@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 213 14% 92%;
     --foreground: 235 25% 15%;
 
     --card: 0 0% 100%;
@@ -35,21 +35,21 @@
     --radius: 4px;
 
     /* Sidebar tokens */
-    --sidebar-background: 240 33% 14%;
-    --sidebar-foreground: 0 0% 100%;
+    --sidebar-background: 30 10% 88%;
+    --sidebar-foreground: 235 25% 15%;
     --sidebar-primary: 210 60% 45%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 25% 18%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 0 0% 100% / 0.1;
+    --sidebar-accent: 30 8% 82%;
+    --sidebar-accent-foreground: 235 25% 15%;
+    --sidebar-border: 0 0% 0% / 0.1;
     --sidebar-ring: 210 60% 45%;
     --sidebar-muted: 220 9% 46%;
 
     /* Ethos custom tokens */
     --ethos-blue: 210 60% 45%;
     --ethos-hover: 210 60% 37%;
-    --ethos-navy: 240 33% 14%;
-    --ethos-navy-light: 240 25% 19%;
+    --ethos-navy: 30 10% 88%;
+    --ethos-navy-light: 30 8% 82%;
   }
 
   .dark {
