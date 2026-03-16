@@ -36,19 +36,6 @@ function WelcomeScreen() {
   );
 }
 
-function EditorPlaceholder() {
-  return (
-    <div className="flex flex-col h-full">
-      <div className="h-10 border-b border-border flex items-center px-4 shrink-0">
-        <PenLine className="h-4 w-4 text-muted-foreground mr-2" />
-        <span className="text-sm font-medium text-foreground">Editor</span>
-      </div>
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">Writing editor coming soon…</p>
-      </div>
-    </div>
-  );
-}
 
 function ChatPlaceholder() {
   return (
