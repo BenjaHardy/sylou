@@ -56,6 +56,13 @@ export default {
           "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
+          muted: "hsl(var(--sidebar-muted))",
+        },
+        ethos: {
+          blue: "hsl(var(--ethos-blue))",
+          hover: "hsl(var(--ethos-hover))",
+          navy: "hsl(var(--ethos-navy))",
+          "navy-light": "hsl(var(--ethos-navy-light))",
         },
       },
       borderRadius: {
@@ -63,22 +70,21 @@ export default {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      boxShadow: {
+        depth: "0 0 0 1px rgba(0,0,0,.06), 0 1px 2px -1px rgba(0,0,0,.06), 0 2px 4px rgba(0,0,0,.04)",
+        focus: "0 0 0 2px #FFFFFF, 0 0 0 4px hsl(210 60% 45%)",
+      },
+      transitionTimingFunction: {
+        "ethos-ease": "cubic-bezier(0.2, 0, 0, 1)",
+      },
       keyframes: {
         "accordion-down": {
-          from: {
-            height: "0",
-          },
-          to: {
-            height: "var(--radix-accordion-content-height)",
-          },
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
         },
         "accordion-up": {
-          from: {
-            height: "var(--radix-accordion-content-height)",
-          },
-          to: {
-            height: "0",
-          },
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
         },
       },
       animation: {
