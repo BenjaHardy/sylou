@@ -50,7 +50,7 @@ export function ProjectContentArea({ project }: Props) {
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize={40} minSize={25}>
-          <ChatPlaceholder />
+          <ChatPanel projectId={project.id} />
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
