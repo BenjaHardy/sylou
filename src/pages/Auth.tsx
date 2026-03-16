@@ -96,7 +96,7 @@ export default function Auth() {
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   required
-                  className="w-full h-10 pl-10 pr-3 bg-background border border-border rounded-sm text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                  className="w-full h-10 pl-10 pr-3 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
                 />
               </div>
             )}
@@ -109,7 +109,7 @@ export default function Auth() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full h-10 pl-10 pr-3 bg-background border border-border rounded-sm text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                className="w-full h-10 pl-10 pr-3 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
               />
             </div>
 
@@ -122,7 +122,7 @@ export default function Auth() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
-                className="w-full h-10 pl-10 pr-3 bg-background border border-border rounded-sm text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                className="w-full h-10 pl-10 pr-3 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
               />
             </div>
 
@@ -133,7 +133,7 @@ export default function Auth() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full h-10 bg-primary hover:bg-ethos-hover text-primary-foreground rounded-sm text-sm font-medium transition-all duration-150 ease-ethos-ease active:scale-[0.98] disabled:opacity-50"
+              className="w-full h-10 bg-primary hover:bg-ethos-hover text-primary-foreground rounded-md text-sm font-medium transition-all duration-150 ease-ethos-ease active:scale-[0.98] disabled:opacity-50"
             >
               {submitting ? "Please wait…" : mode === "signin" ? "Sign In" : "Sign Up"}
             </button>
@@ -151,14 +151,14 @@ export default function Auth() {
               <button
                 type="button"
                 onClick={() => handleOAuth("google")}
-                className="h-10 border border-border rounded-sm text-sm font-medium text-foreground hover:bg-secondary transition-colors duration-150 ease-ethos-ease"
+                className="h-10 border border-border rounded-md text-sm font-medium text-foreground hover:bg-secondary transition-colors duration-150 ease-ethos-ease"
               >
                 Google
               </button>
               <button
                 type="button"
                 onClick={() => handleOAuth("azure")}
-                className="h-10 border border-border rounded-sm text-sm font-medium text-foreground hover:bg-secondary transition-colors duration-150 ease-ethos-ease"
+                className="h-10 border border-border rounded-md text-sm font-medium text-foreground hover:bg-secondary transition-colors duration-150 ease-ethos-ease"
               >
                 Microsoft
               </button>

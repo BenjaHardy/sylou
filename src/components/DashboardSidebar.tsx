@@ -31,7 +31,7 @@ export function DashboardSidebar() {
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="p-1 text-sidebar-muted hover:text-sidebar-foreground transition-colors rounded-sm"
+          className="p-1 text-sidebar-muted hover:text-sidebar-foreground transition-colors rounded-md"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -41,7 +41,7 @@ export function DashboardSidebar() {
       {/* New Project */}
       <div className="px-4">
         <button
-          className={`bg-primary hover:bg-ethos-hover text-primary-foreground rounded-sm text-sm font-medium transition-all duration-150 ease-ethos-ease active:scale-[0.98] ${
+          className={`bg-primary hover:bg-ethos-hover text-primary-foreground rounded-md text-sm font-medium transition-all duration-150 ease-ethos-ease active:scale-[0.98] ${
             collapsed ? "w-8 h-8 flex items-center justify-center" : "w-full py-2"
           }`}
         >
@@ -59,7 +59,7 @@ export function DashboardSidebar() {
         {placeholderProjects.map((project) => (
           <div
             key={project}
-            className={`flex items-center gap-2 text-sm text-sidebar-foreground/70 hover:bg-ethos-navy-light rounded-sm cursor-pointer transition-colors duration-150 ease-ethos-ease ${
+            className={`flex items-center gap-2 text-sm text-sidebar-foreground/70 hover:bg-ethos-navy-light rounded-md cursor-pointer transition-colors duration-150 ease-ethos-ease ${
               collapsed ? "p-2 justify-center" : "px-3 py-2"
             }`}
           >
@@ -72,7 +72,7 @@ export function DashboardSidebar() {
       {/* User */}
       <div className="p-4 border-t border-sidebar-border">
         <div className={`flex items-center ${collapsed ? "justify-center" : "gap-4"}`}>
-          <div className="w-8 h-8 bg-primary rounded-sm flex items-center justify-center text-xs font-bold text-primary-foreground shrink-0">
+          <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center text-xs font-bold text-primary-foreground shrink-0">
             {initials}
           </div>
           {!collapsed && (
