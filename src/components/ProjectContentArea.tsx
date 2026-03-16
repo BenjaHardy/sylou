@@ -1,7 +1,7 @@
-import { FolderOpen, PenLine, MessageSquare, Lightbulb } from "lucide-react";
+import { FolderOpen, MessageSquare, Lightbulb } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
+import { WritingEditor } from "@/components/WritingEditor";
 import type { Project } from "@/hooks/useProjects";
-
 interface Props {
   project: Project | null;
 }
@@ -36,19 +36,6 @@ function WelcomeScreen() {
   );
 }
 
-function EditorPlaceholder() {
-  return (
-    <div className="flex flex-col h-full">
-      <div className="h-10 border-b border-border flex items-center px-4 shrink-0">
-        <PenLine className="h-4 w-4 text-muted-foreground mr-2" />
-        <span className="text-sm font-medium text-foreground">Editor</span>
-      </div>
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">Writing editor coming soon…</p>
-      </div>
-    </div>
-  );
-}
 
 function ChatPlaceholder() {
   return (
@@ -71,7 +58,7 @@ export function ProjectContentArea({ project }: Props) {
     <div className="flex-1 flex flex-col bg-background h-screen">
       <ResizablePanelGroup direction="horizontal" className="flex-1">
         <ResizablePanel defaultSize={60} minSize={30}>
-          <EditorPlaceholder />
+          <WritingEditor projectId={project.id} />
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize={40} minSize={25}>
