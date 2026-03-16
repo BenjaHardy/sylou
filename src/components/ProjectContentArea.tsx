@@ -1,6 +1,7 @@
-import { FolderOpen, MessageSquare, Lightbulb } from "lucide-react";
+import { FolderOpen, Lightbulb } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { WritingEditor } from "@/components/WritingEditor";
+import { ChatPanel } from "@/components/ChatPanel";
 import type { Project } from "@/hooks/useProjects";
 interface Props {
   project: Project | null;
@@ -37,19 +38,6 @@ function WelcomeScreen() {
 }
 
 
-function ChatPlaceholder() {
-  return (
-    <div className="flex flex-col h-full">
-      <div className="h-10 border-b border-border flex items-center px-4 shrink-0">
-        <MessageSquare className="h-4 w-4 text-muted-foreground mr-2" />
-        <span className="text-sm font-medium text-foreground">Chat</span>
-      </div>
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">Chat panel coming soon…</p>
-      </div>
-    </div>
-  );
-}
 
 export function ProjectContentArea({ project }: Props) {
   if (!project) return <WelcomeScreen />;
@@ -62,7 +50,7 @@ export function ProjectContentArea({ project }: Props) {
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize={40} minSize={25}>
-          <ChatPlaceholder />
+          <ChatPanel projectId={project.id} />
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
