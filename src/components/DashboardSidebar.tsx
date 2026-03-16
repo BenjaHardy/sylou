@@ -94,11 +94,16 @@ export function DashboardSidebar({ selectedProjectId, onSelectProject, onNewProj
         <div className="px-4">
           <button
             onClick={onNewProject}
-            className={`bg-primary hover:bg-ethos-hover text-primary-foreground rounded-md text-sm font-medium transition-all duration-150 ease-ethos-ease active:scale-[0.98] ${
-              collapsed ? "w-8 h-8 flex items-center justify-center" : "w-full py-2"
+            className={`rounded-md text-sm transition-all duration-150 ease-ethos-ease active:scale-[0.98] hover:bg-ethos-navy-light ${
+              collapsed ? "w-8 h-8 flex items-center justify-center text-sidebar-foreground/70" : "w-full px-3 py-2 text-left text-sidebar-foreground/70"
             }`}
           >
-            {collapsed ? <Plus className="h-4 w-4" /> : "+ New Project"}
+            {collapsed ? <Plus className="h-4 w-4" /> : (
+              <span className="flex items-center gap-2">
+                <Plus className="h-4 w-4 shrink-0" />
+                New Project
+              </span>
+            )}
           </button>
         </div>
 
