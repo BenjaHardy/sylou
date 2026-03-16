@@ -1,5 +1,6 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { Plus, FolderOpen, ChevronLeft, ChevronRight, LogOut } from "lucide-react";
+import ethosLogo from "@/assets/ethos-logo.png";
 import { useState } from "react";
 
 const placeholderProjects = ["Internal Audit", "System Architecture", "Client Portal"];
@@ -26,9 +27,7 @@ export function DashboardSidebar() {
       {/* Header */}
       <div className="p-4 flex items-center justify-between">
         {!collapsed && (
-          <h1 className="text-sidebar-foreground font-bold tracking-tighter text-xl">
-            ETHOS
-          </h1>
+          <img src={ethosLogo} alt="Ethos" className="h-6 invert" />
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
