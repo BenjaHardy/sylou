@@ -1,7 +1,7 @@
-import { FolderOpen, PenLine, MessageSquare, Lightbulb } from "lucide-react";
+import { FolderOpen, MessageSquare, Lightbulb } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
+import { WritingEditor } from "@/components/WritingEditor";
 import type { Project } from "@/hooks/useProjects";
-
 interface Props {
   project: Project | null;
 }
