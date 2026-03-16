@@ -14,13 +14,245 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      chat_messages: {
+        Row: {
+          concise_mode: boolean | null
+          content: string
+          created_at: string
+          flow_flag: string | null
+          id: string
+          model_used: string | null
+          role: string
+          source_type: string | null
+          thread_id: string
+          tutor_mode: boolean | null
+        }
+        Insert: {
+          concise_mode?: boolean | null
+          content: string
+          created_at?: string
+          flow_flag?: string | null
+          id?: string
+          model_used?: string | null
+          role: string
+          source_type?: string | null
+          thread_id: string
+          tutor_mode?: boolean | null
+        }
+        Update: {
+          concise_mode?: boolean | null
+          content?: string
+          created_at?: string
+          flow_flag?: string | null
+          id?: string
+          model_used?: string | null
+          role?: string
+          source_type?: string | null
+          thread_id?: string
+          tutor_mode?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_threads: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          project_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string
+          project_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          project_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_threads_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          billing_period_start: string | null
+          created_at: string
+          display_name: string | null
+          email: string
+          flow_nudges_enabled: boolean | null
+          id: string
+          monthly_token_budget: number
+          preferred_chat_model: string | null
+          preferred_language: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          subscription_tier: string
+          tokens_used_this_period: number
+          updated_at: string
+        }
+        Insert: {
+          billing_period_start?: string | null
+          created_at?: string
+          display_name?: string | null
+          email: string
+          flow_nudges_enabled?: boolean | null
+          id: string
+          monthly_token_budget?: number
+          preferred_chat_model?: string | null
+          preferred_language?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_tier?: string
+          tokens_used_this_period?: number
+          updated_at?: string
+        }
+        Update: {
+          billing_period_start?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string
+          flow_nudges_enabled?: boolean | null
+          id?: string
+          monthly_token_budget?: number
+          preferred_chat_model?: string | null
+          preferred_language?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_tier?: string
+          tokens_used_this_period?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          created_at: string
+          id: string
+          language: string
+          name: string
+          template: string | null
+          tutor_mode: boolean
+          tutor_mode_locked: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          language?: string
+          name: string
+          template?: string | null
+          tutor_mode?: boolean
+          tutor_mode_locked?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          language?: string
+          name?: string
+          template?: string | null
+          tutor_mode?: boolean
+          tutor_mode_locked?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      writing_content: {
+        Row: {
+          content: string
+          id: string
+          project_id: string
+          updated_at: string
+        }
+        Insert: {
+          content?: string
+          id?: string
+          project_id: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          id?: string
+          project_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "writing_content_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      writing_versions: {
+        Row: {
+          content: string
+          id: string
+          project_id: string
+          saved_at: string
+        }
+        Insert: {
+          content: string
+          id?: string
+          project_id: string
+          saved_at?: string
+        }
+        Update: {
+          content?: string
+          id?: string
+          project_id?: string
+          saved_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "writing_versions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      owns_project: { Args: { _project_id: string }; Returns: boolean }
+      owns_thread: { Args: { _thread_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
