@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Editor } from "@tiptap/react";
+import type { Editor } from "@tiptap/core";
 import { Toggle } from "@/components/ui/toggle";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
