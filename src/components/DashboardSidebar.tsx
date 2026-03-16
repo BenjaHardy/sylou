@@ -27,9 +27,7 @@ export function DashboardSidebar() {
       {/* Header */}
       <div className="p-4 flex items-center justify-between">
         {!collapsed && (
-          <h1 className="text-sidebar-foreground font-bold tracking-tighter text-xl">
-            ETHOS
-          </h1>
+          <img src={ethosLogo} alt="Ethos" className="h-6 invert" />
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
