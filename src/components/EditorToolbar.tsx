@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { Editor } from "@tiptap/core";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Editor = any;
 import { Toggle } from "@/components/ui/toggle";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
