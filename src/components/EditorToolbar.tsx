@@ -91,7 +91,7 @@ export function EditorToolbar({ editor }: Props) {
   };
 
   return (
-    <div className="border-b border-border bg-muted/30 shrink-0">
+    <div className="border-b border-border bg-[hsl(var(--ethos-surface))] shrink-0">
       <div className="flex flex-wrap items-center gap-0.5 px-2 py-1">
         {/* Text formatting */}
         <ToolbarToggle pressed={editor.isActive("bold")} onPressedChange={() => editor.chain().focus().toggleBold().run()} title="Bold">

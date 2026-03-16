@@ -69,7 +69,7 @@ export function WritingEditor({ projectId }: Props) {
       <div className="flex-1 overflow-y-auto bg-background">
         <EditorContent editor={editor} className="h-full" />
       </div>
-      <div className="h-8 border-t border-border flex items-center justify-between px-4 text-xs text-muted-foreground shrink-0">
+      <div className="h-8 border-t border-border flex items-center justify-between px-4 text-xs text-muted-foreground shrink-0 bg-[hsl(var(--ethos-surface))]">
         <span>
           {words} {words === 1 ? "word" : "words"} · {chars}{" "}
           {chars === 1 ? "character" : "characters"}
