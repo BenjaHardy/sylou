@@ -52,10 +52,9 @@ export function EditorToolbar({ editor }: Props) {
 
   const handleFind = () => {
     if (!findText) return;
-    // Use browser find as TipTap doesn't have built-in search
-    const win = window;
-    if (win.find) {
-      win.find(findText, false, false, true);
+    // @ts-ignore - window.find is non-standard but widely supported
+    if ((window as any).find) {
+      (window as any).find(findText, false, false, true);
     }
   };
 
