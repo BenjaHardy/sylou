@@ -1,5 +1,6 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { Plus, FolderOpen, ChevronLeft, ChevronRight, LogOut } from "lucide-react";
+import ethosLogo from "@/assets/ethos-logo.png";
 import { useState } from "react";
 
 const placeholderProjects = ["Internal Audit", "System Architecture", "Client Portal"];
