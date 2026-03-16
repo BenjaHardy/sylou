@@ -58,7 +58,7 @@ export function ProjectContentArea({ project }: Props) {
     <div className="flex-1 flex flex-col bg-background h-screen">
       <ResizablePanelGroup direction="horizontal" className="flex-1">
         <ResizablePanel defaultSize={60} minSize={30}>
-          <EditorPlaceholder />
+          <WritingEditor projectId={project.id} />
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize={40} minSize={25}>
