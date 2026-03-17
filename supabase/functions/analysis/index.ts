@@ -534,7 +534,11 @@ ${writePillarNotice}`;
 
     if (budgetRemaining < estimated + 2000) {
       return jsonResponse(
-        { error: `Insufficient token budget for FLOW analysis (estimated ~${estimated} input tokens, budget remaining: ${budgetRemaining})` },
+        {
+          error: `Insufficient token budget for FLOW analysis`,
+          estimated_cost: estimated + 2000,
+          budget_remaining: budgetRemaining,
+        },
         403
       );
     }
