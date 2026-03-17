@@ -596,7 +596,7 @@ ${writePillarNotice}`;
         ai_write: flowResult.write,
         metrics_snapshot: metricsSnapshot,
         flow_meta: flowMeta,
-        model_used: "claude-sonnet-4-20250514",
+        model_used: "claude-sonnet-4-6",
       })
       .select()
       .single();
