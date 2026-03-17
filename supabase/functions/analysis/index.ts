@@ -502,7 +502,7 @@ ${writePillarNotice}`;
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 8192,
         system: FLOW_PROMPT_TEMPLATE,
         messages: [{ role: "user", content: userPrompt }],
@@ -596,7 +596,7 @@ ${writePillarNotice}`;
         ai_write: flowResult.write,
         metrics_snapshot: metricsSnapshot,
         flow_meta: flowMeta,
-        model_used: "claude-sonnet-4-20250514",
+        model_used: "claude-sonnet-4-6",
       })
       .select()
       .single();
@@ -612,7 +612,7 @@ ${writePillarNotice}`;
         user_id: user.id,
         project_id: projectId,
         function_name: "analysis",
-        model_used: "claude-sonnet-4-20250514",
+        model_used: "claude-sonnet-4-6",
         input_tokens: inputTokens,
         output_tokens: outputTokens,
       }),
