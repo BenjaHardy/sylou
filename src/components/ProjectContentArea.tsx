@@ -32,9 +32,10 @@ function WelcomeScreen() {
           </p>
           <ul className="text-sm text-muted-foreground space-y-2">
             <li>• Click <span className="font-medium text-foreground">+ New Project</span> to create your first project</li>
-            <li>• Choose a template that fits your writing style</li>
-            <li>• Use the AI chat panel to brainstorm and refine ideas</li>
             <li>• Enable <span className="font-medium text-foreground">Tutor Mode</span> for guided learning</li>
+            <li>• Choose the template that fits your type of work</li>
+            <li>• Use the AI chat panel to brainstorm and refine ideas</li>
+            <li>• Select text in your editor and use <span className="font-medium text-foreground">Ask</span> or <span className="font-medium text-foreground">Propose</span> for context-aware AI feedback</li>
           </ul>
         </div>
       </div>
