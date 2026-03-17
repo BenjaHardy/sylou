@@ -41,7 +41,7 @@ import type {
 } from "@/hooks/useFlowAnalysis";
 
 interface Props {
-  report: FlowReport;
+  report: FlowReport | null;
   projectName: string;
   loading: boolean;
   onBack: () => void;
