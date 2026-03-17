@@ -40,6 +40,9 @@ function WelcomeScreen() {
   );
 }
 
+const DEFAULT_EDITOR_SIZE = 70;
+const DEFAULT_CHAT_SIZE = 30;
+
 export function ProjectContentArea({ project }: Props) {
   const [chatExpanded, setChatExpanded] = useState(false);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
@@ -49,12 +52,10 @@ export function ProjectContentArea({ project }: Props) {
 
   const handleToggleChat = () => {
     if (chatExpanded) {
-      // Collapse back to default
-      editorPanelRef.current?.resize(60);
-      chatPanelRef.current?.resize(40);
+      editorPanelRef.current?.resize(DEFAULT_EDITOR_SIZE);
+      chatPanelRef.current?.resize(DEFAULT_CHAT_SIZE);
       setChatExpanded(false);
     } else {
-      // Expand chat to cover editor
       editorPanelRef.current?.resize(0);
       chatPanelRef.current?.resize(100);
       setChatExpanded(true);
@@ -62,23 +63,18 @@ export function ProjectContentArea({ project }: Props) {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-background h-screen">
+    <div className="flex-1 flex flex-col bg-background h-screen [&_[data-panel]]:transition-all [&_[data-panel]]:duration-150 [&_[data-panel]]:ease-ethos-ease">
       <ResizablePanelGroup direction="horizontal" className="flex-1">
-        <ResizablePanel ref={editorPanelRef} defaultSize={60} minSize={0}>
+        <ResizablePanel ref={editorPanelRef} defaultSize={DEFAULT_EDITOR_SIZE} minSize={0}>
           <WritingEditor projectId={project.id} />
         </ResizablePanel>
         <ResizableHandle withHandle />
-        <ResizablePanel ref={chatPanelRef} defaultSize={40} minSize={25}>
-          <div className="relative h-full">
-            <button
-              onClick={handleToggleChat}
-              className="absolute top-3 left-2 z-10 p-1 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted"
-              aria-label={chatExpanded ? "Collapse chat panel" : "Expand chat panel"}
-            >
-              {chatExpanded ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-            </button>
-            <ChatPanel projectId={project.id} />
-          </div>
+        <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20}>
+          <ChatPanel
+            projectId={project.id}
+            chatExpanded={chatExpanded}
+            onToggleChat={handleToggleChat}
+          />
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>

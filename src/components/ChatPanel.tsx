@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, KeyboardEvent } from "react";
-import { MessageSquare, Send, Bot, User, X, Info } from "lucide-react";
+import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
@@ -9,6 +9,8 @@ import { format } from "date-fns";
 
 interface Props {
   projectId: string;
+  chatExpanded?: boolean;
+  onToggleChat?: () => void;
 }
 
 const TIP_DISMISSED_KEY = "ethos-chat-tip-dismissed";
@@ -47,7 +49,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-export function ChatPanel({ projectId }: Props) {
+export function ChatPanel({ projectId, chatExpanded, onToggleChat }: Props) {
   const { threadId, threadName } = useChatThread(projectId);
   const { messages, loading, sending, sendMessage } = useChatMessages(threadId);
   const [input, setInput] = useState("");
@@ -99,6 +101,15 @@ export function ChatPanel({ projectId }: Props) {
       {/* Header */}
       <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-2">
+          {onToggleChat && (
+            <button
+              onClick={onToggleChat}
+              className="p-1 text-muted-foreground hover:text-foreground transition-colors rounded-md"
+              aria-label={chatExpanded ? "Collapse chat panel" : "Expand chat panel"}
+            >
+              {chatExpanded ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </button>
+          )}
           <MessageSquare className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium text-foreground">{threadName}</span>
         </div>
