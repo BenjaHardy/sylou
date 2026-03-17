@@ -93,7 +93,7 @@ export function WritingEditor({ projectId, onWritingActivity, onFlowClick, flowL
           {isDirty ? (
             <button
               onClick={manualSave}
-              className="px-2.5 py-0.5 rounded text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              className="px-4 py-1 rounded text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
             >
               Save
             </button>
@@ -108,11 +108,7 @@ export function WritingEditor({ projectId, onWritingActivity, onFlowClick, flowL
             className="inline-flex items-center gap-1.5 px-4 py-1 rounded text-sm font-medium text-white transition-colors disabled:opacity-70"
             style={{ backgroundColor: flowLoading ? '#6c757d' : '#6A8C8C' }}
           >
-            {flowLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Activity className="h-4 w-4" />
-            )}
+            {flowLoading && <Loader2 className="h-4 w-4 animate-spin" />}
             {flowLoading ? "Analyzing…" : hasFlowReport ? "View FLOW" : "Analyze with FLOW"}
           </button>
         </div>
