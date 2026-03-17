@@ -49,7 +49,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-export function ChatPanel({ projectId }: Props) {
+export function ChatPanel({ projectId, chatExpanded, onToggleChat }: Props) {
   const { threadId, threadName } = useChatThread(projectId);
   const { messages, loading, sending, sendMessage } = useChatMessages(threadId);
   const [input, setInput] = useState("");
