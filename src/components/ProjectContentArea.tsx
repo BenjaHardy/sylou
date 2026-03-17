@@ -1,8 +1,11 @@
-import { FolderOpen, Lightbulb } from "lucide-react";
+import { useState, useRef } from "react";
+import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { WritingEditor } from "@/components/WritingEditor";
 import { ChatPanel } from "@/components/ChatPanel";
 import type { Project } from "@/hooks/useProjects";
+import type { ImperativePanelHandle } from "react-resizable-panels";
+
 interface Props {
   project: Project | null;
 }
@@ -37,20 +40,45 @@ function WelcomeScreen() {
   );
 }
 
-
-
 export function ProjectContentArea({ project }: Props) {
+  const [chatExpanded, setChatExpanded] = useState(false);
+  const chatPanelRef = useRef<ImperativePanelHandle>(null);
+  const editorPanelRef = useRef<ImperativePanelHandle>(null);
+
   if (!project) return <WelcomeScreen />;
+
+  const handleToggleChat = () => {
+    if (chatExpanded) {
+      // Collapse back to default
+      editorPanelRef.current?.resize(60);
+      chatPanelRef.current?.resize(40);
+      setChatExpanded(false);
+    } else {
+      // Expand chat to cover editor
+      editorPanelRef.current?.resize(0);
+      chatPanelRef.current?.resize(100);
+      setChatExpanded(true);
+    }
+  };
 
   return (
     <div className="flex-1 flex flex-col bg-background h-screen">
       <ResizablePanelGroup direction="horizontal" className="flex-1">
-        <ResizablePanel defaultSize={60} minSize={30}>
+        <ResizablePanel ref={editorPanelRef} defaultSize={60} minSize={0}>
           <WritingEditor projectId={project.id} />
         </ResizablePanel>
         <ResizableHandle withHandle />
-        <ResizablePanel defaultSize={40} minSize={25}>
-          <ChatPanel projectId={project.id} />
+        <ResizablePanel ref={chatPanelRef} defaultSize={40} minSize={25}>
+          <div className="relative h-full">
+            <button
+              onClick={handleToggleChat}
+              className="absolute top-3 left-2 z-10 p-1 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted"
+              aria-label={chatExpanded ? "Collapse chat panel" : "Expand chat panel"}
+            >
+              {chatExpanded ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </button>
+            <ChatPanel projectId={project.id} />
+          </div>
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
