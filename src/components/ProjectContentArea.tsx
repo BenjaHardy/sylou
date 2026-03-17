@@ -49,6 +49,7 @@ export function ProjectContentArea({ project }: Props) {
   const [chatExpanded, setChatExpanded] = useState(false);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
+  const { markWriting } = useActivityTracker(project?.id ?? null);
 
   if (!project) return <WelcomeScreen />;
 
