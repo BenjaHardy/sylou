@@ -118,5 +118,13 @@ export function useWritingContent(projectId: string | null) {
     };
   }, []);
 
-  return { content, loading, saveState, updateContent };
+  const isDirty = content !== lastSavedContent.current;
+
+  const manualSave = useCallback(() => {
+    if (!isDirty) return;
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    saveNow(content);
+  }, [isDirty, content, saveNow]);
+
+  return { content, loading, saveState, updateContent, isDirty, manualSave };
 }

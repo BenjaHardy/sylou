@@ -80,10 +80,24 @@ export function WritingEditor({ projectId }: Props) {
           {words} {words === 1 ? "word" : "words"} · {chars}{" "}
           {chars === 1 ? "character" : "characters"}
         </span>
-        <span>
-          {saveState.status === "saving" && "Saving…"}
-          {saveState.status === "saved" && "✓ Saved"}
-        </span>
+        <div className="flex items-center gap-3">
+          <span>
+            {saveState.status === "saving" && "Saving…"}
+            {saveState.status === "saved" && !isDirty && "✓ Saved"}
+          </span>
+          {isDirty ? (
+            <button
+              onClick={manualSave}
+              className="px-2.5 py-0.5 rounded text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              Save
+            </button>
+          ) : (
+            <span className="px-2.5 py-0.5 rounded text-xs font-medium text-muted-foreground/60">
+              Saved
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
