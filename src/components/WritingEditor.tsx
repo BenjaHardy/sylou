@@ -80,7 +80,7 @@ export function WritingEditor({ projectId, onWritingActivity, onFlowClick, flowL
       <div className="flex-1 overflow-y-auto bg-background">
         <EditorContent editor={editor} className="h-full" />
       </div>
-      <div className="h-8 border-t border-border flex items-center justify-between px-4 text-xs text-muted-foreground shrink-0 bg-[hsl(var(--ethos-surface))]">
+      <div className="border-t border-border flex items-center justify-between px-4 py-1.5 text-xs text-muted-foreground shrink-0 bg-[hsl(var(--ethos-surface))]">
         <span>
           {words} {words === 1 ? "word" : "words"} · {chars}{" "}
           {chars === 1 ? "character" : "characters"}
@@ -102,6 +102,18 @@ export function WritingEditor({ projectId, onWritingActivity, onFlowClick, flowL
               Saved
             </span>
           )}
+          <button
+            onClick={onFlowClick}
+            disabled={flowLoading}
+            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-medium bg-accent text-accent-foreground hover:bg-accent/80 transition-colors disabled:opacity-50"
+          >
+            {flowLoading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Activity className="h-3 w-3" />
+            )}
+            {flowLoading ? "Analyzing…" : hasFlowReport ? "View FLOW" : "Analyze with FLOW"}
+          </button>
         </div>
       </div>
     </div>
