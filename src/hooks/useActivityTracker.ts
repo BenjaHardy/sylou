@@ -35,13 +35,14 @@ export function useActivityTracker(projectId: string | null) {
 
       try {
         // Fetch current stats to check clock anomaly & first_activity
-        const { data: stats } = await supabase
+        const { data } = await supabase
           .from("project_stats" as any)
           .select("last_activity_at, first_activity_at, total_active_time_seconds, total_writing_time_seconds, clock_anomaly_count")
           .eq("project_id", projectId)
           .single();
 
-        if (!stats) return;
+        if (!data) return;
+        const stats = data as any;
 
         const nowIso = new Date().toISOString();
         const updates: Record<string, any> = {};
