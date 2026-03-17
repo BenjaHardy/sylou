@@ -353,6 +353,20 @@ export function FlowReportView({
     );
   }
 
+  if (!report) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-background">
+        <div className="text-center space-y-3">
+          <p className="text-sm text-muted-foreground">No report data available.</p>
+          <Button variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Editor
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col bg-background h-screen">
       {/* Header */}
