@@ -331,7 +331,7 @@ export function FlowReportView({
   const [preFeedbackViewed, setPreFeedbackViewed] = useState(false);
 
   // Show pre-feedback prompt first if it hasn't been submitted
-  const showPreFeedback = !report.user_feedback_pre && !preFeedbackViewed;
+  const showPreFeedback = report ? !report.user_feedback_pre && !preFeedbackViewed : false;
 
   if (loading) {
     return (
