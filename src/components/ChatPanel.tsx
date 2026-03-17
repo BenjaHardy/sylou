@@ -191,6 +191,11 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat }: Props) {
             <Send className="h-4 w-4" />
           </Button>
         </div>
+        {budgetRemaining != null && (
+          <p className="text-[10px] text-muted-foreground/60 mt-1.5 text-right">
+            {budgetRemaining.toLocaleString()} tokens remaining
+          </p>
+        )}
       </div>
     </div>
   );
