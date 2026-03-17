@@ -612,7 +612,7 @@ ${writePillarNotice}`;
         user_id: user.id,
         project_id: projectId,
         function_name: "analysis",
-        model_used: "claude-sonnet-4-20250514",
+        model_used: "claude-sonnet-4-6",
         input_tokens: inputTokens,
         output_tokens: outputTokens,
       }),
