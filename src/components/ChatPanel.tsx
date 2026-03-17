@@ -51,7 +51,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
 
 export function ChatPanel({ projectId, chatExpanded, onToggleChat }: Props) {
   const { threadId, threadName } = useChatThread(projectId);
-  const { messages, loading, sending, sendMessage } = useChatMessages(threadId);
+  const { messages, loading, sending, sendMessage, budgetRemaining } = useChatMessages(threadId);
   const [input, setInput] = useState("");
   const [conciseMode, setConciseMode] = useState(false);
   const [tipDismissed, setTipDismissed] = useState(
