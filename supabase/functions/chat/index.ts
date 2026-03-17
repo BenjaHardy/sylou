@@ -190,6 +190,26 @@ Deno.serve(async (req) => {
       .update({ tokens_used_this_period: newTotal })
       .eq("id", user.id);
 
+    // --- Increment prompt count in project_stats ---
+    const promptColumn = tutorMode
+      ? "chat_prompt_count_tutor"
+      : "chat_prompt_count_normal";
+
+    // Fetch current count then increment
+    const { data: currentStats } = await supabase
+      .from("project_stats")
+      .select(promptColumn)
+      .eq("project_id", thread.project_id)
+      .single();
+
+    if (currentStats) {
+      const currentCount = (currentStats as Record<string, number>)[promptColumn] || 0;
+      await supabase
+        .from("project_stats")
+        .update({ [promptColumn]: currentCount + 1 })
+        .eq("project_id", thread.project_id);
+    }
+
     return jsonResponse({
       reply: assistantText,
       tokens_used: estimatedTokens,
