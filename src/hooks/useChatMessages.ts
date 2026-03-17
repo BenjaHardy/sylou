@@ -18,6 +18,7 @@ export function useChatMessages(threadId: string | null) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [budgetRemaining, setBudgetRemaining] = useState<number | null>(null);
 
   useEffect(() => {
     if (!threadId) {
@@ -47,53 +48,46 @@ export function useChatMessages(threadId: string | null) {
       if (!threadId || !content.trim()) return;
       setSending(true);
 
-      const userMsg = {
-        thread_id: threadId,
-        role: "user",
-        content: content.trim(),
-        source_type: "chat",
-        flow_flag: "normal",
-        concise_mode: conciseMode,
-      };
+      try {
+        const { data, error } = await supabase.functions.invoke("chat", {
+          body: {
+            thread_id: threadId,
+            message: content.trim(),
+            concise_mode: conciseMode,
+          },
+        });
 
-      const { data: inserted, error: userErr } = await supabase
-        .from("chat_messages")
-        .insert(userMsg)
-        .select()
-        .single();
+        if (error) {
+          console.error("Chat function error:", error);
+          setSending(false);
+          return;
+        }
 
-      if (userErr) {
-        console.error("Failed to send message:", userErr);
+        if (data?.error) {
+          console.error("Chat API error:", data.error);
+          setSending(false);
+          return;
+        }
+
+        // Add both messages returned by the edge function
+        if (data?.user_message) {
+          setMessages((prev) => [...prev, data.user_message as ChatMessage]);
+        }
+        if (data?.assistant_message) {
+          setMessages((prev) => [...prev, data.assistant_message as ChatMessage]);
+        }
+
+        if (data?.budget_remaining != null) {
+          setBudgetRemaining(data.budget_remaining);
+        }
+      } catch (err) {
+        console.error("Failed to send message:", err);
+      } finally {
         setSending(false);
-        return;
       }
-
-      setMessages((prev) => [...prev, inserted as ChatMessage]);
-
-      // Mock assistant response (will be replaced by Edge Function)
-      const mockReply = {
-        thread_id: threadId,
-        role: "assistant",
-        content: "AI responses will be connected soon.",
-        source_type: "chat",
-        flow_flag: "normal",
-        concise_mode: conciseMode,
-      };
-
-      const { data: reply, error: replyErr } = await supabase
-        .from("chat_messages")
-        .insert(mockReply)
-        .select()
-        .single();
-
-      if (!replyErr && reply) {
-        setMessages((prev) => [...prev, reply as ChatMessage]);
-      }
-
-      setSending(false);
     },
     [threadId]
   );
 
-  return { messages, loading, sending, sendMessage };
+  return { messages, loading, sending, sendMessage, budgetRemaining };
 }

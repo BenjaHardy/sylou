@@ -51,7 +51,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
 
 export function ChatPanel({ projectId, chatExpanded, onToggleChat }: Props) {
   const { threadId, threadName } = useChatThread(projectId);
-  const { messages, loading, sending, sendMessage } = useChatMessages(threadId);
+  const { messages, loading, sending, sendMessage, budgetRemaining } = useChatMessages(threadId);
   const [input, setInput] = useState("");
   const [conciseMode, setConciseMode] = useState(false);
   const [tipDismissed, setTipDismissed] = useState(
@@ -191,6 +191,11 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat }: Props) {
             <Send className="h-4 w-4" />
           </Button>
         </div>
+        {budgetRemaining != null && (
+          <p className="text-[10px] text-muted-foreground/60 mt-1.5 text-right">
+            {budgetRemaining.toLocaleString()} tokens remaining
+          </p>
+        )}
       </div>
     </div>
   );
