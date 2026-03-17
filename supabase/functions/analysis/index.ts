@@ -34,7 +34,7 @@ const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI coll
 Identify how the user researched relevant topics, whether he questioned the AI's outputs, compared alternatives, or challenged suggestions — versus relying on the AI without investigation.
 
 - L – Lead (Ideas & Opinions)
-Determine who is the true source of the ideas, opinions and perspectives in the final work: the user (original thinking, own viewpoint) or the AI (suggestions heavily reused, ideas taken verbatim, reliance on AI-driven).
+Determine who is the true source of the ideas, opinions and perspectives in the final work: the user (original thinking, own viewpoint) or the AI (suggestions heavily reused, ideas taken verbatim, reliance on AI-driven content).
 
 - O – Organize (Structure & Argumentation)
 Assess how the ideas, opinions and perspectives are structured, and how the narrative and argumentation — supporting those ideas, opinions and perspectives — are developed. Determine whether the user or the AI primarily shaped the outline, the logical progression, the argumentation, and the overall structure.
