@@ -15,6 +15,7 @@ import { Loader2 } from "lucide-react";
 
 interface Props {
   projectId: string;
+  onWritingActivity?: () => void;
 }
 
 export function WritingEditor({ projectId }: Props) {
