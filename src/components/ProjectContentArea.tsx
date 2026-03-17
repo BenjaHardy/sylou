@@ -3,6 +3,8 @@ import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { WritingEditor } from "@/components/WritingEditor";
 import { ChatPanel } from "@/components/ChatPanel";
+import { ProjectActivityBar } from "@/components/ProjectActivityBar";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 import type { Project } from "@/hooks/useProjects";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 
