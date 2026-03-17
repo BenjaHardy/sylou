@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_editor_actions: {
+        Row: {
+          action_type: string
+          ai_response_preview: string | null
+          char_count_original: number | null
+          char_count_result: number | null
+          created_at: string
+          id: string
+          instruction_text: string | null
+          outcome: string
+          project_id: string
+          selected_text_preview: string | null
+        }
+        Insert: {
+          action_type: string
+          ai_response_preview?: string | null
+          char_count_original?: number | null
+          char_count_result?: number | null
+          created_at?: string
+          id?: string
+          instruction_text?: string | null
+          outcome: string
+          project_id: string
+          selected_text_preview?: string | null
+        }
+        Update: {
+          action_type?: string
+          ai_response_preview?: string | null
+          char_count_original?: number | null
+          char_count_result?: number | null
+          created_at?: string
+          id?: string
+          instruction_text?: string | null
+          outcome?: string
+          project_id?: string
+          selected_text_preview?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_editor_actions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_messages: {
         Row: {
           concise_mode: boolean | null
@@ -86,6 +133,86 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "chat_threads_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      flow_reports: {
+        Row: {
+          ai_editor_summary: Json | null
+          ai_find: Json
+          ai_lead: Json
+          ai_organize: Json
+          ai_summary: string
+          ai_write: Json
+          certificate_id: string | null
+          created_at: string
+          flow_meta: Json | null
+          id: string
+          metrics_snapshot: Json | null
+          model_used: string
+          project_id: string
+          provenance_snapshot: Json | null
+          share_enabled: boolean | null
+          share_token: string | null
+          share_visibility: string | null
+          user_feedback_post: Json | null
+          user_feedback_post_at: string | null
+          user_feedback_pre: Json | null
+          user_feedback_pre_at: string | null
+        }
+        Insert: {
+          ai_editor_summary?: Json | null
+          ai_find: Json
+          ai_lead: Json
+          ai_organize: Json
+          ai_summary: string
+          ai_write: Json
+          certificate_id?: string | null
+          created_at?: string
+          flow_meta?: Json | null
+          id?: string
+          metrics_snapshot?: Json | null
+          model_used: string
+          project_id: string
+          provenance_snapshot?: Json | null
+          share_enabled?: boolean | null
+          share_token?: string | null
+          share_visibility?: string | null
+          user_feedback_post?: Json | null
+          user_feedback_post_at?: string | null
+          user_feedback_pre?: Json | null
+          user_feedback_pre_at?: string | null
+        }
+        Update: {
+          ai_editor_summary?: Json | null
+          ai_find?: Json
+          ai_lead?: Json
+          ai_organize?: Json
+          ai_summary?: string
+          ai_write?: Json
+          certificate_id?: string | null
+          created_at?: string
+          flow_meta?: Json | null
+          id?: string
+          metrics_snapshot?: Json | null
+          model_used?: string
+          project_id?: string
+          provenance_snapshot?: Json | null
+          share_enabled?: boolean | null
+          share_token?: string | null
+          share_visibility?: string | null
+          user_feedback_post?: Json | null
+          user_feedback_post_at?: string | null
+          user_feedback_pre?: Json | null
+          user_feedback_pre_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flow_reports_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
@@ -238,6 +365,83 @@ export type Database = {
           },
         ]
       }
+      provenance_events: {
+        Row: {
+          id: string
+          project_id: string
+          segment_map: Json
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          segment_map?: Json
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          segment_map?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provenance_events_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      token_usage: {
+        Row: {
+          created_at: string
+          function_name: string
+          id: string
+          input_tokens: number
+          model_used: string
+          output_tokens: number
+          project_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          function_name: string
+          id?: string
+          input_tokens?: number
+          model_used: string
+          output_tokens?: number
+          project_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          function_name?: string
+          id?: string
+          input_tokens?: number
+          model_used?: string
+          output_tokens?: number
+          project_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "token_usage_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "token_usage_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       writing_content: {
         Row: {
           content: string
@@ -260,6 +464,35 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "writing_content_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      writing_summary_log: {
+        Row: {
+          id: string
+          last_updated_at: string
+          project_id: string
+          summary_text: string
+        }
+        Insert: {
+          id?: string
+          last_updated_at?: string
+          project_id: string
+          summary_text: string
+        }
+        Update: {
+          id?: string
+          last_updated_at?: string
+          project_id?: string
+          summary_text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "writing_summary_log_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: true
             referencedRelation: "projects"
