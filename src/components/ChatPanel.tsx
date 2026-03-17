@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, KeyboardEvent } from "react";
-import { MessageSquare, Send, Bot, User, X, Info } from "lucide-react";
+import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
@@ -9,6 +9,8 @@ import { format } from "date-fns";
 
 interface Props {
   projectId: string;
+  chatExpanded?: boolean;
+  onToggleChat?: () => void;
 }
 
 const TIP_DISMISSED_KEY = "ethos-chat-tip-dismissed";
