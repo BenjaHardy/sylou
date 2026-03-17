@@ -198,7 +198,7 @@ export function ProjectContentArea({ project }: Props) {
 
   return (
     <div className="flex-1 flex flex-col bg-background h-screen [&_[data-panel]]:transition-all [&_[data-panel]]:duration-150 [&_[data-panel]]:ease-ethos-ease">
-      {/* Project toolbar with FLOW button */}
+      {/* Project toolbar */}
       <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
         <span className="text-sm font-medium text-foreground truncate max-w-[200px]">
           {project.name}
@@ -214,23 +214,6 @@ export function ProjectContentArea({ project }: Props) {
               Budget: ~{budgetError.estimated_cost.toLocaleString()} needed, {budgetError.budget_remaining.toLocaleString()} remaining
             </span>
           )}
-          <Button
-            size="sm"
-            onClick={handleFlowClick}
-            disabled={flowLoading}
-            className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
-          >
-            {flowLoading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Activity className="h-3.5 w-3.5" />
-            )}
-            {flowLoading
-              ? "Analyzing…"
-              : flowReport
-              ? "View FLOW Report"
-              : "Run FLOW Analysis"}
-          </Button>
         </div>
       </div>
 
