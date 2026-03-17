@@ -11,11 +11,14 @@ import Color from "@tiptap/extension-color";
 import { FontSize } from "@/lib/tiptap-font-size";
 import { useWritingContent } from "@/hooks/useWritingContent";
 import { EditorToolbar } from "@/components/EditorToolbar";
-import { Loader2 } from "lucide-react";
+import { Loader2, Activity } from "lucide-react";
 
 interface Props {
   projectId: string;
   onWritingActivity?: () => void;
+  onFlowClick?: () => void;
+  flowLoading?: boolean;
+  hasFlowReport?: boolean;
 }
 
 export function WritingEditor({ projectId, onWritingActivity }: Props) {
