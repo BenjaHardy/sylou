@@ -21,7 +21,7 @@ interface Props {
   hasFlowReport?: boolean;
 }
 
-export function WritingEditor({ projectId, onWritingActivity }: Props) {
+export function WritingEditor({ projectId, onWritingActivity, onFlowClick, flowLoading, hasFlowReport }: Props) {
   const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
   const [initialSet, setInitialSet] = useState(false);
 
