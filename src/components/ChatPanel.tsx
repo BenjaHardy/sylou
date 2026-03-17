@@ -101,6 +101,15 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat }: Props) {
       {/* Header */}
       <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-2">
+          {onToggleChat && (
+            <button
+              onClick={onToggleChat}
+              className="p-1 text-muted-foreground hover:text-foreground transition-colors rounded-md"
+              aria-label={chatExpanded ? "Collapse chat panel" : "Expand chat panel"}
+            >
+              {chatExpanded ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </button>
+          )}
           <MessageSquare className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium text-foreground">{threadName}</span>
         </div>
