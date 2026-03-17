@@ -220,7 +220,7 @@ export function ProjectContentArea({ project }: Props) {
       <ResizablePanelGroup direction="horizontal" className="flex-1">
         <ResizablePanel ref={editorPanelRef} defaultSize={DEFAULT_EDITOR_SIZE} minSize={0}>
           <div className="flex flex-col h-full">
-            <WritingEditor projectId={project.id} onWritingActivity={markWriting} onFlowClick={handleFlowClick} flowLoading={flowLoading} hasFlowReport={!!flowReport} />
+            <WritingEditor projectId={project.id} tutorMode={project.tutor_mode} onWritingActivity={markWriting} onFlowClick={handleFlowClick} flowLoading={flowLoading} hasFlowReport={!!flowReport} />
             <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
               <ProjectActivityBar projectId={project.id} />
             </div>
