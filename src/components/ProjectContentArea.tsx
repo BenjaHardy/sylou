@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Activity, Loader2 } from "lucide-react";
+import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
 import { WritingEditor } from "@/components/WritingEditor";
