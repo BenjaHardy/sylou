@@ -1,13 +1,39 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { estimateTokens, classifyTokenUsage, type TokenEstimation } from "@/lib/estimateTokens";
-import type { Json } from "@/integrations/supabase/types";
 
 export interface FlowPillar {
   reasoning: string;
   evidence: string[];
   score: number | null;
   narrative: string;
+}
+
+export interface FlowMeta {
+  estimated_input_tokens: number;
+  context_limit_tokens: number;
+  token_status: string;
+  measured_at: string;
+  similarity_pct?: number;
+  write_score_capped?: boolean;
+}
+
+export interface MetricsSnapshot {
+  total_active_time_seconds: number;
+  total_writing_time_seconds: number;
+  chat_prompt_count_normal: number;
+  chat_prompt_count_tutor: number;
+  sanity_check_count: number;
+  first_activity_at: string | null;
+  last_activity_at: string | null;
+  clock_anomaly_count: number;
+}
+
+export interface FlowFeedback {
+  find: number;
+  lead: number;
+  organize: number;
+  write: number;
 }
 
 export interface FlowReport {
@@ -18,29 +44,17 @@ export interface FlowReport {
   ai_lead: FlowPillar;
   ai_organize: FlowPillar;
   ai_write: FlowPillar;
-  flow_meta: {
-    estimated_input_tokens: number;
-    context_limit_tokens: number;
-    token_status: string;
-    measured_at: string;
-    similarity_pct?: number;
-    write_score_capped?: boolean;
-  } | null;
-  metrics_snapshot: {
-    total_active_time_seconds: number;
-    total_writing_time_seconds: number;
-    chat_prompt_count_normal: number;
-    chat_prompt_count_tutor: number;
-    sanity_check_count: number;
-    first_activity_at: string | null;
-    last_activity_at: string | null;
-    clock_anomaly_count: number;
-  } | null;
+  flow_meta: FlowMeta | null;
+  metrics_snapshot: MetricsSnapshot | null;
   model_used: string;
   created_at: string;
+  user_feedback_pre: FlowFeedback | null;
+  user_feedback_pre_at: string | null;
+  user_feedback_post: FlowFeedback | null;
+  user_feedback_post_at: string | null;
 }
 
-interface BudgetError {
+export interface BudgetError {
   type: "budget";
   estimated_cost: number;
   budget_remaining: number;
@@ -67,19 +81,24 @@ export function useFlowAnalysis(projectId: string | null) {
 
     if (data) {
       setReport(data as unknown as FlowReport);
+    } else {
+      setReport(null);
     }
   }, [projectId]);
 
+  // Load report on mount / project change
+  useEffect(() => {
+    loadLatestReport();
+  }, [loadLatestReport]);
+
   /**
    * Estimate tokens BEFORE running analysis.
-   * Fetches writing + chat to build an approximation of the prompt size.
    */
   const runPreCheck = useCallback(async (): Promise<TokenEstimation | null> => {
     if (!projectId) return null;
     setError(null);
     setBudgetError(null);
 
-    // Fetch writing content + chat messages in parallel
     const [writingRes, threadsRes] = await Promise.all([
       supabase
         .from("writing_content")
@@ -104,8 +123,8 @@ export function useFlowAnalysis(projectId: string | null) {
       chatText = (msgs ?? []).map((m: { content: string }) => m.content).join("\n");
     }
 
-    // Approximate the full prompt (template ~2500 chars + writing + chat + sections)
-    const promptApprox = writing + "\n" + chatText + "\n".repeat(2500);
+    // Approximate the full prompt (template ~3000 chars + writing + chat + sections)
+    const promptApprox = writing + "\n" + chatText + "\n".repeat(3000);
     const estimated = estimateTokens(promptApprox);
     const result = classifyTokenUsage(estimated, "claude-sonnet-4-6");
     setPreCheck(result);
@@ -125,30 +144,19 @@ export function useFlowAnalysis(projectId: string | null) {
       });
 
       if (fnErr) {
-        // Check for budget error (403)
         const msg = fnErr.message || "";
-        if (msg.includes("Insufficient token budget") || fnErr.context?.status === 403) {
-          // Try to parse structured budget info from the response
-          try {
-            const parsed = typeof data === "object" ? data : JSON.parse(msg);
-            if (parsed?.estimated_cost != null) {
-              setBudgetError({
-                type: "budget",
-                estimated_cost: parsed.estimated_cost,
-                budget_remaining: parsed.budget_remaining,
-                message: parsed.error || msg,
-              });
-              setLoading(false);
-              return;
-            }
-          } catch {
-            // Fall through to generic error
-          }
-          setError(msg);
+        // Try structured budget error from data
+        if (data?.estimated_cost != null) {
+          setBudgetError({
+            type: "budget",
+            estimated_cost: data.estimated_cost,
+            budget_remaining: data.budget_remaining,
+            message: data.error || msg,
+          });
           setLoading(false);
           return;
         }
-        setError(fnErr.message || "Analysis failed");
+        setError(msg || "Analysis failed");
         setLoading(false);
         return;
       }
@@ -163,6 +171,37 @@ export function useFlowAnalysis(projectId: string | null) {
     }
   }, [projectId]);
 
+  /** Save user feedback (pre or post) */
+  const saveFeedback = useCallback(
+    async (type: "pre" | "post", feedback: FlowFeedback) => {
+      if (!report) return;
+      const now = new Date().toISOString();
+      const update =
+        type === "pre"
+          ? { user_feedback_pre: feedback as any, user_feedback_pre_at: now }
+          : { user_feedback_post: feedback as any, user_feedback_post_at: now };
+
+      const { error: err } = await supabase
+        .from("flow_reports")
+        .update(update)
+        .eq("id", report.id);
+
+      if (!err) {
+        setReport((prev) =>
+          prev
+            ? {
+                ...prev,
+                ...(type === "pre"
+                  ? { user_feedback_pre: feedback, user_feedback_pre_at: now }
+                  : { user_feedback_post: feedback, user_feedback_post_at: now }),
+              }
+            : prev
+        );
+      }
+    },
+    [report]
+  );
+
   const clearPreCheck = useCallback(() => setPreCheck(null), []);
 
   return {
@@ -175,5 +214,6 @@ export function useFlowAnalysis(projectId: string | null) {
     budgetError,
     runAnalysis,
     loadLatestReport,
+    saveFeedback,
   };
 }
