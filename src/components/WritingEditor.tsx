@@ -18,7 +18,7 @@ interface Props {
   onWritingActivity?: () => void;
 }
 
-export function WritingEditor({ projectId }: Props) {
+export function WritingEditor({ projectId, onWritingActivity }: Props) {
   const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
   const [initialSet, setInitialSet] = useState(false);
 
