@@ -41,7 +41,7 @@ import type {
 } from "@/hooks/useFlowAnalysis";
 
 interface Props {
-  report: FlowReport;
+  report: FlowReport | null;
   projectName: string;
   loading: boolean;
   onBack: () => void;
@@ -331,7 +331,7 @@ export function FlowReportView({
   const [preFeedbackViewed, setPreFeedbackViewed] = useState(false);
 
   // Show pre-feedback prompt first if it hasn't been submitted
-  const showPreFeedback = !report.user_feedback_pre && !preFeedbackViewed;
+  const showPreFeedback = report ? !report.user_feedback_pre && !preFeedbackViewed : false;
 
   if (loading) {
     return (
@@ -348,6 +348,20 @@ export function FlowReportView({
               This may take up to a minute
             </p>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!report) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-background">
+        <div className="text-center space-y-3">
+          <p className="text-sm text-muted-foreground">No report data available.</p>
+          <Button variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Editor
+          </Button>
         </div>
       </div>
     );
