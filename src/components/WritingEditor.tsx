@@ -6,6 +6,9 @@ import Link from "@tiptap/extension-link";
 import TextAlign from "@tiptap/extension-text-align";
 import CharacterCount from "@tiptap/extension-character-count";
 import Placeholder from "@tiptap/extension-placeholder";
+import TextStyle from "@tiptap/extension-text-style";
+import Color from "@tiptap/extension-color";
+import { FontSize } from "@/lib/tiptap-font-size";
 import { useWritingContent } from "@/hooks/useWritingContent";
 import { EditorToolbar } from "@/components/EditorToolbar";
 import { Loader2 } from "lucide-react";
@@ -26,6 +29,9 @@ export function WritingEditor({ projectId }: Props) {
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       CharacterCount,
       Placeholder.configure({ placeholder: "Start writing…" }),
+      TextStyle,
+      Color,
+      FontSize,
     ],
     editorProps: {
       attributes: {
