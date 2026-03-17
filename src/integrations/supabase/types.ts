@@ -534,6 +534,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      increment_tokens_used: {
+        Args: { amount: number; user_uuid: string }
+        Returns: undefined
+      }
       owns_project: { Args: { _project_id: string }; Returns: boolean }
       owns_thread: { Args: { _thread_id: string }; Returns: boolean }
     }
