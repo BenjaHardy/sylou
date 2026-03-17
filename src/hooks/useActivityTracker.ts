@@ -48,16 +48,16 @@ export function useActivityTracker(projectId: string | null) {
         const updates: Record<string, any> = {};
 
         // Clock anomaly detection
-        if (stats.last_activity_at && new Date(nowIso) < new Date(stats.last_activity_at as string)) {
-          updates.clock_anomaly_count = ((stats.clock_anomaly_count as number) || 0) + 1;
+        if (stats.last_activity_at && new Date(nowIso) < new Date(stats.last_activity_at)) {
+          updates.clock_anomaly_count = (stats.clock_anomaly_count || 0) + 1;
         } else {
           updates.last_activity_at = nowIso;
         }
 
-        updates.total_active_time_seconds = ((stats.total_active_time_seconds as number) || 0) + 30;
+        updates.total_active_time_seconds = (stats.total_active_time_seconds || 0) + 30;
 
         if (isWriting) {
-          updates.total_writing_time_seconds = ((stats.total_writing_time_seconds as number) || 0) + 30;
+          updates.total_writing_time_seconds = (stats.total_writing_time_seconds || 0) + 30;
         }
 
         if (!stats.first_activity_at) {
