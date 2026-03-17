@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -11,19 +11,29 @@ import Color from "@tiptap/extension-color";
 import { FontSize } from "@/lib/tiptap-font-size";
 import { useWritingContent } from "@/hooks/useWritingContent";
 import { EditorToolbar } from "@/components/EditorToolbar";
-import { Loader2, Activity } from "lucide-react";
+import { AISelectionButton } from "@/components/AISelectionButton";
+import { TextSelectionWindow } from "@/components/TextSelectionWindow";
+import { Loader2 } from "lucide-react";
 
 interface Props {
   projectId: string;
+  tutorMode?: boolean;
   onWritingActivity?: () => void;
   onFlowClick?: () => void;
   flowLoading?: boolean;
   hasFlowReport?: boolean;
+  onAskAI?: (question: string, selectedText: string) => void;
 }
 
-export function WritingEditor({ projectId, onWritingActivity, onFlowClick, flowLoading, hasFlowReport }: Props) {
+export function WritingEditor({ projectId, tutorMode = false, onWritingActivity, onFlowClick, flowLoading, hasFlowReport, onAskAI }: Props) {
   const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
   const [initialSet, setInitialSet] = useState(false);
+  const editorWrapperRef = useRef<HTMLDivElement>(null);
+
+  // AI selection state
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [aiAnchorRect, setAiAnchorRect] = useState<DOMRect | null>(null);
+  const [aiSelectedText, setAiSelectedText] = useState("");
 
   const editor = useEditor({
     extensions: [
@@ -61,7 +71,30 @@ export function WritingEditor({ projectId, onWritingActivity, onFlowClick, flowL
   // Reset when projectId changes
   useEffect(() => {
     setInitialSet(false);
+    setAiPanelOpen(false);
   }, [projectId]);
+
+  const handleOpenAIPanel = useCallback((rect: DOMRect, text: string) => {
+    setAiAnchorRect(rect);
+    setAiSelectedText(text);
+    setAiPanelOpen(true);
+  }, []);
+
+  const handleAcceptProposal = useCallback(
+    (replacementText: string) => {
+      if (!editor) return;
+      // The editor should still have the selection; insert content to replace it
+      editor.chain().focus().insertContent(replacementText).run();
+    },
+    [editor]
+  );
+
+  const handleAsk = useCallback(
+    (question: string, selectedText: string) => {
+      onAskAI?.(question, selectedText);
+    },
+    [onAskAI]
+  );
 
   if (loading || !editor) {
     return (
@@ -74,11 +107,34 @@ export function WritingEditor({ projectId, onWritingActivity, onFlowClick, flowL
   const words = editor.storage.characterCount.words();
   const chars = editor.storage.characterCount.characters();
 
+  const editorDom = editorWrapperRef.current;
+
   return (
     <div className="flex flex-col h-full">
       <EditorToolbar editor={editor} />
-      <div className="flex-1 overflow-y-auto bg-background">
+      <div ref={editorWrapperRef} className="flex-1 overflow-y-auto bg-background relative">
         <EditorContent editor={editor} className="h-full" />
+
+        {/* Floating AI button on text selection */}
+        {!aiPanelOpen && (
+          <AISelectionButton
+            editorElement={editorDom}
+            onOpen={handleOpenAIPanel}
+          />
+        )}
+
+        {/* AI Text Selection Window */}
+        {aiPanelOpen && aiAnchorRect && editorDom && (
+          <TextSelectionWindow
+            selectedText={aiSelectedText}
+            anchorRect={aiAnchorRect}
+            editorElement={editorDom}
+            tutorMode={tutorMode}
+            onClose={() => setAiPanelOpen(false)}
+            onAccept={handleAcceptProposal}
+            onAsk={handleAsk}
+          />
+        )}
       </div>
       <div className="border-t border-border flex items-center justify-between px-4 py-1.5 text-xs text-muted-foreground shrink-0 bg-[hsl(var(--ethos-surface))]">
         <span>
