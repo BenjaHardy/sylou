@@ -18,7 +18,7 @@ interface Props {
 }
 
 export function WritingEditor({ projectId }: Props) {
-  const { content, loading, saveState, updateContent } = useWritingContent(projectId);
+  const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
   const [initialSet, setInitialSet] = useState(false);
 
   const editor = useEditor({
