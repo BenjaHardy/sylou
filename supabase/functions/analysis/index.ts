@@ -1,7 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const allowedOrigin = Deno.env.get("ALLOWED_ORIGIN") || "*";
+
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": allowedOrigin,
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
@@ -12,6 +14,11 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
+
+// ---------------------------------------------------------------------------
+// UUID validation
+// ---------------------------------------------------------------------------
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ---------------------------------------------------------------------------
 // FLOW Prompt v1.2 – full text from Ethos_FLOW_Prompt.docx
@@ -134,6 +141,50 @@ function buildProvenanceAnnotatedWriting(
   return result;
 }
 
+/**
+ * Compute aggregate character-count percentages per provenance type.
+ */
+function computeProvenanceStats(
+  content: string,
+  segmentMap: Array<{ start: number; end: number; type: string }>
+): Record<string, number> {
+  const totalLen = content.length;
+  if (totalLen === 0) return { typed: 100, copy_chat: 0, copy_external: 0, ai: 0 };
+
+  const counts: Record<string, number> = { typed: 0, copy_chat: 0, copy_external: 0, ai: 0 };
+
+  if (!segmentMap || segmentMap.length === 0) {
+    return { typed: 100, copy_chat: 0, copy_external: 0, ai: 0 };
+  }
+
+  const sorted = [...segmentMap].sort((a, b) => a.start - b.start);
+  let cursor = 0;
+
+  for (const seg of sorted) {
+    if (seg.start > cursor) {
+      counts["typed"] += seg.start - cursor;
+    }
+    const normType = seg.type === "typed" ? "typed"
+      : seg.type === "copy_chat" ? "copy_chat"
+      : seg.type === "copy_external" ? "copy_external"
+      : seg.type === "ai" ? "ai"
+      : seg.type;
+    counts[normType] = (counts[normType] || 0) + (seg.end - seg.start);
+    cursor = seg.end;
+  }
+
+  if (cursor < totalLen) {
+    counts["typed"] += totalLen - cursor;
+  }
+
+  // Convert to percentages
+  const result: Record<string, number> = {};
+  for (const [key, val] of Object.entries(counts)) {
+    result[key] = Math.round((val / totalLen) * 1000) / 10; // one decimal
+  }
+  return result;
+}
+
 function buildChatHistoryString(
   messages: Array<{
     created_at: string;
@@ -206,9 +257,6 @@ function buildEditorStatsString(
 // Similarity detection: compare writing against AI assistant chat messages
 // ---------------------------------------------------------------------------
 
-/**
- * Normalise text for comparison: lowercase, collapse whitespace, strip punctuation.
- */
 function normalise(text: string): string {
   return text
     .toLowerCase()
@@ -217,9 +265,6 @@ function normalise(text: string): string {
     .trim();
 }
 
-/**
- * Build a set of n-grams (word-level) from a string.
- */
 function ngrams(text: string, n: number): Set<string> {
   const words = text.split(" ");
   const out = new Set<string>();
@@ -229,10 +274,6 @@ function ngrams(text: string, n: number): Set<string> {
   return out;
 }
 
-/**
- * Estimate the percentage of the writing that closely matches AI assistant
- * chat messages using 5-gram overlap.  Returns a value 0–100.
- */
 function computeSimilarityPct(
   writingContent: string,
   assistantMessages: string[]
@@ -240,7 +281,6 @@ function computeSimilarityPct(
   const normWriting = normalise(writingContent);
   if (!normWriting) return 0;
 
-  // Build set of 5-grams from all assistant messages
   const assistantNgrams = new Set<string>();
   for (const msg of assistantMessages) {
     const normMsg = normalise(msg);
@@ -251,7 +291,6 @@ function computeSimilarityPct(
 
   if (assistantNgrams.size === 0) return 0;
 
-  // Count how many of the writing's 5-grams appear in assistant messages
   const writingNgramsList = ngrams(normWriting, 5);
   if (writingNgramsList.size === 0) return 0;
 
@@ -293,11 +332,11 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
-    // --- Parse body ---
+    // --- Parse body & validate project_id ---
     const body = await req.json();
     const projectId: string = body.project_id;
-    if (!projectId) {
-      return jsonResponse({ error: "project_id is required" }, 400);
+    if (!projectId || typeof projectId !== "string" || !UUID_RE.test(projectId)) {
+      return jsonResponse({ error: "project_id must be a valid UUID" }, 400);
     }
 
     // --- Verify project ownership (RLS) + get settings ---
@@ -311,7 +350,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Project not found or not owned by user" }, 404);
     }
 
-    // --- Token budget check ---
+    // --- Fetch profile for budget (needed later) ---
     const { data: profile } = await supabase
       .from("profiles")
       .select("tokens_used_this_period, monthly_token_budget")
@@ -320,15 +359,6 @@ Deno.serve(async (req) => {
 
     if (!profile) {
       return jsonResponse({ error: "Profile not found" }, 404);
-    }
-
-    const budgetRemaining =
-      profile.monthly_token_budget - profile.tokens_used_this_period;
-    if (budgetRemaining < 25000) {
-      return jsonResponse(
-        { error: "Insufficient token budget for FLOW analysis (requires ~25k tokens)" },
-        403
-      );
     }
 
     // --- Fetch all project data in parallel ---
@@ -415,6 +445,16 @@ Deno.serve(async (req) => {
       segmentMap
     );
 
+    // --- Compute provenance statistics ---
+    const provenanceStats = computeProvenanceStats(writingContent, segmentMap);
+    const provenanceSection = `# === INPUT PROVENANCE DATA ===
+
+Character-count breakdown by provenance type:
+- Typed by user: ${provenanceStats.typed}%
+- Copied from AI chat: ${provenanceStats.copy_chat}%
+- Copied from external source: ${provenanceStats.copy_external}%
+- AI-generated (editor): ${provenanceStats.ai}%`;
+
     // --- Build chat history string ---
     const chatHistoryStr =
       chatMessages.length > 0
@@ -446,7 +486,7 @@ Deno.serve(async (req) => {
     // --- Build full prompt ---
     const userPrompt = `# LANGUAGE
 
-Respond in: ${project.language}
+Respond entirely in ${project.language}. All summaries, analyses, evidence items, reasoning, and narratives must be written in ${project.language}. Only JSON structure and field names remain in English.
 
 # WRITING CONTENT (PROVENANCE-ANNOTATED)
 
@@ -458,6 +498,8 @@ The writing content below is annotated with provenance tags indicating the origi
 - [ai] = AI-generated text accepted from the text selection window (the user selected text in their editor and requested an AI rewrite, expansion, simplification, or proposal, then accepted the result)
 
 ${annotatedWriting}
+
+${provenanceSection}
 
 # CHAT HISTORY
 
@@ -482,10 +524,23 @@ The following statistics summarize AI-assisted editing actions performed via the
 ${editorStatsStr}
 ${writePillarNotice}`;
 
+    // --- Budget check (after prompt is fully built) ---
+    const fullPromptText = FLOW_PROMPT_TEMPLATE + userPrompt;
+    const charEst = Math.ceil(fullPromptText.length / 4) * 1.1;
+    const wordEst = fullPromptText.split(/\s+/).length * 1.3;
+    const estimated = Math.ceil(Math.max(charEst, wordEst));
+    const budgetRemaining =
+      profile.monthly_token_budget - profile.tokens_used_this_period;
+
+    if (budgetRemaining < estimated + 2000) {
+      return jsonResponse(
+        { error: `Insufficient token budget for FLOW analysis (estimated ~${estimated} input tokens, budget remaining: ${budgetRemaining})` },
+        403
+      );
+    }
+
     // --- Estimate input tokens for flow_meta ---
-    const estimatedInputTokens = Math.ceil(
-      (FLOW_PROMPT_TEMPLATE.length + userPrompt.length) / 4
-    );
+    const estimatedInputTokens = estimated;
     const contextLimitTokens = 200000; // Claude Sonnet context window
 
     // --- Call Anthropic with tool use ---
@@ -551,7 +606,7 @@ ${writePillarNotice}`;
         ` [Note: Write score capped at 2.0 due to automated similarity detection finding ${similarityPct}% overlap with AI chat responses.]`;
     }
 
-    // --- Capture metrics snapshot ---
+    // --- Capture metrics snapshot (includes all stats fields) ---
     const metricsSnapshot = statsRes.data
       ? {
           total_active_time_seconds: statsRes.data.total_active_time_seconds,
@@ -559,6 +614,9 @@ ${writePillarNotice}`;
           chat_prompt_count_normal: statsRes.data.chat_prompt_count_normal,
           chat_prompt_count_tutor: statsRes.data.chat_prompt_count_tutor,
           sanity_check_count: statsRes.data.sanity_check_count,
+          first_activity_at: statsRes.data.first_activity_at,
+          last_activity_at: statsRes.data.last_activity_at,
+          clock_anomaly_count: statsRes.data.clock_anomaly_count,
         }
       : null;
 
@@ -570,15 +628,13 @@ ${writePillarNotice}`;
       Math.ceil(JSON.stringify(flowResult).length / 4);
     const totalTokens = inputTokens + outputTokens;
 
+    const budgetRatio = profile.tokens_used_this_period / profile.monthly_token_budget;
+    const tokenStatus = budgetRatio >= 1.0 ? "over" : budgetRatio >= 0.8 ? "near" : "ok";
+
     const flowMeta = {
       estimated_input_tokens: inputTokens,
       context_limit_tokens: contextLimitTokens,
-      token_status:
-        inputTokens > contextLimitTokens * 0.9
-          ? "near_limit"
-          : inputTokens > contextLimitTokens * 0.7
-          ? "high"
-          : "ok",
+      token_status: tokenStatus,
       measured_at: new Date().toISOString(),
       similarity_pct: similarityPct,
       write_score_capped: similarityPct >= 35,
@@ -606,7 +662,10 @@ ${writePillarNotice}`;
       return jsonResponse({ error: "Failed to store analysis report" }, 500);
     }
 
-    // --- Log token usage ---
+    // --- Log token usage & atomically increment budget ---
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
+
     await Promise.all([
       supabase.from("token_usage").insert({
         user_id: user.id,
@@ -616,21 +675,16 @@ ${writePillarNotice}`;
         input_tokens: inputTokens,
         output_tokens: outputTokens,
       }),
-      supabase
-        .from("profiles")
-        .update({
-          tokens_used_this_period:
-            profile.tokens_used_this_period + totalTokens,
-        })
-        .eq("id", user.id),
+      adminSupabase.rpc("increment_tokens_used", {
+        user_uuid: user.id,
+        amount: totalTokens,
+      }),
     ]);
 
     return jsonResponse({
       report,
       tokens_used: totalTokens,
-      budget_remaining:
-        profile.monthly_token_budget -
-        (profile.tokens_used_this_period + totalTokens),
+      budget_remaining: budgetRemaining - totalTokens,
     });
   } catch (err) {
     console.error("Analysis function error:", err);
