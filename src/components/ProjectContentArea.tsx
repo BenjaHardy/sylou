@@ -3,6 +3,8 @@ import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { WritingEditor } from "@/components/WritingEditor";
 import { ChatPanel } from "@/components/ChatPanel";
+import { ProjectActivityBar } from "@/components/ProjectActivityBar";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 import type { Project } from "@/hooks/useProjects";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 
@@ -47,6 +49,7 @@ export function ProjectContentArea({ project }: Props) {
   const [chatExpanded, setChatExpanded] = useState(false);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
+  const { markWriting } = useActivityTracker(project?.id ?? null);
 
   if (!project) return <WelcomeScreen />;
 
@@ -66,7 +69,12 @@ export function ProjectContentArea({ project }: Props) {
     <div className="flex-1 flex flex-col bg-background h-screen [&_[data-panel]]:transition-all [&_[data-panel]]:duration-150 [&_[data-panel]]:ease-ethos-ease">
       <ResizablePanelGroup direction="horizontal" className="flex-1">
         <ResizablePanel ref={editorPanelRef} defaultSize={DEFAULT_EDITOR_SIZE} minSize={0}>
-          <WritingEditor projectId={project.id} />
+          <div className="flex flex-col h-full">
+            <WritingEditor projectId={project.id} onWritingActivity={markWriting} />
+            <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
+              <ProjectActivityBar projectId={project.id} />
+            </div>
+          </div>
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20}>

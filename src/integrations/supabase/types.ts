@@ -144,6 +144,56 @@ export type Database = {
         }
         Relationships: []
       }
+      project_stats: {
+        Row: {
+          chat_prompt_count_normal: number
+          chat_prompt_count_tutor: number
+          clock_anomaly_count: number
+          created_at: string
+          first_activity_at: string | null
+          id: string
+          last_activity_at: string | null
+          project_id: string
+          sanity_check_count: number
+          total_active_time_seconds: number
+          total_writing_time_seconds: number
+        }
+        Insert: {
+          chat_prompt_count_normal?: number
+          chat_prompt_count_tutor?: number
+          clock_anomaly_count?: number
+          created_at?: string
+          first_activity_at?: string | null
+          id?: string
+          last_activity_at?: string | null
+          project_id: string
+          sanity_check_count?: number
+          total_active_time_seconds?: number
+          total_writing_time_seconds?: number
+        }
+        Update: {
+          chat_prompt_count_normal?: number
+          chat_prompt_count_tutor?: number
+          clock_anomaly_count?: number
+          created_at?: string
+          first_activity_at?: string | null
+          id?: string
+          last_activity_at?: string | null
+          project_id?: string
+          sanity_check_count?: number
+          total_active_time_seconds?: number
+          total_writing_time_seconds?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_stats_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           created_at: string

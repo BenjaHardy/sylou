@@ -15,9 +15,10 @@ import { Loader2 } from "lucide-react";
 
 interface Props {
   projectId: string;
+  onWritingActivity?: () => void;
 }
 
-export function WritingEditor({ projectId }: Props) {
+export function WritingEditor({ projectId, onWritingActivity }: Props) {
   const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
   const [initialSet, setInitialSet] = useState(false);
 
@@ -42,6 +43,7 @@ export function WritingEditor({ projectId }: Props) {
     },
     onUpdate: ({ editor: e }) => {
       updateContent(e.getHTML());
+      onWritingActivity?.();
     },
   });
 
