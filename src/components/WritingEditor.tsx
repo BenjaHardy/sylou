@@ -43,6 +43,7 @@ export function WritingEditor({ projectId, onWritingActivity }: Props) {
     },
     onUpdate: ({ editor: e }) => {
       updateContent(e.getHTML());
+      onWritingActivity?.();
     },
   });
 
