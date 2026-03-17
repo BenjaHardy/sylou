@@ -12,12 +12,21 @@ import {
   List, ListOrdered, Quote, Code2, Link2, Minus,
   Undo2, Redo2,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
-  Search, X,
+  Search, X, ChevronDown, Palette,
 } from "lucide-react";
 
 interface Props {
   editor: Editor;
 }
+
+const FONT_SIZES = ["10", "12", "14", "16", "18", "20", "24", "28", "32"];
+
+const PRESET_COLORS = [
+  "#000000", "#434343", "#666666", "#999999",
+  "#B7B7B7", "#D9D9D9", "#EF4444", "#F97316",
+  "#EAB308", "#22C55E", "#3B82F6", "#8B5CF6",
+  "#EC4899", "#14B8A6", "#6366F1", "#A855F7",
+];
 
 function ToolbarToggle({
   pressed,
@@ -43,6 +52,113 @@ function ToolbarToggle({
   );
 }
 
+function FontSizeDropdown({ editor }: { editor: Editor }) {
+  const [open, setOpen] = useState(false);
+  const currentSize = editor.getAttributes("textStyle")?.fontSize?.replace("px", "") || "16";
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          title="Font size"
+          className="h-8 px-2 flex items-center gap-0.5 rounded-md text-xs font-medium hover:bg-accent transition-colors"
+        >
+          {currentSize}
+          <ChevronDown size={12} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-24 p-1" align="start">
+        {FONT_SIZES.map((size) => (
+          <button
+            key={size}
+            onClick={() => {
+              editor.chain().focus().setFontSize(`${size}px`).run();
+              setOpen(false);
+            }}
+            className={`w-full text-left px-3 py-1.5 text-sm rounded-sm hover:bg-accent transition-colors ${
+              currentSize === size ? "bg-accent font-medium" : ""
+            }`}
+          >
+            {size}
+          </button>
+        ))}
+        <button
+          onClick={() => {
+            editor.chain().focus().unsetFontSize().run();
+            setOpen(false);
+          }}
+          className="w-full text-left px-3 py-1.5 text-sm rounded-sm hover:bg-accent transition-colors text-muted-foreground"
+        >
+          Default
+        </button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function FontColorPicker({ editor }: { editor: Editor }) {
+  const [open, setOpen] = useState(false);
+  const currentColor = editor.getAttributes("textStyle")?.color || "#000000";
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          title="Font color"
+          className="h-8 w-8 flex items-center justify-center rounded-md hover:bg-accent transition-colors"
+        >
+          <div className="flex flex-col items-center gap-0.5">
+            <Palette size={14} />
+            <div
+              className="h-1 w-4 rounded-sm"
+              style={{ backgroundColor: currentColor }}
+            />
+          </div>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-52 p-3" align="start">
+        <div className="grid grid-cols-4 gap-1.5 mb-3">
+          {PRESET_COLORS.map((color) => (
+            <button
+              key={color}
+              onClick={() => {
+                editor.chain().focus().setColor(color).run();
+                setOpen(false);
+              }}
+              className="h-7 w-7 rounded-md border border-border hover:scale-110 transition-transform"
+              style={{ backgroundColor: color }}
+              title={color}
+            />
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            value={currentColor}
+            onChange={(e) => {
+              editor.chain().focus().setColor(e.target.value).run();
+            }}
+            className="h-7 w-7 rounded cursor-pointer border-0 p-0"
+            title="Custom color"
+          />
+          <span className="text-xs text-muted-foreground">Custom</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs px-2 ml-auto"
+            onClick={() => {
+              editor.chain().focus().unsetColor().run();
+              setOpen(false);
+            }}
+          >
+            Reset
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function EditorToolbar({ editor }: Props) {
   const [findOpen, setFindOpen] = useState(false);
   const [findText, setFindText] = useState("");
@@ -53,14 +169,12 @@ export function EditorToolbar({ editor }: Props) {
 
   const handleFind = () => {
     if (!findText) return;
-    // @ts-ignore - window.find is non-standard but widely supported
     if ((window as any).find) {
       (window as any).find(findText, false, false, true);
     }
   };
 
   const handleReplace = () => {
-    // Simple replace via execCommand for selected text
     const selection = window.getSelection();
     if (selection && selection.toString() === findText) {
       editor.commands.insertContent(replaceText);
@@ -106,6 +220,12 @@ export function EditorToolbar({ editor }: Props) {
         <ToolbarToggle pressed={editor.isActive("strike")} onPressedChange={() => editor.chain().focus().toggleStrike().run()} title="Strikethrough">
           <Strikethrough size={iconSize} />
         </ToolbarToggle>
+
+        <Separator orientation="vertical" className="mx-1 h-6" />
+
+        {/* Font size & color */}
+        <FontSizeDropdown editor={editor} />
+        <FontColorPicker editor={editor} />
 
         <Separator orientation="vertical" className="mx-1 h-6" />
 
