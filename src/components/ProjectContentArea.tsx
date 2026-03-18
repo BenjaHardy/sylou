@@ -40,7 +40,7 @@ function WelcomeScreen() {
             <li>• Enable <span className="font-medium text-foreground">Tutor Mode</span> for guided learning</li>
             <li>• Choose the template that fits your type of work</li>
             <li>• Use the AI chat panel to brainstorm and refine ideas</li>
-            <li>• Select text in your editor and use <span className="font-medium text-foreground">Ask</span> or <span className="font-medium text-foreground">Propose</span> for context-aware AI feedback</li>
+            
           </ul>
         </div>
       </div>
