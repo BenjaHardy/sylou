@@ -1,5 +1,11 @@
 import { Clock, Pencil, MessageSquare, Shield } from "lucide-react";
 import { useProjectStats, type ProjectStats } from "@/hooks/useProjectStats";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface Props {
   projectId: string;
@@ -12,26 +18,42 @@ function formatDuration(seconds: number): string {
   return `${m}m`;
 }
 
+const ACTIVITY_TOOLTIPS = {
+  Active: "Total time the project was open and the user was actively interacting (typing, clicking, scrolling).",
+  Writing: "Time spent typing or editing in the writing editor specifically.",
+  Prompts: "Number of messages sent to the AI chat assistant.",
+  Checks: "Number of times the AI-assisted editor actions were reviewed or validated before acceptance.",
+} as const;
+
 export function ProjectActivityBar({ projectId }: Props) {
   const { stats } = useProjectStats(projectId);
 
   if (!stats) return null;
 
   const items = [
-    { icon: Clock, label: "Active", value: formatDuration(stats.total_active_time_seconds) },
-    { icon: Pencil, label: "Writing", value: formatDuration(stats.total_writing_time_seconds) },
-    { icon: MessageSquare, label: "Prompts", value: `${stats.chat_prompt_count_normal + stats.chat_prompt_count_tutor}` },
-    { icon: Shield, label: "Checks", value: `${stats.sanity_check_count}` },
+    { icon: Clock, label: "Active" as const, value: formatDuration(stats.total_active_time_seconds) },
+    { icon: Pencil, label: "Writing" as const, value: formatDuration(stats.total_writing_time_seconds) },
+    { icon: MessageSquare, label: "Prompts" as const, value: `${stats.chat_prompt_count_normal + stats.chat_prompt_count_tutor}` },
+    { icon: Shield, label: "Checks" as const, value: `${stats.sanity_check_count}` },
   ];
 
   return (
-    <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
-      {items.map(({ icon: Icon, label, value }) => (
-        <span key={label} className="flex items-center gap-1" title={label}>
-          <Icon className="h-3 w-3" />
-          {value}
-        </span>
-      ))}
-    </div>
+    <TooltipProvider>
+      <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+        {items.map(({ icon: Icon, label, value }) => (
+          <Tooltip key={label}>
+            <TooltipTrigger asChild>
+              <span className="flex items-center gap-1 cursor-help">
+                <Icon className="h-3 w-3" />
+                {value}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs text-xs">
+              {ACTIVITY_TOOLTIPS[label]}
+            </TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
+    </TooltipProvider>
   );
 }
