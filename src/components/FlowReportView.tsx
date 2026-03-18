@@ -179,9 +179,18 @@ function ScoreCard({
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-full bg-background/80 flex items-center justify-center">
-            <Icon className="h-4 w-4" />
-          </div>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="h-8 w-8 rounded-full bg-background/80 flex items-center justify-center cursor-help">
+                  <Icon className="h-4 w-4" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs text-xs">
+                {PILLAR_TOOLTIPS[pillarKey]}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <div>
             <p className="text-xs font-bold uppercase tracking-wider">{labels.short}</p>
             <p className="text-[10px] opacity-80">{labels.full.split(" — ")[1]}</p>
