@@ -6,8 +6,14 @@ import {
   PolarRadiusAxis,
   Radar,
   ResponsiveContainer,
-  Tooltip,
+  Tooltip as RechartsTooltip,
 } from "recharts";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   ArrowLeft,
   Activity,
@@ -82,6 +88,13 @@ const PILLAR_LABELS: Record<string, { short: string; full: string }> = {
   write: { short: "W", full: "Write — Writing & Text Production" },
 };
 
+const PILLAR_TOOLTIPS: Record<string, string> = {
+  find: "Identifies how the user researched relevant topics, whether they questioned the AI's outputs, compared alternatives, or challenged suggestions — versus relying on the AI without investigation.",
+  lead: "Determines who is the true source of the ideas, opinions and perspectives in the final work.",
+  organize: "Assesses how the ideas, opinions and perspectives are structured, and how the narrative and argumentation — supporting those ideas, opinions and perspectives — are developed.",
+  write: "Analyzes the respective contributions to tone, style, clarity, correctness, sentence structure, transitions, and final drafting.",
+};
+
 /* ─── Radar Chart ─── */
 function FlowRadarChart({ report }: { report: FlowReport }) {
   const data = [
@@ -126,7 +139,7 @@ function FlowRadarChart({ report }: { report: FlowReport }) {
             strokeWidth={2}
             dot={{ r: 4, fill: "hsl(var(--primary))" }}
           />
-          <Tooltip
+          <RechartsTooltip
             contentStyle={{
               backgroundColor: "hsl(var(--popover))",
               border: "1px solid hsl(var(--border))",
@@ -166,9 +179,18 @@ function ScoreCard({
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-full bg-background/80 flex items-center justify-center">
-            <Icon className="h-4 w-4" />
-          </div>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="h-8 w-8 rounded-full bg-background/80 flex items-center justify-center cursor-help">
+                  <Icon className="h-4 w-4" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs text-xs">
+                {PILLAR_TOOLTIPS[pillarKey]}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <div>
             <p className="text-xs font-bold uppercase tracking-wider">{labels.short}</p>
             <p className="text-[10px] opacity-80">{labels.full.split(" — ")[1]}</p>
