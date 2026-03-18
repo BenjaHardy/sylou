@@ -270,7 +270,7 @@ function TokenUsageSection({ meta }: { meta: FlowMeta }) {
 
   return (
     <div className="border border-border rounded-lg p-4 space-y-2">
-      <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+      <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -281,7 +281,7 @@ function TokenUsageSection({ meta }: { meta: FlowMeta }) {
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-        Token Usage
+        Token usage
       </h4>
       <div className="grid grid-cols-2 gap-y-2 text-xs">
         <span className="text-muted-foreground">Estimated prompt tokens</span>
