@@ -132,7 +132,7 @@ function FlowRadarChart({ report }: { report: FlowReport }) {
             strokeWidth={2}
             dot={{ r: 4, fill: "hsl(var(--primary))" }}
           />
-          <Tooltip
+          <RechartsTooltip
             contentStyle={{
               backgroundColor: "hsl(var(--popover))",
               border: "1px solid hsl(var(--border))",
