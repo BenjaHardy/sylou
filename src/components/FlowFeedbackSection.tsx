@@ -32,7 +32,18 @@ export function FlowFeedbackSection({ type, existingFeedback, onSubmit }: Props)
       <div className="border border-border rounded-lg p-4 bg-muted/30">
         <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
           <MessageSquareQuote className="h-3.5 w-3.5" />
-          {type === "pre" ? "Your self-assessment (before viewing results)" : "Your post-analysis feedback"}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="cursor-help">
+                  {type === "pre" ? "Self-assessment (pre-analysis feedback)" : "Self-assessment (post-analysis feedback)"}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{type === "pre" ? "Before viewing results" : "After viewing results"}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </p>
         <div className="grid grid-cols-4 gap-3 text-center">
           {PILLARS.map((p) => (
