@@ -271,7 +271,16 @@ function TokenUsageSection({ meta }: { meta: FlowMeta }) {
   return (
     <div className="border border-border rounded-lg p-4 space-y-2">
       <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-        <Zap className="h-3.5 w-3.5" />
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Zap className="h-3.5 w-3.5 cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs text-xs">
+              Shows how much of the AI model's context window was used for this analysis. A higher percentage means more of your project data was included.
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         Token Usage
       </h4>
       <div className="grid grid-cols-2 gap-y-2 text-xs">
