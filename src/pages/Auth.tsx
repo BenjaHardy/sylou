@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ethosLogo from "@/assets/ethos-logo.png";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
