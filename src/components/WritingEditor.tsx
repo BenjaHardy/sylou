@@ -164,7 +164,7 @@ export function WritingEditor({ projectId, tutorMode = false, onWritingActivity,
             className="inline-flex items-center gap-1.5 px-4 py-1 rounded text-sm font-medium text-white transition-colors disabled:opacity-70"
             style={{ backgroundColor: flowLoading ? '#6c757d' : '#6A8C8C' }}
           >
-            {flowLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+            {flowLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
             {flowLoading ? "Analyzing…" : hasFlowReport ? "View FLOW" : "Analyze with FLOW"}
           </button>
         </div>
