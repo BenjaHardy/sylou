@@ -370,7 +370,7 @@ function ProjectActivitySection({ metrics }: { metrics: MetricsSnapshot }) {
                 <Shield className="h-3 w-3 cursor-help" />
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs text-xs">
-                Number of times the AI-assisted editor actions were reviewed or validated before acceptance.
+                Number of sanity checks performed on the project.
               </TooltipContent>
             </Tooltip>
             Sanity checks
