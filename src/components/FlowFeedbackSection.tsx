@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { MessageSquareQuote } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { FlowFeedback } from "@/hooks/useFlowAnalysis";
 
 interface Props {
