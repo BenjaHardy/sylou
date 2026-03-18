@@ -277,7 +277,7 @@ function TokenUsageSection({ meta }: { meta: FlowMeta }) {
               <Zap className="h-3.5 w-3.5 cursor-help" />
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs text-xs">
-              Shows how much of the AI model's context window was used for this analysis. A higher percentage means more of your project data was included.
+              Shows how much of the AI model's context window was used for this analysis. Having more than 100% may negatively impact the FLOW analysis.
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -370,7 +370,7 @@ function ProjectActivitySection({ metrics }: { metrics: MetricsSnapshot }) {
                 <Shield className="h-3 w-3 cursor-help" />
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs text-xs">
-                Number of times the AI-assisted editor actions were reviewed or validated before acceptance.
+                Number of sanity checks performed on the project.
               </TooltipContent>
             </Tooltip>
             Sanity checks

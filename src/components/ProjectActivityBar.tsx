@@ -22,7 +22,7 @@ const ACTIVITY_TOOLTIPS = {
   Active: "Total time the project was open and the user was actively interacting (typing, clicking, scrolling).",
   Writing: "Time spent typing or editing in the writing editor specifically.",
   Prompts: "Number of messages sent to the AI chat assistant.",
-  Checks: "Number of times the AI-assisted editor actions were reviewed or validated before acceptance.",
+  Checks: "Number of sanity checks performed on the project.",
 } as const;
 
 export function ProjectActivityBar({ projectId }: Props) {
