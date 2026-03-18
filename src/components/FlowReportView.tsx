@@ -88,6 +88,13 @@ const PILLAR_LABELS: Record<string, { short: string; full: string }> = {
   write: { short: "W", full: "Write — Writing & Text Production" },
 };
 
+const PILLAR_TOOLTIPS: Record<string, string> = {
+  find: "Identifies how the user researched relevant topics, whether they questioned the AI's outputs, compared alternatives, or challenged suggestions — versus relying on the AI without investigation.",
+  lead: "Determines who is the true source of the ideas, opinions and perspectives in the final work.",
+  organize: "Assesses how the ideas, opinions and perspectives are structured, and how the narrative and argumentation — supporting those ideas, opinions and perspectives — are developed.",
+  write: "Analyzes the respective contributions to tone, style, clarity, correctness, sentence structure, transitions, and final drafting.",
+};
+
 /* ─── Radar Chart ─── */
 function FlowRadarChart({ report }: { report: FlowReport }) {
   const data = [
