@@ -298,8 +298,8 @@ function FlowInfoSection() {
             <p className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-1">How to read scores</p>
             <p>
               Scores range from 0.0 (no human contribution detected) to 5.0 (entirely human). Scores are analytical,
-              not moral. A score of 2.0 ("More AI") is not "bad" — it means the AI contributed significantly to that
-              aspect. A score of 5.0 is not inherently "better" — effective AI collaboration (3.0–4.0) may produce
+              not moral. A score of 2.0 ("More AI") is not "bad", it means the AI contributed significantly to that
+              aspect. A score of 5.0 is not inherently "better", effective AI collaboration (3.0–4.0) may produce
               superior outcomes. FLOW provides transparency; interpretation depends on context.
             </p>
           </div>
