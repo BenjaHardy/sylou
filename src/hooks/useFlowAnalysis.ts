@@ -36,6 +36,17 @@ export interface FlowFeedback {
   write: number;
 }
 
+export interface FlowUserAssessment {
+  scores: FlowFeedback;
+  comments: {
+    find: string;
+    lead: string;
+    organize: string;
+    write: string;
+    overall: string;
+  };
+}
+
 export interface FlowReport {
   id: string;
   project_id: string;
@@ -50,7 +61,7 @@ export interface FlowReport {
   created_at: string;
   user_feedback_pre: FlowFeedback | null;
   user_feedback_pre_at: string | null;
-  user_feedback_post: FlowFeedback | null;
+  user_feedback_post: FlowUserAssessment | FlowFeedback | null;
   user_feedback_post_at: string | null;
 }
 
@@ -67,6 +78,8 @@ export function useFlowAnalysis(projectId: string | null) {
   const [report, setReport] = useState<FlowReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [budgetError, setBudgetError] = useState<BudgetError | null>(null);
+  /** Whether a report existed before the user first clicked "Analyze with FLOW" in this session */
+  const [hadReportOnMount, setHadReportOnMount] = useState<boolean | null>(null);
 
   /** Load the latest existing flow report for this project */
   const loadLatestReport = useCallback(async () => {
@@ -81,15 +94,18 @@ export function useFlowAnalysis(projectId: string | null) {
 
     if (data) {
       setReport(data as unknown as FlowReport);
+      if (hadReportOnMount === null) setHadReportOnMount(true);
     } else {
       setReport(null);
+      if (hadReportOnMount === null) setHadReportOnMount(false);
     }
-  }, [projectId]);
+  }, [projectId, hadReportOnMount]);
 
   // Load report on mount / project change
   useEffect(() => {
+    setHadReportOnMount(null);
     loadLatestReport();
-  }, [loadLatestReport]);
+  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * Estimate tokens BEFORE running analysis.
@@ -202,7 +218,34 @@ export function useFlowAnalysis(projectId: string | null) {
     [report]
   );
 
+  /** Save user assessment (scores + free-text comments) */
+  const saveUserAssessment = useCallback(
+    async (assessment: FlowUserAssessment) => {
+      if (!report) return;
+      const now = new Date().toISOString();
+      const { error: err } = await supabase
+        .from("flow_reports")
+        .update({
+          user_feedback_post: assessment as any,
+          user_feedback_post_at: now,
+        })
+        .eq("id", report.id);
+
+      if (!err) {
+        setReport((prev) =>
+          prev
+            ? { ...prev, user_feedback_post: assessment, user_feedback_post_at: now }
+            : prev
+        );
+      }
+    },
+    [report]
+  );
+
   const clearPreCheck = useCallback(() => setPreCheck(null), []);
+
+  /** Whether the pre-analysis feedback should be offered (first-ever analysis, no prior report) */
+  const isFirstAnalysis = hadReportOnMount === false;
 
   return {
     preCheck,
@@ -215,5 +258,7 @@ export function useFlowAnalysis(projectId: string | null) {
     runAnalysis,
     loadLatestReport,
     saveFeedback,
+    saveUserAssessment,
+    isFirstAnalysis,
   };
 }
