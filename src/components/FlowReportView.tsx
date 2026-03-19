@@ -363,7 +363,14 @@ export function FlowReportView({
 }: Props) {
   const [preFeedbackViewed, setPreFeedbackViewed] = useState(false);
 
-  // Show pre-feedback only if: showPreAnalysis is true AND no existing pre-feedback AND not yet viewed
+  useEffect(() => {
+    if (!showPreAnalysis) {
+      setPreFeedbackViewed(true);
+    } else {
+      setPreFeedbackViewed(false);
+    }
+  }, [showPreAnalysis, report?.id]);
+
   const showPreFeedback = showPreAnalysis && report ? !report.user_feedback_pre && !preFeedbackViewed : false;
 
   if (loading) {
