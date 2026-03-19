@@ -15,6 +15,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   ArrowLeft,
   Activity,
   Search,
@@ -34,6 +39,7 @@ import {
   ChevronUp,
   Loader2,
   Info,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -100,21 +106,79 @@ const PILLAR_TOOLTIPS: Record<string, string> = {
   write: "Analyzes the respective contributions to tone, style, clarity, correctness, sentence structure, transitions, and final drafting.",
 };
 
-/* ─── Radar Chart ─── */
-function FlowRadarChart({ report }: { report: FlowReport }) {
-  const data = [
-    { pillar: "Find", score: report.ai_find.score ?? 0, fullMark: 5 },
-    { pillar: "Lead", score: report.ai_lead.score ?? 0, fullMark: 5 },
-    { pillar: "Organize", score: report.ai_organize.score ?? 0, fullMark: 5 },
-    { pillar: "Write", score: report.ai_write.score ?? 0, fullMark: 5 },
+const PILLAR_KEYS = ["find", "lead", "organize", "write"] as const;
+
+/* ─── Custom Radar Tooltip ─── */
+function CustomRadarTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0]?.payload;
+  if (!item) return null;
+
+  return (
+    <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-md text-xs space-y-1">
+      <p className="font-semibold text-foreground">{item.pillar}</p>
+      {item.aiScore != null ? (
+        <p className="text-blue-500">AI: {item.aiScore.toFixed(1)} — {getScoreLabel(item.aiScore)}</p>
+      ) : (
+        <p className="text-muted-foreground">AI: Insufficient evidence</p>
+      )}
+      {item.userScore != null && (
+        <p style={{ color: item.userColor }}>
+          User: {item.userScore.toFixed(1)} — {getScoreLabel(item.userScore)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ─── Radar Chart with dual overlay ─── */
+function FlowRadarChart({
+  report,
+  userFeedback,
+  userLabel,
+  userColor,
+}: {
+  report: FlowReport;
+  userFeedback: FlowFeedback | null;
+  userLabel: string;
+  userColor: string;
+}) {
+  const pillars = [
+    { key: "find", pillar: "Find" },
+    { key: "lead", pillar: "Lead" },
+    { key: "organize", pillar: "Organize" },
+    { key: "write", pillar: "Write" },
   ];
 
-  const hasNullScores = [
-    report.ai_find.score,
-    report.ai_lead.score,
-    report.ai_organize.score,
-    report.ai_write.score,
-  ].some((s) => s == null);
+  const aiScores: Record<string, number | null> = {
+    find: report.ai_find.score,
+    lead: report.ai_lead.score,
+    organize: report.ai_organize.score,
+    write: report.ai_write.score,
+  };
+
+  const data = pillars.map(({ key, pillar }) => {
+    const aiRaw = aiScores[key];
+    const userRaw = userFeedback?.[key as keyof FlowFeedback] ?? null;
+    return {
+      pillar,
+      aiScore: aiRaw,
+      aiDisplay: aiRaw ?? 0,
+      userScore: userRaw,
+      userDisplay: userRaw ?? 0,
+      userColor,
+      isNull: aiRaw == null,
+    };
+  });
+
+  const hasNullScores = data.some((d) => d.isNull);
+  const hasUser = userFeedback != null;
+
+  // Determine fill/stroke colors
+  const aiStroke = "hsl(217, 91%, 60%)"; // blue-500
+  const aiFill = "hsl(217, 91%, 60%)";
+  const userStroke = userColor;
+  const userFill = userColor;
 
   return (
     <div className="flex flex-col items-center">
@@ -135,32 +199,160 @@ function FlowRadarChart({ report }: { report: FlowReport }) {
             tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
             tickCount={6}
           />
+          {/* AI scores layer */}
           <Radar
-            name="FLOW"
-            dataKey="score"
-            stroke="hsl(var(--primary))"
-            fill="hsl(var(--primary))"
-            fillOpacity={0.2}
+            name="AI Assessment"
+            dataKey="aiDisplay"
+            stroke={aiStroke}
+            fill={aiFill}
+            fillOpacity={0.25}
             strokeWidth={2}
-            dot={{ r: 4, fill: "hsl(var(--primary))" }}
-          />
-          <RechartsTooltip
-            contentStyle={{
-              backgroundColor: "hsl(var(--popover))",
-              border: "1px solid hsl(var(--border))",
-              borderRadius: "8px",
-              fontSize: "12px",
+            strokeDasharray={hasNullScores ? "6 3" : undefined}
+            dot={({ cx, cy, index }: any) => {
+              const d = data[index];
+              if (d?.isNull) {
+                return (
+                  <circle
+                    key={index}
+                    cx={cx}
+                    cy={cy}
+                    r={4}
+                    fill="none"
+                    stroke={aiStroke}
+                    strokeWidth={2}
+                    strokeDasharray="3 2"
+                  />
+                );
+              }
+              return <circle key={index} cx={cx} cy={cy} r={4} fill={aiStroke} />;
             }}
-            formatter={(value: number) => [`${value.toFixed(1)} / 5.0`, "Score"]}
           />
+          {/* User scores layer */}
+          {hasUser && (
+            <Radar
+              name={userLabel}
+              dataKey="userDisplay"
+              stroke={userStroke}
+              fill={userFill}
+              fillOpacity={0.2}
+              strokeWidth={2}
+              dot={{ r: 3, fill: userStroke }}
+            />
+          )}
+          <RechartsTooltip content={<CustomRadarTooltip />} />
         </RadarChart>
       </ResponsiveContainer>
+
+      {/* Legend */}
+      <div className="flex items-center gap-4 mt-2 text-xs">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: aiFill, opacity: 0.6 }} />
+          <span className="text-muted-foreground">Blue = AI Assessment</span>
+        </span>
+        {hasUser && (
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: userFill, opacity: 0.6 }} />
+            <span className="text-muted-foreground">{userLabel === "Pre-analysis" ? "Green" : "Orange"} = {userLabel}</span>
+          </span>
+        )}
+      </div>
+
       {hasNullScores && (
         <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1">
           <Info className="h-3 w-3" />
-          Dashed axes indicate insufficient evidence
+          Dashed lines/markers indicate insufficient evidence
         </p>
       )}
+    </div>
+  );
+}
+
+/* ─── About FLOW Collapsible ─── */
+function FlowInfoSection() {
+  return (
+    <Collapsible>
+      <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group">
+        <Info className="h-3.5 w-3.5" />
+        <span className="underline underline-offset-2">About this FLOW Report</span>
+        <ChevronDown className="h-3 w-3 transition-transform group-data-[state=open]:rotate-180" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-3">
+        <div className="border border-border rounded-lg p-5 bg-muted/30 space-y-4 text-sm text-foreground leading-relaxed">
+          <div>
+            <p className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-1">What is FLOW?</p>
+            <p>
+              FLOW is Ethos's proprietary analytical framework that assesses human-AI collaboration across four pillars,
+              each representing a distinct intellectual process in producing written work:{" "}
+              <strong>Find</strong> (research it), <strong>Lead</strong> (form ideas about it),{" "}
+              <strong>Organize</strong> (structure it), <strong>Write</strong> (write it).
+            </p>
+          </div>
+          <div>
+            <p className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-1">Purpose</p>
+            <p>
+              FLOW promotes transparency in AI-assisted writing. AI assistance is not inherently good or bad, but
+              transparency matters. Ethos makes the collaboration process visible, measurable, and verifiable.
+            </p>
+          </div>
+          <div>
+            <p className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-1">How to read scores</p>
+            <p>
+              Scores range from 0.0 (no human contribution detected) to 5.0 (entirely human). Scores are analytical,
+              not moral. A score of 2.0 ("More AI") is not "bad" — it means the AI contributed significantly to that
+              aspect. A score of 5.0 is not inherently "better" — effective AI collaboration (3.0–4.0) may produce
+              superior outcomes. FLOW provides transparency; interpretation depends on context.
+            </p>
+          </div>
+          <div>
+            <p className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-1">About the AI Assessment</p>
+            <p>
+              The AI assessment is generated by a large language model analyzing the full project data (writing, chat
+              history, and provenance metadata). Like any AI system, results may vary slightly between runs. The AI
+              assessment should be considered alongside the user's own self-assessment when available, as well as the
+              other reports and data provided.
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Learn more at{" "}
+            <a
+              href="https://www.thisisethos.eu"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline underline-offset-2 hover:text-primary/80"
+            >
+              www.thisisethos.eu
+            </a>
+          </p>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/* ─── Report Footer ─── */
+function FlowReportFooter() {
+  return (
+    <div className="border-t border-border pt-6 pb-8 mt-8 text-center space-y-2">
+      <a
+        href="https://www.thisisethos.eu"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+      >
+        Powered by Ethos — AI-Use Transparency
+        <ExternalLink className="h-3 w-3" />
+      </a>
+      <p className="text-[10px] text-muted-foreground">
+        FLOW is a proprietary analytical framework by Ethos. Learn more at{" "}
+        <a
+          href="https://www.thisisethos.eu"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          www.thisisethos.eu
+        </a>
+      </p>
     </div>
   );
 }
@@ -343,12 +535,23 @@ function extractUserAssessment(feedback: FlowReport["user_feedback_post"]): Flow
   if (typeof feedback === "object" && "scores" in feedback && "comments" in feedback) {
     return feedback as FlowUserAssessment;
   }
-  // Legacy format: plain FlowFeedback scores only
   const legacy = feedback as FlowFeedback;
   return {
     scores: legacy,
     comments: { find: "", lead: "", organize: "", write: "", overall: "" },
   };
+}
+
+/** Extract plain FlowFeedback scores from either format */
+function extractFeedbackScores(feedback: FlowReport["user_feedback_post"]): FlowFeedback | null {
+  if (!feedback) return null;
+  if (typeof feedback === "object" && "scores" in feedback) {
+    return (feedback as FlowUserAssessment).scores;
+  }
+  if (typeof feedback === "object" && "find" in feedback) {
+    return feedback as FlowFeedback;
+  }
+  return null;
 }
 
 /* ─── Main Report View ─── */
@@ -362,6 +565,7 @@ export function FlowReportView({
   showPreAnalysis,
 }: Props) {
   const [preFeedbackViewed, setPreFeedbackViewed] = useState(false);
+  const [feedbackToggle, setFeedbackToggle] = useState<"pre" | "post">("post");
 
   useEffect(() => {
     if (!showPreAnalysis) {
@@ -404,6 +608,37 @@ export function FlowReportView({
   }
 
   const existingAssessment = extractUserAssessment(report.user_feedback_post);
+  const preFeedbackScores = report.user_feedback_pre ?? null;
+  const postFeedbackScores = extractFeedbackScores(report.user_feedback_post);
+  const hasBothFeedback = preFeedbackScores != null && postFeedbackScores != null;
+
+  // Determine which user feedback to overlay on the radar
+  let radarUserFeedback: FlowFeedback | null = null;
+  let radarUserLabel = "User Assessment";
+  // green for pre, orange for post
+  const greenColor = "hsl(142, 71%, 45%)";
+  const orangeColor = "hsl(32, 95%, 55%)";
+  let radarUserColor = orangeColor;
+
+  if (hasBothFeedback) {
+    if (feedbackToggle === "pre") {
+      radarUserFeedback = preFeedbackScores;
+      radarUserLabel = "Pre-analysis";
+      radarUserColor = greenColor;
+    } else {
+      radarUserFeedback = postFeedbackScores;
+      radarUserLabel = "Post-analysis";
+      radarUserColor = orangeColor;
+    }
+  } else if (postFeedbackScores) {
+    radarUserFeedback = postFeedbackScores;
+    radarUserLabel = "User Assessment";
+    radarUserColor = orangeColor;
+  } else if (preFeedbackScores) {
+    radarUserFeedback = preFeedbackScores;
+    radarUserLabel = "User Assessment";
+    radarUserColor = greenColor;
+  }
 
   return (
     <div className="flex-1 flex flex-col bg-background h-screen">
@@ -447,8 +682,39 @@ export function FlowReportView({
 
           {(!showPreFeedback || preFeedbackViewed) && (
             <>
+              {/* Collapsible Info Section */}
+              <FlowInfoSection />
+
+              {/* Pre/Post toggle for radar */}
+              {hasBothFeedback && (
+                <div className="flex items-center justify-center gap-1">
+                  <span className="text-xs text-muted-foreground mr-1">Show:</span>
+                  <Button
+                    variant={feedbackToggle === "pre" ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 text-xs px-3"
+                    onClick={() => setFeedbackToggle("pre")}
+                  >
+                    Pre-analysis
+                  </Button>
+                  <Button
+                    variant={feedbackToggle === "post" ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 text-xs px-3"
+                    onClick={() => setFeedbackToggle("post")}
+                  >
+                    Post-analysis
+                  </Button>
+                </div>
+              )}
+
               {/* Radar Chart */}
-              <FlowRadarChart report={report} />
+              <FlowRadarChart
+                report={report}
+                userFeedback={radarUserFeedback}
+                userLabel={radarUserLabel}
+                userColor={radarUserColor}
+              />
 
               {/* Score Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -475,7 +741,6 @@ export function FlowReportView({
                 />
               )}
 
-              {/* Post-feedback scores (legacy display, if old format) */}
               {/* User Assessment (post-analysis): scores + free-text comments */}
               <FlowUserAssessmentSection
                 existingAssessment={existingAssessment}
@@ -489,13 +754,16 @@ export function FlowReportView({
               {report.metrics_snapshot && <ProjectActivitySection metrics={report.metrics_snapshot} />}
 
               {/* Metadata footer */}
-              <div className="text-[10px] text-muted-foreground text-center space-y-0.5 pb-4">
+              <div className="text-[10px] text-muted-foreground text-center space-y-0.5">
                 <p>
                   Model: {report.model_used} · Generated{" "}
                   {new Date(report.created_at).toLocaleString()}
                 </p>
                 <p>Project: {projectName}</p>
               </div>
+
+              {/* Report Footer */}
+              <FlowReportFooter />
             </>
           )}
         </div>
