@@ -43,7 +43,16 @@ export function FlowUserAssessmentSection({ existingAssessment, onSubmit }: Prop
         <div className="flex items-center justify-between">
           <p className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
             <MessageSquareQuote className="h-3.5 w-3.5" />
-            Your Assessment
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help">Self-assessment (post-analysis feedback)</span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>After viewing results</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </p>
           <Button variant="ghost" size="sm" onClick={() => setEditing(true)} className="gap-1 h-7 text-xs">
             <Pencil className="h-3 w-3" />
