@@ -159,6 +159,15 @@ export function WritingEditor({ projectId, tutorMode = false, onWritingActivity,
               Saved
             </span>
           )}
+          {hasFlowReport && (
+            <button
+              onClick={onReanalyzeClick}
+              disabled={flowLoading}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-sm font-medium text-muted-foreground hover:text-foreground border border-border hover:border-foreground/30 transition-colors disabled:opacity-70"
+            >
+              Re-analyze
+            </button>
+          )}
           <button
             onClick={onFlowClick}
             disabled={flowLoading}
