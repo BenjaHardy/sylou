@@ -94,12 +94,12 @@ export function useFlowAnalysis(projectId: string | null) {
 
     if (data) {
       setReport(data as unknown as FlowReport);
-      if (hadReportOnMount === null) setHadReportOnMount(true);
+      setHadReportOnMount((prev) => prev === null ? true : prev);
     } else {
       setReport(null);
-      if (hadReportOnMount === null) setHadReportOnMount(false);
+      setHadReportOnMount((prev) => prev === null ? false : prev);
     }
-  }, [projectId, hadReportOnMount]);
+  }, [projectId]);
 
   // Load report on mount / project change
   useEffect(() => {
