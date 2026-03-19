@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { MessageSquareQuote, Pencil, Check } from "lucide-react";
 import type { FlowUserAssessment, FlowFeedback } from "@/hooks/useFlowAnalysis";
 
