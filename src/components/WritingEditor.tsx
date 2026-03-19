@@ -20,12 +20,13 @@ interface Props {
   tutorMode?: boolean;
   onWritingActivity?: () => void;
   onFlowClick?: () => void;
+  onReanalyzeClick?: () => void;
   flowLoading?: boolean;
   hasFlowReport?: boolean;
   onAskAI?: (question: string, selectedText: string) => void;
 }
 
-export function WritingEditor({ projectId, tutorMode = false, onWritingActivity, onFlowClick, flowLoading, hasFlowReport, onAskAI }: Props) {
+export function WritingEditor({ projectId, tutorMode = false, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskAI }: Props) {
   const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
   const [initialSet, setInitialSet] = useState(false);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
@@ -157,6 +158,15 @@ export function WritingEditor({ projectId, tutorMode = false, onWritingActivity,
             <span className="px-2.5 py-0.5 rounded text-xs font-medium text-muted-foreground/60">
               Saved
             </span>
+          )}
+          {hasFlowReport && (
+            <button
+              onClick={onReanalyzeClick}
+              disabled={flowLoading}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-sm font-medium text-muted-foreground hover:text-foreground border border-border hover:border-foreground/30 transition-colors disabled:opacity-70"
+            >
+              Re-analyze
+            </button>
           )}
           <button
             onClick={onFlowClick}

@@ -8,6 +8,7 @@ import { ProjectActivityBar } from "@/components/ProjectActivityBar";
 import { FlowReportView } from "@/components/FlowReportView";
 import { FlowConfirmDialog } from "@/components/FlowConfirmDialog";
 import { FlowTokenWarningDialog } from "@/components/FlowTokenWarningDialog";
+import { FlowReanalyzeDialog } from "@/components/FlowReanalyzeDialog";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useFlowAnalysis } from "@/hooks/useFlowAnalysis";
 import type { Project } from "@/hooks/useProjects";
@@ -23,12 +24,8 @@ function WelcomeScreen() {
       <div className="text-center space-y-6 max-w-md px-4">
         <FolderOpen className="h-12 w-12 text-muted-foreground mx-auto" />
         <div className="space-y-2">
-          <h1 className="text-xl font-semibold text-foreground">
-            Welcome to Ethos
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Select a project from the sidebar or create a new one to get started.
-          </p>
+          <h1 className="text-xl font-semibold text-foreground">Welcome to Ethos</h1>
+          <p className="text-sm text-muted-foreground">Select a project from the sidebar or create a new one to get started.</p>
         </div>
         <div className="text-left space-y-3 bg-muted/50 rounded-md p-4">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
@@ -40,7 +37,6 @@ function WelcomeScreen() {
             <li>• Enable <span className="font-medium text-foreground">Tutor Mode</span> for guided learning</li>
             <li>• Choose the template that fits your type of work</li>
             <li>• Use the AI chat panel to brainstorm and refine ideas</li>
-            
           </ul>
         </div>
       </div>
@@ -56,6 +52,9 @@ export function ProjectContentArea({ project }: Props) {
   const [showFlowReport, setShowFlowReport] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showTokenWarning, setShowTokenWarning] = useState(false);
+  const [showReanalyze, setShowReanalyze] = useState(false);
+  /** Track whether the current analysis run is the first-ever (pre-analysis feedback eligible) */
+  const [isCurrentRunFirst, setIsCurrentRunFirst] = useState(false);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const { markWriting } = useActivityTracker(project?.id ?? null);
@@ -70,6 +69,8 @@ export function ProjectContentArea({ project }: Props) {
     budgetError,
     runAnalysis,
     saveFeedback,
+    saveUserAssessment,
+    isFirstAnalysis,
   } = useFlowAnalysis(project?.id ?? null);
 
   if (!project) return <WelcomeScreen />;
@@ -87,7 +88,6 @@ export function ProjectContentArea({ project }: Props) {
   };
 
   const handleFlowClick = () => {
-    // If we already have a report and not loading, show it
     if (flowReport && !flowLoading) {
       setShowFlowReport(true);
       return;
@@ -95,18 +95,34 @@ export function ProjectContentArea({ project }: Props) {
     setShowConfirm(true);
   };
 
+  const handleReanalyzeClick = () => {
+    setShowReanalyze(true);
+  };
+
   const handleConfirmAnalysis = async () => {
     setShowConfirm(false);
-    // Run pre-check for token estimation
+    setIsCurrentRunFirst(isFirstAnalysis);
     const estimation = await runPreCheck();
     if (!estimation) return;
 
     if (estimation.status === "ok") {
-      // Safe — proceed directly
       setShowFlowReport(true);
       runAnalysis();
     } else {
-      // Show token warning
+      setShowTokenWarning(true);
+    }
+  };
+
+  const handleConfirmReanalyze = async () => {
+    setShowReanalyze(false);
+    setIsCurrentRunFirst(false); // Re-analysis never shows pre-analysis feedback
+    const estimation = await runPreCheck();
+    if (!estimation) return;
+
+    if (estimation.status === "ok") {
+      setShowFlowReport(true);
+      runAnalysis();
+    } else {
       setShowTokenWarning(true);
     }
   };
@@ -123,17 +139,7 @@ export function ProjectContentArea({ project }: Props) {
     clearPreCheck();
   };
 
-  const handleRerunAnalysis = async () => {
-    const estimation = await runPreCheck();
-    if (!estimation) return;
-    if (estimation.status === "ok") {
-      runAnalysis();
-    } else {
-      setShowTokenWarning(true);
-    }
-  };
-
-  // Show FLOW report view (full-width, replaces editor/chat)
+  // Show FLOW report view
   if (showFlowReport && (flowReport || flowLoading)) {
     if (flowLoading) {
       return (
@@ -144,6 +150,8 @@ export function ProjectContentArea({ project }: Props) {
             loading={true}
             onBack={() => setShowFlowReport(false)}
             onSaveFeedback={() => {}}
+            onSaveAssessment={() => {}}
+            showPreAnalysis={false}
           />
         </div>
       );
@@ -158,6 +166,8 @@ export function ProjectContentArea({ project }: Props) {
             loading={false}
             onBack={() => setShowFlowReport(false)}
             onSaveFeedback={saveFeedback}
+            onSaveAssessment={saveUserAssessment}
+            showPreAnalysis={isCurrentRunFirst}
           />
           <FlowTokenWarningDialog
             open={showTokenWarning}
@@ -177,19 +187,14 @@ export function ProjectContentArea({ project }: Props) {
     }
   }
 
-  // Loading overlay (analysis running but no previous report to show)
   if (showFlowReport && flowLoading && !flowReport) {
     return (
       <div className="flex-1 flex items-center justify-center bg-background h-screen">
         <div className="text-center space-y-4">
           <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
           <div>
-            <p className="text-sm font-medium text-foreground">
-              Analyzing your project…
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              This may take up to a minute
-            </p>
+            <p className="text-sm font-medium text-foreground">Analyzing your project…</p>
+            <p className="text-xs text-muted-foreground mt-1">This may take up to a minute</p>
           </div>
         </div>
       </div>
@@ -198,16 +203,11 @@ export function ProjectContentArea({ project }: Props) {
 
   return (
     <div className="flex-1 flex flex-col bg-background h-screen [&_[data-panel]]:transition-all [&_[data-panel]]:duration-150 [&_[data-panel]]:ease-ethos-ease">
-      {/* Project toolbar */}
       <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
-        <span className="text-sm font-medium text-foreground truncate max-w-[200px]">
-          {project.name}
-        </span>
+        <span className="text-sm font-medium text-foreground truncate max-w-[200px]">{project.name}</span>
         <div className="flex items-center gap-2">
           {flowError && (
-            <span className="text-xs text-destructive truncate max-w-[200px]">
-              {flowError}
-            </span>
+            <span className="text-xs text-destructive truncate max-w-[200px]">{flowError}</span>
           )}
           {budgetError && (
             <span className="text-xs text-destructive truncate max-w-[260px]">
@@ -220,7 +220,15 @@ export function ProjectContentArea({ project }: Props) {
       <ResizablePanelGroup direction="horizontal" className="flex-1">
         <ResizablePanel ref={editorPanelRef} defaultSize={DEFAULT_EDITOR_SIZE} minSize={0}>
           <div className="flex flex-col h-full">
-            <WritingEditor projectId={project.id} tutorMode={project.tutor_mode} onWritingActivity={markWriting} onFlowClick={handleFlowClick} flowLoading={flowLoading} hasFlowReport={!!flowReport} />
+            <WritingEditor
+              projectId={project.id}
+              tutorMode={project.tutor_mode}
+              onWritingActivity={markWriting}
+              onFlowClick={handleFlowClick}
+              onReanalyzeClick={handleReanalyzeClick}
+              flowLoading={flowLoading}
+              hasFlowReport={!!flowReport}
+            />
             <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
               <ProjectActivityBar projectId={project.id} />
             </div>
@@ -228,26 +236,13 @@ export function ProjectContentArea({ project }: Props) {
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20}>
-          <ChatPanel
-            projectId={project.id}
-            chatExpanded={chatExpanded}
-            onToggleChat={handleToggleChat}
-          />
+          <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} />
         </ResizablePanel>
       </ResizablePanelGroup>
 
-      {/* Dialogs */}
-      <FlowConfirmDialog
-        open={showConfirm}
-        onConfirm={handleConfirmAnalysis}
-        onCancel={() => setShowConfirm(false)}
-      />
-      <FlowTokenWarningDialog
-        open={showTokenWarning}
-        estimation={preCheck}
-        onConfirm={handleTokenWarningConfirm}
-        onCancel={handleTokenWarningCancel}
-      />
+      <FlowConfirmDialog open={showConfirm} onConfirm={handleConfirmAnalysis} onCancel={() => setShowConfirm(false)} />
+      <FlowReanalyzeDialog open={showReanalyze} onConfirm={handleConfirmReanalyze} onCancel={() => setShowReanalyze(false)} />
+      <FlowTokenWarningDialog open={showTokenWarning} estimation={preCheck} onConfirm={handleTokenWarningConfirm} onCancel={handleTokenWarningCancel} />
     </div>
   );
 }

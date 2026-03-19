@@ -543,7 +543,7 @@ ${writePillarNotice}`;
 
     // --- Estimate input tokens for flow_meta ---
     const estimatedInputTokens = estimated;
-    const contextLimitTokens = 200000; // Claude Sonnet context window
+    const contextLimitTokens = 1000000; // Claude Sonnet 4.6 context window
 
     // --- Call Anthropic with tool use ---
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");

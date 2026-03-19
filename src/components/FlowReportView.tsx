@@ -38,12 +38,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FlowFeedbackSection } from "@/components/FlowFeedbackSection";
+import { FlowUserAssessmentSection } from "@/components/FlowUserAssessmentSection";
 import type {
   FlowReport,
   FlowPillar,
   FlowMeta,
   MetricsSnapshot,
   FlowFeedback,
+  FlowUserAssessment,
 } from "@/hooks/useFlowAnalysis";
 
 interface Props {
@@ -52,6 +54,9 @@ interface Props {
   loading: boolean;
   onBack: () => void;
   onSaveFeedback: (type: "pre" | "post", feedback: FlowFeedback) => void;
+  onSaveAssessment: (assessment: FlowUserAssessment) => void;
+  /** Whether to show the pre-analysis self-assessment (first-ever analysis only) */
+  showPreAnalysis: boolean;
 }
 
 /* ─── Score Calibration Labels ─── */
@@ -176,7 +181,6 @@ function ScoreCard({
 
   return (
     <div className={`rounded-lg border p-4 space-y-3 ${colorClasses}`}>
-      {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
           <TooltipProvider>
@@ -203,19 +207,11 @@ function ScoreCard({
           <p className="text-[10px] opacity-70 mt-0.5">/ 5.0</p>
         </div>
       </div>
-
-      {/* Score label */}
       <p className="text-xs font-semibold">{scoreLabel}</p>
-
-      {/* Narrative */}
       <p className="text-sm leading-relaxed opacity-90">{pillar.narrative}</p>
-
-      {/* Evidence */}
       {pillar.evidence.length > 0 && (
         <div className="space-y-1">
-          <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">
-            Evidence
-          </p>
+          <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">Evidence</p>
           <ul className="text-xs space-y-1 opacity-80">
             {pillar.evidence.map((e, i) => (
               <li key={i} className="flex gap-1.5">
@@ -226,19 +222,13 @@ function ScoreCard({
           </ul>
         </div>
       )}
-
-      {/* Reasoning toggle */}
       {pillar.reasoning && (
         <div>
           <button
             onClick={() => setExpanded(!expanded)}
             className="text-xs font-medium flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity"
           >
-            {expanded ? (
-              <ChevronUp className="h-3 w-3" />
-            ) : (
-              <ChevronDown className="h-3 w-3" />
-            )}
+            {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
             {expanded ? "Hide reasoning" : "Explain this score"}
           </button>
           {expanded && (
@@ -257,16 +247,9 @@ function TokenUsageSection({ meta }: { meta: FlowMeta }) {
   const ratio = meta.estimated_input_tokens / meta.context_limit_tokens;
   const pct = Math.round(ratio * 100);
   const status = meta.token_status;
-  const StatusIcon =
-    status === "over" ? AlertOctagon : status === "near" ? AlertTriangle : CheckCircle;
-  const statusLabel =
-    status === "over" ? "Over Limit" : status === "near" ? "Near Limit" : "OK";
-  const statusColor =
-    status === "over"
-      ? "text-destructive"
-      : status === "near"
-      ? "text-yellow-600"
-      : "text-green-600";
+  const StatusIcon = status === "over" ? AlertOctagon : status === "near" ? AlertTriangle : CheckCircle;
+  const statusLabel = status === "over" ? "Over Limit" : status === "near" ? "Near Limit" : "OK";
+  const statusColor = status === "over" ? "text-destructive" : status === "near" ? "text-yellow-600" : "text-green-600";
 
   return (
     <div className="border border-border rounded-lg p-4 space-y-2">
@@ -285,19 +268,13 @@ function TokenUsageSection({ meta }: { meta: FlowMeta }) {
       </h4>
       <div className="grid grid-cols-2 gap-y-2 text-xs">
         <span className="text-muted-foreground">Estimated prompt tokens</span>
-        <span className="text-right font-medium text-foreground">
-          {meta.estimated_input_tokens.toLocaleString()}
-        </span>
+        <span className="text-right font-medium text-foreground">{meta.estimated_input_tokens.toLocaleString()}</span>
         <span className="text-muted-foreground">Context limit</span>
-        <span className="text-right font-medium text-foreground">
-          {meta.context_limit_tokens.toLocaleString()}
-        </span>
+        <span className="text-right font-medium text-foreground">{meta.context_limit_tokens.toLocaleString()}</span>
         <span className="text-muted-foreground">Usage</span>
         <span className="text-right font-medium text-foreground">{pct}%</span>
         <span className="text-muted-foreground">Status</span>
-        <span
-          className={`text-right font-semibold flex items-center justify-end gap-1 ${statusColor}`}
-        >
+        <span className={`text-right font-semibold flex items-center justify-end gap-1 ${statusColor}`}>
           <StatusIcon className="h-3 w-3" />
           {statusLabel}
         </span>
@@ -324,64 +301,54 @@ function ProjectActivitySection({ metrics }: { metrics: MetricsSnapshot }) {
         <TooltipProvider>
           <span className="text-muted-foreground flex items-center gap-1">
             <Tooltip>
-              <TooltipTrigger asChild>
-                <Clock className="h-3 w-3 cursor-help" />
-              </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-xs text-xs">
-                Total time the project was open and the user was actively interacting (typing, clicking, scrolling).
-              </TooltipContent>
+              <TooltipTrigger asChild><Clock className="h-3 w-3 cursor-help" /></TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs text-xs">Total time the project was open and the user was actively interacting (typing, clicking, scrolling).</TooltipContent>
             </Tooltip>
             Active time
           </span>
-          <span className="text-right font-medium text-foreground">
-            {fmt(metrics.total_active_time_seconds)}
-          </span>
+          <span className="text-right font-medium text-foreground">{fmt(metrics.total_active_time_seconds)}</span>
           <span className="text-muted-foreground flex items-center gap-1">
             <Tooltip>
-              <TooltipTrigger asChild>
-                <Pencil className="h-3 w-3 cursor-help" />
-              </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-xs text-xs">
-                Time spent typing or editing in the writing editor specifically.
-              </TooltipContent>
+              <TooltipTrigger asChild><Pencil className="h-3 w-3 cursor-help" /></TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs text-xs">Time spent typing or editing in the writing editor specifically.</TooltipContent>
             </Tooltip>
             Writing time
           </span>
-          <span className="text-right font-medium text-foreground">
-            {fmt(metrics.total_writing_time_seconds)}
-          </span>
+          <span className="text-right font-medium text-foreground">{fmt(metrics.total_writing_time_seconds)}</span>
           <span className="text-muted-foreground flex items-center gap-1">
             <Tooltip>
-              <TooltipTrigger asChild>
-                <MessageSquare className="h-3 w-3 cursor-help" />
-              </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-xs text-xs">
-                Number of messages sent to the AI chat assistant.
-              </TooltipContent>
+              <TooltipTrigger asChild><MessageSquare className="h-3 w-3 cursor-help" /></TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs text-xs">Number of messages sent to the AI chat assistant.</TooltipContent>
             </Tooltip>
             Chat prompts
           </span>
-          <span className="text-right font-medium text-foreground">
-            {metrics.chat_prompt_count_normal + metrics.chat_prompt_count_tutor}
-          </span>
+          <span className="text-right font-medium text-foreground">{metrics.chat_prompt_count_normal + metrics.chat_prompt_count_tutor}</span>
           <span className="text-muted-foreground flex items-center gap-1">
             <Tooltip>
-              <TooltipTrigger asChild>
-                <Shield className="h-3 w-3 cursor-help" />
-              </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-xs text-xs">
-                Number of sanity checks performed on the project.
-              </TooltipContent>
+              <TooltipTrigger asChild><Shield className="h-3 w-3 cursor-help" /></TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs text-xs">Number of sanity checks performed on the project.</TooltipContent>
             </Tooltip>
             Sanity checks
           </span>
-          <span className="text-right font-medium text-foreground">
-            {metrics.sanity_check_count}
-          </span>
+          <span className="text-right font-medium text-foreground">{metrics.sanity_check_count}</span>
         </TooltipProvider>
       </div>
     </div>
   );
+}
+
+/** Helper to extract FlowUserAssessment from the polymorphic user_feedback_post field */
+function extractUserAssessment(feedback: FlowReport["user_feedback_post"]): FlowUserAssessment | null {
+  if (!feedback) return null;
+  if (typeof feedback === "object" && "scores" in feedback && "comments" in feedback) {
+    return feedback as FlowUserAssessment;
+  }
+  // Legacy format: plain FlowFeedback scores only
+  const legacy = feedback as FlowFeedback;
+  return {
+    scores: legacy,
+    comments: { find: "", lead: "", organize: "", write: "", overall: "" },
+  };
 }
 
 /* ─── Main Report View ─── */
@@ -391,12 +358,13 @@ export function FlowReportView({
   loading,
   onBack,
   onSaveFeedback,
+  onSaveAssessment,
+  showPreAnalysis,
 }: Props) {
-  // Track whether pre-feedback has been shown
   const [preFeedbackViewed, setPreFeedbackViewed] = useState(false);
 
-  // Show pre-feedback prompt first if it hasn't been submitted
-  const showPreFeedback = report ? !report.user_feedback_pre && !preFeedbackViewed : false;
+  // Show pre-feedback only if: showPreAnalysis is true AND no existing pre-feedback AND not yet viewed
+  const showPreFeedback = showPreAnalysis && report ? !report.user_feedback_pre && !preFeedbackViewed : false;
 
   if (loading) {
     return (
@@ -406,12 +374,8 @@ export function FlowReportView({
             <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
           </div>
           <div>
-            <p className="text-sm font-medium text-foreground">
-              Analyzing your project…
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              This may take up to a minute
-            </p>
+            <p className="text-sm font-medium text-foreground">Analyzing your project…</p>
+            <p className="text-xs text-muted-foreground mt-1">This may take up to a minute</p>
           </div>
         </div>
       </div>
@@ -432,23 +396,18 @@ export function FlowReportView({
     );
   }
 
+  const existingAssessment = extractUserAssessment(report.user_feedback_post);
+
   return (
     <div className="flex-1 flex flex-col bg-background h-screen">
       {/* Header */}
       <div className="h-12 border-b border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onBack}
-          className="gap-1.5 text-muted-foreground hover:text-foreground"
-        >
+        <Button variant="ghost" size="sm" onClick={onBack} className="gap-1.5 text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
           Back to Editor
         </Button>
         <div className="ml-auto flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">
-            {projectName}
-          </span>
+          <span className="text-xs text-muted-foreground">{projectName}</span>
           <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
             <Activity className="h-3.5 w-3.5" />
             FLOW Report
@@ -459,7 +418,7 @@ export function FlowReportView({
       {/* Content */}
       <ScrollArea className="flex-1">
         <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
-          {/* Pre-feedback (reflexivity) */}
+          {/* Pre-feedback (reflexivity) — only on first-ever analysis */}
           {showPreFeedback && (
             <div className="space-y-3">
               <FlowFeedbackSection
@@ -494,17 +453,13 @@ export function FlowReportView({
 
               {/* Overall Summary */}
               <div className="space-y-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Overall Summary
-                </h4>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Overall Summary</h4>
                 <div className="bg-muted/50 rounded-lg p-5">
-                  <p className="text-sm text-foreground leading-relaxed">
-                    {report.ai_summary}
-                  </p>
+                  <p className="text-sm text-foreground leading-relaxed">{report.ai_summary}</p>
                 </div>
               </div>
 
-              {/* Pre-feedback display (if already submitted) */}
+              {/* Pre-feedback display (if submitted) */}
               {report.user_feedback_pre && (
                 <FlowFeedbackSection
                   type="pre"
@@ -513,20 +468,18 @@ export function FlowReportView({
                 />
               )}
 
-              {/* Post-feedback */}
-              <FlowFeedbackSection
-                type="post"
-                existingFeedback={report.user_feedback_post}
-                onSubmit={(fb) => onSaveFeedback("post", fb)}
+              {/* Post-feedback scores (legacy display, if old format) */}
+              {/* User Assessment (post-analysis): scores + free-text comments */}
+              <FlowUserAssessmentSection
+                existingAssessment={existingAssessment}
+                onSubmit={onSaveAssessment}
               />
 
               {/* Token Usage */}
               {report.flow_meta && <TokenUsageSection meta={report.flow_meta} />}
 
               {/* Project Activity */}
-              {report.metrics_snapshot && (
-                <ProjectActivitySection metrics={report.metrics_snapshot} />
-              )}
+              {report.metrics_snapshot && <ProjectActivitySection metrics={report.metrics_snapshot} />}
 
               {/* Metadata footer */}
               <div className="text-[10px] text-muted-foreground text-center space-y-0.5 pb-4">
