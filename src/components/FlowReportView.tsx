@@ -283,8 +283,8 @@ function FlowInfoSection() {
             <p>
               FLOW is Ethos's proprietary analytical framework that assesses human-AI collaboration across four pillars,
               each representing a distinct intellectual process in producing written work:{" "}
-              <strong>Find</strong> (research it), <strong>Lead</strong> (form ideas about it),{" "}
-              <strong>Organize</strong> (structure it), <strong>Write</strong> (write it).
+              Find (research it), Lead (form ideas about it),{" "}
+              Organize (structure it), Write (write it).
             </p>
           </div>
           <div>
