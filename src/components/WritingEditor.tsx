@@ -20,12 +20,13 @@ interface Props {
   tutorMode?: boolean;
   onWritingActivity?: () => void;
   onFlowClick?: () => void;
+  onReanalyzeClick?: () => void;
   flowLoading?: boolean;
   hasFlowReport?: boolean;
   onAskAI?: (question: string, selectedText: string) => void;
 }
 
-export function WritingEditor({ projectId, tutorMode = false, onWritingActivity, onFlowClick, flowLoading, hasFlowReport, onAskAI }: Props) {
+export function WritingEditor({ projectId, tutorMode = false, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskAI }: Props) {
   const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
   const [initialSet, setInitialSet] = useState(false);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
