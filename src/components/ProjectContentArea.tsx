@@ -53,7 +53,7 @@ export function ProjectContentArea({ project }: Props) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [showTokenWarning, setShowTokenWarning] = useState(false);
   const [showReanalyze, setShowReanalyze] = useState(false);
-  /** Track whether the current analysis run is the first-ever (pre-analysis feedback eligible) */
+  /** Track whether the current report view was opened directly from the first-ever analysis run */
   const [isCurrentRunFirst, setIsCurrentRunFirst] = useState(false);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
@@ -87,8 +87,14 @@ export function ProjectContentArea({ project }: Props) {
     }
   };
 
+  const handleCloseFlowReport = () => {
+    setShowFlowReport(false);
+    setIsCurrentRunFirst(false);
+  };
+
   const handleFlowClick = () => {
     if (flowReport && !flowLoading) {
+      setIsCurrentRunFirst(false);
       setShowFlowReport(true);
       return;
     }
@@ -148,7 +154,7 @@ export function ProjectContentArea({ project }: Props) {
             report={flowReport!}
             projectName={project.name}
             loading={true}
-            onBack={() => setShowFlowReport(false)}
+            onBack={handleCloseFlowReport}
             onSaveFeedback={() => {}}
             onSaveAssessment={() => {}}
             showPreAnalysis={false}
@@ -164,7 +170,7 @@ export function ProjectContentArea({ project }: Props) {
             report={flowReport}
             projectName={project.name}
             loading={false}
-            onBack={() => setShowFlowReport(false)}
+            onBack={handleCloseFlowReport}
             onSaveFeedback={saveFeedback}
             onSaveAssessment={saveUserAssessment}
             showPreAnalysis={isCurrentRunFirst}
