@@ -252,7 +252,7 @@ function FlowRadarChart({
         {hasUser && (
           <span className="flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: userFill, opacity: 0.6 }} />
-            <span className="text-muted-foreground">{userLabel === "Pre-analysis" ? "Green" : "Orange"} = {userLabel}</span>
+            <span className="text-muted-foreground">{userLabel === "Pre-analysis" ? "Green = User Assessment (Pre-analysis)" : "Orange = User Assessment (Post-analysis)"}</span>
           </span>
         )}
       </div>
