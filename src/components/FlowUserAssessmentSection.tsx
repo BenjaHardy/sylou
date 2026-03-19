@@ -90,7 +90,16 @@ export function FlowUserAssessmentSection({ existingAssessment, onSubmit }: Prop
     <div className="border border-primary/20 rounded-lg p-4 bg-primary/5 space-y-4">
       <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
         <MessageSquareQuote className="h-4 w-4 text-primary" />
-        Your Assessment
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="cursor-help">Self-assessment (post-analysis feedback)</span>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>After viewing results</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </p>
       <p className="text-xs text-muted-foreground">
         Rate each pillar from 0 (all AI) to 5 (all human) and optionally add comments.
