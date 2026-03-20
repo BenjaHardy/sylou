@@ -209,8 +209,8 @@ export function TextSelectionWindow({
         }
 
         if (actionType === "ask") {
-          // Messages are already logged to chat; signal parent to refresh chat
-          onAskComplete();
+          // Messages returned by edge function — inject directly into chat
+          onAskComplete(data.inserted_messages ?? []);
           onClose();
         } else {
           // Propose: show result panel with accept/modify/reject
