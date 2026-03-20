@@ -280,7 +280,7 @@ export function TextSelectionWindow({
     // For propose actions with pending summary, confirm
     if (pendingSummaryUpdate !== null && currentActionId) {
       try {
-        const { data } = await supabase.functions.invoke("context-prompt", {
+        const { data, error } = await supabase.functions.invoke("context-prompt", {
           body: {
             confirm: true,
             action_id: currentActionId,
@@ -291,9 +291,22 @@ export function TextSelectionWindow({
             instruction: pendingInstruction,
           },
         });
-        onAskComplete(data?.inserted_messages ?? []);
+        if (error) {
+          console.error("Confirm error:", error);
+          toast.error("Failed to log proposal to chat.");
+          onChatRefresh?.();
+        } else {
+          const msgs = data?.inserted_messages ?? [];
+          if (msgs.length > 0) {
+            onAskComplete(msgs);
+          } else {
+            onChatRefresh?.();
+          }
+        }
       } catch (err) {
         console.error("Failed to confirm propose:", err);
+        toast.error("Failed to log proposal to chat.");
+        onChatRefresh?.();
       }
     } else if (currentActionId) {
       updateOutcome(currentActionId, "accepted");
