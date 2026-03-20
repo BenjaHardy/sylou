@@ -25,7 +25,7 @@ interface Props {
   onReanalyzeClick?: () => void;
   flowLoading?: boolean;
   hasFlowReport?: boolean;
-  onAskComplete?: () => void;
+  onAskComplete?: (messages: ChatMessage[]) => void;
 }
 
 export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete }: Props) {
