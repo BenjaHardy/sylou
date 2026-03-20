@@ -13,6 +13,7 @@ interface Props {
   onToggleChat?: () => void;
   refreshTrigger?: number;
   injectMessages?: ChatMessage[];
+  onMessagesInjected?: () => void;
 }
 
 
