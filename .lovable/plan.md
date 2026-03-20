@@ -1,60 +1,26 @@
 
 
-## Analysis: ScoreCard crash on FLOW report view
+## Plan: Delete malformed flow_report row
 
-### What happened
+### What
 
-The error is `pillar.evidence is undefined` at `FlowReportView.tsx:789` (line 404 in the ScoreCard component). This causes a blank screen after the pre-analysis feedback.
+One row in `flow_reports` (id: `ee960cde-4b35-4983-b6a7-89af7db3e6e0`, created 2026-03-20 21:27:51) has XML-like strings stored in `ai_find`, `ai_lead`, `ai_organize`, and `ai_write` instead of proper JSON objects. This row causes a blank screen when viewing that report because the frontend's `ScoreCard` component crashes on `pillar.evidence`.
 
-Looking at the network response from the successful analysis call (status 200 at 21:27:52), the `ai_find` field contains a **raw string** starting with `\n<parameter name="reasoning">...` instead of a JSON object `{reasoning, evidence, score, narrative}`. The same applies to `ai_lead`, `ai_organize`, and `ai_write`.
+The backend validation fix (the `isValidPillar` guard) prevents new malformed rows from being stored, and the frontend defensive rendering prevents crashes even if malformed data exists. So the blank screen issue is already fixed for new reports **and** for viewing this old one (thanks to the frontend guards added earlier).
 
-The AI model (Claude) returned the pillar data as XML-like text strings instead of structured JSON via the tool use schema. This is an intermittent model behavior issue — it worked before with other prompts/content, but with this particular trivial input ("give me a score of 5"), the model responded with malformed tool arguments.
+### Recommendation
 
-### Why the previous fix didn't help
+**Low priority but worth doing.** The frontend guards already prevent the crash, so this row won't cause a blank screen anymore — it will just show "Insufficient data" fallback text for all four pillars. Deleting it keeps the database clean and avoids confusion if the user sees a report with no real scores.
 
-The `defaultPillar` guard added in the last fix (lines 601-605) checks `if (!flowResult.find)` — but a non-empty string is truthy, so the guard doesn't activate. The pillar passes through as a string to the database, gets stored as a JSON string in the `jsonb` column, and then the frontend tries to access `.evidence` on what is actually a string, causing the crash.
+### Action
 
-### Root cause: Two layers
+Delete the single row using the Supabase insert tool:
 
-1. **Backend (analysis edge function):** No validation that each pillar is actually a structured object with the expected fields (`reasoning`, `evidence`, `score`, `narrative`). A string value passes the `!flowResult.find` check.
-
-2. **Frontend (FlowReportView):** `ScoreCard` doesn't guard against malformed pillar data — it directly accesses `pillar.evidence.length` without checking if `evidence` exists.
-
-### Plan
-
-**1. Fix the backend validation (analysis/index.ts, lines 600-606)**
-
-Replace the simple falsy check with a structural validation that verifies each pillar is an object with the required fields. If a pillar is a string or missing required fields, replace it with `defaultPillar`:
-
-```ts
-function isValidPillar(p: unknown): boolean {
-  return (
-    typeof p === "object" && p !== null &&
-    "reasoning" in p && "evidence" in p &&
-    Array.isArray((p as any).evidence) && "narrative" in p
-  );
-}
-
-if (!isValidPillar(flowResult.find)) flowResult.find = defaultPillar;
-if (!isValidPillar(flowResult.lead)) flowResult.lead = defaultPillar;
-if (!isValidPillar(flowResult.organize)) flowResult.organize = defaultPillar;
-if (!isValidPillar(flowResult.write)) flowResult.write = defaultPillar;
+```sql
+DELETE FROM flow_reports WHERE id = 'ee960cde-4b35-4983-b6a7-89af7db3e6e0';
 ```
-
-**2. Fix the frontend guard (FlowReportView.tsx, ScoreCard component)**
-
-Add defensive checks in `ScoreCard` so it handles malformed pillar data without crashing:
-
-```ts
-const evidence = Array.isArray(pillar?.evidence) ? pillar.evidence : [];
-```
-
-Use `evidence` instead of `pillar.evidence` in the render. Also guard `pillar.score`, `pillar.narrative`, and `pillar.reasoning` similarly.
-
-**3. Redeploy the analysis edge function**
 
 ### Files changed
 
-- `supabase/functions/analysis/index.ts` — robust pillar validation
-- `src/components/FlowReportView.tsx` — defensive rendering in ScoreCard
+None — database data operation only.
 
