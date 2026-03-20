@@ -289,7 +289,7 @@ export function TextSelectionWindow({
             instruction: pendingInstruction,
           },
         });
-        onAskComplete(); // Refresh chat to show logged messages
+        onAskComplete(data?.inserted_messages ?? []);
       } catch (err) {
         console.error("Failed to confirm propose:", err);
       }
