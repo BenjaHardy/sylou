@@ -303,7 +303,7 @@ export function TextSelectionWindow({
   const handleAcceptModified = async () => {
     if (pendingSummaryUpdate !== null && currentActionId) {
       try {
-        await supabase.functions.invoke("context-prompt", {
+        const { data } = await supabase.functions.invoke("context-prompt", {
           body: {
             confirm: true,
             modified: true,
