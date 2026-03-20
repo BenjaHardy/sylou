@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.analysis]
 verify_jwt = false
+
+[functions.editor-action]
+verify_jwt = false

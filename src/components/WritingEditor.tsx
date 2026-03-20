@@ -131,6 +131,7 @@ export function WritingEditor({ projectId, tutorMode = false, onWritingActivity,
             anchorRect={aiAnchorRect}
             editorElement={editorDom}
             tutorMode={tutorMode}
+            projectId={projectId}
             onClose={() => setAiPanelOpen(false)}
             onAccept={handleAcceptProposal}
             onAsk={handleAsk}

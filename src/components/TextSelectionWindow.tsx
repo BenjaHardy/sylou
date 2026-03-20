@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { X, Loader2, Check, Pencil, XCircle, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 type ActionId =
   | "fix-grammar"
@@ -20,6 +22,7 @@ interface Props {
   anchorRect: DOMRect;
   editorElement: HTMLElement;
   tutorMode: boolean;
+  projectId: string;
   onClose: () => void;
   onAccept: (text: string) => void;
   onAsk: (question: string, selectedText: string) => void;
@@ -45,11 +48,29 @@ const TUTOR_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
 
 const PREDEFINED: ActionId[] = ["fix-grammar", "translate", "rewrite", "simplify", "expand"];
 
+/** Map UI action id to edge function action_type */
+const ACTION_TYPE_MAP: Record<string, string> = {
+  "fix-grammar": "fix_grammar",
+  rewrite: "rewrite",
+  simplify: "simplify",
+  expand: "expand",
+  translate: "translate",
+};
+
+async function updateOutcome(actionId: string, outcome: string) {
+  const { error } = await supabase
+    .from("ai_editor_actions")
+    .update({ outcome })
+    .eq("id", actionId);
+  if (error) console.error("Failed to update action outcome:", error);
+}
+
 export function TextSelectionWindow({
   selectedText,
   anchorRect,
   editorElement,
   tutorMode,
+  projectId,
   onClose,
   onAccept,
   onAsk,
@@ -59,6 +80,7 @@ export function TextSelectionWindow({
   const [proposedText, setProposedText] = useState("");
   const [inputText, setInputText] = useState("");
   const [editableText, setEditableText] = useState("");
+  const [currentActionId, setCurrentActionId] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const actions = tutorMode ? TUTOR_ACTIONS : NORMAL_ACTIONS;
@@ -90,7 +112,6 @@ export function TextSelectionWindow({
         onClose();
       }
     };
-    // Delay to avoid closing immediately from the trigger click
     const timer = setTimeout(() => {
       document.addEventListener("mousedown", handleClick);
     }, 50);
@@ -100,12 +121,49 @@ export function TextSelectionWindow({
     };
   }, [onClose]);
 
+  const callEditorAction = useCallback(
+    async (actionType: string, targetLanguage?: string) => {
+      setPhase("loading");
+      try {
+        const { data, error } = await supabase.functions.invoke("editor-action", {
+          body: {
+            project_id: projectId,
+            action_type: actionType,
+            selected_text: selectedText,
+            ...(targetLanguage ? { target_language: targetLanguage } : {}),
+          },
+        });
+
+        if (error) {
+          console.error("Editor action error:", error);
+          toast.error("AI action failed. Please try again.");
+          setPhase("actions");
+          return;
+        }
+
+        if (data?.error) {
+          toast.error(data.error);
+          setPhase("actions");
+          return;
+        }
+
+        setProposedText(data.proposed_text);
+        setCurrentActionId(data.action_id);
+        setPhase("result");
+      } catch (err) {
+        console.error("Editor action failed:", err);
+        toast.error("Failed to process AI action.");
+        setPhase("actions");
+      }
+    },
+    [projectId, selectedText]
+  );
+
   const handleAction = useCallback(
     (actionId: ActionId) => {
       setActiveAction(actionId);
 
       if (actionId === "sanity-check") {
-        // Placeholder — do nothing for now
         return;
       }
 
@@ -114,16 +172,17 @@ export function TextSelectionWindow({
         return;
       }
 
-      // Predefined actions — simulate loading then show placeholder
       if (PREDEFINED.includes(actionId)) {
-        setPhase("loading");
-        setTimeout(() => {
-          setProposedText(`[Placeholder ${actionId} result for: "${selectedText.slice(0, 60)}${selectedText.length > 60 ? "…" : ""}"]`);
-          setPhase("result");
-        }, 1200);
+        const actionType = ACTION_TYPE_MAP[actionId];
+        if (actionId === "translate") {
+          // For translate, show input to get target language
+          setPhase("input");
+          return;
+        }
+        callEditorAction(actionType);
       }
     },
-    [selectedText]
+    [callEditorAction]
   );
 
   const handleInputSubmit = () => {
@@ -133,12 +192,34 @@ export function TextSelectionWindow({
       onClose();
       return;
     }
-    // Propose — simulate
+    if (activeAction === "translate") {
+      callEditorAction("translate", inputText.trim());
+      setInputText("");
+      return;
+    }
+    // Propose — simulate for now
     setPhase("loading");
     setTimeout(() => {
       setProposedText(`[Placeholder proposal for: "${inputText.slice(0, 60)}"]`);
       setPhase("result");
     }, 1200);
+  };
+
+  const handleAccept = () => {
+    if (currentActionId) updateOutcome(currentActionId, "accepted");
+    onAccept(proposedText);
+    onClose();
+  };
+
+  const handleAcceptModified = () => {
+    if (currentActionId) updateOutcome(currentActionId, "modified");
+    onAccept(editableText);
+    onClose();
+  };
+
+  const handleReject = () => {
+    if (currentActionId) updateOutcome(currentActionId, "rejected");
+    onClose();
   };
 
   const isProminent = (id: ActionId) => id === "ask" || id === "propose";
@@ -236,10 +317,7 @@ export function TextSelectionWindow({
               <Button
                 size="sm"
                 className="h-7 text-xs gap-1"
-                onClick={() => {
-                  onAccept(proposedText);
-                  onClose();
-                }}
+                onClick={handleAccept}
               >
                 <Check className="h-3.5 w-3.5" />
                 Accept
@@ -260,7 +338,7 @@ export function TextSelectionWindow({
                 size="sm"
                 variant="ghost"
                 className="h-7 text-xs gap-1 text-destructive hover:text-destructive"
-                onClick={onClose}
+                onClick={handleReject}
               >
                 <XCircle className="h-3.5 w-3.5" />
                 Reject
@@ -294,10 +372,7 @@ export function TextSelectionWindow({
               <Button
                 size="sm"
                 className="h-7 text-xs gap-1"
-                onClick={() => {
-                  onAccept(editableText);
-                  onClose();
-                }}
+                onClick={handleAcceptModified}
               >
                 <Check className="h-3.5 w-3.5" />
                 Accept
@@ -314,12 +389,14 @@ export function TextSelectionWindow({
           </div>
         )}
 
-        {/* Input phase (Ask / Propose) */}
+        {/* Input phase (Ask / Propose / Translate) */}
         {phase === "input" && (
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground">
               {activeAction === "ask"
                 ? "Type your question about the selected text…"
+                : activeAction === "translate"
+                ? "Enter the target language…"
                 : "Describe what you want…"}
             </p>
             <Textarea
@@ -328,6 +405,8 @@ export function TextSelectionWindow({
               placeholder={
                 activeAction === "ask"
                   ? "e.g. What does this paragraph imply?"
+                  : activeAction === "translate"
+                  ? "e.g. French, Spanish, German…"
                   : "e.g. Make this more formal and add a conclusion"
               }
               className="text-xs min-h-[60px] resize-none"
