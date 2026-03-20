@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.editor-action]
 verify_jwt = false
+
+[functions.context-prompt]
+verify_jwt = false

@@ -23,9 +23,10 @@ interface Props {
   editorElement: HTMLElement;
   tutorMode: boolean;
   projectId: string;
+  threadId: string | null;
   onClose: () => void;
   onAccept: (text: string) => void;
-  onAsk: (question: string, selectedText: string) => void;
+  onAskComplete: () => void;
 }
 
 const NORMAL_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
@@ -71,9 +72,10 @@ export function TextSelectionWindow({
   editorElement,
   tutorMode,
   projectId,
+  threadId,
   onClose,
   onAccept,
-  onAsk,
+  onAskComplete,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("actions");
   const [activeAction, setActiveAction] = useState<ActionId | null>(null);
@@ -81,6 +83,10 @@ export function TextSelectionWindow({
   const [inputText, setInputText] = useState("");
   const [editableText, setEditableText] = useState("");
   const [currentActionId, setCurrentActionId] = useState<string | null>(null);
+  const [loadingStage, setLoadingStage] = useState<"reviewing" | "preparing">("reviewing");
+  // For propose confirm flow
+  const [pendingSummaryUpdate, setPendingSummaryUpdate] = useState<string | null>(null);
+  const [pendingInstruction, setPendingInstruction] = useState<string>("");
   const panelRef = useRef<HTMLDivElement>(null);
 
   const actions = tutorMode ? TUTOR_ACTIONS : NORMAL_ACTIONS;
@@ -124,6 +130,7 @@ export function TextSelectionWindow({
   const callEditorAction = useCallback(
     async (actionType: string, targetLanguage?: string) => {
       setPhase("loading");
+      setLoadingStage("preparing");
       try {
         const { data, error } = await supabase.functions.invoke("editor-action", {
           body: {
@@ -159,6 +166,69 @@ export function TextSelectionWindow({
     [projectId, selectedText]
   );
 
+  const callContextPrompt = useCallback(
+    async (actionType: "ask" | "propose", userInstruction: string) => {
+      if (!threadId) {
+        toast.error("Chat thread not available.");
+        setPhase("actions");
+        return;
+      }
+
+      setPhase("loading");
+      setLoadingStage("reviewing");
+
+      // Simulate two-stage: switch to "preparing" after a delay
+      const stageTimer = setTimeout(() => setLoadingStage("preparing"), 3000);
+
+      try {
+        const { data, error } = await supabase.functions.invoke("context-prompt", {
+          body: {
+            project_id: projectId,
+            thread_id: threadId,
+            action_type: actionType,
+            selected_text: selectedText,
+            instruction: userInstruction,
+            source_module: "editor",
+          },
+        });
+
+        clearTimeout(stageTimer);
+
+        if (error) {
+          console.error("Context prompt error:", error);
+          toast.error("AI action failed. Please try again.");
+          setPhase("actions");
+          return;
+        }
+
+        if (data?.error) {
+          toast.error(data.error);
+          setPhase("actions");
+          return;
+        }
+
+        if (actionType === "ask") {
+          // Messages are already logged to chat; signal parent to refresh chat
+          onAskComplete();
+          onClose();
+        } else {
+          // Propose: show result panel with accept/modify/reject
+          setProposedText(data.ai_response);
+          setCurrentActionId(data.action_id);
+          setPendingSummaryUpdate(data.summary_update);
+          setPendingInstruction(userInstruction);
+          setPhase("result");
+        }
+      } catch (err) {
+        clearTimeout(stageTimer);
+        console.error("Context prompt failed:", err);
+        toast.error("Failed to process AI action.");
+        setPhase("actions");
+      }
+    },
+    [projectId, threadId, selectedText, onAskComplete, onClose]
+  );
+
   const handleAction = useCallback(
     (actionId: ActionId) => {
       setActiveAction(actionId);
@@ -175,7 +245,6 @@ export function TextSelectionWindow({
       if (PREDEFINED.includes(actionId)) {
         const actionType = ACTION_TYPE_MAP[actionId];
         if (actionId === "translate") {
-          // For translate, show input to get target language
           setPhase("input");
           return;
         }
@@ -188,8 +257,13 @@ export function TextSelectionWindow({
   const handleInputSubmit = () => {
     if (!inputText.trim()) return;
     if (activeAction === "ask") {
-      onAsk(inputText, selectedText);
-      onClose();
+      callContextPrompt("ask", inputText.trim());
+      setInputText("");
+      return;
+    }
+    if (activeAction === "propose") {
+      callContextPrompt("propose", inputText.trim());
+      setInputText("");
       return;
     }
     if (activeAction === "translate") {
@@ -197,28 +271,79 @@ export function TextSelectionWindow({
       setInputText("");
       return;
     }
-    // Propose — simulate for now
-    setPhase("loading");
-    setTimeout(() => {
-      setProposedText(`[Placeholder proposal for: "${inputText.slice(0, 60)}"]`);
-      setPhase("result");
-    }, 1200);
   };
 
-  const handleAccept = () => {
-    if (currentActionId) updateOutcome(currentActionId, "accepted");
+  const handleAccept = async () => {
+    // For propose actions with pending summary, confirm
+    if (pendingSummaryUpdate !== null && currentActionId) {
+      try {
+        await supabase.functions.invoke("context-prompt", {
+          body: {
+            confirm: true,
+            action_id: currentActionId,
+            summary_update: pendingSummaryUpdate,
+            thread_id: threadId,
+            project_id: projectId,
+            selected_text: selectedText,
+            instruction: pendingInstruction,
+            ai_response: proposedText,
+          },
+        });
+        onAskComplete(); // Refresh chat to show logged messages
+      } catch (err) {
+        console.error("Failed to confirm propose:", err);
+      }
+    } else if (currentActionId) {
+      updateOutcome(currentActionId, "accepted");
+    }
     onAccept(proposedText);
     onClose();
   };
 
-  const handleAcceptModified = () => {
-    if (currentActionId) updateOutcome(currentActionId, "modified");
+  const handleAcceptModified = async () => {
+    if (pendingSummaryUpdate !== null && currentActionId) {
+      try {
+        await supabase.functions.invoke("context-prompt", {
+          body: {
+            confirm: true,
+            action_id: currentActionId,
+            summary_update: pendingSummaryUpdate,
+            thread_id: threadId,
+            project_id: projectId,
+            selected_text: selectedText,
+            instruction: pendingInstruction,
+            ai_response: editableText,
+          },
+        });
+        onAskComplete();
+      } catch (err) {
+        console.error("Failed to confirm modified propose:", err);
+      }
+      // Also update outcome to "modified"
+      updateOutcome(currentActionId, "modified");
+    } else if (currentActionId) {
+      updateOutcome(currentActionId, "modified");
+    }
     onAccept(editableText);
     onClose();
   };
 
-  const handleReject = () => {
-    if (currentActionId) updateOutcome(currentActionId, "rejected");
+  const handleReject = async () => {
+    if (pendingSummaryUpdate !== null && currentActionId) {
+      try {
+        await supabase.functions.invoke("context-prompt", {
+          body: {
+            confirm: false,
+            action_id: currentActionId,
+            project_id: projectId,
+          },
+        });
+      } catch (err) {
+        console.error("Failed to reject propose:", err);
+      }
+    } else if (currentActionId) {
+      updateOutcome(currentActionId, "rejected");
+    }
     onClose();
   };
 
@@ -285,11 +410,13 @@ export function TextSelectionWindow({
           </div>
         )}
 
-        {/* Loading phase */}
+        {/* Loading phase with two stages */}
         {phase === "loading" && (
           <div className="flex items-center justify-center py-6 gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Processing…
+            {loadingStage === "reviewing"
+              ? "Reviewing your writing…"
+              : "Preparing response…"}
           </div>
         )}
 

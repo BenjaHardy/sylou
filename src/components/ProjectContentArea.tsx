@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { FlowTokenWarningDialog } from "@/components/FlowTokenWarningDialog";
 import { FlowReanalyzeDialog } from "@/components/FlowReanalyzeDialog";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useFlowAnalysis } from "@/hooks/useFlowAnalysis";
+import { useChatThread } from "@/hooks/useChatThread";
 import type { Project } from "@/hooks/useProjects";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 
@@ -53,11 +54,12 @@ export function ProjectContentArea({ project }: Props) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [showTokenWarning, setShowTokenWarning] = useState(false);
   const [showReanalyze, setShowReanalyze] = useState(false);
-  /** Track whether the current report view was opened directly from the first-ever analysis run */
   const [isCurrentRunFirst, setIsCurrentRunFirst] = useState(false);
+  const [chatRefreshTrigger, setChatRefreshTrigger] = useState(0);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const { markWriting } = useActivityTracker(project?.id ?? null);
+  const { threadId } = useChatThread(project?.id ?? null);
 
   const {
     preCheck,
@@ -229,11 +231,13 @@ export function ProjectContentArea({ project }: Props) {
             <WritingEditor
               projectId={project.id}
               tutorMode={project.tutor_mode}
+              threadId={threadId}
               onWritingActivity={markWriting}
               onFlowClick={handleFlowClick}
               onReanalyzeClick={handleReanalyzeClick}
               flowLoading={flowLoading}
               hasFlowReport={!!flowReport}
+              onAskComplete={() => setChatRefreshTrigger((n) => n + 1)}
             />
             <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
               <ProjectActivityBar projectId={project.id} />
@@ -242,7 +246,7 @@ export function ProjectContentArea({ project }: Props) {
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20}>
-          <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} />
+          <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} />
         </ResizablePanel>
       </ResizablePanelGroup>
 
