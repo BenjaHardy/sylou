@@ -393,28 +393,31 @@ function ScoreCard({
           </div>
         </div>
         <div className="text-right">
-          <p className="text-2xl font-bold leading-none">
-            {pillar.score != null ? pillar.score.toFixed(1) : "—"}
+           <p className="text-2xl font-bold leading-none">
+            {pillar?.score != null ? Number(pillar.score).toFixed(1) : "—"}
           </p>
           <p className="text-[10px] opacity-70 mt-0.5">/ 5.0</p>
         </div>
       </div>
       <p className="text-xs font-semibold">{scoreLabel}</p>
-      <p className="text-sm leading-relaxed opacity-90">{pillar.narrative}</p>
-      {pillar.evidence.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">Evidence</p>
-          <ul className="text-xs space-y-1 opacity-80">
-            {pillar.evidence.map((e, i) => (
-              <li key={i} className="flex gap-1.5">
-                <span className="shrink-0 opacity-50">•</span>
-                <span>{e}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {pillar.reasoning && (
+      <p className="text-sm leading-relaxed opacity-90">{pillar?.narrative ?? ""}</p>
+      {(() => {
+        const evidence = Array.isArray(pillar?.evidence) ? pillar.evidence : [];
+        return evidence.length > 0 ? (
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">Evidence</p>
+            <ul className="text-xs space-y-1 opacity-80">
+              {evidence.map((e: string, i: number) => (
+                <li key={i} className="flex gap-1.5">
+                  <span className="shrink-0 opacity-50">•</span>
+                  <span>{e}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null;
+      })()}
+      {pillar?.reasoning && (
         <div>
           <button
             onClick={() => setExpanded(!expanded)}
