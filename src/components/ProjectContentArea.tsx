@@ -57,6 +57,7 @@ export function ProjectContentArea({ project }: Props) {
   const [showReanalyze, setShowReanalyze] = useState(false);
   const [isCurrentRunFirst, setIsCurrentRunFirst] = useState(false);
   const [chatRefreshTrigger, setChatRefreshTrigger] = useState(0);
+  const [pendingChatMessages, setPendingChatMessages] = useState<ChatMessage[]>([]);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const { markWriting } = useActivityTracker(project?.id ?? null);
