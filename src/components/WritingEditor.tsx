@@ -91,8 +91,8 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     [editor]
   );
 
-  const handleAskComplete = useCallback(() => {
-    onAskComplete?.();
+  const handleAskComplete = useCallback((messages: ChatMessage[]) => {
+    onAskComplete?.(messages);
   }, [onAskComplete]);
 
   if (loading || !editor) {
