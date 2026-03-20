@@ -20,28 +20,26 @@ export function useChatMessages(threadId: string | null) {
   const [sending, setSending] = useState(false);
   const [budgetRemaining, setBudgetRemaining] = useState<number | null>(null);
 
-  useEffect(() => {
+  const fetchMessages = useCallback(async () => {
     if (!threadId) {
       setMessages([]);
       return;
     }
-    let cancelled = false;
     setLoading(true);
-
-    supabase
+    const { data, error } = await supabase
       .from("chat_messages")
       .select("*")
       .eq("thread_id", threadId)
-      .order("created_at", { ascending: true })
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) console.error("Failed to load messages:", error);
-        setMessages((data as ChatMessage[]) ?? []);
-        setLoading(false);
-      });
+      .order("created_at", { ascending: true });
 
-    return () => { cancelled = true; };
+    if (error) console.error("Failed to load messages:", error);
+    setMessages((data as ChatMessage[]) ?? []);
+    setLoading(false);
   }, [threadId]);
+
+  useEffect(() => {
+    fetchMessages();
+  }, [fetchMessages]);
 
   const sendMessage = useCallback(
     async (content: string, conciseMode: boolean) => {
@@ -89,5 +87,5 @@ export function useChatMessages(threadId: string | null) {
     [threadId]
   );
 
-  return { messages, loading, sending, sendMessage, budgetRemaining };
+  return { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages: fetchMessages };
 }
