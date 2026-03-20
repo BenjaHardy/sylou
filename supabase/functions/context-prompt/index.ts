@@ -205,25 +205,32 @@ Deno.serve(async (req) => {
     // ── CONFIRM endpoint ────────────────────────────────────────────────
     if (body.confirm !== undefined) {
       const { confirm, action_id, summary_update, modified } = body;
+      const adminClient = getAdminClient();
 
       if (action_id) {
         const outcome = !confirm ? "rejected" : modified ? "modified" : "accepted";
-        await supabase
+        const { error: updateErr } = await adminClient
           .from("ai_editor_actions")
           .update({ outcome })
           .eq("id", action_id);
+        if (updateErr) console.error("ai_editor_actions outcome update failed:", JSON.stringify(updateErr));
       }
 
       if (confirm && thread_id) {
-        // Fetch the stored AI response from the action row
+        // Fetch the stored AI response from the action row (server-side, trusted)
         let aiResponseContent = "";
         if (action_id) {
-          const { data: actionRow } = await supabase
+          const { data: actionRow, error: fetchErr } = await adminClient
             .from("ai_editor_actions")
             .select("ai_response_full")
             .eq("id", action_id)
-            .single();
+            .maybeSingle();
+          if (fetchErr) console.error("ai_editor_actions fetch failed:", JSON.stringify(fetchErr));
           aiResponseContent = actionRow?.ai_response_full ?? "";
+        }
+        // Fallback: use client-provided ai_response if DB lookup returned nothing
+        if (!aiResponseContent && body.ai_response) {
+          aiResponseContent = body.ai_response;
         }
 
         // Log to chat_messages and collect inserted rows
