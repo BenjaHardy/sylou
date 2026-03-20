@@ -317,7 +317,7 @@ export function TextSelectionWindow({
   };
 
   const handleAcceptModified = async () => {
-    if (pendingSummaryUpdate !== null && currentActionId) {
+    if (pendingSummaryUpdate !== null) {
       try {
         const { data, error } = await supabase.functions.invoke("context-prompt", {
           body: {
@@ -329,6 +329,7 @@ export function TextSelectionWindow({
             project_id: projectId,
             selected_text: selectedText,
             instruction: pendingInstruction,
+            ai_response: editableText,
           },
         });
         if (error) {
