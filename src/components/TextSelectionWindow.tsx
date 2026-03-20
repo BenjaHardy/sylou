@@ -357,7 +357,7 @@ export function TextSelectionWindow({
   };
 
   const handleReject = async () => {
-    if (pendingSummaryUpdate !== null && currentActionId) {
+    if (pendingSummaryUpdate !== null) {
       try {
         await supabase.functions.invoke("context-prompt", {
           body: {

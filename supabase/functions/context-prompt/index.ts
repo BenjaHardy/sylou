@@ -404,7 +404,8 @@ Deno.serve(async (req) => {
     const totalTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
 
     // --- 9. Log to ai_editor_actions (store full AI response) ---
-    const { data: actionRow } = await supabase
+    const adminClient = getAdminClient();
+    const { data: actionRow, error: actionErr } = await adminClient
       .from("ai_editor_actions")
       .insert({
         project_id,
@@ -419,6 +420,10 @@ Deno.serve(async (req) => {
       })
       .select("id")
       .single();
+
+    if (actionErr) {
+      console.error("ai_editor_actions insert failed:", JSON.stringify(actionErr));
+    }
 
     // --- Log token usage ---
     await supabase.from("token_usage").insert({
