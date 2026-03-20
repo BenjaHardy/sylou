@@ -54,11 +54,12 @@ export function ProjectContentArea({ project }: Props) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [showTokenWarning, setShowTokenWarning] = useState(false);
   const [showReanalyze, setShowReanalyze] = useState(false);
-  /** Track whether the current report view was opened directly from the first-ever analysis run */
   const [isCurrentRunFirst, setIsCurrentRunFirst] = useState(false);
+  const [chatRefreshTrigger, setChatRefreshTrigger] = useState(0);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const { markWriting } = useActivityTracker(project?.id ?? null);
+  const { threadId } = useChatThread(project?.id ?? null);
 
   const {
     preCheck,
