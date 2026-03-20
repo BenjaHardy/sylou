@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import type { ChatMessage } from "@/hooks/useChatMessages";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
