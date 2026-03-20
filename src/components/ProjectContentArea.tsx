@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import type { ChatMessage } from "@/hooks/useChatMessages";
 import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
