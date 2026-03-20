@@ -27,7 +27,7 @@ interface Props {
   threadId: string | null;
   onClose: () => void;
   onAccept: (text: string) => void;
-  onAskComplete: () => void;
+  onAskComplete: (messages: ChatMessage[]) => void;
 }
 
 const NORMAL_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
