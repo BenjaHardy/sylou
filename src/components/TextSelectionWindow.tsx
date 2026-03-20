@@ -78,6 +78,7 @@ export function TextSelectionWindow({
   onClose,
   onAccept,
   onAskComplete,
+  onChatRefresh,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("actions");
   const [activeAction, setActiveAction] = useState<ActionId | null>(null);
