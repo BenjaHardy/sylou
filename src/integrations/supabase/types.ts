@@ -17,6 +17,7 @@ export type Database = {
       ai_editor_actions: {
         Row: {
           action_type: string
+          ai_response_full: string | null
           ai_response_preview: string | null
           char_count_original: number | null
           char_count_result: number | null
@@ -29,6 +30,7 @@ export type Database = {
         }
         Insert: {
           action_type: string
+          ai_response_full?: string | null
           ai_response_preview?: string | null
           char_count_original?: number | null
           char_count_result?: number | null
@@ -41,6 +43,7 @@ export type Database = {
         }
         Update: {
           action_type?: string
+          ai_response_full?: string | null
           ai_response_preview?: string | null
           char_count_original?: number | null
           char_count_result?: number | null
