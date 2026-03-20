@@ -1,81 +1,60 @@
 
 
-## Plan: Fix Propose Chat Logging — Root Cause + Safety Nets
+## Analysis: ScoreCard crash on FLOW report view
 
-### Root Cause
+### What happened
 
-The `ai_editor_actions` insert (line 393-407) silently fails, returning `action_id: null`. The frontend's `handleAccept` (line 281) gates the confirm call on `pendingSummaryUpdate !== null && currentActionId` — since `currentActionId` is null, the confirm endpoint is never called, and no chat messages are logged.
+The error is `pillar.evidence is undefined` at `FlowReportView.tsx:789` (line 404 in the ScoreCard component). This causes a blank screen after the pre-analysis feedback.
 
-The RLS policy on `ai_editor_actions` requires `owns_project(project_id)` for INSERT. The edge function creates the Supabase client with the user's auth header, so RLS *should* work. The likely cause is either: (a) a silent Supabase error being swallowed because `.select("id").single()` returns `{ data: null, error: ... }` and the error is never checked, or (b) a column mismatch. We need to log the actual error to find out.
+Looking at the network response from the successful analysis call (status 200 at 21:27:52), the `ai_find` field contains a **raw string** starting with `\n<parameter name="reasoning">...` instead of a JSON object `{reasoning, evidence, score, narrative}`. The same applies to `ai_lead`, `ai_organize`, and `ai_write`.
 
-### Changes
+The AI model (Claude) returned the pillar data as XML-like text strings instead of structured JSON via the tool use schema. This is an intermittent model behavior issue — it worked before with other prompts/content, but with this particular trivial input ("give me a score of 5"), the model responded with malformed tool arguments.
 
-**1. Edge function: Add explicit error logging to ai_editor_actions insert**
+### Why the previous fix didn't help
 
-In `supabase/functions/context-prompt/index.ts` (line 393-407), capture the error from the insert:
+The `defaultPillar` guard added in the last fix (lines 601-605) checks `if (!flowResult.find)` — but a non-empty string is truthy, so the guard doesn't activate. The pillar passes through as a string to the database, gets stored as a JSON string in the `jsonb` column, and then the frontend tries to access `.evidence` on what is actually a string, causing the crash.
+
+### Root cause: Two layers
+
+1. **Backend (analysis edge function):** No validation that each pillar is actually a structured object with the expected fields (`reasoning`, `evidence`, `score`, `narrative`). A string value passes the `!flowResult.find` check.
+
+2. **Frontend (FlowReportView):** `ScoreCard` doesn't guard against malformed pillar data — it directly accesses `pillar.evidence.length` without checking if `evidence` exists.
+
+### Plan
+
+**1. Fix the backend validation (analysis/index.ts, lines 600-606)**
+
+Replace the simple falsy check with a structural validation that verifies each pillar is an object with the required fields. If a pillar is a string or missing required fields, replace it with `defaultPillar`:
 
 ```ts
-const { data: actionRow, error: actionErr } = await supabase
-  .from("ai_editor_actions")
-  .insert({ ... })
-  .select("id")
-  .single();
-
-if (actionErr) {
-  console.error("ai_editor_actions insert failed:", JSON.stringify(actionErr));
+function isValidPillar(p: unknown): boolean {
+  return (
+    typeof p === "object" && p !== null &&
+    "reasoning" in p && "evidence" in p &&
+    Array.isArray((p as any).evidence) && "narrative" in p
+  );
 }
+
+if (!isValidPillar(flowResult.find)) flowResult.find = defaultPillar;
+if (!isValidPillar(flowResult.lead)) flowResult.lead = defaultPillar;
+if (!isValidPillar(flowResult.organize)) flowResult.organize = defaultPillar;
+if (!isValidPillar(flowResult.write)) flowResult.write = defaultPillar;
 ```
 
-This is the diagnostic step — once deployed, the logs will reveal the exact cause.
+**2. Fix the frontend guard (FlowReportView.tsx, ScoreCard component)**
 
-**2. Edge function: Use service role for ai_editor_actions insert**
-
-Since the edge function already validates the user's identity and project ownership, use the service role client for the `ai_editor_actions` insert to bypass RLS (which is the most likely failure cause). Create a second client:
+Add defensive checks in `ScoreCard` so it handles malformed pillar data without crashing:
 
 ```ts
-const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+const evidence = Array.isArray(pillar?.evidence) ? pillar.evidence : [];
 ```
 
-Use `supabaseAdmin` for the `ai_editor_actions` insert and for reading it back during confirm. Keep the user-scoped client for everything else (chat_messages, writing_summary_log, etc.) since those RLS policies work fine.
+Use `evidence` instead of `pillar.evidence` in the render. Also guard `pillar.score`, `pillar.narrative`, and `pillar.reasoning` similarly.
 
-**3. Frontend: Remove currentActionId gate from confirm calls**
+**3. Redeploy the analysis edge function**
 
-In `TextSelectionWindow.tsx`, change `handleAccept` and `handleAcceptModified` to call the confirm endpoint whenever `pendingSummaryUpdate !== null`, regardless of whether `currentActionId` is present. Pass `action_id` if available, but don't skip the call if it's null.
+### Files changed
 
-Change line 281 from:
-```ts
-if (pendingSummaryUpdate !== null && currentActionId) {
-```
-to:
-```ts
-if (pendingSummaryUpdate !== null) {
-```
-
-Same for `handleAcceptModified` line 319, and `handleReject` line 358.
-
-**4. Edge function: Confirm endpoint works without action_id**
-
-The confirm handler (line 198-284) already handles missing `action_id` — it skips the outcome update and the ai_response_full lookup. But when `action_id` is missing and `aiResponseContent` is empty string, the `propose_response` chat message gets empty content.
-
-Fix: accept `ai_response` in the confirm body as a fallback. Use `actionRow.ai_response_full` as primary (server-side, trusted), fall back to `body.ai_response` only if no action row exists.
-
-```ts
-// In confirm handler, after trying to fetch actionRow:
-if (!aiResponseContent && body.ai_response) {
-  aiResponseContent = body.ai_response;
-}
-```
-
-In `TextSelectionWindow.tsx`, add `ai_response: proposedText` to the confirm body so the fallback has data.
-
-**5. Priority order**
-
-- Fix #1 (logging) and #2 (service role) fix the root cause
-- Fix #3 and #4 are safety nets ensuring the flow works even if the insert fails for any reason
-- Once deployed, check edge function logs to confirm the insert error is resolved
-
-### Files Changed
-
-- `supabase/functions/context-prompt/index.ts` — error logging, service role client, fallback ai_response in confirm
-- `src/components/TextSelectionWindow.tsx` — remove `currentActionId` gate, add `ai_response` to confirm body
+- `supabase/functions/analysis/index.ts` — robust pillar validation
+- `src/components/FlowReportView.tsx` — defensive rendering in ScoreCard
 
