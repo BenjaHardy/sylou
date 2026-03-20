@@ -277,8 +277,8 @@ export function TextSelectionWindow({
   };
 
   const handleAccept = async () => {
-    // For propose actions with pending summary, confirm
-    if (pendingSummaryUpdate !== null && currentActionId) {
+    // For propose actions with pending summary, confirm (works with or without action_id)
+    if (pendingSummaryUpdate !== null) {
       try {
         const { data, error } = await supabase.functions.invoke("context-prompt", {
           body: {
@@ -289,6 +289,7 @@ export function TextSelectionWindow({
             project_id: projectId,
             selected_text: selectedText,
             instruction: pendingInstruction,
+            ai_response: proposedText,
           },
         });
         if (error) {
@@ -316,7 +317,7 @@ export function TextSelectionWindow({
   };
 
   const handleAcceptModified = async () => {
-    if (pendingSummaryUpdate !== null && currentActionId) {
+    if (pendingSummaryUpdate !== null) {
       try {
         const { data, error } = await supabase.functions.invoke("context-prompt", {
           body: {
@@ -328,6 +329,7 @@ export function TextSelectionWindow({
             project_id: projectId,
             selected_text: selectedText,
             instruction: pendingInstruction,
+            ai_response: editableText,
           },
         });
         if (error) {
@@ -355,7 +357,7 @@ export function TextSelectionWindow({
   };
 
   const handleReject = async () => {
-    if (pendingSummaryUpdate !== null && currentActionId) {
+    if (pendingSummaryUpdate !== null) {
       try {
         await supabase.functions.invoke("context-prompt", {
           body: {

@@ -1,5 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Service-role client for ai_editor_actions (bypasses RLS)
+function getAdminClient() {
+  const url = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  return createClient(url, serviceKey);
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -198,25 +205,32 @@ Deno.serve(async (req) => {
     // ── CONFIRM endpoint ────────────────────────────────────────────────
     if (body.confirm !== undefined) {
       const { confirm, action_id, summary_update, modified } = body;
+      const adminClient = getAdminClient();
 
       if (action_id) {
         const outcome = !confirm ? "rejected" : modified ? "modified" : "accepted";
-        await supabase
+        const { error: updateErr } = await adminClient
           .from("ai_editor_actions")
           .update({ outcome })
           .eq("id", action_id);
+        if (updateErr) console.error("ai_editor_actions outcome update failed:", JSON.stringify(updateErr));
       }
 
       if (confirm && thread_id) {
-        // Fetch the stored AI response from the action row
+        // Fetch the stored AI response from the action row (server-side, trusted)
         let aiResponseContent = "";
         if (action_id) {
-          const { data: actionRow } = await supabase
+          const { data: actionRow, error: fetchErr } = await adminClient
             .from("ai_editor_actions")
             .select("ai_response_full")
             .eq("id", action_id)
-            .single();
+            .maybeSingle();
+          if (fetchErr) console.error("ai_editor_actions fetch failed:", JSON.stringify(fetchErr));
           aiResponseContent = actionRow?.ai_response_full ?? "";
+        }
+        // Fallback: use client-provided ai_response if DB lookup returned nothing
+        if (!aiResponseContent && body.ai_response) {
+          aiResponseContent = body.ai_response;
         }
 
         // Log to chat_messages and collect inserted rows
@@ -390,7 +404,8 @@ Deno.serve(async (req) => {
     const totalTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
 
     // --- 9. Log to ai_editor_actions (store full AI response) ---
-    const { data: actionRow } = await supabase
+    const adminClient = getAdminClient();
+    const { data: actionRow, error: actionErr } = await adminClient
       .from("ai_editor_actions")
       .insert({
         project_id,
@@ -405,6 +420,10 @@ Deno.serve(async (req) => {
       })
       .select("id")
       .single();
+
+    if (actionErr) {
+      console.error("ai_editor_actions insert failed:", JSON.stringify(actionErr));
+    }
 
     // --- Log token usage ---
     await supabase.from("token_usage").insert({
