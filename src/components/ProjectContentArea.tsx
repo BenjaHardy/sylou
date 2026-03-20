@@ -240,6 +240,7 @@ export function ProjectContentArea({ project }: Props) {
               flowLoading={flowLoading}
               hasFlowReport={!!flowReport}
               onAskComplete={(msgs) => setPendingChatMessages((prev) => [...prev, ...msgs])}
+              onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
             />
             <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
               <ProjectActivityBar projectId={project.id} />
