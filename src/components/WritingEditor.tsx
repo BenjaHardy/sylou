@@ -18,15 +18,16 @@ import { Loader2, Activity } from "lucide-react";
 interface Props {
   projectId: string;
   tutorMode?: boolean;
+  threadId: string | null;
   onWritingActivity?: () => void;
   onFlowClick?: () => void;
   onReanalyzeClick?: () => void;
   flowLoading?: boolean;
   hasFlowReport?: boolean;
-  onAskAI?: (question: string, selectedText: string) => void;
+  onAskComplete?: () => void;
 }
 
-export function WritingEditor({ projectId, tutorMode = false, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskAI }: Props) {
+export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete }: Props) {
   const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
   const [initialSet, setInitialSet] = useState(false);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
@@ -84,18 +85,14 @@ export function WritingEditor({ projectId, tutorMode = false, onWritingActivity,
   const handleAcceptProposal = useCallback(
     (replacementText: string) => {
       if (!editor) return;
-      // The editor should still have the selection; insert content to replace it
       editor.chain().focus().insertContent(replacementText).run();
     },
     [editor]
   );
 
-  const handleAsk = useCallback(
-    (question: string, selectedText: string) => {
-      onAskAI?.(question, selectedText);
-    },
-    [onAskAI]
-  );
+  const handleAskComplete = useCallback(() => {
+    onAskComplete?.();
+  }, [onAskComplete]);
 
   if (loading || !editor) {
     return (
@@ -132,9 +129,10 @@ export function WritingEditor({ projectId, tutorMode = false, onWritingActivity,
             editorElement={editorDom}
             tutorMode={tutorMode}
             projectId={projectId}
+            threadId={threadId}
             onClose={() => setAiPanelOpen(false)}
             onAccept={handleAcceptProposal}
-            onAsk={handleAsk}
+            onAskComplete={handleAskComplete}
           />
         )}
       </div>

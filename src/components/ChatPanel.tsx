@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, KeyboardEvent } from "react";
-import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight } from "lucide-react";
+import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
@@ -11,12 +11,61 @@ interface Props {
   projectId: string;
   chatExpanded?: boolean;
   onToggleChat?: () => void;
+  refreshTrigger?: number;
 }
 
 const TIP_DISMISSED_KEY = "ethos-chat-tip-dismissed";
 
+const SOURCE_LABELS: Record<string, string> = {
+  ask_prompt: "Ask · Text Selection",
+  ask_response: "Ask · AI Response",
+  propose_prompt: "Propose · Text Selection",
+  propose_response: "Propose · AI Response",
+  writing_summary: "Writing Summary Update",
+};
+
+function WritingSummaryBubble({ message }: { message: ChatMessage }) {
+  const [collapsed, setCollapsed] = useState(true);
+
+  return (
+    <div className="flex gap-2.5">
+      <div className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 bg-accent/60 text-accent-foreground">
+        <FileText className="h-3.5 w-3.5" />
+      </div>
+      <div className="max-w-[80%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed bg-accent/30 text-foreground border border-accent/40">
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
+        >
+          <span className="text-[10px] uppercase tracking-wider font-semibold text-accent-foreground/70">
+            {SOURCE_LABELS[message.source_type ?? ""] ?? "Writing Summary"}
+          </span>
+          {collapsed ? <ChevronDown className="h-3 w-3 ml-auto" /> : <ChevronUp className="h-3 w-3 ml-auto" />}
+        </button>
+        {!collapsed && (
+          <p className="whitespace-pre-wrap break-words mt-2 text-xs text-muted-foreground">
+            {message.content}
+          </p>
+        )}
+        <span className="block text-[10px] mt-1.5 text-muted-foreground/60">
+          {format(new Date(message.created_at), "h:mm a")}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function ChatBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
+  const sourceType = message.source_type ?? "chat";
+  const isContextMessage = ["ask_prompt", "ask_response", "propose_prompt", "propose_response"].includes(sourceType);
+
+  // Writing summary messages get special collapsed treatment
+  if (sourceType === "writing_summary") {
+    return <WritingSummaryBubble message={message} />;
+  }
+
+  const sourceLabel = SOURCE_LABELS[sourceType];
 
   return (
     <div className={`flex gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
@@ -31,11 +80,20 @@ function ChatBubble({ message }: { message: ChatMessage }) {
       </div>
       <div
         className={`max-w-[80%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed ${
-          isUser
-            ? "bg-primary/10 text-foreground"
-            : "bg-muted text-foreground"
+          isContextMessage
+            ? isUser
+              ? "bg-primary/5 text-foreground border border-primary/20"
+              : "bg-muted/80 text-foreground border border-border"
+            : isUser
+              ? "bg-primary/10 text-foreground"
+              : "bg-muted text-foreground"
         }`}
       >
+        {sourceLabel && (
+          <span className="block text-[10px] uppercase tracking-wider font-semibold text-primary/60 mb-1">
+            {sourceLabel}
+          </span>
+        )}
         <p className="whitespace-pre-wrap break-words">{message.content}</p>
         <span
           className={`block text-[10px] mt-1.5 ${
@@ -49,9 +107,9 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-export function ChatPanel({ projectId, chatExpanded, onToggleChat }: Props) {
+export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger }: Props) {
   const { threadId, threadName } = useChatThread(projectId);
-  const { messages, loading, sending, sendMessage, budgetRemaining } = useChatMessages(threadId);
+  const { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages } = useChatMessages(threadId);
   const [input, setInput] = useState("");
   const [conciseMode, setConciseMode] = useState(false);
   const [tipDismissed, setTipDismissed] = useState(
@@ -59,6 +117,13 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat }: Props) {
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Refresh messages when trigger changes (e.g. after Ask/Propose)
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      refreshMessages();
+    }
+  }, [refreshTrigger, refreshMessages]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
