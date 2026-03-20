@@ -1,59 +1,81 @@
 
 
-## Plan: Fix Context-Prompt Edge Function & TextSelectionWindow Issues
+## Plan: Fix Propose Chat Logging — Root Cause + Safety Nets
 
-### 1. Flow Flags Fix (context-prompt Edge Function)
+### Root Cause
 
-Change `flow_flag` values in `supabase/functions/context-prompt/index.ts`:
+The `ai_editor_actions` insert (line 393-407) silently fails, returning `action_id: null`. The frontend's `handleAccept` (line 281) gates the confirm call on `pendingSummaryUpdate !== null && currentActionId` — since `currentActionId` is null, the confirm endpoint is never called, and no chat messages are logged.
 
-| Message type | Current | New |
-|---|---|---|
-| ask_prompt (line 406) | "not_assessed" | "normal" |
-| ask_response (line 424) | "not_assessed" | "normal" |
-| writing_summary (lines 414, 218) | "not_assessed" | "not_assessed" (keep) |
-| propose_prompt (line 212) | "not_assessed" | "normal" |
-| propose_response (line 231) | "not_assessed" | "normal" |
+The RLS policy on `ai_editor_actions` requires `owns_project(project_id)` for INSERT. The edge function creates the Supabase client with the user's auth header, so RLS *should* work. The likely cause is either: (a) a silent Supabase error being swallowed because `.select("id").single()` returns `{ data: null, error: ... }` and the error is never checked, or (b) a column mismatch. We need to log the actual error to find out.
 
-### 2. Language Awareness
+### Changes
 
-In the project fetch (line 277), add `language` to the select: `"id, tutor_mode, language"`. Then append `Respond in {project.language}.` to both the summary prompt system message and the response prompt system message.
+**1. Edge function: Add explicit error logging to ai_editor_actions insert**
 
-### 3. Server-Side AI Response Storage
+In `supabase/functions/context-prompt/index.ts` (line 393-407), capture the error from the insert:
 
-Store the full `ai_response` in `ai_editor_actions` during the initial call. The existing `ai_response_preview` column is truncated to 500 chars — we'll add a new `ai_response_full` TEXT column via migration. On confirm, read the response from the DB row instead of trusting the client-provided `ai_response`.
-
-**Migration**: `ALTER TABLE ai_editor_actions ADD COLUMN ai_response_full text;`
-
-In the edge function:
-- On initial insert, store `ai_response` in `ai_response_full`
-- On confirm, fetch the `ai_editor_actions` row by `action_id` and use its `ai_response_full` value
-
-In `TextSelectionWindow.tsx`: remove `ai_response: proposedText` / `ai_response: editableText` from the confirm body.
-
-### 4. Atomic Budget Update
-
-Replace the read-then-write budget update (lines 391-395) with:
 ```ts
-await supabase.rpc('increment_tokens_used', { user_uuid: user.id, amount: totalTokens });
+const { data: actionRow, error: actionErr } = await supabase
+  .from("ai_editor_actions")
+  .insert({ ... })
+  .select("id")
+  .single();
+
+if (actionErr) {
+  console.error("ai_editor_actions insert failed:", JSON.stringify(actionErr));
+}
 ```
-The `increment_tokens_used` function already exists in the database.
 
-Also update the budget_remaining calculation to use a fresh read or compute from the pre-check value.
+This is the diagnostic step — once deployed, the logs will reveal the exact cause.
 
-### 5. Propose Confirm Outcome — Server-Side
+**2. Edge function: Use service role for ai_editor_actions insert**
 
-Add `modified` field support to the confirm endpoint body. When `confirm === true && body.modified === true`, set outcome to `"modified"` instead of `"accepted"`.
+Since the edge function already validates the user's identity and project ownership, use the service role client for the `ai_editor_actions` insert to bypass RLS (which is the most likely failure cause). Create a second client:
 
-In `TextSelectionWindow.tsx` `handleAcceptModified`: add `modified: true` to the confirm body and remove the separate `updateOutcome(currentActionId, "modified")` call.
+```ts
+const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+```
 
-### 6. localStorage Removal in ChatPanel
+Use `supabaseAdmin` for the `ai_editor_actions` insert and for reading it back during confirm. Keep the user-scoped client for everything else (chat_messages, writing_summary_log, etc.) since those RLS policies work fine.
 
-Replace `localStorage.getItem(TIP_DISMISSED_KEY)` with `useState(false)`. Remove the `localStorage.setItem` call in `dismissTip`. Remove the `TIP_DISMISSED_KEY` constant.
+**3. Frontend: Remove currentActionId gate from confirm calls**
+
+In `TextSelectionWindow.tsx`, change `handleAccept` and `handleAcceptModified` to call the confirm endpoint whenever `pendingSummaryUpdate !== null`, regardless of whether `currentActionId` is present. Pass `action_id` if available, but don't skip the call if it's null.
+
+Change line 281 from:
+```ts
+if (pendingSummaryUpdate !== null && currentActionId) {
+```
+to:
+```ts
+if (pendingSummaryUpdate !== null) {
+```
+
+Same for `handleAcceptModified` line 319, and `handleReject` line 358.
+
+**4. Edge function: Confirm endpoint works without action_id**
+
+The confirm handler (line 198-284) already handles missing `action_id` — it skips the outcome update and the ai_response_full lookup. But when `action_id` is missing and `aiResponseContent` is empty string, the `propose_response` chat message gets empty content.
+
+Fix: accept `ai_response` in the confirm body as a fallback. Use `actionRow.ai_response_full` as primary (server-side, trusted), fall back to `body.ai_response` only if no action row exists.
+
+```ts
+// In confirm handler, after trying to fetch actionRow:
+if (!aiResponseContent && body.ai_response) {
+  aiResponseContent = body.ai_response;
+}
+```
+
+In `TextSelectionWindow.tsx`, add `ai_response: proposedText` to the confirm body so the fallback has data.
+
+**5. Priority order**
+
+- Fix #1 (logging) and #2 (service role) fix the root cause
+- Fix #3 and #4 are safety nets ensuring the flow works even if the insert fails for any reason
+- Once deployed, check edge function logs to confirm the insert error is resolved
 
 ### Files Changed
 
-- `supabase/functions/context-prompt/index.ts` — fixes 1-5
-- `src/components/TextSelectionWindow.tsx` — fixes 3, 5
-- `src/components/ChatPanel.tsx` — fix 6
-- New migration for `ai_response_full` column
+- `supabase/functions/context-prompt/index.ts` — error logging, service role client, fallback ai_response in confirm
+- `src/components/TextSelectionWindow.tsx` — remove `currentActionId` gate, add `ai_response` to confirm body
 
