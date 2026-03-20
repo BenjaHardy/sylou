@@ -87,5 +87,14 @@ export function useChatMessages(threadId: string | null) {
     [threadId]
   );
 
-  return { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages: fetchMessages };
+  const appendMessages = useCallback((newMsgs: ChatMessage[]) => {
+    if (!newMsgs.length) return;
+    setMessages((prev) => {
+      const existingIds = new Set(prev.map((m) => m.id));
+      const deduped = newMsgs.filter((m) => !existingIds.has(m.id));
+      return deduped.length ? [...prev, ...deduped] : prev;
+    });
+  }, []);
+
+  return { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages, appendMessages };
 }

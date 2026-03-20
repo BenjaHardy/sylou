@@ -108,14 +108,21 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger }: Props) {
+export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages }: Props) {
   const { threadId, threadName } = useChatThread(projectId);
-  const { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages } = useChatMessages(threadId);
+  const { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages, appendMessages } = useChatMessages(threadId);
   const [input, setInput] = useState("");
   const [conciseMode, setConciseMode] = useState(false);
   const [tipDismissed, setTipDismissed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Inject messages directly when provided (from Ask/Propose flows)
+  useEffect(() => {
+    if (injectMessages && injectMessages.length > 0) {
+      appendMessages(injectMessages);
+    }
+  }, [injectMessages, appendMessages]);
 
   // Refresh messages when trigger changes (e.g. after Ask/Propose)
   useEffect(() => {
