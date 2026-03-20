@@ -597,6 +597,14 @@ ${writePillarNotice}`;
 
     const flowResult = toolUseBlock.input;
 
+    // Validate all required pillars are present
+    const defaultPillar = { reasoning: "Insufficient data", evidence: [], score: null, narrative: "Could not be assessed." };
+    if (!flowResult.find) flowResult.find = defaultPillar;
+    if (!flowResult.lead) flowResult.lead = defaultPillar;
+    if (!flowResult.organize) flowResult.organize = defaultPillar;
+    if (!flowResult.write) flowResult.write = defaultPillar;
+    if (!flowResult.summary) flowResult.summary = "Analysis could not produce a complete summary.";
+
     // --- Apply Write pillar score cap if similarity >= 35% ---
     if (
       similarityPct >= 35 &&
