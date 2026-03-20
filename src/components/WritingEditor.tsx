@@ -29,7 +29,7 @@ interface Props {
   onChatRefresh?: () => void;
 }
 
-export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete }: Props) {
+export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh }: Props) {
   const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
   const [initialSet, setInitialSet] = useState(false);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
