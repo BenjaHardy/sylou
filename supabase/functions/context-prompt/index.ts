@@ -57,8 +57,11 @@ function buildSummaryPrompt(
   selectedText: string,
   instruction: string,
   sourceModule: string,
+  language: string,
 ): { role: string; content: string }[] {
-  const prompt = `You are a writing analysis assistant. Your task is to produce a brief, focused summary of the user's current writing project, relevant to answering a specific question or fulfilling a specific request.
+  const prompt = `You are a writing analysis assistant. Respond in ${language}.
+
+Your task is to produce a brief, focused summary of the user's current writing project, relevant to answering a specific question or fulfilling a specific request.
 
 === CURRENT WRITING ===
 ${writingContent}
@@ -102,6 +105,7 @@ function buildResponsePrompt(
   sourceModule: string,
   recentChat: { role: string; content: string }[],
   actionType: "ask" | "propose",
+  language: string,
 ): { role: string; content: string }[] {
   const taskInstruction =
     actionType === "ask"
@@ -113,6 +117,8 @@ function buildResponsePrompt(
     : "No previous messages.";
 
   const contextPrompt = `${systemPrompt}
+
+Respond in ${language}.
 
 === WRITING CONTEXT ===
 The following is a summary of the user's current writing, relevant to their request:
@@ -191,17 +197,28 @@ Deno.serve(async (req) => {
 
     // ── CONFIRM endpoint ────────────────────────────────────────────────
     if (body.confirm !== undefined) {
-      // { confirm: true/false, action_id, summary_update, thread_id, selected_text, instruction, ai_response }
-      const { confirm, action_id, summary_update, ai_response } = body;
+      const { confirm, action_id, summary_update, modified } = body;
 
       if (action_id) {
+        const outcome = !confirm ? "rejected" : modified ? "modified" : "accepted";
         await supabase
           .from("ai_editor_actions")
-          .update({ outcome: confirm ? "accepted" : "rejected" })
+          .update({ outcome })
           .eq("id", action_id);
       }
 
       if (confirm && thread_id) {
+        // Fetch the stored AI response from the action row
+        let aiResponseContent = "";
+        if (action_id) {
+          const { data: actionRow } = await supabase
+            .from("ai_editor_actions")
+            .select("ai_response_full")
+            .eq("id", action_id)
+            .single();
+          aiResponseContent = actionRow?.ai_response_full ?? "";
+        }
+
         // Log to chat_messages like 'ask' flow
         const userPromptContent = `[Propose] Selected: "${(selected_text || "").slice(0, 200)}"\nInstruction: ${instruction || ""}`;
         await supabase.from("chat_messages").insert({
@@ -209,7 +226,7 @@ Deno.serve(async (req) => {
           role: "user",
           content: userPromptContent,
           source_type: "propose_prompt",
-          flow_flag: "not_assessed",
+          flow_flag: "normal",
         });
 
         if (summary_update && summary_update !== "No update needed.") {
@@ -225,9 +242,9 @@ Deno.serve(async (req) => {
         await supabase.from("chat_messages").insert({
           thread_id,
           role: "assistant",
-          content: ai_response || "",
+          content: aiResponseContent,
           source_type: "propose_response",
-          flow_flag: "not_assessed",
+          flow_flag: "normal",
           model_used: "mistral-large-latest",
         });
 
@@ -271,16 +288,18 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "action_type must be 'ask' or 'propose'" }, 400);
     }
 
-    // --- Verify project ownership ---
+    // --- Verify project ownership & get language ---
     const { data: project, error: projectErr } = await supabase
       .from("projects")
-      .select("id, tutor_mode")
+      .select("id, tutor_mode, language")
       .eq("id", project_id)
       .single();
 
     if (projectErr || !project) {
       return jsonResponse({ error: "Project not found or not owned by user" }, 404);
     }
+
+    const projectLanguage = project.language ?? "English";
 
     // --- 1. Fetch writing content ---
     const { data: writingRow } = await supabase
@@ -317,6 +336,7 @@ Deno.serve(async (req) => {
       selected_text,
       instruction,
       source_module,
+      projectLanguage,
     );
 
     const summaryResult = await callMistral(mistralKey, summaryMessages, 1000);
@@ -351,6 +371,7 @@ Deno.serve(async (req) => {
       source_module,
       recentChat,
       action_type,
+      projectLanguage,
     );
 
     const responseResult = await callMistral(mistralKey, responseMessages, 2000);
@@ -361,7 +382,7 @@ Deno.serve(async (req) => {
     const totalOutputChars = summaryResult.outputChars + responseResult.outputChars;
     const totalTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
 
-    // --- 9. Log to ai_editor_actions ---
+    // --- 9. Log to ai_editor_actions (store full AI response) ---
     const { data: actionRow } = await supabase
       .from("ai_editor_actions")
       .insert({
@@ -369,6 +390,7 @@ Deno.serve(async (req) => {
         action_type: action_type === "ask" ? "ask" : "propose",
         selected_text_preview: selected_text.slice(0, 500),
         ai_response_preview: aiResponse.slice(0, 500),
+        ai_response_full: aiResponse,
         char_count_original: selected_text.length,
         char_count_result: aiResponse.length,
         outcome: action_type === "ask" ? "delivered" : "pending",
@@ -387,12 +409,13 @@ Deno.serve(async (req) => {
       output_tokens: Math.ceil(totalOutputChars / 4),
     });
 
-    // --- Update budget ---
-    const newTotal = profile.tokens_used_this_period + totalTokens;
-    await supabase
-      .from("profiles")
-      .update({ tokens_used_this_period: newTotal })
-      .eq("id", user.id);
+    // --- Atomic budget update ---
+    await supabase.rpc("increment_tokens_used", {
+      user_uuid: user.id,
+      amount: totalTokens,
+    });
+
+    const budgetRemaining = profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
 
     // --- 7. For 'ask': insert chat messages & commit summary ---
     if (action_type === "ask") {
@@ -403,7 +426,7 @@ Deno.serve(async (req) => {
         role: "user",
         content: userPromptContent,
         source_type: "ask_prompt",
-        flow_flag: "not_assessed",
+        flow_flag: "normal",
       });
 
       if (summaryUpdate !== "No update needed.") {
@@ -421,7 +444,7 @@ Deno.serve(async (req) => {
         role: "assistant",
         content: aiResponse,
         source_type: "ask_response",
-        flow_flag: "not_assessed",
+        flow_flag: "normal",
         model_used: "mistral-large-latest",
       });
 
@@ -449,7 +472,7 @@ Deno.serve(async (req) => {
       summary_update: summaryUpdate,
       action_id: actionRow?.id ?? null,
       tokens_used: totalTokens,
-      budget_remaining: profile.monthly_token_budget - newTotal,
+      budget_remaining: budgetRemaining,
     });
   } catch (err) {
     console.error("Context-prompt error:", err);

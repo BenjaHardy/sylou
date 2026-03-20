@@ -1,0 +1,1 @@
+ALTER TABLE public.ai_editor_actions ADD COLUMN ai_response_full text;

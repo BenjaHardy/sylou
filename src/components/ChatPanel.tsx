@@ -14,7 +14,7 @@ interface Props {
   refreshTrigger?: number;
 }
 
-const TIP_DISMISSED_KEY = "ethos-chat-tip-dismissed";
+
 
 const SOURCE_LABELS: Record<string, string> = {
   ask_prompt: "Ask · Text Selection",
@@ -112,9 +112,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   const { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages } = useChatMessages(threadId);
   const [input, setInput] = useState("");
   const [conciseMode, setConciseMode] = useState(false);
-  const [tipDismissed, setTipDismissed] = useState(
-    () => localStorage.getItem(TIP_DISMISSED_KEY) === "true"
-  );
+  const [tipDismissed, setTipDismissed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -158,7 +156,6 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
 
   const dismissTip = () => {
     setTipDismissed(true);
-    localStorage.setItem(TIP_DISMISSED_KEY, "true");
   };
 
   return (

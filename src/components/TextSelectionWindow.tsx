@@ -286,7 +286,6 @@ export function TextSelectionWindow({
             project_id: projectId,
             selected_text: selectedText,
             instruction: pendingInstruction,
-            ai_response: proposedText,
           },
         });
         onAskComplete(); // Refresh chat to show logged messages
@@ -306,21 +305,19 @@ export function TextSelectionWindow({
         await supabase.functions.invoke("context-prompt", {
           body: {
             confirm: true,
+            modified: true,
             action_id: currentActionId,
             summary_update: pendingSummaryUpdate,
             thread_id: threadId,
             project_id: projectId,
             selected_text: selectedText,
             instruction: pendingInstruction,
-            ai_response: editableText,
           },
         });
         onAskComplete();
       } catch (err) {
         console.error("Failed to confirm modified propose:", err);
       }
-      // Also update outcome to "modified"
-      updateOutcome(currentActionId, "modified");
     } else if (currentActionId) {
       updateOutcome(currentActionId, "modified");
     }
