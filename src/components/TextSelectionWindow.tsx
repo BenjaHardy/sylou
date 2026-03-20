@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { X, Loader2, Check, Pencil, XCircle, Send } from "lucide-react";
+import type { ChatMessage } from "@/hooks/useChatMessages";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
