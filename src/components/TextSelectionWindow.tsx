@@ -315,7 +315,7 @@ export function TextSelectionWindow({
             instruction: pendingInstruction,
           },
         });
-        onAskComplete();
+        onAskComplete(data?.inserted_messages ?? []);
       } catch (err) {
         console.error("Failed to confirm modified propose:", err);
       }
