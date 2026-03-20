@@ -278,7 +278,7 @@ export function TextSelectionWindow({
     // For propose actions with pending summary, confirm
     if (pendingSummaryUpdate !== null && currentActionId) {
       try {
-        await supabase.functions.invoke("context-prompt", {
+        const { data } = await supabase.functions.invoke("context-prompt", {
           body: {
             confirm: true,
             action_id: currentActionId,
