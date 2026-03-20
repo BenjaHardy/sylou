@@ -46,6 +46,22 @@ export function useChatMessages(threadId: string | null) {
       if (!threadId || !content.trim()) return;
       setSending(true);
 
+      // Optimistic: show user message immediately
+      const optimisticId = `optimistic-${Date.now()}`;
+      const optimisticMsg: ChatMessage = {
+        id: optimisticId,
+        thread_id: threadId,
+        role: "user",
+        content: content.trim(),
+        created_at: new Date().toISOString(),
+        source_type: null,
+        flow_flag: null,
+        concise_mode: conciseMode,
+        tutor_mode: null,
+        model_used: null,
+      };
+      setMessages((prev) => [...prev, optimisticMsg]);
+
       try {
         const { data, error } = await supabase.functions.invoke("chat", {
           body: {
@@ -57,29 +73,34 @@ export function useChatMessages(threadId: string | null) {
 
         if (error) {
           console.error("Chat function error:", error);
+          // Remove optimistic message on error
+          setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
           setSending(false);
           return;
         }
 
         if (data?.error) {
           console.error("Chat API error:", data.error);
+          setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
           setSending(false);
           return;
         }
 
-        // Add both messages returned by the edge function
-        if (data?.user_message) {
-          setMessages((prev) => [...prev, data.user_message as ChatMessage]);
-        }
-        if (data?.assistant_message) {
-          setMessages((prev) => [...prev, data.assistant_message as ChatMessage]);
-        }
+        // Replace optimistic message with real one, add assistant message
+        setMessages((prev) => {
+          const without = prev.filter((m) => m.id !== optimisticId);
+          const next = [...without];
+          if (data?.user_message) next.push(data.user_message as ChatMessage);
+          if (data?.assistant_message) next.push(data.assistant_message as ChatMessage);
+          return next;
+        });
 
         if (data?.budget_remaining != null) {
           setBudgetRemaining(data.budget_remaining);
         }
       } catch (err) {
         console.error("Failed to send message:", err);
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       } finally {
         setSending(false);
       }
