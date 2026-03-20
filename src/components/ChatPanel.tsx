@@ -12,6 +12,7 @@ interface Props {
   chatExpanded?: boolean;
   onToggleChat?: () => void;
   refreshTrigger?: number;
+  injectMessages?: ChatMessage[];
 }
 
 
