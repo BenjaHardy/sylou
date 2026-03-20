@@ -112,9 +112,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   const { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages } = useChatMessages(threadId);
   const [input, setInput] = useState("");
   const [conciseMode, setConciseMode] = useState(false);
-  const [tipDismissed, setTipDismissed] = useState(
-    () => localStorage.getItem(TIP_DISMISSED_KEY) === "true"
-  );
+  const [tipDismissed, setTipDismissed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
