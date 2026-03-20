@@ -135,6 +135,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
             onClose={() => setAiPanelOpen(false)}
             onAccept={handleAcceptProposal}
             onAskComplete={handleAskComplete}
+            onChatRefresh={onChatRefresh}
           />
         )}
       </div>
