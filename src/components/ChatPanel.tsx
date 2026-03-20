@@ -14,7 +14,7 @@ interface Props {
   refreshTrigger?: number;
 }
 
-const TIP_DISMISSED_KEY = "ethos-chat-tip-dismissed";
+
 
 const SOURCE_LABELS: Record<string, string> = {
   ask_prompt: "Ask · Text Selection",
