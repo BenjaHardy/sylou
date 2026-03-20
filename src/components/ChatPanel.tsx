@@ -122,8 +122,9 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   useEffect(() => {
     if (injectMessages && injectMessages.length > 0) {
       appendMessages(injectMessages);
+      onMessagesInjected?.();
     }
-  }, [injectMessages, appendMessages]);
+  }, [injectMessages, appendMessages, onMessagesInjected]);
 
   // Refresh messages when trigger changes (e.g. after Ask/Propose)
   useEffect(() => {
