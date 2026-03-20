@@ -13,6 +13,7 @@ interface Props {
   onToggleChat?: () => void;
   refreshTrigger?: number;
   injectMessages?: ChatMessage[];
+  onMessagesInjected?: () => void;
 }
 
 
@@ -108,7 +109,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages }: Props) {
+export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected }: Props) {
   const { threadId, threadName } = useChatThread(projectId);
   const { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages, appendMessages } = useChatMessages(threadId);
   const [input, setInput] = useState("");
@@ -121,8 +122,9 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   useEffect(() => {
     if (injectMessages && injectMessages.length > 0) {
       appendMessages(injectMessages);
+      onMessagesInjected?.();
     }
-  }, [injectMessages, appendMessages]);
+  }, [injectMessages, appendMessages, onMessagesInjected]);
 
   // Refresh messages when trigger changes (e.g. after Ask/Propose)
   useEffect(() => {

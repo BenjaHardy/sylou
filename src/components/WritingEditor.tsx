@@ -26,9 +26,10 @@ interface Props {
   flowLoading?: boolean;
   hasFlowReport?: boolean;
   onAskComplete?: (messages: ChatMessage[]) => void;
+  onChatRefresh?: () => void;
 }
 
-export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete }: Props) {
+export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh }: Props) {
   const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
   const [initialSet, setInitialSet] = useState(false);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
@@ -134,6 +135,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
             onClose={() => setAiPanelOpen(false)}
             onAccept={handleAcceptProposal}
             onAskComplete={handleAskComplete}
+            onChatRefresh={onChatRefresh}
           />
         )}
       </div>

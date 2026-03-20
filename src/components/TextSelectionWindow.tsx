@@ -28,6 +28,7 @@ interface Props {
   onClose: () => void;
   onAccept: (text: string) => void;
   onAskComplete: (messages: ChatMessage[]) => void;
+  onChatRefresh?: () => void;
 }
 
 const NORMAL_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
@@ -77,6 +78,7 @@ export function TextSelectionWindow({
   onClose,
   onAccept,
   onAskComplete,
+  onChatRefresh,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("actions");
   const [activeAction, setActiveAction] = useState<ActionId | null>(null);
@@ -278,7 +280,7 @@ export function TextSelectionWindow({
     // For propose actions with pending summary, confirm
     if (pendingSummaryUpdate !== null && currentActionId) {
       try {
-        const { data } = await supabase.functions.invoke("context-prompt", {
+        const { data, error } = await supabase.functions.invoke("context-prompt", {
           body: {
             confirm: true,
             action_id: currentActionId,
@@ -289,9 +291,22 @@ export function TextSelectionWindow({
             instruction: pendingInstruction,
           },
         });
-        onAskComplete(data?.inserted_messages ?? []);
+        if (error) {
+          console.error("Confirm error:", error);
+          toast.error("Failed to log proposal to chat.");
+          onChatRefresh?.();
+        } else {
+          const msgs = data?.inserted_messages ?? [];
+          if (msgs.length > 0) {
+            onAskComplete(msgs);
+          } else {
+            onChatRefresh?.();
+          }
+        }
       } catch (err) {
         console.error("Failed to confirm propose:", err);
+        toast.error("Failed to log proposal to chat.");
+        onChatRefresh?.();
       }
     } else if (currentActionId) {
       updateOutcome(currentActionId, "accepted");
@@ -303,7 +318,7 @@ export function TextSelectionWindow({
   const handleAcceptModified = async () => {
     if (pendingSummaryUpdate !== null && currentActionId) {
       try {
-        const { data } = await supabase.functions.invoke("context-prompt", {
+        const { data, error } = await supabase.functions.invoke("context-prompt", {
           body: {
             confirm: true,
             modified: true,
@@ -315,9 +330,22 @@ export function TextSelectionWindow({
             instruction: pendingInstruction,
           },
         });
-        onAskComplete(data?.inserted_messages ?? []);
+        if (error) {
+          console.error("Confirm modified error:", error);
+          toast.error("Failed to log proposal to chat.");
+          onChatRefresh?.();
+        } else {
+          const msgs = data?.inserted_messages ?? [];
+          if (msgs.length > 0) {
+            onAskComplete(msgs);
+          } else {
+            onChatRefresh?.();
+          }
+        }
       } catch (err) {
         console.error("Failed to confirm modified propose:", err);
+        toast.error("Failed to log proposal to chat.");
+        onChatRefresh?.();
       }
     } else if (currentActionId) {
       updateOutcome(currentActionId, "modified");

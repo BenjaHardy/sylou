@@ -240,6 +240,7 @@ export function ProjectContentArea({ project }: Props) {
               flowLoading={flowLoading}
               hasFlowReport={!!flowReport}
               onAskComplete={(msgs) => setPendingChatMessages((prev) => [...prev, ...msgs])}
+              onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
             />
             <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
               <ProjectActivityBar projectId={project.id} />
@@ -248,7 +249,7 @@ export function ProjectContentArea({ project }: Props) {
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20}>
-          <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} />
+          <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} />
         </ResizablePanel>
       </ResizablePanelGroup>
 
