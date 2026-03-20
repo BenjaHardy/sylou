@@ -231,11 +231,13 @@ export function ProjectContentArea({ project }: Props) {
             <WritingEditor
               projectId={project.id}
               tutorMode={project.tutor_mode}
+              threadId={threadId}
               onWritingActivity={markWriting}
               onFlowClick={handleFlowClick}
               onReanalyzeClick={handleReanalyzeClick}
               flowLoading={flowLoading}
               hasFlowReport={!!flowReport}
+              onAskComplete={() => setChatRefreshTrigger((n) => n + 1)}
             />
             <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
               <ProjectActivityBar projectId={project.id} />
@@ -244,7 +246,7 @@ export function ProjectContentArea({ project }: Props) {
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20}>
-          <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} />
+          <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} />
         </ResizablePanel>
       </ResizablePanelGroup>
 
