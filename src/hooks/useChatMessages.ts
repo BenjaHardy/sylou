@@ -96,5 +96,5 @@ export function useChatMessages(threadId: string | null) {
     });
   }, []);
 
-  return { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages, appendMessages };
+  return { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages: fetchMessages, appendMessages };
 }
