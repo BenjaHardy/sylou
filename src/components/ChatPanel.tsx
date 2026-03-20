@@ -156,7 +156,6 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
 
   const dismissTip = () => {
     setTipDismissed(true);
-    localStorage.setItem(TIP_DISMISSED_KEY, "true");
   };
 
   return (
