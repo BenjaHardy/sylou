@@ -286,7 +286,6 @@ export function TextSelectionWindow({
             project_id: projectId,
             selected_text: selectedText,
             instruction: pendingInstruction,
-            ai_response: proposedText,
           },
         });
         onAskComplete(); // Refresh chat to show logged messages
