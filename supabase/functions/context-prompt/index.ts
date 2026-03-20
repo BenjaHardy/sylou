@@ -219,34 +219,39 @@ Deno.serve(async (req) => {
           aiResponseContent = actionRow?.ai_response_full ?? "";
         }
 
-        // Log to chat_messages like 'ask' flow
+        // Log to chat_messages and collect inserted rows
+        const insertedMessages = [];
+
         const userPromptContent = `[Propose] Selected: "${(selected_text || "").slice(0, 200)}"\nInstruction: ${instruction || ""}`;
-        await supabase.from("chat_messages").insert({
+        const { data: promptMsg } = await supabase.from("chat_messages").insert({
           thread_id,
           role: "user",
           content: userPromptContent,
           source_type: "propose_prompt",
           flow_flag: "normal",
-        });
+        }).select().single();
+        if (promptMsg) insertedMessages.push(promptMsg);
 
         if (summary_update && summary_update !== "No update needed.") {
-          await supabase.from("chat_messages").insert({
+          const { data: summaryMsg } = await supabase.from("chat_messages").insert({
             thread_id,
             role: "assistant",
             content: summary_update,
             source_type: "writing_summary",
             flow_flag: "not_assessed",
-          });
+          }).select().single();
+          if (summaryMsg) insertedMessages.push(summaryMsg);
         }
 
-        await supabase.from("chat_messages").insert({
+        const { data: responseMsg } = await supabase.from("chat_messages").insert({
           thread_id,
           role: "assistant",
           content: aiResponseContent,
           source_type: "propose_response",
           flow_flag: "normal",
           model_used: "mistral-large-latest",
-        });
+        }).select().single();
+        if (responseMsg) insertedMessages.push(responseMsg);
 
         // Commit summary
         if (summary_update && summary_update !== "No update needed.") {
@@ -271,9 +276,11 @@ Deno.serve(async (req) => {
             });
           }
         }
+
+        return jsonResponse({ ok: true, inserted_messages: insertedMessages });
       }
 
-      return jsonResponse({ ok: true });
+      return jsonResponse({ ok: true, inserted_messages: [] });
     }
 
     // ── Main context-prompt flow ────────────────────────────────────────
@@ -418,35 +425,40 @@ Deno.serve(async (req) => {
     const budgetRemaining = profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
 
     // --- 7. For 'ask': insert chat messages & commit summary ---
+    const insertedMessages = [];
+
     if (action_type === "ask") {
       const userPromptContent = `[Ask] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"\nQuestion: ${instruction}`;
 
-      await supabase.from("chat_messages").insert({
+      const { data: promptMsg } = await supabase.from("chat_messages").insert({
         thread_id,
         role: "user",
         content: userPromptContent,
         source_type: "ask_prompt",
         flow_flag: "normal",
-      });
+      }).select().single();
+      if (promptMsg) insertedMessages.push(promptMsg);
 
       if (summaryUpdate !== "No update needed.") {
-        await supabase.from("chat_messages").insert({
+        const { data: summaryMsg } = await supabase.from("chat_messages").insert({
           thread_id,
           role: "assistant",
           content: summaryUpdate,
           source_type: "writing_summary",
           flow_flag: "not_assessed",
-        });
+        }).select().single();
+        if (summaryMsg) insertedMessages.push(summaryMsg);
       }
 
-      await supabase.from("chat_messages").insert({
+      const { data: responseMsg } = await supabase.from("chat_messages").insert({
         thread_id,
         role: "assistant",
         content: aiResponse,
         source_type: "ask_response",
         flow_flag: "normal",
         model_used: "mistral-large-latest",
-      });
+      }).select().single();
+      if (responseMsg) insertedMessages.push(responseMsg);
 
       // Update writing_summary_log
       if (summaryUpdate !== "No update needed.") {
@@ -473,6 +485,7 @@ Deno.serve(async (req) => {
       action_id: actionRow?.id ?? null,
       tokens_used: totalTokens,
       budget_remaining: budgetRemaining,
+      inserted_messages: insertedMessages,
     });
   } catch (err) {
     console.error("Context-prompt error:", err);

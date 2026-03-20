@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import type { ChatMessage } from "@/hooks/useChatMessages";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -24,7 +25,7 @@ interface Props {
   onReanalyzeClick?: () => void;
   flowLoading?: boolean;
   hasFlowReport?: boolean;
-  onAskComplete?: () => void;
+  onAskComplete?: (messages: ChatMessage[]) => void;
 }
 
 export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete }: Props) {
@@ -90,8 +91,8 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     [editor]
   );
 
-  const handleAskComplete = useCallback(() => {
-    onAskComplete?.();
+  const handleAskComplete = useCallback((messages: ChatMessage[]) => {
+    onAskComplete?.(messages);
   }, [onAskComplete]);
 
   if (loading || !editor) {

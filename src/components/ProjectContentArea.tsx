@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import type { ChatMessage } from "@/hooks/useChatMessages";
 import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ export function ProjectContentArea({ project }: Props) {
   const [showReanalyze, setShowReanalyze] = useState(false);
   const [isCurrentRunFirst, setIsCurrentRunFirst] = useState(false);
   const [chatRefreshTrigger, setChatRefreshTrigger] = useState(0);
+  const [pendingChatMessages, setPendingChatMessages] = useState<ChatMessage[]>([]);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const { markWriting } = useActivityTracker(project?.id ?? null);
@@ -237,7 +239,7 @@ export function ProjectContentArea({ project }: Props) {
               onReanalyzeClick={handleReanalyzeClick}
               flowLoading={flowLoading}
               hasFlowReport={!!flowReport}
-              onAskComplete={() => setChatRefreshTrigger((n) => n + 1)}
+              onAskComplete={(msgs) => setPendingChatMessages((prev) => [...prev, ...msgs])}
             />
             <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
               <ProjectActivityBar projectId={project.id} />
@@ -246,7 +248,7 @@ export function ProjectContentArea({ project }: Props) {
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20}>
-          <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} />
+          <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} />
         </ResizablePanel>
       </ResizablePanelGroup>
 

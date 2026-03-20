@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { X, Loader2, Check, Pencil, XCircle, Send } from "lucide-react";
+import type { ChatMessage } from "@/hooks/useChatMessages";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,7 +27,7 @@ interface Props {
   threadId: string | null;
   onClose: () => void;
   onAccept: (text: string) => void;
-  onAskComplete: () => void;
+  onAskComplete: (messages: ChatMessage[]) => void;
 }
 
 const NORMAL_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
@@ -208,8 +209,8 @@ export function TextSelectionWindow({
         }
 
         if (actionType === "ask") {
-          // Messages are already logged to chat; signal parent to refresh chat
-          onAskComplete();
+          // Messages returned by edge function — inject directly into chat
+          onAskComplete(data.inserted_messages ?? []);
           onClose();
         } else {
           // Propose: show result panel with accept/modify/reject
@@ -277,7 +278,7 @@ export function TextSelectionWindow({
     // For propose actions with pending summary, confirm
     if (pendingSummaryUpdate !== null && currentActionId) {
       try {
-        await supabase.functions.invoke("context-prompt", {
+        const { data } = await supabase.functions.invoke("context-prompt", {
           body: {
             confirm: true,
             action_id: currentActionId,
@@ -288,7 +289,7 @@ export function TextSelectionWindow({
             instruction: pendingInstruction,
           },
         });
-        onAskComplete(); // Refresh chat to show logged messages
+        onAskComplete(data?.inserted_messages ?? []);
       } catch (err) {
         console.error("Failed to confirm propose:", err);
       }
@@ -302,7 +303,7 @@ export function TextSelectionWindow({
   const handleAcceptModified = async () => {
     if (pendingSummaryUpdate !== null && currentActionId) {
       try {
-        await supabase.functions.invoke("context-prompt", {
+        const { data } = await supabase.functions.invoke("context-prompt", {
           body: {
             confirm: true,
             modified: true,
@@ -314,7 +315,7 @@ export function TextSelectionWindow({
             instruction: pendingInstruction,
           },
         });
-        onAskComplete();
+        onAskComplete(data?.inserted_messages ?? []);
       } catch (err) {
         console.error("Failed to confirm modified propose:", err);
       }
