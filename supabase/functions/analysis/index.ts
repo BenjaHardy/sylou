@@ -255,6 +255,28 @@ function buildEditorStatsString(
 // Similarity detection: compare writing against AI assistant chat messages
 // ---------------------------------------------------------------------------
 
+function threeGramOverlap(current: string, original: string): number {
+  const norm = (t: string) =>
+    t.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim();
+  const make3grams = (t: string): Set<string> => {
+    const words = t.split(" ");
+    const s = new Set<string>();
+    for (let i = 0; i <= words.length - 3; i++) {
+      s.add(words.slice(i, i + 3).join(" "));
+    }
+    return s;
+  };
+  const origGrams = make3grams(norm(original));
+  if (origGrams.size === 0) return 1; // too short to compare, keep original classification
+  const curGrams = make3grams(norm(current));
+  if (curGrams.size === 0) return 0;
+  let matches = 0;
+  for (const g of origGrams) {
+    if (curGrams.has(g)) matches++;
+  }
+  return matches / origGrams.size;
+}
+
 function normalise(text: string): string {
   return text
     .toLowerCase()
