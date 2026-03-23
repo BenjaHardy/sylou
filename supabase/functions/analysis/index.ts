@@ -106,9 +106,31 @@ const SUBMIT_FLOW_TOOL = {
 // Helpers
 // ---------------------------------------------------------------------------
 
+function normalizeSource(seg: { source?: string; type?: string }): string {
+  const raw = seg.source ?? seg.type ?? "typed";
+  switch (raw) {
+    case "typed":
+    case "chat_user":
+      return "typed";
+    case "chat_ai":
+      return "copy_chat";
+    case "ai_editor":
+      return "ai";
+    case "external":
+      return "copy_external";
+    // Legacy values that already match the display keys
+    case "copy_chat":
+    case "copy_external":
+    case "ai":
+      return raw;
+    default:
+      return raw;
+  }
+}
+
 function buildProvenanceAnnotatedWriting(
   content: string,
-  segmentMap: Array<{ start: number; end: number; type: string }>
+  segmentMap: Array<{ start: number; end: number; source?: string; type?: string }>
 ): string {
   if (!segmentMap || segmentMap.length === 0) {
     return `[t]${content}`;
@@ -122,12 +144,13 @@ function buildProvenanceAnnotatedWriting(
     if (seg.start > cursor) {
       result += `[t]${content.slice(cursor, seg.start)}`;
     }
+    const norm = normalizeSource(seg);
     const tag =
-      seg.type === "typed" ? "[t]"
-      : seg.type === "copy_chat" ? "[cc]"
-      : seg.type === "copy_external" ? "[ce]"
-      : seg.type === "ai" ? "[ai]"
-      : `[${seg.type}]`;
+      norm === "typed" ? "[t]"
+      : norm === "copy_chat" ? "[cc]"
+      : norm === "copy_external" ? "[ce]"
+      : norm === "ai" ? "[ai]"
+      : `[${norm}]`;
     result += `${tag}${content.slice(seg.start, seg.end)}`;
     cursor = seg.end;
   }
@@ -144,7 +167,7 @@ function buildProvenanceAnnotatedWriting(
  */
 function computeProvenanceStats(
   content: string,
-  segmentMap: Array<{ start: number; end: number; type: string }>
+  segmentMap: Array<{ start: number; end: number; source?: string; type?: string }>
 ): Record<string, number> {
   const totalLen = content.length;
   if (totalLen === 0) return { typed: 100, copy_chat: 0, copy_external: 0, ai: 0 };
@@ -162,11 +185,7 @@ function computeProvenanceStats(
     if (seg.start > cursor) {
       counts["typed"] += seg.start - cursor;
     }
-    const normType = seg.type === "typed" ? "typed"
-      : seg.type === "copy_chat" ? "copy_chat"
-      : seg.type === "copy_external" ? "copy_external"
-      : seg.type === "ai" ? "ai"
-      : seg.type;
+    const normType = normalizeSource(seg);
     counts[normType] = (counts[normType] || 0) + (seg.end - seg.start);
     cursor = seg.end;
   }
@@ -458,14 +477,16 @@ Deno.serve(async (req) => {
       (provenanceRes.data?.segment_map as Array<{
         start: number;
         end: number;
-        type: string;
+        source?: string;
+        type?: string;
         original_text?: string | null;
       }>) ?? [];
 
     const segmentMap = rawSegmentMap.map((seg) => {
+      const src = normalizeSource(seg);
       // Only reclassify non-typed segments that have original_text and are ≥50 chars
       if (
-        seg.type === "typed" ||
+        src === "typed" ||
         !seg.original_text ||
         seg.end - seg.start < 50
       ) {
@@ -477,13 +498,13 @@ Deno.serve(async (req) => {
 
       // Fast check: if current text is >100% longer, reclassify immediately
       if (currentText.length > origText.length * 2) {
-        return { ...seg, type: "typed" };
+        return { ...seg, source: "typed" };
       }
 
       // 3-gram overlap check
       const overlap = threeGramOverlap(currentText, origText);
       if (overlap < 0.5) {
-        return { ...seg, type: "typed" };
+        return { ...seg, source: "typed" };
       }
 
       return seg;
