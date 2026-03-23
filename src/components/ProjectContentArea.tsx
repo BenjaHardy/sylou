@@ -84,6 +84,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
     onFlowLoadingChange?.(flowLoading);
   }, [flowLoading, onFlowLoadingChange]);
 
+  if (!project) return <WelcomeScreen />;
 
   const handleToggleChat = () => {
     if (chatExpanded) {
