@@ -33,7 +33,7 @@ interface Props {
   conciseMode?: boolean;
 }
 
-export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker }: Props) {
+export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, conciseMode }: Props) {
   const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
   const { getTracker, initWithContentLength, scheduleSave } = useProvenanceTracker(projectId);
   const [initialSet, setInitialSet] = useState(false);
