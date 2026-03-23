@@ -1,38 +1,30 @@
 
 
-## Fix: Provenance Classification for Pasted Text
+## Fix: Provenance Data Mismatch in FLOW Analysis
 
-### What changes
+### Problem
 
-**File 1: `src/lib/provenance-tracker.ts`**
+The analysis edge function reads provenance segments using the wrong field name and wrong values:
 
-- Add `_internalClipboard: { text: string; source: SegmentSource } | null` field
-- Add `setInternalClipboard(text, source)` — stores the copied text and its dominant source; overwrites any previous value (no expiry needed since it's only cleared by a new copy)
-- Add `checkInternalClipboard(pastedText)` — checks (without clearing) if pasted text matches the stored internal clipboard text; returns the source or null. Only cleared when overwritten by a new copy event
-- Add `getDominantSource(from, to)` — iterates segments overlapping `[from, to)`, returns the source with the most character coverage. Include a code comment noting the known limitation: mixed-source ranges get a single dominant tag, and preserving per-segment breakdown on paste is a future refinement
-- Normalize text in `consumeAiResultText` — trim and collapse whitespace before comparison so minor formatting differences don't prevent matching
-- Update `classifyPaste` priority order:
-  1. AI result text match (existing)
-  2. Chat clipboard role (existing)
-  3. Internal clipboard check (new) — if matched, return stored source with appropriate `originalText`
-  4. External fallback (existing)
+- **Field**: reads `seg.type` but the DB stores `seg.source`
+- **Values**: expects `copy_chat`, `copy_external`, `ai` but the DB stores `chat_ai`, `external`, `ai_editor`
 
-**File 2: `src/components/WritingEditor.tsx`**
+This means `buildProvenanceAnnotatedWriting` and `computeProvenanceStats` can't match any segment types, so gaps between segments default to `typed` — explaining why the FLOW analysis reports ~5% typed / 0% AI even when the highlighted text view (which reads `seg.source` correctly) shows the text is entirely AI-generated.
 
-- Add copy/cut handlers in `editorProps`:
-  - `handleDOMEvents.copy` and `handleDOMEvents.cut`
-  - Guard: if selection is empty/collapsed, bail out immediately
-  - Get selection `from`/`to` from editor state
-  - Call `tracker.getDominantSource(from, to)` to determine the source
-  - Get selected text via `editor.state.doc.textBetween(from, to)`
-  - Call `tracker.setInternalClipboard(text, dominantSource)`
-  - Return `false` to let default copy/cut proceed
+### Fix
 
-### Priority order verification
+**Single file: `supabase/functions/analysis/index.ts`**
 
-Chat panel copies set `_chatClipboardRole` (consumed on paste). Editor copies set `_internalClipboard`. Since `classifyPaste` checks chat clipboard before internal clipboard, a chat panel copy followed by paste will correctly use the chat tag. An editor copy doesn't touch `_chatClipboardRole`, so no conflict.
+Update both `buildProvenanceAnnotatedWriting` and `computeProvenanceStats` to:
 
-### Known limitation (commented in code)
+1. Read `seg.source` instead of `seg.type` (with fallback to `seg.type` for any legacy data)
+2. Map the actual stored values to the display tags:
+   - `typed` / `chat_user` → `[t]` / `typed`
+   - `chat_ai` → `[cc]` / `copy_chat`
+   - `ai_editor` → `[ai]` / `ai`
+   - `external` → `[ce]` / `copy_external`
 
-`getDominantSource` returns a single source for mixed-provenance selections. Future refinement could preserve the full segment breakdown when copying.
+3. Update the reclassification block (line ~465) to also read `seg.source` instead of `seg.type`
+
+No database or frontend changes needed — the stored data is correct, only the analysis function misreads it.
 
