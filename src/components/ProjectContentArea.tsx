@@ -80,7 +80,10 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
     isFirstAnalysis,
   } = useFlowAnalysis(project?.id ?? null);
 
-  if (!project) return <WelcomeScreen />;
+  useEffect(() => {
+    onFlowLoadingChange?.(flowLoading);
+  }, [flowLoading, onFlowLoadingChange]);
+
 
   const handleToggleChat = () => {
     if (chatExpanded) {
