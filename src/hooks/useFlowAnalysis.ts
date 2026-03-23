@@ -57,6 +57,7 @@ export interface FlowReport {
   ai_write: FlowPillar;
   flow_meta: FlowMeta | null;
   metrics_snapshot: MetricsSnapshot | null;
+  provenance_snapshot: import("@/lib/provenance-tracker").ProvenanceSegment[] | null;
   model_used: string;
   created_at: string;
   user_feedback_pre: FlowFeedback | null;

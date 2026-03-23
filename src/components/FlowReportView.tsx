@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { FlowHighlightedText } from "@/components/FlowHighlightedText";
 import {
   RadarChart,
   PolarGrid,
@@ -27,6 +29,7 @@ import {
   LayoutList,
   PenTool,
   Zap,
+  Eye,
   BarChart3,
   Clock,
   Pencil,
@@ -569,6 +572,23 @@ export function FlowReportView({
 }: Props) {
   const [preFeedbackViewed, setPreFeedbackViewed] = useState(false);
   const [feedbackToggle, setFeedbackToggle] = useState<"pre" | "post">("post");
+  const [showHighlighted, setShowHighlighted] = useState(false);
+  const [writingContent, setWritingContent] = useState<string>("");
+
+  // Fetch writing content when report loads (needed for highlighted text view)
+  const fetchWritingContent = useCallback(async () => {
+    if (!report?.project_id) return;
+    const { data } = await supabase
+      .from("writing_content")
+      .select("content")
+      .eq("project_id", report.project_id)
+      .single();
+    if (data) setWritingContent(data.content);
+  }, [report?.project_id]);
+
+  useEffect(() => {
+    fetchWritingContent();
+  }, [fetchWritingContent]);
 
   useEffect(() => {
     if (!showPreAnalysis) {
@@ -644,7 +664,7 @@ export function FlowReportView({
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-background h-screen">
+    <div className="flex-1 flex flex-col bg-background h-screen relative">
       {/* Header */}
       <div className="h-12 border-b border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
         <Button variant="ghost" size="sm" onClick={onBack} className="gap-1.5 text-muted-foreground hover:text-foreground">
@@ -659,6 +679,17 @@ export function FlowReportView({
           </div>
         </div>
       </div>
+
+      {/* Highlighted Text Panel (overlays the report) */}
+      {showHighlighted && report?.provenance_snapshot && (
+        <div className="absolute inset-0 z-10 bg-background">
+          <FlowHighlightedText
+            segments={report.provenance_snapshot}
+            writingContent={writingContent}
+            onClose={() => setShowHighlighted(false)}
+          />
+        </div>
+      )}
 
       {/* Content */}
       <ScrollArea className="flex-1">
@@ -734,6 +765,21 @@ export function FlowReportView({
                   <p className="text-sm text-foreground leading-relaxed">{report.ai_summary}</p>
                 </div>
               </div>
+
+              {/* View Highlighted Text */}
+              {report.provenance_snapshot && report.provenance_snapshot.length > 0 && (
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs"
+                    onClick={() => setShowHighlighted(true)}
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    View Highlighted Text
+                  </Button>
+                </div>
+              )}
 
               {/* Pre-feedback display (if submitted) */}
               {report.user_feedback_pre && (
