@@ -572,6 +572,23 @@ export function FlowReportView({
 }: Props) {
   const [preFeedbackViewed, setPreFeedbackViewed] = useState(false);
   const [feedbackToggle, setFeedbackToggle] = useState<"pre" | "post">("post");
+  const [showHighlighted, setShowHighlighted] = useState(false);
+  const [writingContent, setWritingContent] = useState<string>("");
+
+  // Fetch writing content when report loads (needed for highlighted text view)
+  const fetchWritingContent = useCallback(async () => {
+    if (!report?.project_id) return;
+    const { data } = await supabase
+      .from("writing_content")
+      .select("content")
+      .eq("project_id", report.project_id)
+      .single();
+    if (data) setWritingContent(data.content);
+  }, [report?.project_id]);
+
+  useEffect(() => {
+    fetchWritingContent();
+  }, [fetchWritingContent]);
 
   useEffect(() => {
     if (!showPreAnalysis) {
