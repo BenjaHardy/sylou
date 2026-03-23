@@ -256,7 +256,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
           <span className="text-xs text-muted-foreground">Concise</span>
           <Switch
             checked={conciseMode}
-            onCheckedChange={setConciseMode}
+            onCheckedChange={onConciseModeChange}
             className="scale-75"
           />
         </div>

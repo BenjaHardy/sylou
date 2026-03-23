@@ -259,7 +259,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20}>
-          <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} />
+          <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} conciseMode={conciseMode} onConciseModeChange={setConciseMode} />
         </ResizablePanel>
       </ResizablePanelGroup>
 
