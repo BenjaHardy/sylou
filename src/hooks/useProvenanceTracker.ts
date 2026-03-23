@@ -106,5 +106,6 @@ export function useProvenanceTracker(projectId: string | null) {
     getTracker,
     initWithContentLength,
     scheduleSave,
+    provenanceLoaded,
   };
 }

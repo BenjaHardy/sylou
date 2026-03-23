@@ -118,7 +118,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
 
   // Set initial content when loaded
   useEffect(() => {
-    if (editor && !loading && !initialSet) {
+    if (editor && !loading && provenanceLoaded && !initialSet) {
       editor.commands.setContent(content || "");
       const docLen = editor.state.doc.content.size;
       prevDocLenRef.current = docLen;
@@ -127,7 +127,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       // Expose tracker to parent
       onProvenanceTracker?.(getTracker());
     }
-  }, [editor, loading, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker]);
+  }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker]);
 
   // Reset when projectId changes
   useEffect(() => {
