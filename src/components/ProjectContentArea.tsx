@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import type { ChatMessage } from "@/hooks/useChatMessages";
 import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
@@ -19,6 +19,7 @@ import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 
 interface Props {
   project: Project | null;
+  onFlowLoadingChange?: (loading: boolean) => void;
 }
 
 function WelcomeScreen() {
@@ -50,7 +51,7 @@ function WelcomeScreen() {
 const DEFAULT_EDITOR_SIZE = 70;
 const DEFAULT_CHAT_SIZE = 30;
 
-export function ProjectContentArea({ project }: Props) {
+export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
   const [chatExpanded, setChatExpanded] = useState(false);
   const [showFlowReport, setShowFlowReport] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -78,6 +79,10 @@ export function ProjectContentArea({ project }: Props) {
     saveUserAssessment,
     isFirstAnalysis,
   } = useFlowAnalysis(project?.id ?? null);
+
+  useEffect(() => {
+    onFlowLoadingChange?.(flowLoading);
+  }, [flowLoading, onFlowLoadingChange]);
 
   if (!project) return <WelcomeScreen />;
 

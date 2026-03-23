@@ -37,9 +37,10 @@ interface Props {
   selectedProjectId: string | null;
   onSelectProject: (id: string) => void;
   onNewProject: () => void;
+  disabled?: boolean;
 }
 
-export function DashboardSidebar({ selectedProjectId, onSelectProject, onNewProject }: Props) {
+export function DashboardSidebar({ selectedProjectId, onSelectProject, onNewProject, disabled }: Props) {
   const { user, signOut } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
@@ -132,8 +133,8 @@ export function DashboardSidebar({ selectedProjectId, onSelectProject, onNewProj
               return (
                 <div
                   key={project.id}
-                  onClick={() => onSelectProject(project.id)}
-                  className={`group flex items-center gap-2 text-sm rounded-md cursor-pointer transition-colors duration-150 ease-ethos-ease ${
+                  onClick={() => !disabled && onSelectProject(project.id)}
+                  className={`group flex items-center gap-2 text-sm rounded-md transition-colors duration-150 ease-ethos-ease ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"} ${
                     collapsed ? "p-2 justify-center" : "px-3 py-2"
                   } ${
                     isSelected
