@@ -680,6 +680,17 @@ export function FlowReportView({
         </div>
       </div>
 
+      {/* Highlighted Text Panel (overlays the report) */}
+      {showHighlighted && report?.provenance_snapshot && (
+        <div className="absolute inset-0 z-10 bg-background">
+          <FlowHighlightedText
+            segments={report.provenance_snapshot}
+            writingContent={writingContent}
+            onClose={() => setShowHighlighted(false)}
+          />
+        </div>
+      )}
+
       {/* Content */}
       <ScrollArea className="flex-1">
         <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
