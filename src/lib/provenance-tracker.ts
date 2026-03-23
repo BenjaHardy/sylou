@@ -134,18 +134,6 @@ export class ProvenanceTracker {
     this.mergeAdjacent();
   }
 
-  /** Classify what kind of insertion this is */
-  private classifyInsertion(text: string): { source: SegmentSource; originalText: string | null } {
-    // Check AI editor programmatic insertion flag first
-    if (this._pendingAiInsertion) {
-      this._pendingAiInsertion = false;
-      return { source: "ai_editor", originalText: text };
-    }
-
-    // This will be called during paste handling; check flags set by handlePaste
-    // For typed text, default
-    return { source: "typed", originalText: null };
-  }
 
   /** Called from paste event handler before the transaction fires */
   classifyPaste(pastedText: string): { source: SegmentSource; originalText: string | null } {
