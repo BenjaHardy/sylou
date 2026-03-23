@@ -11,10 +11,12 @@ import TextStyle from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
 import { FontSize } from "@/lib/tiptap-font-size";
 import { useWritingContent } from "@/hooks/useWritingContent";
+import { useProvenanceTracker } from "@/hooks/useProvenanceTracker";
 import { EditorToolbar } from "@/components/EditorToolbar";
 import { AISelectionButton } from "@/components/AISelectionButton";
 import { TextSelectionWindow } from "@/components/TextSelectionWindow";
 import { Loader2, Activity } from "lucide-react";
+import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 
 interface Props {
   projectId: string;
@@ -27,12 +29,15 @@ interface Props {
   hasFlowReport?: boolean;
   onAskComplete?: (messages: ChatMessage[]) => void;
   onChatRefresh?: () => void;
+  onProvenanceTracker?: (tracker: ProvenanceTracker) => void;
 }
 
-export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh }: Props) {
+export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker }: Props) {
   const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
+  const { getTracker, initWithContentLength, scheduleSave } = useProvenanceTracker(projectId);
   const [initialSet, setInitialSet] = useState(false);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
+  const prevDocLenRef = useRef<number>(0);
 
   // AI selection state
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
@@ -57,10 +62,56 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           "prose prose-sm sm:prose max-w-none focus:outline-none min-h-full px-8 py-6",
         style: "font-size:16px;line-height:1.6;",
       },
+      handlePaste: (_view, event) => {
+        const tracker = getTracker();
+        const pastedText = event.clipboardData?.getData("text/plain") ?? "";
+        if (pastedText) {
+          const classification = tracker.classifyPaste(pastedText);
+          tracker.setPasteOverride(classification);
+        }
+        return false; // Let TipTap handle the actual paste
+      },
     },
-    onUpdate: ({ editor: e }) => {
-      updateContent(e.getHTML());
+    onUpdate: ({ editor: e, transaction }) => {
+      const newHTML = e.getHTML();
+      updateContent(newHTML);
       onWritingActivity?.();
+
+      // Track provenance changes
+      const tracker = getTracker();
+      const newLen = e.state.doc.content.size;
+      const oldLen = prevDocLenRef.current;
+
+      if (newLen !== oldLen && transaction.docChanged) {
+        const changes: { from: number; to: number; insertLength: number; insertedText: string }[] = [];
+        transaction.steps.forEach((step) => {
+          const stepMap = step.getMap();
+          stepMap.forEach((oldStart, oldEnd, newStart, newEnd) => {
+            const insertLength = newEnd - newStart;
+            let insertedText = "";
+            if (insertLength > 0) {
+              try {
+                insertedText = e.state.doc.textBetween(newStart, newEnd, "");
+              } catch {
+                insertedText = "";
+              }
+            }
+            changes.push({
+              from: oldStart,
+              to: oldEnd,
+              insertLength,
+              insertedText,
+            });
+          });
+        });
+
+        if (changes.length > 0) {
+          tracker.handleTransaction(oldLen, newLen, changes);
+          scheduleSave();
+        }
+      }
+
+      prevDocLenRef.current = newLen;
     },
   });
 
@@ -68,9 +119,14 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   useEffect(() => {
     if (editor && !loading && !initialSet) {
       editor.commands.setContent(content || "");
+      const docLen = editor.state.doc.content.size;
+      prevDocLenRef.current = docLen;
+      initWithContentLength(docLen);
       setInitialSet(true);
+      // Expose tracker to parent
+      onProvenanceTracker?.(getTracker());
     }
-  }, [editor, loading, content, initialSet]);
+  }, [editor, loading, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker]);
 
   // Reset when projectId changes
   useEffect(() => {
@@ -87,9 +143,12 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   const handleAcceptProposal = useCallback(
     (replacementText: string) => {
       if (!editor) return;
+      // Flag the tracker for AI insertion before inserting content
+      const tracker = getTracker();
+      tracker.setPendingAiInsertion();
       editor.chain().focus().insertContent(replacementText).run();
     },
-    [editor]
+    [editor, getTracker]
   );
 
   const handleAskComplete = useCallback((messages: ChatMessage[]) => {
@@ -136,6 +195,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
             onAccept={handleAcceptProposal}
             onAskComplete={handleAskComplete}
             onChatRefresh={onChatRefresh}
+            provenanceTracker={getTracker()}
           />
         )}
       </div>
