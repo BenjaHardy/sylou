@@ -80,7 +80,7 @@ export function useProvenanceTracker(projectId: string | null) {
       const { error } = await supabase
         .from("provenance_events")
         .update({
-          segment_map: trackerRef.current.toJSON() as unknown as Record<string, unknown>,
+          segment_map: JSON.parse(json),
           updated_at: new Date().toISOString(),
         })
         .eq("project_id", projectId);
