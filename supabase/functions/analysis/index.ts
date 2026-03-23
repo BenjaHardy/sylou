@@ -544,7 +544,7 @@ The writing content below is annotated with provenance tags indicating the origi
 
 - [t] = typed by the user (original user writing, including text copied from the user's own chat messages)
 - [cc] = copied from AI assistant chat messages (AI-originated text)
-- [ce] = copied from an external source (neither user nor AI contribution)
+- [ce] = copied from an external source (neither user nor AI contribution; pay attention not to wrongly attribute to user)
 - [ai] = AI-generated text accepted from the text selection window (the user selected text in their editor and requested an AI rewrite, expansion, simplification, or proposal, then accepted the result)
 
 ${annotatedWriting}
