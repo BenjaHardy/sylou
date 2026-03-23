@@ -199,6 +199,7 @@ export function TextSelectionWindow({
             selected_text: selectedText,
             instruction: userInstruction,
             source_module: "editor",
+            concise_mode: conciseMode ?? false,
           },
         });
 
