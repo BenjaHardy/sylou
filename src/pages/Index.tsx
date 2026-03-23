@@ -7,6 +7,7 @@ import { useProjects } from "@/hooks/useProjects";
 export default function Index() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newDialogOpen, setNewDialogOpen] = useState(false);
+  const [flowLoading, setFlowLoading] = useState(false);
   const { data: projects } = useProjects();
 
   const selectedProject = projects?.find((p) => p.id === selectedId) ?? null;
@@ -17,8 +18,9 @@ export default function Index() {
         selectedProjectId={selectedId}
         onSelectProject={setSelectedId}
         onNewProject={() => setNewDialogOpen(true)}
+        disabled={flowLoading}
       />
-      <ProjectContentArea project={selectedProject} />
+      <ProjectContentArea project={selectedProject} onFlowLoadingChange={setFlowLoading} />
       <NewProjectDialog
         open={newDialogOpen}
         onOpenChange={setNewDialogOpen}
