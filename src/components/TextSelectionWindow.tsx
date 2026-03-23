@@ -31,6 +31,7 @@ interface Props {
   onAskComplete: (messages: ChatMessage[]) => void;
   onChatRefresh?: () => void;
   provenanceTracker?: ProvenanceTracker;
+  conciseMode?: boolean;
 }
 
 const NORMAL_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
@@ -82,6 +83,7 @@ export function TextSelectionWindow({
   onAskComplete,
   onChatRefresh,
   provenanceTracker,
+  conciseMode,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("actions");
   const [activeAction, setActiveAction] = useState<ActionId | null>(null);
@@ -197,6 +199,7 @@ export function TextSelectionWindow({
             selected_text: selectedText,
             instruction: userInstruction,
             source_module: "editor",
+            concise_mode: conciseMode ?? false,
           },
         });
 

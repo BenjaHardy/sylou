@@ -53,6 +53,7 @@ const DEFAULT_CHAT_SIZE = 30;
 
 export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
   const [chatExpanded, setChatExpanded] = useState(false);
+  const [conciseMode, setConciseMode] = useState(false);
   const [showFlowReport, setShowFlowReport] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showTokenWarning, setShowTokenWarning] = useState(false);
@@ -249,6 +250,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
               onAskComplete={(msgs) => setPendingChatMessages((prev) => [...prev, ...msgs])}
               onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
               onProvenanceTracker={setProvenanceTracker}
+              conciseMode={conciseMode}
             />
             <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
               <ProjectActivityBar projectId={project.id} />
@@ -257,7 +259,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20}>
-          <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} />
+          <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} conciseMode={conciseMode} onConciseModeChange={setConciseMode} />
         </ResizablePanel>
       </ResizablePanelGroup>
 

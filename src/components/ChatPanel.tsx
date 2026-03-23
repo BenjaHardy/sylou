@@ -17,6 +17,8 @@ interface Props {
   injectMessages?: ChatMessage[];
   onMessagesInjected?: () => void;
   provenanceTracker?: ProvenanceTracker;
+  conciseMode: boolean;
+  onConciseModeChange: (value: boolean) => void;
 }
 
 
@@ -147,11 +149,10 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker }: Props) {
+export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker, conciseMode, onConciseModeChange }: Props) {
   const { threadId, threadName } = useChatThread(projectId);
   const { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages, appendMessages } = useChatMessages(threadId);
   const [input, setInput] = useState("");
-  const [conciseMode, setConciseMode] = useState(false);
   const [tipDismissed, setTipDismissed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -255,7 +256,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
           <span className="text-xs text-muted-foreground">Concise</span>
           <Switch
             checked={conciseMode}
-            onCheckedChange={setConciseMode}
+            onCheckedChange={onConciseModeChange}
             className="scale-75"
           />
         </div>

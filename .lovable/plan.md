@@ -2,23 +2,13 @@
 
 ## Fix: Pass `concise_mode` to Context-Prompt Calls
 
+### Status: ✅ Completed
+
 ### Problem
-The `concise_mode` toggle lives in `ChatPanel` state but is never passed to the `context-prompt` edge function. The `TextSelectionWindow` component calls `context-prompt` without `concise_mode` in the body (line 192-201), so `body.concise_mode` always evaluates to `false` on the server side. The edge function logic itself is correct — it just never receives `true`.
+The `concise_mode` toggle lived in `ChatPanel` state but was never passed to the `context-prompt` edge function called by `TextSelectionWindow`.
 
-### Fix
-
-1. **`TextSelectionWindow.tsx`** — Accept a `conciseMode` prop and include `concise_mode: conciseMode` in the `context-prompt` invocation body (line ~194).
-
-2. **`ProjectContentArea.tsx`** (or wherever `TextSelectionWindow` is rendered) — Pass the `conciseMode` value down. This requires either:
-   - Lifting the `conciseMode` state up from `ChatPanel` to the parent component, or
-   - Reading `conciseMode` from a shared source (e.g., project settings or a context provider)
-
-   The simplest approach: lift `conciseMode` state to the parent that renders both `ChatPanel` and `TextSelectionWindow`, then pass it as a prop to both.
-
-### Steps
-
-1. Move `conciseMode` / `setConciseMode` state from `ChatPanel` to `ProjectContentArea`
-2. Pass `conciseMode` and `setConciseMode` as props to `ChatPanel`
-3. Pass `conciseMode` as a prop to `TextSelectionWindow`
-4. In `TextSelectionWindow`, add `concise_mode: conciseMode` to the edge function call body
-
+### Fix Applied
+1. Lifted `conciseMode` state from `ChatPanel` to `ProjectContentArea`
+2. Passed `conciseMode` and `setConciseMode` as props to `ChatPanel`
+3. Passed `conciseMode` through `WritingEditor` to `TextSelectionWindow`
+4. Added `concise_mode: conciseMode` to the `context-prompt` invocation body in `TextSelectionWindow`
