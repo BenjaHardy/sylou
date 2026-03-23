@@ -215,7 +215,7 @@ export class ProvenanceTracker {
       return { source: "ai_editor", originalText: pastedText };
     }
 
-    // 2. Check chat clipboard role
+    // 2. Check chat clipboard role (consumed on use)
     const chatRole = this.consumeChatClipboardRole();
     if (chatRole === "assistant") {
       return { source: "chat_ai", originalText: pastedText };
@@ -224,7 +224,17 @@ export class ProvenanceTracker {
       return { source: "chat_user", originalText: null };
     }
 
-    // 3. External
+    // 3. Check internal editor clipboard (not consumed — supports multiple pastes)
+    const internalSource = this.checkInternalClipboard(pastedText);
+    if (internalSource) {
+      // Typed text stays typed with no original_text; other sources keep original_text
+      const originalText = internalSource === "typed" || internalSource === "chat_user"
+        ? null
+        : pastedText;
+      return { source: internalSource, originalText };
+    }
+
+    // 4. External
     return { source: "external", originalText: pastedText };
   }
 
