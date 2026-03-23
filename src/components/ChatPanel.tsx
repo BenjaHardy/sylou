@@ -149,11 +149,10 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker }: Props) {
+export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker, conciseMode, onConciseModeChange }: Props) {
   const { threadId, threadName } = useChatThread(projectId);
   const { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages, appendMessages } = useChatMessages(threadId);
   const [input, setInput] = useState("");
-  const [conciseMode, setConciseMode] = useState(false);
   const [tipDismissed, setTipDismissed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
