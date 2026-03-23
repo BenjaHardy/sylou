@@ -1,27 +1,24 @@
 
 
-## Render Chat Messages as Rich Markdown
+## Fix: Pass `concise_mode` to Context-Prompt Calls
 
 ### Problem
-Assistant messages display as plain text — markdown formatting (paragraphs, bold, lists, headings, etc.) is ignored because the content is rendered inside a simple `<p>` tag with `whitespace-pre-wrap`.
+The `concise_mode` toggle lives in `ChatPanel` state but is never passed to the `context-prompt` edge function. The `TextSelectionWindow` component calls `context-prompt` without `concise_mode` in the body (line 192-201), so `body.concise_mode` always evaluates to `false` on the server side. The edge function logic itself is correct — it just never receives `true`.
 
-### Solution
-Use `react-markdown` to render assistant message content as formatted HTML, while keeping user messages as plain text.
+### Fix
+
+1. **`TextSelectionWindow.tsx`** — Accept a `conciseMode` prop and include `concise_mode: conciseMode` in the `context-prompt` invocation body (line ~194).
+
+2. **`ProjectContentArea.tsx`** (or wherever `TextSelectionWindow` is rendered) — Pass the `conciseMode` value down. This requires either:
+   - Lifting the `conciseMode` state up from `ChatPanel` to the parent component, or
+   - Reading `conciseMode` from a shared source (e.g., project settings or a context provider)
+
+   The simplest approach: lift `conciseMode` state to the parent that renders both `ChatPanel` and `TextSelectionWindow`, then pass it as a prop to both.
 
 ### Steps
 
-1. **Install `react-markdown`** — lightweight markdown renderer for React.
-
-2. **Update `ChatBubble` in `src/components/ChatPanel.tsx`**:
-   - For assistant messages: replace the `<p className="whitespace-pre-wrap break-words">{message.content}</p>` with a `<ReactMarkdown>` component.
-   - For user messages: keep the current plain text rendering.
-   - Add a `prose` wrapper class (from Tailwind typography plugin or manual styles) so rendered markdown looks clean — proper paragraph spacing, list styling, inline code, etc.
-   - Add scoped CSS or Tailwind classes to keep font size consistent (`text-sm`) and avoid oversized headings inside chat bubbles.
-
-3. **Add minimal markdown styles** — ensure paragraphs have spacing (`mb-2 last:mb-0`), lists are indented, code blocks have background, and links are styled. This can be done via the `components` prop of `react-markdown` to map elements to styled versions.
-
-### What stays the same
-- User messages remain plain text
-- Writing summary bubbles unchanged
-- No backend changes
+1. Move `conciseMode` / `setConciseMode` state from `ChatPanel` to `ProjectContentArea`
+2. Pass `conciseMode` and `setConciseMode` as props to `ChatPanel`
+3. Pass `conciseMode` as a prop to `TextSelectionWindow`
+4. In `TextSelectionWindow`, add `concise_mode: conciseMode` to the edge function call body
 
