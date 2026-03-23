@@ -30,6 +30,7 @@ interface Props {
   onAccept: (text: string) => void;
   onAskComplete: (messages: ChatMessage[]) => void;
   onChatRefresh?: () => void;
+  provenanceTracker?: ProvenanceTracker;
 }
 
 const NORMAL_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
