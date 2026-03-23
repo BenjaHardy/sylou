@@ -225,6 +225,8 @@ export function TextSelectionWindow({
           setCurrentActionId(data.action_id);
           setPendingSummaryUpdate(data.summary_update);
           setPendingInstruction(userInstruction);
+          // Register for manual copy/paste detection
+          provenanceTracker?.registerAiResultText(data.ai_response);
           setPhase("result");
         }
       } catch (err) {
