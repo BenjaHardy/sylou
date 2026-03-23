@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, KeyboardEvent } from "react";
+import { useState, useRef, useEffect, KeyboardEvent, useCallback } from "react";
 import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { useChatThread } from "@/hooks/useChatThread";
 import { useChatMessages, ChatMessage } from "@/hooks/useChatMessages";
 import { format } from "date-fns";
+import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 
 interface Props {
   projectId: string;
