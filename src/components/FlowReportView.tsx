@@ -664,7 +664,7 @@ export function FlowReportView({
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-background h-screen">
+    <div className="flex-1 flex flex-col bg-background h-screen relative">
       {/* Header */}
       <div className="h-12 border-b border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
         <Button variant="ghost" size="sm" onClick={onBack} className="gap-1.5 text-muted-foreground hover:text-foreground">
