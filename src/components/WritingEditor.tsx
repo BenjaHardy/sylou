@@ -197,6 +197,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
             onAskComplete={handleAskComplete}
             onChatRefresh={onChatRefresh}
             provenanceTracker={getTracker()}
+            conciseMode={conciseMode}
           />
         )}
       </div>
