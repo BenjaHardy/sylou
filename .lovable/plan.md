@@ -1,32 +1,27 @@
 
 
-## Fix: Provenance Data Race Condition
+## Fix: Highlighted Text Layout, Color Offset & Tag Cleanup
 
-### Problem
-When the editor loads, there's a race between two async operations:
-1. `useProvenanceTracker` fetches `segment_map` from `provenance_events` (async, no loading state exposed)
-2. `WritingEditor` calls `initWithContentLength` as soon as writing content is ready
+### Problems
+1. **Color offset**: Provenance positions use TipTap's ProseMirror counting (block boundaries add +1 each for open/close). The current code strips HTML to plain text via `textContent`, losing those structural offsets, so segment colors drift by a few characters per paragraph.
+2. **Lost layout**: Stripping to plain text removes all paragraph breaks and formatting.
+3. **Visible segment tags**: The `[t]`, `[cc]`, `[ce]`, `[ai]` markers appear in the legend and tooltips — redundant given the color coding.
 
-If #2 fires before #1 completes, the tracker has empty segments, so `initWithContentLength` marks the entire document as `[t]` (typed). This overwritten state then gets auto-saved back to the database via `scheduleSave`, permanently destroying the real provenance data.
+### Solution
 
-This also explains why re-running FLOW analysis shows everything as typed — the provenance was already overwritten in the DB.
+**Single file change: `src/components/FlowHighlightedText.tsx`**
 
-### Fix
+**A) HTML-aware rendering with TipTap position tracking**
+- Replace `plainText = div.textContent` with a recursive DOM walker that parses the `writingContent` HTML
+- The walker tracks a position counter matching TipTap's model: +1 when entering a block node, +1 when leaving (so `<p>Hello</p><p>World</p>` counts as positions 0→enter(1)→H(2)e(3)l(4)l(5)o(6)→leave(7)→enter(8)→W(9)...)
+- For each text node, split it at segment boundaries and wrap each piece in a colored `<span>` (reusing existing `SegmentSpan` tooltip logic)
+- Preserve block elements (`<p>`, `<h1>`, etc.) as React elements so paragraphs render naturally
+- Total text length for percentage stats recalculated using the same position-aware counting
 
-**`src/hooks/useProvenanceTracker.ts`** — Add a `provenanceLoaded` state:
-- Add a `useState<boolean>(false)` for `provenanceLoaded`
-- Set it to `true` after the async load completes (or when there's no projectId)
-- Return `provenanceLoaded` from the hook
+**B) Remove segment identifier tags**
+- Legend items: `"Typed [t]"` → `"Typed"`, `"AI Chat [cc]"` → `"AI Chat"`, etc.
+- Tooltip: remove `{style.tag}` from the write-mode tooltip content
 
-**`src/components/WritingEditor.tsx`** — Wait for provenance before initializing:
-- Destructure `provenanceLoaded` from `useProvenanceTracker`
-- In the "Set initial content" effect, add `provenanceLoaded` to the guard condition: only call `initWithContentLength` when `!loading && provenanceLoaded && !initialSet`
-- Add `provenanceLoaded` to the effect dependency array
-
-### Steps
-1. In `useProvenanceTracker.ts`: add `provenanceLoaded` state, set `true` after load, return it
-2. In `WritingEditor.tsx`: gate `initWithContentLength` on `provenanceLoaded`
-
-### Result
-The editor will wait for provenance segments to be fetched before initializing the tracker, preventing the race condition from overwriting real provenance data with all-typed segments.
+### What stays the same
+- Mode toggle (Write / Clipboard), stats bar, close button, all color mappings, tooltip percentage display
 
