@@ -88,15 +88,25 @@ ${sourceModule}
 === YOUR TASK ===
 - Produce a brief summary of the writing that includes ONLY information needed to answer the user's question or fulfill their request effectively. Be concise and specific.
 
+CRITICAL RULES — follow exactly:
+
+1. If an EXISTING WRITING SUMMARY is provided above AND it already covers
+   all information needed to answer the user's question:
+   → Reply with exactly: "No update needed."
+
+2. If an EXISTING WRITING SUMMARY is provided above BUT additional details
+   from the writing are needed:
+   → Start your reply with "Additionally, " and provide ONLY the new facts.
+   → Do NOT repeat anything from the existing summary.
+
+3. If NO existing summary exists (it says "None"):
+   → Start with "Writing currently includes..." and write a fresh summary.
+
 FORMAT:
-- Start with "Writing currently includes..."
+- Keep under 300 words. 
+- State only facts from the writing — no analysis or recommendations.
 - Focus on aspects relevant to the user's question
-- Include character traits, plot points, arguments, or structural elements ONLY if they are needed to provide a good response
-- If an existing summary already covers the relevant information, state "No update needed." and stop
-- If the existing summary exists but needs additions, write ONLY the new information to append. Do not repeat what is already in the summary.
-- Start additions with "Additionally, ..."
-- Keep the summary under 300 words
-- Do not include your own analysis or recommendations — just summarize the relevant facts from the writing`;
+- Include character traits, plot points, arguments, or structural elements ONLY if they are needed to provide a good response`;
 
   return [
     { role: "system", content: prompt },
