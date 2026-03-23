@@ -199,7 +199,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   };
 
   return (
-    <div className="flex flex-col h-full bg-[hsl(var(--ethos-surface))]">
+    <div ref={chatContainerRef} className="flex flex-col h-full bg-[hsl(var(--ethos-surface))]">
       {/* Header */}
       <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-2">
