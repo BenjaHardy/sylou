@@ -766,6 +766,21 @@ export function FlowReportView({
                 </div>
               </div>
 
+              {/* View Highlighted Text */}
+              {report.provenance_snapshot && report.provenance_snapshot.length > 0 && (
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs"
+                    onClick={() => setShowHighlighted(true)}
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    View Highlighted Text
+                  </Button>
+                </div>
+              )}
+
               {/* Pre-feedback display (if submitted) */}
               {report.user_feedback_pre && (
                 <FlowFeedbackSection
