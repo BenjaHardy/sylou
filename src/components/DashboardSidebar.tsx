@@ -94,8 +94,8 @@ export function DashboardSidebar({ selectedProjectId, onSelectProject, onNewProj
         {/* New Project */}
         <div className="px-4">
           <button
-            onClick={onNewProject}
-            className={`rounded-md text-sm transition-all duration-150 ease-ethos-ease active:scale-[0.98] hover:bg-ethos-navy-light ${
+            onClick={() => !disabled && onNewProject()}
+            className={`rounded-md text-sm transition-all duration-150 ease-ethos-ease ${disabled ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.98] hover:bg-ethos-navy-light'} ${
               collapsed ? "w-8 h-8 flex items-center justify-center text-sidebar-foreground/70" : "w-full px-3 py-2 text-left text-sidebar-foreground/70"
             }`}
           >
