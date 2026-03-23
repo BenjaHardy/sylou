@@ -83,6 +83,7 @@ export function TextSelectionWindow({
   onAskComplete,
   onChatRefresh,
   provenanceTracker,
+  conciseMode,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("actions");
   const [activeAction, setActiveAction] = useState<ActionId | null>(null);
