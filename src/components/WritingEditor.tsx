@@ -30,6 +30,7 @@ interface Props {
   onAskComplete?: (messages: ChatMessage[]) => void;
   onChatRefresh?: () => void;
   onProvenanceTracker?: (tracker: ProvenanceTracker) => void;
+  conciseMode?: boolean;
 }
 
 export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker }: Props) {

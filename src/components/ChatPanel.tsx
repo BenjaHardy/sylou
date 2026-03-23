@@ -17,6 +17,8 @@ interface Props {
   injectMessages?: ChatMessage[];
   onMessagesInjected?: () => void;
   provenanceTracker?: ProvenanceTracker;
+  conciseMode: boolean;
+  onConciseModeChange: (value: boolean) => void;
 }
 
 

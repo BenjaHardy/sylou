@@ -31,6 +31,7 @@ interface Props {
   onAskComplete: (messages: ChatMessage[]) => void;
   onChatRefresh?: () => void;
   provenanceTracker?: ProvenanceTracker;
+  conciseMode?: boolean;
 }
 
 const NORMAL_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
