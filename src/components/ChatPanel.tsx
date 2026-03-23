@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, KeyboardEvent, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
 import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
