@@ -25,6 +25,13 @@ export class ProvenanceTracker {
   private _chatClipboardRole: "assistant" | "user" | null = null;
   private _chatClipboardExpiry: ReturnType<typeof setTimeout> | null = null;
 
+  /**
+   * Internal editor clipboard — stores text + dominant source when user
+   * copies/cuts within the TipTap editor. Persists until overwritten by
+   * the next copy/cut event (users may paste multiple times).
+   */
+  private _internalClipboard: { text: string; source: SegmentSource } | null = null;
+
   // ─── Initialization ──────────────────────────────────────
 
   /** Load segments from DB or initialize for existing content */
@@ -48,6 +55,62 @@ export class ProvenanceTracker {
     return this.segments.map(s => ({ ...s }));
   }
 
+  // ─── Internal Editor Clipboard ──────────────────────────
+
+  /** Called on copy/cut within the editor to record the dominant source of the selection */
+  setInternalClipboard(text: string, source: SegmentSource) {
+    this._internalClipboard = { text, source };
+  }
+
+  /**
+   * Returns the dominant provenance source for a given character range.
+   *
+   * Known limitation: mixed-source ranges are flattened to the single source
+   * with the most character coverage. Preserving the full segment breakdown
+   * when copying (and splitting into multiple segments on paste) would be
+   * significantly more complex — flagged for future refinement.
+   */
+  getDominantSource(from: number, to: number): SegmentSource {
+    if (from >= to) return "typed";
+
+    const coverage = new Map<SegmentSource, number>();
+
+    for (const seg of this.segments) {
+      if (seg.end <= from || seg.start >= to) continue;
+      const overlapStart = Math.max(seg.start, from);
+      const overlapEnd = Math.min(seg.end, to);
+      const len = overlapEnd - overlapStart;
+      if (len > 0) {
+        coverage.set(seg.source, (coverage.get(seg.source) ?? 0) + len);
+      }
+    }
+
+    if (coverage.size === 0) return "typed";
+
+    let best: SegmentSource = "typed";
+    let bestLen = 0;
+    for (const [source, len] of coverage) {
+      if (len > bestLen) {
+        best = source;
+        bestLen = len;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Check (without clearing) if pasted text matches the internal editor clipboard.
+   * Returns the stored source or null if no match.
+   */
+  private checkInternalClipboard(pastedText: string): SegmentSource | null {
+    if (!this._internalClipboard) return null;
+    const normalize = (t: string) => t.trim().replace(/\s+/g, " ");
+    if (normalize(pastedText) === normalize(this._internalClipboard.text)) {
+      return this._internalClipboard.source;
+    }
+    return null;
+  }
+
   // ─── AI Editor Flags ─────────────────────────────────────
 
   /** Call before programmatic insertion from TextSelectionWindow */
@@ -67,11 +130,21 @@ export class ProvenanceTracker {
     }, 300_000);
   }
 
-  /** Check if pasted text is a known AI result */
+  /** Check if pasted text is a known AI result (with normalized matching) */
   private consumeAiResultText(text: string): boolean {
+    // Exact match first
     if (this._aiResultTexts.has(text)) {
       this._aiResultTexts.delete(text);
       return true;
+    }
+    // Normalized match — trim + collapse whitespace
+    const normalize = (t: string) => t.trim().replace(/\s+/g, " ");
+    const normalizedPaste = normalize(text);
+    for (const [registered] of this._aiResultTexts) {
+      if (normalize(registered) === normalizedPaste) {
+        this._aiResultTexts.delete(registered);
+        return true;
+      }
     }
     return false;
   }
@@ -142,7 +215,7 @@ export class ProvenanceTracker {
       return { source: "ai_editor", originalText: pastedText };
     }
 
-    // 2. Check chat clipboard role
+    // 2. Check chat clipboard role (consumed on use)
     const chatRole = this.consumeChatClipboardRole();
     if (chatRole === "assistant") {
       return { source: "chat_ai", originalText: pastedText };
@@ -151,7 +224,17 @@ export class ProvenanceTracker {
       return { source: "chat_user", originalText: null };
     }
 
-    // 3. External
+    // 3. Check internal editor clipboard (not consumed — supports multiple pastes)
+    const internalSource = this.checkInternalClipboard(pastedText);
+    if (internalSource) {
+      // Typed text stays typed with no original_text; other sources keep original_text
+      const originalText = internalSource === "typed" || internalSource === "chat_user"
+        ? null
+        : pastedText;
+      return { source: internalSource, originalText };
+    }
+
+    // 4. External
     return { source: "external", originalText: pastedText };
   }
 

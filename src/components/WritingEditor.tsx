@@ -63,6 +63,34 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           "prose prose-sm sm:prose max-w-none focus:outline-none min-h-full px-8 py-6",
         style: "font-size:16px;line-height:1.6;",
       },
+      handleDOMEvents: {
+        copy: (_view, event) => {
+          const ed = editor;
+          if (!ed) return false;
+          const { from, to } = ed.state.selection;
+          if (from === to) return false; // collapsed selection — bail out
+          const tracker = getTracker();
+          const text = ed.state.doc.textBetween(from, to, "");
+          if (text) {
+            const dominant = tracker.getDominantSource(from, to);
+            tracker.setInternalClipboard(text, dominant);
+          }
+          return false; // let default copy proceed
+        },
+        cut: (_view, event) => {
+          const ed = editor;
+          if (!ed) return false;
+          const { from, to } = ed.state.selection;
+          if (from === to) return false;
+          const tracker = getTracker();
+          const text = ed.state.doc.textBetween(from, to, "");
+          if (text) {
+            const dominant = tracker.getDominantSource(from, to);
+            tracker.setInternalClipboard(text, dominant);
+          }
+          return false; // let default cut proceed
+        },
+      },
       handlePaste: (_view, event) => {
         const tracker = getTracker();
         const pastedText = event.clipboardData?.getData("text/plain") ?? "";
