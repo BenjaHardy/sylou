@@ -1,26 +1,27 @@
 
 
-## Plan: Delete malformed flow_report row
+## Render Chat Messages as Rich Markdown
 
-### What
+### Problem
+Assistant messages display as plain text — markdown formatting (paragraphs, bold, lists, headings, etc.) is ignored because the content is rendered inside a simple `<p>` tag with `whitespace-pre-wrap`.
 
-One row in `flow_reports` (id: `ee960cde-4b35-4983-b6a7-89af7db3e6e0`, created 2026-03-20 21:27:51) has XML-like strings stored in `ai_find`, `ai_lead`, `ai_organize`, and `ai_write` instead of proper JSON objects. This row causes a blank screen when viewing that report because the frontend's `ScoreCard` component crashes on `pillar.evidence`.
+### Solution
+Use `react-markdown` to render assistant message content as formatted HTML, while keeping user messages as plain text.
 
-The backend validation fix (the `isValidPillar` guard) prevents new malformed rows from being stored, and the frontend defensive rendering prevents crashes even if malformed data exists. So the blank screen issue is already fixed for new reports **and** for viewing this old one (thanks to the frontend guards added earlier).
+### Steps
 
-### Recommendation
+1. **Install `react-markdown`** — lightweight markdown renderer for React.
 
-**Low priority but worth doing.** The frontend guards already prevent the crash, so this row won't cause a blank screen anymore — it will just show "Insufficient data" fallback text for all four pillars. Deleting it keeps the database clean and avoids confusion if the user sees a report with no real scores.
+2. **Update `ChatBubble` in `src/components/ChatPanel.tsx`**:
+   - For assistant messages: replace the `<p className="whitespace-pre-wrap break-words">{message.content}</p>` with a `<ReactMarkdown>` component.
+   - For user messages: keep the current plain text rendering.
+   - Add a `prose` wrapper class (from Tailwind typography plugin or manual styles) so rendered markdown looks clean — proper paragraph spacing, list styling, inline code, etc.
+   - Add scoped CSS or Tailwind classes to keep font size consistent (`text-sm`) and avoid oversized headings inside chat bubbles.
 
-### Action
+3. **Add minimal markdown styles** — ensure paragraphs have spacing (`mb-2 last:mb-0`), lists are indented, code blocks have background, and links are styled. This can be done via the `components` prop of `react-markdown` to map elements to styled versions.
 
-Delete the single row using the Supabase insert tool:
-
-```sql
-DELETE FROM flow_reports WHERE id = 'ee960cde-4b35-4983-b6a7-89af7db3e6e0';
-```
-
-### Files changed
-
-None — database data operation only.
+### What stays the same
+- User messages remain plain text
+- Writing summary bubbles unchanged
+- No backend changes
 
