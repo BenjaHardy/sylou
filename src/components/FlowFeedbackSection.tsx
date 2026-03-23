@@ -73,6 +73,9 @@ export function FlowFeedbackSection({ type, existingFeedback, onSubmit }: Props)
         </p>
         <p className="text-xs text-muted-foreground mt-1">
           Rate each pillar from 0 (all AI) to 5 (all human). Use half-point increments.
+          {type === "pre" && (
+            <> Pre-analysis user feedback is only possible the first time the FLOW analysis is run for a given project.</>
+          )}
         </p>
       </div>
       <div className="space-y-3">
