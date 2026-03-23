@@ -72,7 +72,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   const sourceLabel = SOURCE_LABELS[sourceType];
 
   return (
-    <div className={`flex gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
+    <div className={`flex gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`} data-chat-role={message.role}>
       <div
         className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 ${
           isUser
