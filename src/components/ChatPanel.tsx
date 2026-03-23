@@ -111,7 +111,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected }: Props) {
+export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker }: Props) {
   const { threadId, threadName } = useChatThread(projectId);
   const { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages, appendMessages } = useChatMessages(threadId);
   const [input, setInput] = useState("");
@@ -119,6 +119,34 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   const [tipDismissed, setTipDismissed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Listen for copy events within chat to tag clipboard with message role
+  useEffect(() => {
+    const container = chatContainerRef.current;
+    if (!container || !provenanceTracker) return;
+
+    const handleCopy = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+      const anchor = sel.anchorNode;
+      if (!anchor) return;
+
+      // Walk up from the selection to find the nearest [data-chat-role] element
+      let el: HTMLElement | null = anchor instanceof HTMLElement ? anchor : anchor.parentElement;
+      while (el && el !== container) {
+        if (el.dataset?.chatRole) {
+          const role = el.dataset.chatRole as "user" | "assistant";
+          provenanceTracker.setChatClipboardRole(role);
+          return;
+        }
+        el = el.parentElement;
+      }
+    };
+
+    container.addEventListener("copy", handleCopy);
+    return () => container.removeEventListener("copy", handleCopy);
+  }, [provenanceTracker]);
 
   // Inject messages directly when provided (from Ask/Propose flows)
   useEffect(() => {
