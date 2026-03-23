@@ -721,6 +721,7 @@ ${writePillarNotice}`;
         ai_write: flowResult.write,
         metrics_snapshot: metricsSnapshot,
         flow_meta: flowMeta,
+        provenance_snapshot: segmentMap,
         model_used: "claude-sonnet-4-6",
       })
       .select()
