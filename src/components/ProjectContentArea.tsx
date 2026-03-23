@@ -15,6 +15,7 @@ import { useFlowAnalysis } from "@/hooks/useFlowAnalysis";
 import { useChatThread } from "@/hooks/useChatThread";
 import type { Project } from "@/hooks/useProjects";
 import type { ImperativePanelHandle } from "react-resizable-panels";
+import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 
 interface Props {
   project: Project | null;
