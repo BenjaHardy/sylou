@@ -162,6 +162,8 @@ export function TextSelectionWindow({
 
         setProposedText(data.proposed_text);
         setCurrentActionId(data.action_id);
+        // Register for manual copy/paste detection
+        provenanceTracker?.registerAiResultText(data.proposed_text);
         setPhase("result");
       } catch (err) {
         console.error("Editor action failed:", err);
