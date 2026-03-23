@@ -19,6 +19,7 @@ import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 
 interface Props {
   project: Project | null;
+  onFlowLoadingChange?: (loading: boolean) => void;
 }
 
 function WelcomeScreen() {
