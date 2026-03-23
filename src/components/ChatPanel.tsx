@@ -15,6 +15,7 @@ interface Props {
   refreshTrigger?: number;
   injectMessages?: ChatMessage[];
   onMessagesInjected?: () => void;
+  provenanceTracker?: ProvenanceTracker;
 }
 
 
