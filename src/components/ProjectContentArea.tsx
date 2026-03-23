@@ -15,6 +15,7 @@ import { useFlowAnalysis } from "@/hooks/useFlowAnalysis";
 import { useChatThread } from "@/hooks/useChatThread";
 import type { Project } from "@/hooks/useProjects";
 import type { ImperativePanelHandle } from "react-resizable-panels";
+import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 
 interface Props {
   project: Project | null;
@@ -58,6 +59,7 @@ export function ProjectContentArea({ project }: Props) {
   const [isCurrentRunFirst, setIsCurrentRunFirst] = useState(false);
   const [chatRefreshTrigger, setChatRefreshTrigger] = useState(0);
   const [pendingChatMessages, setPendingChatMessages] = useState<ChatMessage[]>([]);
+  const [provenanceTracker, setProvenanceTracker] = useState<ProvenanceTracker | null>(null);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const { markWriting } = useActivityTracker(project?.id ?? null);
@@ -241,6 +243,7 @@ export function ProjectContentArea({ project }: Props) {
               hasFlowReport={!!flowReport}
               onAskComplete={(msgs) => setPendingChatMessages((prev) => [...prev, ...msgs])}
               onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
+              onProvenanceTracker={setProvenanceTracker}
             />
             <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
               <ProjectActivityBar projectId={project.id} />
@@ -249,7 +252,7 @@ export function ProjectContentArea({ project }: Props) {
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20}>
-          <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} />
+          <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} />
         </ResizablePanel>
       </ResizablePanelGroup>
 

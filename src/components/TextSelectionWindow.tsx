@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 
 type ActionId =
   | "fix-grammar"
@@ -29,6 +30,7 @@ interface Props {
   onAccept: (text: string) => void;
   onAskComplete: (messages: ChatMessage[]) => void;
   onChatRefresh?: () => void;
+  provenanceTracker?: ProvenanceTracker;
 }
 
 const NORMAL_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
@@ -79,6 +81,7 @@ export function TextSelectionWindow({
   onAccept,
   onAskComplete,
   onChatRefresh,
+  provenanceTracker,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("actions");
   const [activeAction, setActiveAction] = useState<ActionId | null>(null);
@@ -159,6 +162,8 @@ export function TextSelectionWindow({
 
         setProposedText(data.proposed_text);
         setCurrentActionId(data.action_id);
+        // Register for manual copy/paste detection
+        provenanceTracker?.registerAiResultText(data.proposed_text);
         setPhase("result");
       } catch (err) {
         console.error("Editor action failed:", err);
@@ -220,6 +225,8 @@ export function TextSelectionWindow({
           setCurrentActionId(data.action_id);
           setPendingSummaryUpdate(data.summary_update);
           setPendingInstruction(userInstruction);
+          // Register for manual copy/paste detection
+          provenanceTracker?.registerAiResultText(data.ai_response);
           setPhase("result");
         }
       } catch (err) {

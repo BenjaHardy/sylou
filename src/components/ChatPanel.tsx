@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, KeyboardEvent } from "react";
+import { useState, useRef, useEffect, KeyboardEvent, useCallback } from "react";
 import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { useChatThread } from "@/hooks/useChatThread";
 import { useChatMessages, ChatMessage } from "@/hooks/useChatMessages";
 import { format } from "date-fns";
+import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 
 interface Props {
   projectId: string;
@@ -14,6 +15,7 @@ interface Props {
   refreshTrigger?: number;
   injectMessages?: ChatMessage[];
   onMessagesInjected?: () => void;
+  provenanceTracker?: ProvenanceTracker;
 }
 
 
@@ -70,7 +72,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   const sourceLabel = SOURCE_LABELS[sourceType];
 
   return (
-    <div className={`flex gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
+    <div className={`flex gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`} data-chat-role={message.role}>
       <div
         className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 ${
           isUser
@@ -109,7 +111,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected }: Props) {
+export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker }: Props) {
   const { threadId, threadName } = useChatThread(projectId);
   const { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages, appendMessages } = useChatMessages(threadId);
   const [input, setInput] = useState("");
@@ -117,6 +119,34 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   const [tipDismissed, setTipDismissed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Listen for copy events within chat to tag clipboard with message role
+  useEffect(() => {
+    const container = chatContainerRef.current;
+    if (!container || !provenanceTracker) return;
+
+    const handleCopy = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+      const anchor = sel.anchorNode;
+      if (!anchor) return;
+
+      // Walk up from the selection to find the nearest [data-chat-role] element
+      let el: HTMLElement | null = anchor instanceof HTMLElement ? anchor : anchor.parentElement;
+      while (el && el !== container) {
+        if (el.dataset?.chatRole) {
+          const role = el.dataset.chatRole as "user" | "assistant";
+          provenanceTracker.setChatClipboardRole(role);
+          return;
+        }
+        el = el.parentElement;
+      }
+    };
+
+    container.addEventListener("copy", handleCopy);
+    return () => container.removeEventListener("copy", handleCopy);
+  }, [provenanceTracker]);
 
   // Inject messages directly when provided (from Ask/Propose flows)
   useEffect(() => {
@@ -169,7 +199,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   };
 
   return (
-    <div className="flex flex-col h-full bg-[hsl(var(--ethos-surface))]">
+    <div ref={chatContainerRef} className="flex flex-col h-full bg-[hsl(var(--ethos-surface))]">
       {/* Header */}
       <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-2">
