@@ -37,9 +37,10 @@ interface Props {
   selectedProjectId: string | null;
   onSelectProject: (id: string) => void;
   onNewProject: () => void;
+  disabled?: boolean;
 }
 
-export function DashboardSidebar({ selectedProjectId, onSelectProject, onNewProject }: Props) {
+export function DashboardSidebar({ selectedProjectId, onSelectProject, onNewProject, disabled }: Props) {
   const { user, signOut } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
