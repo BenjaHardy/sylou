@@ -29,6 +29,7 @@ import {
   LayoutList,
   PenTool,
   Zap,
+  Eye,
   BarChart3,
   Clock,
   Pencil,
