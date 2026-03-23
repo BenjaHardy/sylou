@@ -255,6 +255,28 @@ function buildEditorStatsString(
 // Similarity detection: compare writing against AI assistant chat messages
 // ---------------------------------------------------------------------------
 
+function threeGramOverlap(current: string, original: string): number {
+  const norm = (t: string) =>
+    t.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim();
+  const make3grams = (t: string): Set<string> => {
+    const words = t.split(" ");
+    const s = new Set<string>();
+    for (let i = 0; i <= words.length - 3; i++) {
+      s.add(words.slice(i, i + 3).join(" "));
+    }
+    return s;
+  };
+  const origGrams = make3grams(norm(original));
+  if (origGrams.size === 0) return 1; // too short to compare, keep original classification
+  const curGrams = make3grams(norm(current));
+  if (curGrams.size === 0) return 0;
+  let matches = 0;
+  for (const g of origGrams) {
+    if (curGrams.has(g)) matches++;
+  }
+  return matches / origGrams.size;
+}
+
 function normalise(text: string): string {
   return text
     .toLowerCase()
@@ -431,13 +453,43 @@ Deno.serve(async (req) => {
       }));
     }
 
-    // --- Build provenance-annotated writing ---
-    const segmentMap =
+    // --- Reclassify provenance segments where content diverged from original ---
+    const rawSegmentMap =
       (provenanceRes.data?.segment_map as Array<{
         start: number;
         end: number;
         type: string;
+        original_text?: string | null;
       }>) ?? [];
+
+    const segmentMap = rawSegmentMap.map((seg) => {
+      // Only reclassify non-typed segments that have original_text and are ≥50 chars
+      if (
+        seg.type === "typed" ||
+        !seg.original_text ||
+        seg.end - seg.start < 50
+      ) {
+        return seg;
+      }
+
+      const currentText = writingContent.slice(seg.start, seg.end);
+      const origText = seg.original_text;
+
+      // Fast check: if current text is >100% longer, reclassify immediately
+      if (currentText.length > origText.length * 2) {
+        return { ...seg, type: "typed" };
+      }
+
+      // 3-gram overlap check
+      const overlap = threeGramOverlap(currentText, origText);
+      if (overlap < 0.5) {
+        return { ...seg, type: "typed" };
+      }
+
+      return seg;
+    });
+
+    // --- Build provenance-annotated writing ---
     const annotatedWriting = buildProvenanceAnnotatedWriting(
       writingContent,
       segmentMap
