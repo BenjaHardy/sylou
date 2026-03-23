@@ -53,6 +53,7 @@ const DEFAULT_CHAT_SIZE = 30;
 
 export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
   const [chatExpanded, setChatExpanded] = useState(false);
+  const [conciseMode, setConciseMode] = useState(false);
   const [showFlowReport, setShowFlowReport] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showTokenWarning, setShowTokenWarning] = useState(false);
