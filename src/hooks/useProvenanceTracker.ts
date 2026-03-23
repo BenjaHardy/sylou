@@ -35,7 +35,7 @@ export function useProvenanceTracker(projectId: string | null) {
         return;
       }
 
-      const segmentMap = data?.segment_map as ProvenanceSegment[] | null;
+      const segmentMap = data?.segment_map as unknown as ProvenanceSegment[] | null;
       // We'll call init later when editor content length is known
       trackerRef.current = new ProvenanceTracker();
       if (segmentMap && Array.isArray(segmentMap) && segmentMap.length > 0) {
