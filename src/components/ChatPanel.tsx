@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, KeyboardEvent, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
 import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -98,7 +99,42 @@ function ChatBubble({ message }: { message: ChatMessage }) {
             {sourceLabel}
           </span>
         )}
-        <p className="whitespace-pre-wrap break-words">{message.content}</p>
+        {isUser ? (
+          <p className="whitespace-pre-wrap break-words">{message.content}</p>
+        ) : (
+          <div className="prose-chat break-words">
+            <ReactMarkdown
+              components={{
+                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                ul: ({ children }) => <ul className="list-disc pl-4 mb-2 last:mb-0 space-y-1">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 last:mb-0 space-y-1">{children}</ol>,
+                li: ({ children }) => <li>{children}</li>,
+                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                em: ({ children }) => <em>{children}</em>,
+                code: ({ children, className }) => {
+                  const isBlock = className?.includes("language-");
+                  return isBlock ? (
+                    <code className={`block bg-muted/60 rounded px-2 py-1.5 text-xs my-2 overflow-x-auto ${className}`}>{children}</code>
+                  ) : (
+                    <code className="bg-muted/60 rounded px-1 py-0.5 text-xs">{children}</code>
+                  );
+                },
+                pre: ({ children }) => <pre className="mb-2 last:mb-0">{children}</pre>,
+                h1: ({ children }) => <p className="font-bold mb-2">{children}</p>,
+                h2: ({ children }) => <p className="font-bold mb-2">{children}</p>,
+                h3: ({ children }) => <p className="font-semibold mb-1.5">{children}</p>,
+                a: ({ href, children }) => (
+                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">{children}</a>
+                ),
+                blockquote: ({ children }) => (
+                  <blockquote className="border-l-2 border-primary/30 pl-3 my-2 text-muted-foreground italic">{children}</blockquote>
+                ),
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        )}
         <span
           className={`block text-[10px] mt-1.5 ${
             isUser ? "text-primary/50 text-right" : "text-muted-foreground/60"
