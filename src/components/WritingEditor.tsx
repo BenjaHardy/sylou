@@ -35,7 +35,7 @@ interface Props {
 
 export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, conciseMode }: Props) {
   const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
-  const { getTracker, initWithContentLength, scheduleSave } = useProvenanceTracker(projectId);
+  const { getTracker, initWithContentLength, scheduleSave, provenanceLoaded } = useProvenanceTracker(projectId);
   const [initialSet, setInitialSet] = useState(false);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
   const prevDocLenRef = useRef<number>(0);
@@ -118,7 +118,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
 
   // Set initial content when loaded
   useEffect(() => {
-    if (editor && !loading && !initialSet) {
+    if (editor && !loading && provenanceLoaded && !initialSet) {
       editor.commands.setContent(content || "");
       const docLen = editor.state.doc.content.size;
       prevDocLenRef.current = docLen;
@@ -127,7 +127,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       // Expose tracker to parent
       onProvenanceTracker?.(getTracker());
     }
-  }, [editor, loading, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker]);
+  }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker]);
 
   // Reset when projectId changes
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { ProvenanceTracker, ProvenanceSegment } from "@/lib/provenance-tracker";
 
@@ -12,16 +12,20 @@ export function useProvenanceTracker(projectId: string | null) {
   const loadedProjectRef = useRef<string | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedJsonRef = useRef<string>("");
+  const [provenanceLoaded, setProvenanceLoaded] = useState(false);
 
   // Load provenance data when project changes
   useEffect(() => {
     if (!projectId) {
       trackerRef.current = new ProvenanceTracker();
       loadedProjectRef.current = null;
+      setProvenanceLoaded(true);
       return;
     }
 
     if (loadedProjectRef.current === projectId) return;
+
+    setProvenanceLoaded(false);
 
     const load = async () => {
       const { data, error } = await supabase
@@ -32,6 +36,7 @@ export function useProvenanceTracker(projectId: string | null) {
 
       if (error) {
         console.error("Failed to load provenance:", error);
+        setProvenanceLoaded(true);
         return;
       }
 
@@ -42,6 +47,7 @@ export function useProvenanceTracker(projectId: string | null) {
         trackerRef.current.init(segmentMap, 0); // Will be re-clamped on initWithContentLength
       }
       loadedProjectRef.current = projectId;
+      setProvenanceLoaded(true);
     };
 
     load();
@@ -100,5 +106,6 @@ export function useProvenanceTracker(projectId: string | null) {
     getTracker,
     initWithContentLength,
     scheduleSave,
+    provenanceLoaded,
   };
 }
