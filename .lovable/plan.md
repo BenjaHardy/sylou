@@ -1,57 +1,47 @@
 
 
-## Fix: Structural Reorganization Detection for Cross-Paragraph Deletions
+## Fix: Per-Step Processing & Within/Tail Distinction
 
-### Root Cause
+### Problem
+Two bugs cause AI text to be reclassified as `[t]` when deleting lines:
 
-The current substring check only looks at text **within the deleted range** (`oldStart` to `oldEnd`). But when you delete lines at the beginning of a document, ProseMirror reports a replacement where the "inserted" content is text from **after** the deleted range — the surviving paragraphs that got repositioned due to paragraph merging.
+1. **Collapsed match type**: `preserveSource` is collapsed from `'within'|'tail'` to a boolean before reaching the tracker. The `'tail'` case needs different handling — pure delete, no insert — but gets the same "delete only the difference" logic as `'within'`.
 
-Example: document has paragraphs P1, P2, P3. User deletes P1 and P2.
-- ProseMirror step: replace `[0, 27]` with P3's content (which was at positions `[27, 40]`)
-- Current check: is P3's text a substring of `textBetween(0, 27)` (P1+P2 text)? **No** → `preserveSource = false`
-- Result: P3's content gets reclassified as `[t]` — the exact bug observed
+2. **Multi-step coordinate drift**: All steps in a transaction are collected into a flat array and sorted. But each step's coordinates are relative to the doc state *after* the previous step. Processing them together with a sort corrupts the segment map.
 
-### Fix
+### Changes
 
-**File: `src/components/WritingEditor.tsx`** (lines 136-147)
+**File 1: `src/components/WritingEditor.tsx`** (lines ~106-200)
 
-Expand the substring check to also look at text **immediately after** `oldEnd` in the old document. The surviving text in a cross-paragraph deletion always comes from the tail — the content just beyond the deleted range.
+- Replace batch-collect-then-process with **per-step immediate processing**:
+  - For each step in `transaction.steps`, extract its changes, then immediately call `tracker.handleSingleChange(...)` for each change
+  - Pass the actual `preserveSource` subtype (`'within' | 'tail' | false`) instead of collapsing to boolean
+  - Remove the `changes` array accumulation and the final `tracker.handleTransaction()` call
+  - Call `scheduleSave()` once after all steps are processed
+- Remove all `console.log('[PROVENANCE DEBUG]')` statements
 
-```
-if (deleteLength > 0 && insertLength > 0 && insertedText) {
-  try {
-    const normalizedNew = normalize(insertedText);
-    if (normalizedNew.length > 0) {
-      // Check within the deleted range (handles mid-paragraph edits)
-      const oldText = transaction.before.textBetween(oldStart, oldEnd, "");
-      if (normalize(oldText).includes(normalizedNew)) {
-        preserveSource = true;
-      } else {
-        // Check text AFTER the deleted range (handles cross-paragraph deletions
-        // where ProseMirror merges surviving tail content into the replacement)
-        const beforeSize = transaction.before.content.size;
-        if (oldEnd < beforeSize) {
-          const tailEnd = Math.min(beforeSize, oldEnd + insertLength + 50);
-          const tailText = transaction.before.textBetween(oldEnd, tailEnd, "");
-          if (normalize(tailText).includes(normalizedNew)) {
-            preserveSource = true;
-          }
-        }
-      }
-    }
-  } catch {
-    // fall through to default handling
-  }
-}
-```
+**File 2: `src/lib/provenance-tracker.ts`** (lines ~227-264)
 
-### Why this works
+- Add a new public method `handleSingleChange(change)` that processes one change at a time:
+  ```
+  handleSingleChange(change: {
+    from: number; to: number;
+    insertLength: number; insertedText: string;
+    preserveSource: 'within' | 'tail' | false;
+  })
+  ```
+- Logic branches:
+  - `preserveSource === 'within'`: delete only `[from, from + netDeleted]` — surviving text within the deleted range keeps its provenance
+  - `preserveSource === 'tail'`: pure delete `[from, to]`, skip insert entirely — segments after `to` shift left naturally with their original provenance
+  - `false`: current behavior — classify and delete+insert
+- Call `mergeAdjacent()` at the end of each single change
+- Keep `handleTransaction` as-is for backward compatibility (unused but harmless)
 
-- For **beginning/end deletions**: the surviving text is right after `oldEnd` in the old doc → tail check matches → provenance preserved
-- For **mid-paragraph merges** (existing behavior): the surviving text is within `[oldStart, oldEnd]` → original check matches
-- For **genuine replacements** (paste-over, typing): the new text doesn't exist in either range → correctly classified as `typed`
+### Why this fixes both issues
+
+- Per-step processing ensures each step's coordinates match the tracker's current state — no drift
+- The `'tail'` case correctly does a pure delete, letting the surviving AI segments shift left with their `[ai]` source intact
 
 ### No other changes needed
-
-The `provenance-tracker.ts` logic is correct — the issue was solely in the detection of when to set `preserveSource`.
+No DB, edge function, or UI changes.
 
