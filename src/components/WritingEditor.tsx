@@ -122,7 +122,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
             const insertLength = newEnd - newStart;
             const deleteLength = oldEnd - oldStart;
             let insertedText = "";
-            let preserveSource = false;
+            let preserveSource: false | 'within' | 'tail' = false;
 
             if (insertLength > 0) {
               try {
@@ -139,8 +139,14 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
                 if (normalizedNew.length > 0) {
                   // Check within the deleted range (handles mid-paragraph edits)
                   const oldText = transaction.before.textBetween(oldStart, oldEnd, "");
-                  if (normalize(oldText).includes(normalizedNew)) {
-                    preserveSource = true;
+                  const normalizedOld = normalize(oldText);
+                  if (normalizedOld.includes(normalizedNew)) {
+                    preserveSource = 'within';
+                    console.log('[PROVENANCE DEBUG] preserveSource=within', {
+                      oldStart, oldEnd, deleteLength, insertLength,
+                      oldText: oldText.substring(0, 100),
+                      insertedText: insertedText.substring(0, 100),
+                    });
                   } else {
                     // Check text AFTER the deleted range (handles cross-paragraph deletions
                     // where ProseMirror merges surviving tail content into the replacement)
@@ -149,23 +155,39 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
                       const tailEnd = Math.min(beforeSize, oldEnd + insertLength + 50);
                       const tailText = transaction.before.textBetween(oldEnd, tailEnd, "");
                       if (normalize(tailText).includes(normalizedNew)) {
-                        preserveSource = true;
+                        preserveSource = 'tail';
+                        console.log('[PROVENANCE DEBUG] preserveSource=tail', {
+                          oldStart, oldEnd, deleteLength, insertLength,
+                          oldText: oldText.substring(0, 100),
+                          tailText: tailText.substring(0, 100),
+                          insertedText: insertedText.substring(0, 100),
+                        });
                       }
                     }
                   }
+                  if (!preserveSource) {
+                    console.log('[PROVENANCE DEBUG] preserveSource=false (no match)', {
+                      oldStart, oldEnd, deleteLength, insertLength,
+                      oldText: oldText.substring(0, 100),
+                      insertedText: insertedText.substring(0, 100),
+                    });
+                  }
                 }
-              } catch {
-                // If we can't access old text, fall through to default handling
+              } catch (err) {
+                console.log('[PROVENANCE DEBUG] error in detection', err);
               }
             }
 
-            changes.push({
+            const changeObj = {
               from: oldStart,
               to: oldEnd,
               insertLength,
               insertedText,
-              preserveSource,
-            });
+              preserveSource: preserveSource !== false,
+            };
+            console.log('[PROVENANCE DEBUG] change pushed', { ...changeObj, preserveSource });
+
+            changes.push(changeObj);
           });
         });
 
