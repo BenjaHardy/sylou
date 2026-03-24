@@ -510,8 +510,8 @@ Deno.serve(async (req) => {
       }));
     }
 
-    // --- Reclassify provenance segments where content diverged from original ---
-    const rawSegmentMap =
+    // --- Use provenance segments as-is (mapping-based tracking is accurate) ---
+    const segmentMap =
       (provenanceRes.data?.segment_map as Array<{
         start: number;
         end: number;
@@ -519,34 +519,6 @@ Deno.serve(async (req) => {
         type?: string;
         original_text?: string | null;
       }>) ?? [];
-
-    const segmentMap = rawSegmentMap.map((seg) => {
-      const src = normalizeSource(seg);
-      // Only reclassify non-typed segments that have original_text and are ≥50 chars
-      if (
-        src === "typed" ||
-        !seg.original_text ||
-        seg.end - seg.start < 50
-      ) {
-        return seg;
-      }
-
-      const currentText = writingContent.slice(seg.start, seg.end);
-      const origText = seg.original_text;
-
-      // Fast check: if current text is >100% longer, reclassify immediately
-      if (currentText.length > origText.length * 2) {
-        return { ...seg, source: "typed" };
-      }
-
-      // 3-gram overlap check
-      const overlap = threeGramOverlap(currentText, origText);
-      if (overlap < 0.5) {
-        return { ...seg, source: "typed" };
-      }
-
-      return seg;
-    });
 
     // --- Build provenance-annotated writing ---
     const annotatedWriting = buildProvenanceAnnotatedWriting(
