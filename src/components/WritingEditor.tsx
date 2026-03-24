@@ -135,11 +135,24 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
             // Detect structural reorganizations (paragraph merges)
             if (deleteLength > 0 && insertLength > 0 && insertedText) {
               try {
-                const oldText = transaction.before.textBetween(oldStart, oldEnd, "");
-                const normalizedOld = normalize(oldText);
                 const normalizedNew = normalize(insertedText);
-                if (normalizedNew.length > 0 && normalizedOld.includes(normalizedNew)) {
-                  preserveSource = true;
+                if (normalizedNew.length > 0) {
+                  // Check within the deleted range (handles mid-paragraph edits)
+                  const oldText = transaction.before.textBetween(oldStart, oldEnd, "");
+                  if (normalize(oldText).includes(normalizedNew)) {
+                    preserveSource = true;
+                  } else {
+                    // Check text AFTER the deleted range (handles cross-paragraph deletions
+                    // where ProseMirror merges surviving tail content into the replacement)
+                    const beforeSize = transaction.before.content.size;
+                    if (oldEnd < beforeSize) {
+                      const tailEnd = Math.min(beforeSize, oldEnd + insertLength + 50);
+                      const tailText = transaction.before.textBetween(oldEnd, tailEnd, "");
+                      if (normalize(tailText).includes(normalizedNew)) {
+                        preserveSource = true;
+                      }
+                    }
+                  }
                 }
               } catch {
                 // If we can't access old text, fall through to default handling
