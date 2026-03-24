@@ -187,13 +187,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
             };
             console.log('[PROVENANCE DEBUG] change pushed', { ...changeObj, preserveSource });
 
-            changes.push({
-              from: oldStart,
-              to: oldEnd,
-              insertLength,
-              insertedText,
-              preserveSource,
-            });
+            changes.push(changeObj);
           });
         });
 
