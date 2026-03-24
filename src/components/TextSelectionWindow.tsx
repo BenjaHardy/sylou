@@ -254,7 +254,7 @@ export function TextSelectionWindow({
         setPhase("actions");
       }
     },
-    [projectId, threadId, selectedText, onAskComplete, onClose]
+    [projectId, threadId, selectedText, onAskComplete, onClose, getSourceBreakdown]
   );
 
   const handleAction = useCallback(
