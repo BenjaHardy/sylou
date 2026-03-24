@@ -211,6 +211,7 @@ Deno.serve(async (req) => {
     // --- Parse body ---
     const body = await req.json();
     const { project_id, thread_id, action_type, selected_text, instruction, source_module } = body;
+    const selectedTextSource: string | undefined = body.selected_text_source;
 
     // ── CONFIRM endpoint ────────────────────────────────────────────────
     if (body.confirm !== undefined) {
