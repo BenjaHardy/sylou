@@ -419,8 +419,9 @@ Deno.serve(async (req) => {
           .single(),
         supabase
           .from("ai_editor_actions")
-          .select("action_type, outcome, char_count_original, char_count_result")
-          .eq("project_id", projectId),
+          .select("action_type, outcome, char_count_original, char_count_result, selected_text_preview, ai_response_preview, instruction_text, created_at")
+          .eq("project_id", projectId)
+          .order("created_at", { ascending: false }),
         supabase
           .from("project_stats")
           .select("*")
