@@ -139,17 +139,26 @@ export function TextSelectionWindow({
     };
   }, [onClose]);
 
+  const getSourceBreakdown = useCallback(() => {
+    if (provenanceTracker && selectionFrom != null && selectionTo != null && selectionFrom < selectionTo) {
+      return provenanceTracker.getSourceBreakdown(selectionFrom, selectionTo);
+    }
+    return undefined;
+  }, [provenanceTracker, selectionFrom, selectionTo]);
+
   const callEditorAction = useCallback(
     async (actionType: string, targetLanguage?: string) => {
       setPhase("loading");
       setLoadingStage("preparing");
       try {
+        const selected_text_source = getSourceBreakdown();
         const { data, error } = await supabase.functions.invoke("editor-action", {
           body: {
             project_id: projectId,
             action_type: actionType,
             selected_text: selectedText,
             ...(targetLanguage ? { target_language: targetLanguage } : {}),
+            ...(selected_text_source ? { selected_text_source } : {}),
           },
         });
 
