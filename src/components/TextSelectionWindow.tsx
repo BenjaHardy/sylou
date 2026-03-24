@@ -317,6 +317,7 @@ export function TextSelectionWindow({
             selected_text: selectedText,
             instruction: pendingInstruction,
             ai_response: proposedText,
+            ...(pendingSourceBreakdown ? { selected_text_source: pendingSourceBreakdown } : {}),
           },
         });
         if (error) {
