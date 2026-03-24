@@ -495,7 +495,9 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
         char_count_original: selected_text.length,
         char_count_result: aiResponse.length,
         outcome: action_type === "ask" ? "delivered" : "pending",
-        instruction_text: instruction.slice(0, 1000),
+        instruction_text: selectedTextSource
+          ? `${instruction.slice(0, 1000)} | Source: ${selectedTextSource}`
+          : instruction.slice(0, 1000),
       })
       .select("id")
       .single();
