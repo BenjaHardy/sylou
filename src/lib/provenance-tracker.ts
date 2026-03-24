@@ -64,11 +64,6 @@ export class ProvenanceTracker {
 
   /**
    * Returns the dominant provenance source for a given character range.
-   *
-   * Known limitation: mixed-source ranges are flattened to the single source
-   * with the most character coverage. Preserving the full segment breakdown
-   * when copying (and splitting into multiple segments on paste) would be
-   * significantly more complex — flagged for future refinement.
    */
   getDominantSource(from: number, to: number): SegmentSource {
     if (from >= to) return "typed";
@@ -101,9 +96,6 @@ export class ProvenanceTracker {
   /**
    * Returns a human-readable source breakdown string for a given character range.
    * E.g., "85% [t], 15% [ce]". Merges chat_user into typed for display.
-   *
-   * Known limitation: same as getDominantSource — mixed-source ranges are
-   * summarised by percentage rather than preserving per-segment breakdown.
    */
   getSourceBreakdown(from: number, to: number): string {
     if (from >= to) return "100% [t]";
@@ -218,67 +210,140 @@ export class ProvenanceTracker {
     return role;
   }
 
-  // ─── Transaction Handling ────────────────────────────────
+  // ─── Transaction Handling (Mapping-Based) ────────────────
 
   /**
-   * Called on every TipTap transaction that changes the document.
-   * Adjusts the segment map based on what changed.
+   * Apply a ProseMirror transaction to the segment map using the
+   * transaction's own mapping, rather than delete/insert cycles.
+   *
+   * Steps:
+   * 1. Map all existing segment positions through the transaction mapping
+   * 2. Remove collapsed (zero-length) segments
+   * 3. Fill gaps (newly inserted content) with classified segments
+   * 4. Merge adjacent same-source segments
    */
-  handleTransaction(
-    oldLength: number,
-    newLength: number,
-    changes: { from: number; to: number; insertLength: number; insertedText: string; preserveSource?: boolean }[]
+  applyTransaction(
+    transaction: {
+      mapping: { map: (pos: number, bias?: number) => number };
+      doc: { content: { size: number }; textBetween: (from: number, to: number, blockSeparator: string) => string };
+    }
   ) {
-    // Legacy method — kept for backward compatibility
-    const sorted = [...changes].sort((a, b) => b.from - a.from);
-    for (const change of sorted) {
-      this.handleSingleChange({
-        ...change,
-        preserveSource: change.preserveSource ? 'within' : false,
+    const mapping = transaction.mapping;
+    const newDocSize = transaction.doc.content.size;
+
+    // Step 1: Map existing segments through the transaction mapping
+    const mapped: ProvenanceSegment[] = [];
+    for (const seg of this.segments) {
+      const newStart = mapping.map(seg.start, 1); // bias right for start
+      const newEnd = mapping.map(seg.end, -1);     // bias left for end
+      if (newEnd > newStart) {
+        mapped.push({
+          start: newStart,
+          end: newEnd,
+          source: seg.source,
+          original_text: seg.original_text,
+        });
+      }
+      // If newEnd <= newStart, segment was fully deleted — drop it
+    }
+
+    // Step 2: Sort mapped segments by start position
+    mapped.sort((a, b) => a.start - b.start);
+
+    // Step 3: Identify gaps and fill with classified segments
+    const result: ProvenanceSegment[] = [];
+    let cursor = 0;
+
+    for (const seg of mapped) {
+      // Clamp segment to valid doc range
+      const segStart = Math.max(seg.start, cursor);
+      const segEnd = Math.min(seg.end, newDocSize);
+
+      if (segStart > cursor) {
+        // Gap before this segment — newly inserted content
+        const gapText = this.extractText(transaction.doc, cursor, segStart);
+        const classification = this.classifyGap(gapText);
+        result.push({
+          start: cursor,
+          end: segStart,
+          source: classification.source,
+          original_text: classification.originalText,
+        });
+      }
+
+      if (segEnd > segStart) {
+        result.push({ ...seg, start: segStart, end: segEnd });
+      }
+
+      cursor = Math.max(cursor, segEnd);
+    }
+
+    // Fill trailing gap (content inserted at the end)
+    if (cursor < newDocSize) {
+      const gapText = this.extractText(transaction.doc, cursor, newDocSize);
+      const classification = this.classifyGap(gapText);
+      result.push({
+        start: cursor,
+        end: newDocSize,
+        source: classification.source,
+        original_text: classification.originalText,
       });
+    }
+
+    this.segments = result;
+
+    // Step 4: Merge adjacent same-source segments
+    this.mergeAdjacent();
+  }
+
+  /**
+   * Safely extract text from a ProseMirror doc node.
+   */
+  private extractText(
+    doc: { textBetween: (from: number, to: number, blockSeparator: string) => string; content: { size: number } },
+    from: number,
+    to: number
+  ): string {
+    try {
+      const clampedTo = Math.min(to, doc.content.size);
+      if (from >= clampedTo) return "";
+      return doc.textBetween(from, clampedTo, "");
+    } catch {
+      return "";
     }
   }
 
   /**
-   * Process a single change immediately. Called per-step to avoid coordinate drift.
+   * Classify a gap (newly inserted content) using the existing
+   * classification priority: pending AI flag → paste override →
+   * internal clipboard → AI result registry → chat clipboard → typed.
    */
-  handleSingleChange(change: {
+  private classifyGap(text: string): { source: SegmentSource; originalText: string | null } {
+    return this.classifyInsertionFull(text);
+  }
+
+  /**
+   * Legacy method — kept for backward compatibility.
+   */
+  handleTransaction(
+    _oldLength: number,
+    _newLength: number,
+    _changes: { from: number; to: number; insertLength: number; insertedText: string; preserveSource?: boolean }[]
+  ) {
+    // No-op — use applyTransaction instead
+  }
+
+  /**
+   * Legacy method — kept for backward compatibility.
+   */
+  handleSingleChange(_change: {
     from: number;
     to: number;
     insertLength: number;
     insertedText: string;
     preserveSource: 'within' | 'tail' | false;
   }) {
-    const { from, to, insertLength, insertedText, preserveSource } = change;
-    const deleteLength = to - from;
-
-    if (deleteLength > 0 && insertLength === 0) {
-      // Pure deletion
-      this.handleDelete(from, to);
-    } else if (deleteLength === 0 && insertLength > 0) {
-      // Pure insertion
-      const source = this.classifyInsertionFull(insertedText);
-      this.handleInsert(from, insertLength, source, insertedText);
-    } else if (deleteLength > 0 && insertLength > 0) {
-      if (preserveSource === 'within') {
-        // Structural reorganization within the deleted range
-        const netDeleted = deleteLength - insertLength;
-        if (netDeleted > 0) {
-          this.handleDelete(from, from + netDeleted);
-        }
-      } else if (preserveSource === 'tail') {
-        // Cross-paragraph deletion: surviving text comes from after oldEnd
-        // Pure delete the full range — segments after `to` shift left naturally
-        this.handleDelete(from, to);
-      } else {
-        // Genuine replacement (delete then insert)
-        const source = this.classifyInsertionFull(insertedText);
-        this.handleDelete(from, to);
-        this.handleInsert(from, insertLength, source, insertedText);
-      }
-    }
-
-    this.mergeAdjacent();
+    // No-op — use applyTransaction instead
   }
 
 
@@ -319,7 +384,7 @@ export class ProvenanceTracker {
     this._pasteOverride = override;
   }
 
-  /** Updated classifyInsertion to check paste override */
+  /** Classify inserted text using priority: AI flag → paste override → typed */
   private classifyInsertionFull(text: string): { source: SegmentSource; originalText: string | null } {
     if (this._pendingAiInsertion) {
       this._pendingAiInsertion = false;
@@ -334,104 +399,6 @@ export class ProvenanceTracker {
   }
 
   // ─── Segment Operations ──────────────────────────────────
-
-  private handleInsert(
-    pos: number,
-    length: number,
-    classification: { source: SegmentSource; originalText: string | null },
-    _text: string
-  ) {
-    const { source, originalText } = classification;
-    const newSeg: ProvenanceSegment = {
-      start: pos,
-      end: pos + length,
-      source,
-      original_text: originalText,
-    };
-
-    if (this.segments.length === 0) {
-      this.segments.push(newSeg);
-      return;
-    }
-
-    // Find which segment contains `pos`
-    let idx = this.findSegmentAt(pos);
-
-    if (idx === -1) {
-      // Position is at or past the end — append
-      // But first shift nothing; just push
-      this.segments.push(newSeg);
-      return;
-    }
-
-    const seg = this.segments[idx];
-
-    // If inserting inside a same-source segment (and it's 'typed'), just extend it
-    if (source === "typed" && seg.source === "typed" && pos >= seg.start && pos <= seg.end) {
-      seg.end += length;
-      // Shift all subsequent segments
-      for (let i = idx + 1; i < this.segments.length; i++) {
-        this.segments[i].start += length;
-        this.segments[i].end += length;
-      }
-      return;
-    }
-
-    // Split the existing segment at `pos` and insert new segment between
-    const parts: ProvenanceSegment[] = [];
-
-    if (pos > seg.start) {
-      parts.push({ start: seg.start, end: pos, source: seg.source, original_text: seg.original_text });
-    }
-    parts.push(newSeg);
-    if (pos < seg.end) {
-      parts.push({ start: pos + length, end: seg.end + length, source: seg.source, original_text: seg.original_text });
-    }
-
-    // Shift all subsequent segments
-    for (let i = idx + 1; i < this.segments.length; i++) {
-      this.segments[i].start += length;
-      this.segments[i].end += length;
-    }
-
-    this.segments.splice(idx, 1, ...parts);
-  }
-
-  private handleDelete(from: number, to: number) {
-    const deleteLen = to - from;
-    const newSegments: ProvenanceSegment[] = [];
-
-    for (const seg of this.segments) {
-      if (seg.end <= from) {
-        // Entirely before deletion — keep as-is
-        newSegments.push(seg);
-      } else if (seg.start >= to) {
-        // Entirely after deletion — shift left
-        newSegments.push({
-          ...seg,
-          start: seg.start - deleteLen,
-          end: seg.end - deleteLen,
-        });
-      } else {
-        // Segment overlaps with deletion range
-        if (seg.start < from) {
-          // Part before deletion survives
-          newSegments.push({ ...seg, end: from });
-        }
-        if (seg.end > to) {
-          // Part after deletion survives (shifted)
-          newSegments.push({
-            ...seg,
-            start: from,
-            end: seg.end - deleteLen,
-          });
-        }
-        // If fully contained, segment is removed (nothing pushed)
-      }
-    }
-
-    this.segments = newSegments;
-  }
 
   private mergeAdjacent() {
     if (this.segments.length <= 1) return;
@@ -451,15 +418,6 @@ export class ProvenanceTracker {
       }
     }
     this.segments = merged;
-  }
-
-  private findSegmentAt(pos: number): number {
-    for (let i = 0; i < this.segments.length; i++) {
-      if (pos >= this.segments[i].start && pos <= this.segments[i].end) {
-        return i;
-      }
-    }
-    return -1;
   }
 
   private clampToLength(len: number) {

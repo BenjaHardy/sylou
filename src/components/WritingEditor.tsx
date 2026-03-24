@@ -108,82 +108,17 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       updateContent(newHTML);
       onWritingActivity?.();
 
-      // Track provenance changes
-      const tracker = getTracker();
-      const newLen = e.state.doc.content.size;
-      const oldLen = prevDocLenRef.current;
-
-      if (newLen !== oldLen && transaction.docChanged) {
-        const normalize = (t: string) => t.trim().replace(/\s+/g, " ");
-        let hasChanges = false;
-
-        // Process each step immediately to avoid coordinate drift
-        transaction.steps.forEach((step, stepIndex) => {
-          const stepMap = step.getMap();
-          // Get the doc state after this step (steps are applied sequentially)
-          const docAfterStep = stepIndex < transaction.steps.length - 1
-            ? transaction.docs[stepIndex + 1]
-            : e.state.doc;
-          const docBeforeStep = stepIndex === 0
-            ? transaction.before
-            : transaction.docs[stepIndex];
-
-          stepMap.forEach((oldStart, oldEnd, newStart, newEnd) => {
-            const insertLength = newEnd - newStart;
-            const deleteLength = oldEnd - oldStart;
-            let insertedText = "";
-            let preserveSource: false | 'within' | 'tail' = false;
-
-            if (insertLength > 0) {
-              try {
-                insertedText = docAfterStep.textBetween(newStart, newEnd, "");
-              } catch {
-                insertedText = "";
-              }
-            }
-
-            // Detect structural reorganizations (paragraph merges)
-            if (deleteLength > 0 && insertLength > 0 && insertedText) {
-              try {
-                const normalizedNew = normalize(insertedText);
-                if (normalizedNew.length > 0) {
-                  const oldText = docBeforeStep.textBetween(oldStart, oldEnd, "");
-                  const normalizedOld = normalize(oldText);
-                  if (normalizedOld.includes(normalizedNew)) {
-                    preserveSource = 'within';
-                  } else {
-                    const beforeSize = docBeforeStep.content.size;
-                    if (oldEnd < beforeSize) {
-                      const tailEnd = Math.min(beforeSize, oldEnd + insertLength + 50);
-                      const tailText = docBeforeStep.textBetween(oldEnd, tailEnd, "");
-                      if (normalize(tailText).includes(normalizedNew)) {
-                        preserveSource = 'tail';
-                      }
-                    }
-                  }
-                }
-              } catch {
-                // fall through
-              }
-            }
-
-            tracker.handleSingleChange({
-              from: oldStart,
-              to: oldEnd,
-              insertLength,
-              insertedText,
-              preserveSource,
-            });
-            hasChanges = true;
-          });
+      // Track provenance changes using mapping-based approach
+      if (transaction.docChanged) {
+        const tracker = getTracker();
+        tracker.applyTransaction({
+          mapping: transaction.mapping,
+          doc: e.state.doc,
         });
-
-        if (hasChanges) {
-          scheduleSave();
-        }
+        scheduleSave();
       }
 
-      prevDocLenRef.current = newLen;
+      prevDocLenRef.current = e.state.doc.content.size;
     },
   });
 
