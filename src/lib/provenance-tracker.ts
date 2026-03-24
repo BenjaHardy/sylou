@@ -227,13 +227,13 @@ export class ProvenanceTracker {
   handleTransaction(
     oldLength: number,
     newLength: number,
-    changes: { from: number; to: number; insertLength: number; insertedText: string }[]
+    changes: { from: number; to: number; insertLength: number; insertedText: string; preserveSource?: boolean }[]
   ) {
     // Process changes in reverse order (from end to start) to maintain positions
     const sorted = [...changes].sort((a, b) => b.from - a.from);
 
     for (const change of sorted) {
-      const { from, to, insertLength, insertedText } = change;
+      const { from, to, insertLength, insertedText, preserveSource } = change;
       const deleteLength = to - from;
 
       if (deleteLength > 0 && insertLength === 0) {
@@ -244,10 +244,19 @@ export class ProvenanceTracker {
         const source = this.classifyInsertionFull(insertedText);
         this.handleInsert(from, insertLength, source, insertedText);
       } else if (deleteLength > 0 && insertLength > 0) {
-        // Replacement (delete then insert)
-        const source = this.classifyInsertionFull(insertedText);
-        this.handleDelete(from, to);
-        this.handleInsert(from, insertLength, source, insertedText);
+        if (preserveSource) {
+          // Structural reorganization — only delete the net removed characters
+          // The surviving text (tail) keeps its original provenance
+          const netDeleted = deleteLength - insertLength;
+          if (netDeleted > 0) {
+            this.handleDelete(from, from + netDeleted);
+          }
+        } else {
+          // Genuine replacement (delete then insert)
+          const source = this.classifyInsertionFull(insertedText);
+          this.handleDelete(from, to);
+          this.handleInsert(from, insertLength, source, insertedText);
+        }
       }
     }
 
