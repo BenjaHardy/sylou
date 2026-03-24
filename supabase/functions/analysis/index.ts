@@ -565,6 +565,9 @@ Character-count breakdown by provenance type:
         outcome: string;
         char_count_original: number | null;
         char_count_result: number | null;
+        selected_text_preview: string | null;
+        ai_response_preview: string | null;
+        instruction_text: string | null;
       }>) ?? []
     );
 
