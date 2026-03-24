@@ -44,6 +44,8 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [aiAnchorRect, setAiAnchorRect] = useState<DOMRect | null>(null);
   const [aiSelectedText, setAiSelectedText] = useState("");
+  const [aiSelectionFrom, setAiSelectionFrom] = useState(0);
+  const [aiSelectionTo, setAiSelectionTo] = useState(0);
 
   const editor = useEditor({
     extensions: [
