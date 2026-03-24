@@ -322,30 +322,6 @@ export class ProvenanceTracker {
     return this.classifyInsertionFull(text);
   }
 
-  /**
-   * Legacy method — kept for backward compatibility.
-   */
-  handleTransaction(
-    _oldLength: number,
-    _newLength: number,
-    _changes: { from: number; to: number; insertLength: number; insertedText: string; preserveSource?: boolean }[]
-  ) {
-    // No-op — use applyTransaction instead
-  }
-
-  /**
-   * Legacy method — kept for backward compatibility.
-   */
-  handleSingleChange(_change: {
-    from: number;
-    to: number;
-    insertLength: number;
-    insertedText: string;
-    preserveSource: 'within' | 'tail' | false;
-  }) {
-    // No-op — use applyTransaction instead
-  }
-
 
   /** Called from paste event handler before the transaction fires */
   classifyPaste(pastedText: string): { source: SegmentSource; originalText: string | null } {
