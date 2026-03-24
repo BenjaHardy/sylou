@@ -234,6 +234,9 @@ function buildEditorStatsString(
     outcome: string;
     char_count_original: number | null;
     char_count_result: number | null;
+    selected_text_preview?: string | null;
+    ai_response_preview?: string | null;
+    instruction_text?: string | null;
   }>
 ): string {
   if (!actions || actions.length === 0) {
@@ -265,6 +268,28 @@ function buildEditorStatsString(
   if (acceptedResultChars > 0 && totalOrigChars > 0) {
     const pct = Math.round((acceptedResultChars / totalOrigChars) * 100);
     lines.push(`Estimated % of writing from accepted AI suggestions: ~${pct}%`);
+  }
+
+  // Append detailed per-action log (most recent 20) so the LLM can see
+  // the user's original text vs the AI result — critical for cases where
+  // user-written text was merely grammar-checked or lightly rewritten.
+  const detailedActions = actions.slice(0, 20);
+  if (detailedActions.some(a => a.selected_text_preview || a.ai_response_preview)) {
+    lines.push("");
+    lines.push("--- Detailed action log (most recent 20) ---");
+    for (let i = 0; i < detailedActions.length; i++) {
+      const a = detailedActions[i];
+      lines.push(`\n--- Action ${i + 1}: ${a.action_type} (${a.outcome}) ---`);
+      if (a.selected_text_preview) {
+        lines.push(`Original (user-written): "${a.selected_text_preview}"`);
+      }
+      if (a.ai_response_preview) {
+        lines.push(`AI result: "${a.ai_response_preview}"`);
+      }
+      if (a.instruction_text) {
+        lines.push(`User instruction: "${a.instruction_text}"`);
+      }
+    }
   }
 
   return lines.join("\n");
@@ -419,8 +444,9 @@ Deno.serve(async (req) => {
           .single(),
         supabase
           .from("ai_editor_actions")
-          .select("action_type, outcome, char_count_original, char_count_result")
-          .eq("project_id", projectId),
+          .select("action_type, outcome, char_count_original, char_count_result, selected_text_preview, ai_response_preview, instruction_text, created_at")
+          .eq("project_id", projectId)
+          .order("created_at", { ascending: false }),
         supabase
           .from("project_stats")
           .select("*")
@@ -539,6 +565,9 @@ Character-count breakdown by provenance type:
         outcome: string;
         char_count_original: number | null;
         char_count_result: number | null;
+        selected_text_preview: string | null;
+        ai_response_preview: string | null;
+        instruction_text: string | null;
       }>) ?? []
     );
 
