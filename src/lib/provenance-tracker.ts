@@ -229,34 +229,52 @@ export class ProvenanceTracker {
     newLength: number,
     changes: { from: number; to: number; insertLength: number; insertedText: string; preserveSource?: boolean }[]
   ) {
-    // Process changes in reverse order (from end to start) to maintain positions
+    // Legacy method — kept for backward compatibility
     const sorted = [...changes].sort((a, b) => b.from - a.from);
-
     for (const change of sorted) {
-      const { from, to, insertLength, insertedText, preserveSource } = change;
-      const deleteLength = to - from;
+      this.handleSingleChange({
+        ...change,
+        preserveSource: change.preserveSource ? 'within' : false,
+      });
+    }
+  }
 
-      if (deleteLength > 0 && insertLength === 0) {
-        // Pure deletion
-        this.handleDelete(from, to);
-      } else if (deleteLength === 0 && insertLength > 0) {
-        // Pure insertion
-        const source = this.classifyInsertionFull(insertedText);
-        this.handleInsert(from, insertLength, source, insertedText);
-      } else if (deleteLength > 0 && insertLength > 0) {
-        if (preserveSource) {
-          // Structural reorganization — only delete the net removed characters
-          // The surviving text (tail) keeps its original provenance
-          const netDeleted = deleteLength - insertLength;
-          if (netDeleted > 0) {
-            this.handleDelete(from, from + netDeleted);
-          }
-        } else {
-          // Genuine replacement (delete then insert)
-          const source = this.classifyInsertionFull(insertedText);
-          this.handleDelete(from, to);
-          this.handleInsert(from, insertLength, source, insertedText);
+  /**
+   * Process a single change immediately. Called per-step to avoid coordinate drift.
+   */
+  handleSingleChange(change: {
+    from: number;
+    to: number;
+    insertLength: number;
+    insertedText: string;
+    preserveSource: 'within' | 'tail' | false;
+  }) {
+    const { from, to, insertLength, insertedText, preserveSource } = change;
+    const deleteLength = to - from;
+
+    if (deleteLength > 0 && insertLength === 0) {
+      // Pure deletion
+      this.handleDelete(from, to);
+    } else if (deleteLength === 0 && insertLength > 0) {
+      // Pure insertion
+      const source = this.classifyInsertionFull(insertedText);
+      this.handleInsert(from, insertLength, source, insertedText);
+    } else if (deleteLength > 0 && insertLength > 0) {
+      if (preserveSource === 'within') {
+        // Structural reorganization within the deleted range
+        const netDeleted = deleteLength - insertLength;
+        if (netDeleted > 0) {
+          this.handleDelete(from, from + netDeleted);
         }
+      } else if (preserveSource === 'tail') {
+        // Cross-paragraph deletion: surviving text comes from after oldEnd
+        // Pure delete the full range — segments after `to` shift left naturally
+        this.handleDelete(from, to);
+      } else {
+        // Genuine replacement (delete then insert)
+        const source = this.classifyInsertionFull(insertedText);
+        this.handleDelete(from, to);
+        this.handleInsert(from, insertLength, source, insertedText);
       }
     }
 

@@ -115,9 +115,19 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
 
       if (newLen !== oldLen && transaction.docChanged) {
         const normalize = (t: string) => t.trim().replace(/\s+/g, " ");
-        const changes: { from: number; to: number; insertLength: number; insertedText: string; preserveSource?: boolean }[] = [];
-        transaction.steps.forEach((step) => {
+        let hasChanges = false;
+
+        // Process each step immediately to avoid coordinate drift
+        transaction.steps.forEach((step, stepIndex) => {
           const stepMap = step.getMap();
+          // Get the doc state after this step (steps are applied sequentially)
+          const docAfterStep = stepIndex < transaction.steps.length - 1
+            ? transaction.docs[stepIndex + 1]
+            : e.state.doc;
+          const docBeforeStep = stepIndex === 0
+            ? transaction.before
+            : transaction.docs[stepIndex];
+
           stepMap.forEach((oldStart, oldEnd, newStart, newEnd) => {
             const insertLength = newEnd - newStart;
             const deleteLength = oldEnd - oldStart;
@@ -126,7 +136,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
 
             if (insertLength > 0) {
               try {
-                insertedText = e.state.doc.textBetween(newStart, newEnd, "");
+                insertedText = docAfterStep.textBetween(newStart, newEnd, "");
               } catch {
                 insertedText = "";
               }
@@ -137,62 +147,38 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
               try {
                 const normalizedNew = normalize(insertedText);
                 if (normalizedNew.length > 0) {
-                  // Check within the deleted range (handles mid-paragraph edits)
-                  const oldText = transaction.before.textBetween(oldStart, oldEnd, "");
+                  const oldText = docBeforeStep.textBetween(oldStart, oldEnd, "");
                   const normalizedOld = normalize(oldText);
                   if (normalizedOld.includes(normalizedNew)) {
                     preserveSource = 'within';
-                    console.log('[PROVENANCE DEBUG] preserveSource=within', {
-                      oldStart, oldEnd, deleteLength, insertLength,
-                      oldText: oldText.substring(0, 100),
-                      insertedText: insertedText.substring(0, 100),
-                    });
                   } else {
-                    // Check text AFTER the deleted range (handles cross-paragraph deletions
-                    // where ProseMirror merges surviving tail content into the replacement)
-                    const beforeSize = transaction.before.content.size;
+                    const beforeSize = docBeforeStep.content.size;
                     if (oldEnd < beforeSize) {
                       const tailEnd = Math.min(beforeSize, oldEnd + insertLength + 50);
-                      const tailText = transaction.before.textBetween(oldEnd, tailEnd, "");
+                      const tailText = docBeforeStep.textBetween(oldEnd, tailEnd, "");
                       if (normalize(tailText).includes(normalizedNew)) {
                         preserveSource = 'tail';
-                        console.log('[PROVENANCE DEBUG] preserveSource=tail', {
-                          oldStart, oldEnd, deleteLength, insertLength,
-                          oldText: oldText.substring(0, 100),
-                          tailText: tailText.substring(0, 100),
-                          insertedText: insertedText.substring(0, 100),
-                        });
                       }
                     }
                   }
-                  if (!preserveSource) {
-                    console.log('[PROVENANCE DEBUG] preserveSource=false (no match)', {
-                      oldStart, oldEnd, deleteLength, insertLength,
-                      oldText: oldText.substring(0, 100),
-                      insertedText: insertedText.substring(0, 100),
-                    });
-                  }
                 }
-              } catch (err) {
-                console.log('[PROVENANCE DEBUG] error in detection', err);
+              } catch {
+                // fall through
               }
             }
 
-            const changeObj = {
+            tracker.handleSingleChange({
               from: oldStart,
               to: oldEnd,
               insertLength,
               insertedText,
-              preserveSource: preserveSource !== false,
-            };
-            console.log('[PROVENANCE DEBUG] change pushed', { ...changeObj, preserveSource });
-
-            changes.push(changeObj);
+              preserveSource,
+            });
+            hasChanges = true;
           });
         });
 
-        if (changes.length > 0) {
-          tracker.handleTransaction(oldLen, newLen, changes);
+        if (hasChanges) {
           scheduleSave();
         }
       }
