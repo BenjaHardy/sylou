@@ -114,12 +114,16 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       const oldLen = prevDocLenRef.current;
 
       if (newLen !== oldLen && transaction.docChanged) {
-        const changes: { from: number; to: number; insertLength: number; insertedText: string }[] = [];
+        const normalize = (t: string) => t.trim().replace(/\s+/g, " ");
+        const changes: { from: number; to: number; insertLength: number; insertedText: string; preserveSource?: boolean }[] = [];
         transaction.steps.forEach((step) => {
           const stepMap = step.getMap();
           stepMap.forEach((oldStart, oldEnd, newStart, newEnd) => {
             const insertLength = newEnd - newStart;
+            const deleteLength = oldEnd - oldStart;
             let insertedText = "";
+            let preserveSource = false;
+
             if (insertLength > 0) {
               try {
                 insertedText = e.state.doc.textBetween(newStart, newEnd, "");
@@ -127,11 +131,27 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
                 insertedText = "";
               }
             }
+
+            // Detect structural reorganizations (paragraph merges)
+            if (deleteLength > 0 && insertLength > 0 && insertedText) {
+              try {
+                const oldText = transaction.before.textBetween(oldStart, oldEnd, "");
+                const normalizedOld = normalize(oldText);
+                const normalizedNew = normalize(insertedText);
+                if (normalizedNew.length > 0 && normalizedOld.includes(normalizedNew)) {
+                  preserveSource = true;
+                }
+              } catch {
+                // If we can't access old text, fall through to default handling
+              }
+            }
+
             changes.push({
               from: oldStart,
               to: oldEnd,
               insertLength,
               insertedText,
+              preserveSource,
             });
           });
         });
