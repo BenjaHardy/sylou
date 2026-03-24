@@ -247,7 +247,8 @@ Deno.serve(async (req) => {
         // Log to chat_messages and collect inserted rows
         const insertedMessages = [];
 
-        const userPromptContent = `[Propose] Selected: "${(selected_text || "").slice(0, 200)}"\nInstruction: ${instruction || ""}`;
+        const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
+        const userPromptContent = `[Propose] Selected: "${(selected_text || "").slice(0, 200)}"${sourceNote}\nInstruction: ${instruction || ""}`;
         const { data: promptMsg } = await supabase.from("chat_messages").insert({
           thread_id,
           role: "user",
