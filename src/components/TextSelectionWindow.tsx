@@ -204,6 +204,7 @@ export function TextSelectionWindow({
       const stageTimer = setTimeout(() => setLoadingStage("preparing"), 3000);
 
       try {
+        const selected_text_source = getSourceBreakdown();
         const { data, error } = await supabase.functions.invoke("context-prompt", {
           body: {
             project_id: projectId,
@@ -213,6 +214,7 @@ export function TextSelectionWindow({
             instruction: userInstruction,
             source_module: "editor",
             concise_mode: conciseMode ?? false,
+            ...(selected_text_source ? { selected_text_source } : {}),
           },
         });
 
