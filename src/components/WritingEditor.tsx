@@ -44,6 +44,8 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [aiAnchorRect, setAiAnchorRect] = useState<DOMRect | null>(null);
   const [aiSelectedText, setAiSelectedText] = useState("");
+  const [aiSelectionFrom, setAiSelectionFrom] = useState(0);
+  const [aiSelectionTo, setAiSelectionTo] = useState(0);
 
   const editor = useEditor({
     extensions: [
@@ -166,8 +168,14 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   const handleOpenAIPanel = useCallback((rect: DOMRect, text: string) => {
     setAiAnchorRect(rect);
     setAiSelectedText(text);
+    // Capture selection positions for provenance source breakdown
+    if (editor) {
+      const { from, to } = editor.state.selection;
+      setAiSelectionFrom(from);
+      setAiSelectionTo(to);
+    }
     setAiPanelOpen(true);
-  }, []);
+  }, [editor]);
 
   const handleAcceptProposal = useCallback(
     (replacementText: string) => {
@@ -226,6 +234,8 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
             onChatRefresh={onChatRefresh}
             provenanceTracker={getTracker()}
             conciseMode={conciseMode}
+            selectionFrom={aiSelectionFrom}
+            selectionTo={aiSelectionTo}
           />
         )}
       </div>

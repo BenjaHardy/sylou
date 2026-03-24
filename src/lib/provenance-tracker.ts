@@ -99,6 +99,53 @@ export class ProvenanceTracker {
   }
 
   /**
+   * Returns a human-readable source breakdown string for a given character range.
+   * E.g., "85% [t], 15% [ce]". Merges chat_user into typed for display.
+   *
+   * Known limitation: same as getDominantSource — mixed-source ranges are
+   * summarised by percentage rather than preserving per-segment breakdown.
+   */
+  getSourceBreakdown(from: number, to: number): string {
+    if (from >= to) return "100% [t]";
+
+    const coverage = new Map<SegmentSource, number>();
+    for (const seg of this.segments) {
+      if (seg.end <= from || seg.start >= to) continue;
+      const overlapStart = Math.max(seg.start, from);
+      const overlapEnd = Math.min(seg.end, to);
+      const len = overlapEnd - overlapStart;
+      if (len > 0) {
+        coverage.set(seg.source, (coverage.get(seg.source) ?? 0) + len);
+      }
+    }
+
+    if (coverage.size === 0) return "100% [t]";
+
+    // Merge chat_user into typed for display
+    const displayMap = new Map<string, number>();
+    const tagMap: Record<string, string> = {
+      typed: "[t]",
+      chat_user: "[t]",
+      chat_ai: "[cc]",
+      ai_editor: "[ai]",
+      external: "[ce]",
+    };
+
+    for (const [source, len] of coverage) {
+      const tag = tagMap[source] ?? `[${source}]`;
+      displayMap.set(tag, (displayMap.get(tag) ?? 0) + len);
+    }
+
+    const totalLen = Array.from(displayMap.values()).reduce((a, b) => a + b, 0);
+    const entries = Array.from(displayMap.entries())
+      .map(([tag, len]) => ({ tag, pct: Math.round((len / totalLen) * 100) }))
+      .filter(e => e.pct > 0)
+      .sort((a, b) => b.pct - a.pct);
+
+    return entries.map(e => `${e.pct}% ${e.tag}`).join(", ");
+  }
+
+  /**
    * Check (without clearing) if pasted text matches the internal editor clipboard.
    * Returns the stored source or null if no match.
    */

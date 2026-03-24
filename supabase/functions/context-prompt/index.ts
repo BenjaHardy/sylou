@@ -211,6 +211,7 @@ Deno.serve(async (req) => {
     // --- Parse body ---
     const body = await req.json();
     const { project_id, thread_id, action_type, selected_text, instruction, source_module } = body;
+    const selectedTextSource: string | undefined = body.selected_text_source;
 
     // ── CONFIRM endpoint ────────────────────────────────────────────────
     if (body.confirm !== undefined) {
@@ -246,7 +247,8 @@ Deno.serve(async (req) => {
         // Log to chat_messages and collect inserted rows
         const insertedMessages = [];
 
-        const userPromptContent = `[Propose] Selected: "${(selected_text || "").slice(0, 200)}"\nInstruction: ${instruction || ""}`;
+        const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
+        const userPromptContent = `[Propose] Selected: "${(selected_text || "").slice(0, 200)}"${sourceNote}\nInstruction: ${instruction || ""}`;
         const { data: promptMsg } = await supabase.from("chat_messages").insert({
           thread_id,
           role: "user",
@@ -493,7 +495,9 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
         char_count_original: selected_text.length,
         char_count_result: aiResponse.length,
         outcome: action_type === "ask" ? "delivered" : "pending",
-        instruction_text: instruction.slice(0, 1000),
+        instruction_text: selectedTextSource
+          ? `${instruction.slice(0, 1000)} | Source: ${selectedTextSource}`
+          : instruction.slice(0, 1000),
       })
       .select("id")
       .single();
@@ -524,7 +528,8 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
     const insertedMessages = [];
 
     if (action_type === "ask") {
-      const userPromptContent = `[Ask] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"\nQuestion: ${instruction}`;
+      const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
+      const userPromptContent = `[Ask] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\nQuestion: ${instruction}`;
 
       const { data: promptMsg } = await supabase.from("chat_messages").insert({
         thread_id,

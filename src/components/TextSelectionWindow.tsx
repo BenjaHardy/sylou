@@ -32,6 +32,8 @@ interface Props {
   onChatRefresh?: () => void;
   provenanceTracker?: ProvenanceTracker;
   conciseMode?: boolean;
+  selectionFrom?: number;
+  selectionTo?: number;
 }
 
 const NORMAL_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
@@ -84,6 +86,8 @@ export function TextSelectionWindow({
   onChatRefresh,
   provenanceTracker,
   conciseMode,
+  selectionFrom,
+  selectionTo,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("actions");
   const [activeAction, setActiveAction] = useState<ActionId | null>(null);
@@ -135,17 +139,26 @@ export function TextSelectionWindow({
     };
   }, [onClose]);
 
+  const getSourceBreakdown = useCallback(() => {
+    if (provenanceTracker && selectionFrom != null && selectionTo != null && selectionFrom < selectionTo) {
+      return provenanceTracker.getSourceBreakdown(selectionFrom, selectionTo);
+    }
+    return undefined;
+  }, [provenanceTracker, selectionFrom, selectionTo]);
+
   const callEditorAction = useCallback(
     async (actionType: string, targetLanguage?: string) => {
       setPhase("loading");
       setLoadingStage("preparing");
       try {
+        const selected_text_source = getSourceBreakdown();
         const { data, error } = await supabase.functions.invoke("editor-action", {
           body: {
             project_id: projectId,
             action_type: actionType,
             selected_text: selectedText,
             ...(targetLanguage ? { target_language: targetLanguage } : {}),
+            ...(selected_text_source ? { selected_text_source } : {}),
           },
         });
 
@@ -173,7 +186,7 @@ export function TextSelectionWindow({
         setPhase("actions");
       }
     },
-    [projectId, selectedText]
+    [projectId, selectedText, getSourceBreakdown]
   );
 
   const callContextPrompt = useCallback(
@@ -191,6 +204,7 @@ export function TextSelectionWindow({
       const stageTimer = setTimeout(() => setLoadingStage("preparing"), 3000);
 
       try {
+        const selected_text_source = getSourceBreakdown();
         const { data, error } = await supabase.functions.invoke("context-prompt", {
           body: {
             project_id: projectId,
@@ -200,6 +214,7 @@ export function TextSelectionWindow({
             instruction: userInstruction,
             source_module: "editor",
             concise_mode: conciseMode ?? false,
+            ...(selected_text_source ? { selected_text_source } : {}),
           },
         });
 
@@ -239,7 +254,7 @@ export function TextSelectionWindow({
         setPhase("actions");
       }
     },
-    [projectId, threadId, selectedText, onAskComplete, onClose]
+    [projectId, threadId, selectedText, onAskComplete, onClose, getSourceBreakdown]
   );
 
   const handleAction = useCallback(

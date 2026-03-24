@@ -72,6 +72,7 @@ Deno.serve(async (req) => {
     const actionType: string = body.action_type;
     const selectedText: string = body.selected_text;
     const targetLanguage: string | undefined = body.target_language;
+    const selectedTextSource: string | undefined = body.selected_text_source;
 
     if (!projectId || !actionType || !selectedText) {
       return jsonResponse(
@@ -152,6 +153,14 @@ Deno.serve(async (req) => {
     const estimatedTokens = Math.ceil((inputChars + outputChars) / 4);
 
     // --- Log to ai_editor_actions (outcome = 'pending') ---
+    // Build instruction_text with source breakdown appended
+    let instructionText: string | null = actionType === "translate" ? `translate:${targetLanguage}` : null;
+    if (selectedTextSource) {
+      instructionText = instructionText
+        ? `${instructionText} | Source: ${selectedTextSource}`
+        : `Source: ${selectedTextSource}`;
+    }
+
     const { data: actionRow, error: actionErr } = await supabase
       .from("ai_editor_actions")
       .insert({
@@ -162,7 +171,7 @@ Deno.serve(async (req) => {
         char_count_original: selectedText.length,
         char_count_result: proposedText.length,
         outcome: "pending",
-        instruction_text: actionType === "translate" ? `translate:${targetLanguage}` : null,
+        instruction_text: instructionText,
       })
       .select("id")
       .single();

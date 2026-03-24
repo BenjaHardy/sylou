@@ -281,13 +281,25 @@ function buildEditorStatsString(
       const a = detailedActions[i];
       lines.push(`\n--- Action ${i + 1}: ${a.action_type} (${a.outcome}) ---`);
       if (a.selected_text_preview) {
-        lines.push(`Original (user-written): "${a.selected_text_preview}"`);
+        // Parse source info from instruction_text if present (after "| Source:" or "Source:")
+        let sourceLabel = "source unknown";
+        if (a.instruction_text) {
+          const sourceMatch = a.instruction_text.match(/(?:\|\s*)?Source:\s*(.+?)$/);
+          if (sourceMatch) {
+            sourceLabel = `source: ${sourceMatch[1].trim()}`;
+          }
+        }
+        lines.push(`Original (${sourceLabel}): "${a.selected_text_preview}"`);
       }
       if (a.ai_response_preview) {
         lines.push(`AI result: "${a.ai_response_preview}"`);
       }
       if (a.instruction_text) {
-        lines.push(`User instruction: "${a.instruction_text}"`);
+        // Strip the source info before displaying instruction
+        const cleanInstruction = a.instruction_text.replace(/\s*\|\s*Source:\s*.+$/, "").trim();
+        if (cleanInstruction && cleanInstruction !== "Source:") {
+          lines.push(`User instruction: "${cleanInstruction}"`);
+        }
       }
     }
   }
