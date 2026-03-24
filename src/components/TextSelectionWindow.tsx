@@ -358,6 +358,7 @@ export function TextSelectionWindow({
             selected_text: selectedText,
             instruction: pendingInstruction,
             ai_response: editableText,
+            ...(pendingSourceBreakdown ? { selected_text_source: pendingSourceBreakdown } : {}),
           },
         });
         if (error) {
