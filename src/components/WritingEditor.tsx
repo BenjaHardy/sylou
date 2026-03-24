@@ -234,6 +234,8 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
             onChatRefresh={onChatRefresh}
             provenanceTracker={getTracker()}
             conciseMode={conciseMode}
+            selectionFrom={aiSelectionFrom}
+            selectionTo={aiSelectionTo}
           />
         )}
       </div>
