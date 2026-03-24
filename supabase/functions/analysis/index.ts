@@ -169,15 +169,14 @@ function computeProvenanceStats(
   content: string,
   segmentMap: Array<{ start: number; end: number; source?: string; type?: string }>
 ): Record<string, number> {
-  const totalLen = content.length;
-  if (totalLen === 0) return { typed: 100, copy_chat: 0, copy_external: 0, ai: 0 };
-
-  const counts: Record<string, number> = { typed: 0, copy_chat: 0, copy_external: 0, ai: 0 };
-
   if (!segmentMap || segmentMap.length === 0) {
+    // Fallback: strip HTML tags for plain text length
+    const plainLen = content.replace(/<[^>]*>/g, "").length;
+    if (plainLen === 0) return { typed: 100, copy_chat: 0, copy_external: 0, ai: 0 };
     return { typed: 100, copy_chat: 0, copy_external: 0, ai: 0 };
   }
 
+  const counts: Record<string, number> = { typed: 0, copy_chat: 0, copy_external: 0, ai: 0 };
   const sorted = [...segmentMap].sort((a, b) => a.start - b.start);
   let cursor = 0;
 
@@ -187,12 +186,13 @@ function computeProvenanceStats(
     }
     const normType = normalizeSource(seg);
     counts[normType] = (counts[normType] || 0) + (seg.end - seg.start);
-    cursor = seg.end;
+    cursor = Math.max(cursor, seg.end);
   }
 
-  if (cursor < totalLen) {
-    counts["typed"] += totalLen - cursor;
-  }
+  // Use segment-derived total length (TipTap coordinate system) instead of
+  // raw HTML content.length, so percentages align with the highlighted text view.
+  const totalLen = cursor;
+  if (totalLen === 0) return { typed: 100, copy_chat: 0, copy_external: 0, ai: 0 };
 
   // Convert to percentages
   const result: Record<string, number> = {};
