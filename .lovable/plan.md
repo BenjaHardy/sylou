@@ -1,47 +1,30 @@
 
 
-## Fix: Per-Step Processing & Within/Tail Distinction
+## Cleanup: Remove Dead Code Artifacts
 
-### Problem
-Two bugs cause AI text to be reclassified as `[t]` when deleting lines:
+The codebase has three categories of dead code left over from the refactoring:
 
-1. **Collapsed match type**: `preserveSource` is collapsed from `'within'|'tail'` to a boolean before reaching the tracker. The `'tail'` case needs different handling — pure delete, no insert — but gets the same "delete only the difference" logic as `'within'`.
+### 1. Dead legacy no-op methods in `src/lib/provenance-tracker.ts`
+- **`handleTransaction()`** (lines 328-334) — no-op stub, never called
+- **`handleSingleChange()`** (lines 339-347) — no-op stub, never called
 
-2. **Multi-step coordinate drift**: All steps in a transaction are collected into a flat array and sorted. But each step's coordinates are relative to the doc state *after* the previous step. Processing them together with a sort corrupts the segment map.
+Both reference the old `preserveSource` types (`'within' | 'tail'`) that no longer exist anywhere in the codebase. Safe to remove entirely.
 
-### Changes
+### 2. Dead `threeGramOverlap` function in `supabase/functions/analysis/index.ts`
+- **`threeGramOverlap()`** (lines 314-334) — defined but never called after the 50% reclassification rule was removed
 
-**File 1: `src/components/WritingEditor.tsx`** (lines ~106-200)
+Safe to remove. The `normalise()` and `ngrams()` functions (lines 336-351) are still used by `computeSimilarityPct`, so those stay.
 
-- Replace batch-collect-then-process with **per-step immediate processing**:
-  - For each step in `transaction.steps`, extract its changes, then immediately call `tracker.handleSingleChange(...)` for each change
-  - Pass the actual `preserveSource` subtype (`'within' | 'tail' | false`) instead of collapsing to boolean
-  - Remove the `changes` array accumulation and the final `tracker.handleTransaction()` call
-  - Call `scheduleSave()` once after all steps are processed
-- Remove all `console.log('[PROVENANCE DEBUG]')` statements
+### 3. Everything else is clean
+- `WritingEditor.tsx` — no leftover substring-matching code, no `preserveSource` references
+- All clipboard/classification logic in the tracker is actively used
+- No unused imports detected
 
-**File 2: `src/lib/provenance-tracker.ts`** (lines ~227-264)
+### Summary of changes
+| File | Action |
+|------|--------|
+| `src/lib/provenance-tracker.ts` | Remove `handleTransaction` and `handleSingleChange` no-op methods (~20 lines) |
+| `supabase/functions/analysis/index.ts` | Remove `threeGramOverlap` function (~21 lines) |
 
-- Add a new public method `handleSingleChange(change)` that processes one change at a time:
-  ```
-  handleSingleChange(change: {
-    from: number; to: number;
-    insertLength: number; insertedText: string;
-    preserveSource: 'within' | 'tail' | false;
-  })
-  ```
-- Logic branches:
-  - `preserveSource === 'within'`: delete only `[from, from + netDeleted]` — surviving text within the deleted range keeps its provenance
-  - `preserveSource === 'tail'`: pure delete `[from, to]`, skip insert entirely — segments after `to` shift left naturally with their original provenance
-  - `false`: current behavior — classify and delete+insert
-- Call `mergeAdjacent()` at the end of each single change
-- Keep `handleTransaction` as-is for backward compatibility (unused but harmless)
-
-### Why this fixes both issues
-
-- Per-step processing ensures each step's coordinates match the tracker's current state — no drift
-- The `'tail'` case correctly does a pure delete, letting the surviving AI segments shift left with their `[ai]` source intact
-
-### No other changes needed
-No DB, edge function, or UI changes.
+No functional impact — purely dead code removal.
 
