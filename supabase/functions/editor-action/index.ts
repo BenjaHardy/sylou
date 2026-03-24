@@ -72,6 +72,7 @@ Deno.serve(async (req) => {
     const actionType: string = body.action_type;
     const selectedText: string = body.selected_text;
     const targetLanguage: string | undefined = body.target_language;
+    const selectedTextSource: string | undefined = body.selected_text_source;
 
     if (!projectId || !actionType || !selectedText) {
       return jsonResponse(
