@@ -168,8 +168,14 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   const handleOpenAIPanel = useCallback((rect: DOMRect, text: string) => {
     setAiAnchorRect(rect);
     setAiSelectedText(text);
+    // Capture selection positions for provenance source breakdown
+    if (editor) {
+      const { from, to } = editor.state.selection;
+      setAiSelectionFrom(from);
+      setAiSelectionTo(to);
+    }
     setAiPanelOpen(true);
-  }, []);
+  }, [editor]);
 
   const handleAcceptProposal = useCallback(
     (replacementText: string) => {
