@@ -99,6 +99,7 @@ export function TextSelectionWindow({
   // For propose confirm flow
   const [pendingSummaryUpdate, setPendingSummaryUpdate] = useState<string | null>(null);
   const [pendingInstruction, setPendingInstruction] = useState<string>("");
+  const [pendingSourceBreakdown, setPendingSourceBreakdown] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const actions = tutorMode ? TUTOR_ACTIONS : NORMAL_ACTIONS;
@@ -243,6 +244,7 @@ export function TextSelectionWindow({
           setCurrentActionId(data.action_id);
           setPendingSummaryUpdate(data.summary_update);
           setPendingInstruction(userInstruction);
+          setPendingSourceBreakdown(selected_text_source ?? null);
           // Register for manual copy/paste detection
           provenanceTracker?.registerAiResultText(data.ai_response);
           setPhase("result");
@@ -315,6 +317,7 @@ export function TextSelectionWindow({
             selected_text: selectedText,
             instruction: pendingInstruction,
             ai_response: proposedText,
+            ...(pendingSourceBreakdown ? { selected_text_source: pendingSourceBreakdown } : {}),
           },
         });
         if (error) {
@@ -355,6 +358,7 @@ export function TextSelectionWindow({
             selected_text: selectedText,
             instruction: pendingInstruction,
             ai_response: editableText,
+            ...(pendingSourceBreakdown ? { selected_text_source: pendingSourceBreakdown } : {}),
           },
         });
         if (error) {
