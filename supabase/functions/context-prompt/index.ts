@@ -528,7 +528,8 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
     const insertedMessages = [];
 
     if (action_type === "ask") {
-      const userPromptContent = `[Ask] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"\nQuestion: ${instruction}`;
+      const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
+      const userPromptContent = `[Ask] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\nQuestion: ${instruction}`;
 
       const { data: promptMsg } = await supabase.from("chat_messages").insert({
         thread_id,
