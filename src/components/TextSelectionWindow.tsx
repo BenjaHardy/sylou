@@ -186,7 +186,7 @@ export function TextSelectionWindow({
         setPhase("actions");
       }
     },
-    [projectId, selectedText]
+    [projectId, selectedText, getSourceBreakdown]
   );
 
   const callContextPrompt = useCallback(
