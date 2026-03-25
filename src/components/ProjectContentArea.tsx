@@ -270,6 +270,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
               onAskComplete={(msgs) => setPendingChatMessages((prev) => [...prev, ...msgs])}
               onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
               onProvenanceTracker={setProvenanceTracker}
+              onFlushProvenance={(fn) => { flushProvenanceRef.current = fn; }}
               conciseMode={conciseMode}
               onEditorContent={setEditorHtml}
             />
