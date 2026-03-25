@@ -40,6 +40,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   const [initialSet, setInitialSet] = useState(false);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
   const prevDocLenRef = useRef<number>(0);
+  const isInitialLoadRef = useRef(false);
 
   // AI selection state
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
@@ -71,14 +72,14 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           const ed = editor;
           if (!ed) return false;
           const { from, to } = ed.state.selection;
-          if (from === to) return false; // collapsed selection — bail out
+          if (from === to) return false;
           const tracker = getTracker();
           const text = ed.state.doc.textBetween(from, to, "\n");
           if (text) {
             const dominant = tracker.getDominantSource(from, to);
             tracker.setInternalClipboard(text, dominant);
           }
-          return false; // let browser handle actual copy
+          return false;
         },
         handleCut: (_view, event) => {
           const ed2 = editor;
@@ -91,7 +92,22 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
             const dominant = tracker.getDominantSource(from, to);
             tracker.setInternalClipboard(text, dominant);
           }
-          return false; // let default cut proceed
+          return false;
+        },
+        drop: (_view, event) => {
+          // Capture the drag source's dominant provenance before the drop transaction fires
+          const ed = editor;
+          if (!ed) return false;
+          const { from, to } = ed.state.selection;
+          if (from === to) return false; // no selection being dragged
+          const tracker = getTracker();
+          const dominant = tracker.getDominantSource(from, to);
+          const text = ed.state.doc.textBetween(from, to, "\n");
+          tracker.setDragOverride({
+            source: dominant,
+            originalText: dominant === "typed" || dominant === "chat_user" ? null : text,
+          });
+          return false; // let ProseMirror handle the actual drop
         },
       },
       handlePaste: (_view, event) => {
@@ -101,7 +117,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           const classification = tracker.classifyPaste(pastedText);
           tracker.setPasteOverride(classification);
         }
-        return false; // Let TipTap handle the actual paste
+        return false;
       },
     },
     onUpdate: ({ editor: e, transaction }) => {
@@ -113,10 +129,39 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       // Track provenance changes using mapping-based approach
       if (transaction.docChanged) {
         const tracker = getTracker();
-        tracker.applyTransaction({
-          mapping: transaction.mapping,
-          doc: e.state.doc,
-        });
+
+        // Skip tracking during initial content load
+        if (tracker.isSkipTracking()) {
+          prevDocLenRef.current = e.state.doc.content.size;
+          return;
+        }
+
+        // Detect undo/redo — ProseMirror sets "history$" meta on undo/redo transactions
+        const historyMeta = transaction.getMeta("history$");
+        if (historyMeta) {
+          // This is an undo or redo transaction
+          if (historyMeta.redo) {
+            tracker.redoProvenance();
+          } else {
+            tracker.undoProvenance();
+          }
+          scheduleSave();
+          prevDocLenRef.current = e.state.doc.content.size;
+          return;
+        }
+
+        // Check if ProseMirror is grouping this with the previous undo entry
+        // (addToHistory === false means "append to previous undo group")
+        const addToHistory = transaction.getMeta("addToHistory");
+        const shouldPushHistory = addToHistory !== false;
+
+        tracker.applyTransaction(
+          {
+            mapping: transaction.mapping,
+            doc: e.state.doc,
+          },
+          shouldPushHistory,
+        );
         scheduleSave();
       }
 
@@ -127,13 +172,22 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   // Set initial content when loaded
   useEffect(() => {
     if (editor && !loading && provenanceLoaded && !initialSet) {
+      // Skip provenance tracking during initial setContent
+      const tracker = getTracker();
+      isInitialLoadRef.current = true;
+      tracker.setSkipTracking(true);
+
       editor.commands.setContent(content || "");
+
+      tracker.setSkipTracking(false);
+      isInitialLoadRef.current = false;
+
       const docLen = editor.state.doc.content.size;
       prevDocLenRef.current = docLen;
       initWithContentLength(docLen);
       setInitialSet(true);
       // Expose tracker and flush function to parent
-      onProvenanceTracker?.(getTracker());
+      onProvenanceTracker?.(tracker);
       onFlushProvenance?.(() => flushSave());
     }
   }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker, onFlushProvenance, flushSave]);
@@ -147,7 +201,6 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   const handleOpenAIPanel = useCallback((rect: DOMRect, text: string) => {
     setAiAnchorRect(rect);
     setAiSelectedText(text);
-    // Capture selection positions for provenance source breakdown
     if (editor) {
       const { from, to } = editor.state.selection;
       setAiSelectionFrom(from);
@@ -159,7 +212,6 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   const handleAcceptProposal = useCallback(
     (replacementText: string) => {
       if (!editor) return;
-      // Flag the tracker for AI insertion before inserting content
       const tracker = getTracker();
       tracker.setPendingAiInsertion();
       editor.chain().focus().insertContent(replacementText).run();
