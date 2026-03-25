@@ -98,10 +98,6 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
         const pastedText = event.clipboardData?.getData("text/plain") ?? "";
         if (pastedText) {
           const classification = tracker.classifyPaste(pastedText);
-          console.log('[PASTE DEBUG] handlePaste fired', {
-            classifiedSource: classification.source,
-            pastedTextPreview: pastedText.slice(0, 50),
-          });
           tracker.setPasteOverride(classification);
         }
         return false; // Let TipTap handle the actual paste

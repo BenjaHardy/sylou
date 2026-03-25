@@ -214,28 +214,25 @@ export class ProvenanceTracker {
 
   /**
    * Apply a ProseMirror transaction to the segment map using the
-   * transaction's own mapping, rather than delete/insert cycles.
+   * transaction's own mapping and step maps.
    *
    * Steps:
    * 1. Map all existing segment positions through the transaction mapping
-   * 2. Remove collapsed (zero-length) segments
+   * 2. Extract insertion ranges from step maps and split absorbed segments
    * 3. Fill gaps (newly inserted content) with classified segments
    * 4. Merge adjacent same-source segments
    */
   applyTransaction(
     transaction: {
-      mapping: { map: (pos: number, bias?: number) => number };
+      mapping: {
+        map: (pos: number, bias?: number) => number;
+        maps: Array<{ forEach: (fn: (oldStart: number, oldEnd: number, newStart: number, newEnd: number) => void) => void }>;
+      };
       doc: { content: { size: number }; textBetween: (from: number, to: number, blockSeparator: string) => string };
     }
   ) {
     const mapping = transaction.mapping;
     const newDocSize = transaction.doc.content.size;
-
-    console.log('[PROV DEBUG] applyTransaction start', {
-      pasteOverrideSet: !!this._pasteOverride,
-      pasteOverrideSource: this._pasteOverride?.source ?? null,
-      existingSegments: this.segments.length,
-    });
 
     // Step 1: Map existing segments through the transaction mapping
     const mapped: ProvenanceSegment[] = [];
@@ -253,31 +250,106 @@ export class ProvenanceTracker {
       // If newEnd <= newStart, segment was fully deleted — drop it
     }
 
-    // Step 2: Sort mapped segments by start position
+    // Sort mapped segments by start position
     mapped.sort((a, b) => a.start - b.start);
 
-    console.log('[PROV DEBUG] after mapping', {
-      mappedSegments: mapped.map(s => ({ start: s.start, end: s.end, source: s.source })),
-      newDocSize,
-    });
+    // Step 2: Extract insertion ranges from step maps and split segments
+    // that absorbed insertions they shouldn't own.
+    const hasSignal = !!(this._pasteOverride || this._pendingAiInsertion);
+    const insertionRanges: Array<{ start: number; end: number }> = [];
+
+    const maps = mapping.maps;
+    for (let i = 0; i < maps.length; i++) {
+      maps[i].forEach((oldStart: number, oldEnd: number, newStart: number, newEnd: number) => {
+        const oldLen = oldEnd - oldStart;
+        const newLen = newEnd - newStart;
+        if (newLen > oldLen) {
+          // Content was inserted. The insertion's position in the original doc is oldStart.
+          // Map through the FULL mapping to get final document coordinates.
+          const finalStart = mapping.map(oldStart, 1);
+          const insertionLength = newLen - oldLen;
+          const finalEnd = finalStart + insertionLength;
+          insertionRanges.push({ start: finalStart, end: finalEnd });
+        }
+      });
+    }
+
+    // Deduplicate overlapping insertion ranges
+    if (insertionRanges.length > 1) {
+      insertionRanges.sort((a, b) => a.start - b.start);
+      const deduped: typeof insertionRanges = [insertionRanges[0]];
+      for (let i = 1; i < insertionRanges.length; i++) {
+        const prev = deduped[deduped.length - 1];
+        const curr = insertionRanges[i];
+        if (curr.start <= prev.end) {
+          prev.end = Math.max(prev.end, curr.end);
+        } else {
+          deduped.push(curr);
+        }
+      }
+      insertionRanges.length = 0;
+      insertionRanges.push(...deduped);
+    }
+
+    // Split segments that absorbed insertions.
+    // Only split when: (a) a classification signal is active, or
+    // (b) the absorbing segment is NOT typed (typing into [ai] must create [t]).
+    const splitMapped: ProvenanceSegment[] = [];
+    for (const seg of mapped) {
+      let current = seg;
+      let didSplit = false;
+
+      for (const ins of insertionRanges) {
+        // Check if this insertion falls within the current segment
+        if (ins.start >= current.start && ins.end <= current.end && ins.start < ins.end) {
+          const shouldSplit = hasSignal || current.source !== "typed";
+          if (!shouldSplit) continue;
+
+          didSplit = true;
+          // Part before insertion
+          if (ins.start > current.start) {
+            splitMapped.push({
+              start: current.start,
+              end: ins.start,
+              source: current.source,
+              original_text: current.original_text,
+            });
+          }
+          // The insertion range itself becomes a gap — don't add a segment for it.
+          // Part after insertion becomes the new "current" for further splits.
+          if (ins.end < current.end) {
+            current = {
+              start: ins.end,
+              end: current.end,
+              source: current.source,
+              original_text: current.original_text,
+            };
+            didSplit = false; // current still needs to be pushed if no more splits
+          } else {
+            // Insertion consumed the rest of the segment
+            current = { ...current, start: current.end, end: current.end };
+            break;
+          }
+        }
+      }
+
+      // Push remaining current if it has content
+      if (current.end > current.start) {
+        splitMapped.push(current);
+      }
+    }
 
     // Step 3: Identify gaps and fill with classified segments
     const result: ProvenanceSegment[] = [];
     let cursor = 0;
 
-    for (const seg of mapped) {
-      // Clamp segment to valid doc range
+    for (const seg of splitMapped) {
       const segStart = Math.max(seg.start, cursor);
       const segEnd = Math.min(seg.end, newDocSize);
 
       if (segStart > cursor) {
         // Gap before this segment — newly inserted content
         const gapText = this.extractText(transaction.doc, cursor, segStart);
-        console.log('[PROV DEBUG] gap found', {
-          gapStart: cursor, gapEnd: segStart,
-          gapTextPreview: gapText.slice(0, 50),
-          pasteOverrideStillSet: !!this._pasteOverride,
-        });
         const classification = this.classifyGap(gapText);
         result.push({
           start: cursor,
@@ -297,11 +369,6 @@ export class ProvenanceTracker {
     // Fill trailing gap (content inserted at the end)
     if (cursor < newDocSize) {
       const gapText = this.extractText(transaction.doc, cursor, newDocSize);
-      console.log('[PROV DEBUG] trailing gap', {
-        gapStart: cursor, gapEnd: newDocSize,
-        gapTextPreview: gapText.slice(0, 50),
-        pasteOverrideStillSet: !!this._pasteOverride,
-      });
       const classification = this.classifyGap(gapText);
       result.push({
         start: cursor,
@@ -383,11 +450,6 @@ export class ProvenanceTracker {
 
   /** Classify inserted text using priority: AI flag → paste override → typed */
   private classifyInsertionFull(text: string): { source: SegmentSource; originalText: string | null } {
-    console.log('[PROV DEBUG] classifyInsertionFull', {
-      textPreview: text.slice(0, 50),
-      pendingAi: this._pendingAiInsertion,
-      pasteOverride: this._pasteOverride?.source ?? null,
-    });
     if (this._pendingAiInsertion) {
       this._pendingAiInsertion = false;
       return { source: "ai_editor", originalText: text };
