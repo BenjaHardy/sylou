@@ -130,6 +130,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
 
     if (estimation.status === "ok") {
       setShowFlowReport(true);
+      await flushProvenanceRef.current?.();
       runAnalysis();
     } else {
       setShowTokenWarning(true);
