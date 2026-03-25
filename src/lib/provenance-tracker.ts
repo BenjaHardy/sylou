@@ -297,6 +297,11 @@ export class ProvenanceTracker {
     // Fill trailing gap (content inserted at the end)
     if (cursor < newDocSize) {
       const gapText = this.extractText(transaction.doc, cursor, newDocSize);
+      console.log('[PROV DEBUG] trailing gap', {
+        gapStart: cursor, gapEnd: newDocSize,
+        gapTextPreview: gapText.slice(0, 50),
+        pasteOverrideStillSet: !!this._pasteOverride,
+      });
       const classification = this.classifyGap(gapText);
       result.push({
         start: cursor,
