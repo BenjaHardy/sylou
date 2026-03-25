@@ -79,11 +79,13 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           }
           return false; // let browser handle actual copy
         },
-        handleCut: (_view, event, _slice) => {
-          const { from, to } = ed.state.selection;
+        handleCut: (_view, event) => {
+          const ed2 = editor;
+          if (!ed2) return false;
+          const { from, to } = ed2.state.selection;
           if (from === to) return false;
           const tracker = getTracker();
-          const text = ed.state.doc.textBetween(from, to, "\n");
+          const text = ed2.state.doc.textBetween(from, to, "\n");
           if (text) {
             const dominant = tracker.getDominantSource(from, to);
             tracker.setInternalClipboard(text, dominant);
