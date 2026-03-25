@@ -72,20 +72,20 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           const { from, to } = ed.state.selection;
           if (from === to) return false; // collapsed selection — bail out
           const tracker = getTracker();
-          const text = ed.state.doc.textBetween(from, to, "");
+          const text = ed.state.doc.textBetween(from, to, "\n");
           if (text) {
             const dominant = tracker.getDominantSource(from, to);
             tracker.setInternalClipboard(text, dominant);
           }
-          return false; // let default copy proceed
+          return false; // let browser handle actual copy
         },
-        cut: (_view, event) => {
-          const ed = editor;
-          if (!ed) return false;
-          const { from, to } = ed.state.selection;
+        handleCut: (_view, event) => {
+          const ed2 = editor;
+          if (!ed2) return false;
+          const { from, to } = ed2.state.selection;
           if (from === to) return false;
           const tracker = getTracker();
-          const text = ed.state.doc.textBetween(from, to, "");
+          const text = ed2.state.doc.textBetween(from, to, "\n");
           if (text) {
             const dominant = tracker.getDominantSource(from, to);
             tracker.setInternalClipboard(text, dominant);
