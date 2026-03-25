@@ -263,11 +263,11 @@ export class ProvenanceTracker {
       maps[i].forEach((oldStart: number, oldEnd: number, newStart: number, newEnd: number) => {
         const oldLen = oldEnd - oldStart;
         const newLen = newEnd - newStart;
-        if (newLen > oldLen) {
-          // Content was inserted. The insertion's position in the original doc is oldStart.
-          // Map through the FULL mapping to get final document coordinates.
-          const finalStart = mapping.map(oldStart, 1);
-          const insertionLength = newLen - oldLen;
+        if (newLen > 0) {
+          // Content was inserted or replaced. Map oldStart through the FULL mapping
+          // with left bias (-1) to get the start of the insertion in final coordinates.
+          const finalStart = mapping.map(oldStart, -1);
+          const insertionLength = newLen;
           const finalEnd = finalStart + insertionLength;
           insertionRanges.push({ start: finalStart, end: finalEnd });
         }
