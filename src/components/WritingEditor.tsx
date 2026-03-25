@@ -106,6 +106,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     onUpdate: ({ editor: e, transaction }) => {
       const newHTML = e.getHTML();
       updateContent(newHTML);
+      onEditorContent?.(newHTML);
       onWritingActivity?.();
 
       // Track provenance changes using mapping-based approach

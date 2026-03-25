@@ -1,12 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { ChatMessage } from "@/hooks/useChatMessages";
-import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Loader2, Eye, RefreshCw } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
 import { WritingEditor } from "@/components/WritingEditor";
 import { ChatPanel } from "@/components/ChatPanel";
 import { ProjectActivityBar } from "@/components/ProjectActivityBar";
 import { FlowReportView } from "@/components/FlowReportView";
+import { FlowHighlightedText } from "@/components/FlowHighlightedText";
 import { FlowConfirmDialog } from "@/components/FlowConfirmDialog";
 import { FlowTokenWarningDialog } from "@/components/FlowTokenWarningDialog";
 import { FlowReanalyzeDialog } from "@/components/FlowReanalyzeDialog";
