@@ -189,8 +189,18 @@ export function FlowHighlightedText({ segments, writingContent, onClose }: Props
     const container = document.createElement("div");
     container.innerHTML = writingContent;
 
-    const { nodes } = walkNode(container, 0, segments, totalTextLen, "root");
-    return nodes;
+    // Walk the container's children directly — the wrapper <div> is NOT part of
+    // the ProseMirror document tree, so treating it as a block node would shift
+    // all positions by +1 and cause segment boundaries to drift.
+    const allNodes: ReactNode[] = [];
+    let pos = 0;
+    const children = container.childNodes;
+    for (let i = 0; i < children.length; i++) {
+      const result = walkNode(children[i], pos, segments, totalTextLen, `root-${i}`);
+      allNodes.push(...result.nodes);
+      pos = result.pos;
+    }
+    return allNodes;
   }, [segments, writingContent, totalTextLen]);
 
   const stats = useMemo(() => {

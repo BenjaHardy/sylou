@@ -66,6 +66,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
   const [showLiveProvenance, setShowLiveProvenance] = useState(false);
   const [editorHtml, setEditorHtml] = useState("");
   const [provenanceKey, setProvenanceKey] = useState(0);
+  const flushProvenanceRef = useRef<(() => Promise<void>) | null>(null);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const { markWriting } = useActivityTracker(project?.id ?? null);
@@ -129,6 +130,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
 
     if (estimation.status === "ok") {
       setShowFlowReport(true);
+      await flushProvenanceRef.current?.();
       runAnalysis();
     } else {
       setShowTokenWarning(true);
@@ -143,16 +145,18 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
 
     if (estimation.status === "ok") {
       setShowFlowReport(true);
+      await flushProvenanceRef.current?.();
       runAnalysis();
     } else {
       setShowTokenWarning(true);
     }
   };
 
-  const handleTokenWarningConfirm = () => {
+  const handleTokenWarningConfirm = async () => {
     setShowTokenWarning(false);
     clearPreCheck();
     setShowFlowReport(true);
+    await flushProvenanceRef.current?.();
     runAnalysis();
   };
 
@@ -194,9 +198,10 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
           <FlowTokenWarningDialog
             open={showTokenWarning}
             estimation={preCheck}
-            onConfirm={() => {
+            onConfirm={async () => {
               setShowTokenWarning(false);
               clearPreCheck();
+              await flushProvenanceRef.current?.();
               runAnalysis();
             }}
             onCancel={() => {
@@ -266,6 +271,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
               onAskComplete={(msgs) => setPendingChatMessages((prev) => [...prev, ...msgs])}
               onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
               onProvenanceTracker={setProvenanceTracker}
+              onFlushProvenance={(fn) => { flushProvenanceRef.current = fn; }}
               conciseMode={conciseMode}
               onEditorContent={setEditorHtml}
             />

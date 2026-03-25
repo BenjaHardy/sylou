@@ -30,12 +30,13 @@ interface Props {
   onAskComplete?: (messages: ChatMessage[]) => void;
   onChatRefresh?: () => void;
   onProvenanceTracker?: (tracker: ProvenanceTracker) => void;
+  onFlushProvenance?: (flush: () => Promise<void>) => void;
   conciseMode?: boolean;
 }
 
-export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, conciseMode, onEditorContent }: Props & { onEditorContent?: (html: string) => void }) {
+export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, onFlushProvenance, conciseMode, onEditorContent }: Props & { onEditorContent?: (html: string) => void }) {
   const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
-  const { getTracker, initWithContentLength, scheduleSave, provenanceLoaded } = useProvenanceTracker(projectId);
+  const { getTracker, initWithContentLength, scheduleSave, flushSave, provenanceLoaded } = useProvenanceTracker(projectId);
   const [initialSet, setInitialSet] = useState(false);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
   const prevDocLenRef = useRef<number>(0);
@@ -131,10 +132,11 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       prevDocLenRef.current = docLen;
       initWithContentLength(docLen);
       setInitialSet(true);
-      // Expose tracker to parent
+      // Expose tracker and flush function to parent
       onProvenanceTracker?.(getTracker());
+      onFlushProvenance?.(() => flushSave());
     }
-  }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker]);
+  }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker, onFlushProvenance, flushSave]);
 
   // Reset when projectId changes
   useEffect(() => {
