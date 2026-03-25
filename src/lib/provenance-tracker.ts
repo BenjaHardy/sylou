@@ -383,6 +383,11 @@ export class ProvenanceTracker {
 
   /** Classify inserted text using priority: AI flag → paste override → typed */
   private classifyInsertionFull(text: string): { source: SegmentSource; originalText: string | null } {
+    console.log('[PROV DEBUG] classifyInsertionFull', {
+      textPreview: text.slice(0, 50),
+      pendingAi: this._pendingAiInsertion,
+      pasteOverride: this._pasteOverride?.source ?? null,
+    });
     if (this._pendingAiInsertion) {
       this._pendingAiInsertion = false;
       return { source: "ai_editor", originalText: text };
