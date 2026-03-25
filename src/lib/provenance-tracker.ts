@@ -18,6 +18,8 @@ export interface ProvenanceSegment {
   original_text: string | null;
 }
 
+const MAX_HISTORY = 100;
+
 export class ProvenanceTracker {
   private segments: ProvenanceSegment[] = [];
   private _pendingAiInsertion = false;
@@ -32,6 +34,16 @@ export class ProvenanceTracker {
    */
   private _internalClipboard: { text: string; source: SegmentSource } | null = null;
 
+  /** Drag-and-drop override — set before drop transaction fires */
+  private _dragOverride: { source: SegmentSource; originalText: string | null } | null = null;
+
+  /** Skip tracking flag — used during programmatic content resets */
+  private _skipTracking = false;
+
+  /** Undo/redo history stacks for provenance segments */
+  private _undoStack: ProvenanceSegment[][] = [];
+  private _redoStack: ProvenanceSegment[][] = [];
+
   // ─── Initialization ──────────────────────────────────────
 
   /** Load segments from DB or initialize for existing content */
@@ -45,6 +57,9 @@ export class ProvenanceTracker {
     } else {
       this.segments = [];
     }
+    // Reset history on init
+    this._undoStack = [];
+    this._redoStack = [];
   }
 
   getSegments(): ProvenanceSegment[] {
@@ -53,6 +68,46 @@ export class ProvenanceTracker {
 
   toJSON(): ProvenanceSegment[] {
     return this.segments.map(s => ({ ...s }));
+  }
+
+  // ─── Skip Tracking (for programmatic content resets) ─────
+
+  setSkipTracking(skip: boolean) {
+    this._skipTracking = skip;
+  }
+
+  isSkipTracking(): boolean {
+    return this._skipTracking;
+  }
+
+  // ─── Undo/Redo History ──────────────────────────────────
+
+  /** Push current segments to undo stack (called before normal edits) */
+  private pushHistory() {
+    this._undoStack.push(this.segments.map(s => ({ ...s })));
+    if (this._undoStack.length > MAX_HISTORY) {
+      this._undoStack.shift();
+    }
+    // Any new edit clears redo
+    this._redoStack = [];
+  }
+
+  /** Restore segments from undo stack */
+  undoProvenance() {
+    const prev = this._undoStack.pop();
+    if (prev) {
+      this._redoStack.push(this.segments.map(s => ({ ...s })));
+      this.segments = prev;
+    }
+  }
+
+  /** Restore segments from redo stack */
+  redoProvenance() {
+    const next = this._redoStack.pop();
+    if (next) {
+      this._undoStack.push(this.segments.map(s => ({ ...s })));
+      this.segments = next;
+    }
   }
 
   // ─── Internal Editor Clipboard ──────────────────────────
@@ -169,11 +224,10 @@ export class ProvenanceTracker {
     }, 300_000);
   }
 
-  /** Check if pasted text is a known AI result (with normalized matching) */
+  /** Check if pasted text is a known AI result (with normalized + substring matching) */
   private consumeAiResultText(text: string): boolean {
     // Exact match first
     if (this._aiResultTexts.has(text)) {
-      this._aiResultTexts.delete(text);
       return true;
     }
     // Normalized match — trim + collapse whitespace
@@ -181,8 +235,15 @@ export class ProvenanceTracker {
     const normalizedPaste = normalize(text);
     for (const [registered] of this._aiResultTexts) {
       if (normalize(registered) === normalizedPaste) {
-        this._aiResultTexts.delete(registered);
         return true;
+      }
+    }
+    // Substring match — only for pasted text >= 20 chars
+    if (normalizedPaste.length >= 20) {
+      for (const [registered] of this._aiResultTexts) {
+        if (normalize(registered).includes(normalizedPaste)) {
+          return true;
+        }
       }
     }
     return false;
@@ -200,14 +261,22 @@ export class ProvenanceTracker {
     }, 30_000);
   }
 
-  private consumeChatClipboardRole(): "assistant" | "user" | null {
-    const role = this._chatClipboardRole;
-    this._chatClipboardRole = null;
-    if (this._chatClipboardExpiry) {
-      clearTimeout(this._chatClipboardExpiry);
-      this._chatClipboardExpiry = null;
-    }
-    return role;
+  /** Check chat clipboard role without clearing it (supports multiple pastes) */
+  private checkChatClipboardRole(): "assistant" | "user" | null {
+    return this._chatClipboardRole;
+  }
+
+  // ─── Drag-and-Drop Override ──────────────────────────────
+
+  /** Set before a drop transaction fires, with the dominant source of the dragged range */
+  setDragOverride(override: { source: SegmentSource; originalText: string | null }) {
+    this._dragOverride = override;
+  }
+
+  private consumeDragOverride(): { source: SegmentSource; originalText: string | null } | null {
+    const o = this._dragOverride;
+    this._dragOverride = null;
+    return o;
   }
 
   // ─── Transaction Handling (Mapping-Based) ────────────────
@@ -229,8 +298,16 @@ export class ProvenanceTracker {
         maps: readonly { forEach: (fn: (oldStart: number, oldEnd: number, newStart: number, newEnd: number) => void) => void }[];
       };
       doc: { content: { size: number }; textBetween: (from: number, to: number, blockSeparator: string) => string };
-    }
+    },
+    pushToHistory = true,
   ) {
+    if (this._skipTracking) return;
+
+    // Push to history stack before modifying (for undo support)
+    if (pushToHistory) {
+      this.pushHistory();
+    }
+
     const mapping = transaction.mapping;
     const newDocSize = transaction.doc.content.size;
 
@@ -255,17 +332,14 @@ export class ProvenanceTracker {
 
     // Step 2: Extract insertion ranges from step maps and split segments
     // that absorbed insertions they shouldn't own.
-    const hasSignal = !!(this._pasteOverride || this._pendingAiInsertion);
+    const hasSignal = !!(this._pasteOverride || this._pendingAiInsertion || this._dragOverride);
     const insertionRanges: Array<{ start: number; end: number }> = [];
 
     const maps = mapping.maps;
     for (let i = 0; i < maps.length; i++) {
       maps[i].forEach((oldStart: number, oldEnd: number, newStart: number, newEnd: number) => {
-        const oldLen = oldEnd - oldStart;
         const newLen = newEnd - newStart;
         if (newLen > 0) {
-          // Content was inserted or replaced. Map oldStart through the FULL mapping
-          // with left bias (-1) to get the start of the insertion in final coordinates.
           const finalStart = mapping.map(oldStart, -1);
           const insertionLength = newLen;
           const finalEnd = finalStart + insertionLength;
@@ -292,21 +366,17 @@ export class ProvenanceTracker {
     }
 
     // Split segments that absorbed insertions.
-    // Only split when: (a) a classification signal is active, or
-    // (b) the absorbing segment is NOT typed (typing into [ai] must create [t]).
     const splitMapped: ProvenanceSegment[] = [];
     for (const seg of mapped) {
       let current = seg;
       let didSplit = false;
 
       for (const ins of insertionRanges) {
-        // Check if this insertion falls within the current segment
         if (ins.start >= current.start && ins.end <= current.end && ins.start < ins.end) {
           const shouldSplit = hasSignal || current.source !== "typed";
           if (!shouldSplit) continue;
 
           didSplit = true;
-          // Part before insertion
           if (ins.start > current.start) {
             splitMapped.push({
               start: current.start,
@@ -315,8 +385,6 @@ export class ProvenanceTracker {
               original_text: current.original_text,
             });
           }
-          // The insertion range itself becomes a gap — don't add a segment for it.
-          // Part after insertion becomes the new "current" for further splits.
           if (ins.end < current.end) {
             current = {
               start: ins.end,
@@ -324,16 +392,14 @@ export class ProvenanceTracker {
               source: current.source,
               original_text: current.original_text,
             };
-            didSplit = false; // current still needs to be pushed if no more splits
+            didSplit = false;
           } else {
-            // Insertion consumed the rest of the segment
             current = { ...current, start: current.end, end: current.end };
             break;
           }
         }
       }
 
-      // Push remaining current if it has content
       if (current.end > current.start) {
         splitMapped.push(current);
       }
@@ -348,7 +414,6 @@ export class ProvenanceTracker {
       const segEnd = Math.min(seg.end, newDocSize);
 
       if (segStart > cursor) {
-        // Gap before this segment — newly inserted content
         const gapText = this.extractText(transaction.doc, cursor, segStart);
         const classification = this.classifyGap(gapText);
         result.push({
@@ -366,7 +431,7 @@ export class ProvenanceTracker {
       cursor = Math.max(cursor, segEnd);
     }
 
-    // Fill trailing gap (content inserted at the end)
+    // Fill trailing gap
     if (cursor < newDocSize) {
       const gapText = this.extractText(transaction.doc, cursor, newDocSize);
       const classification = this.classifyGap(gapText);
@@ -404,7 +469,8 @@ export class ProvenanceTracker {
   /**
    * Classify a gap (newly inserted content) using the existing
    * classification priority: pending AI flag → paste override →
-   * internal clipboard → AI result registry → chat clipboard → typed.
+   * drag override → internal clipboard → AI result registry →
+   * chat clipboard → typed.
    */
   private classifyGap(text: string): { source: SegmentSource; originalText: string | null } {
     return this.classifyInsertionFull(text);
@@ -418,8 +484,8 @@ export class ProvenanceTracker {
       return { source: "ai_editor", originalText: pastedText };
     }
 
-    // 2. Check chat clipboard role (consumed on use)
-    const chatRole = this.consumeChatClipboardRole();
+    // 2. Check chat clipboard role (not consumed — supports multiple pastes)
+    const chatRole = this.checkChatClipboardRole();
     if (chatRole === "assistant") {
       return { source: "chat_ai", originalText: pastedText };
     }
@@ -430,7 +496,6 @@ export class ProvenanceTracker {
     // 3. Check internal editor clipboard (not consumed — supports multiple pastes)
     const internalSource = this.checkInternalClipboard(pastedText);
     if (internalSource) {
-      // Typed text stays typed with no original_text; other sources keep original_text
       const originalText = internalSource === "typed" || internalSource === "chat_user"
         ? null
         : pastedText;
@@ -448,7 +513,7 @@ export class ProvenanceTracker {
     this._pasteOverride = override;
   }
 
-  /** Classify inserted text using priority: AI flag → paste override → typed */
+  /** Classify inserted text using priority: AI flag → paste override → drag override → typed */
   private classifyInsertionFull(text: string): { source: SegmentSource; originalText: string | null } {
     if (this._pendingAiInsertion) {
       this._pendingAiInsertion = false;
@@ -457,6 +522,11 @@ export class ProvenanceTracker {
     if (this._pasteOverride) {
       const o = this._pasteOverride;
       this._pasteOverride = null;
+      return o;
+    }
+    if (this._dragOverride) {
+      const o = this._dragOverride;
+      this._dragOverride = null;
       return o;
     }
     return { source: "typed", originalText: null };
@@ -472,12 +542,10 @@ export class ProvenanceTracker {
       const curr = this.segments[i];
       if (prev.source === curr.source && prev.end === curr.start) {
         prev.end = curr.end;
-        // For non-typed segments, concatenate original_text if both exist
         if (prev.original_text != null && curr.original_text != null) {
           prev.original_text += curr.original_text;
         }
       } else if (curr.start < curr.end) {
-        // Only add non-empty segments
         merged.push(curr);
       }
     }
