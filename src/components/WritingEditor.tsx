@@ -30,10 +30,11 @@ interface Props {
   onAskComplete?: (messages: ChatMessage[]) => void;
   onChatRefresh?: () => void;
   onProvenanceTracker?: (tracker: ProvenanceTracker) => void;
+  onFlushProvenance?: (flush: () => Promise<void>) => void;
   conciseMode?: boolean;
 }
 
-export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, conciseMode, onEditorContent }: Props & { onEditorContent?: (html: string) => void }) {
+export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, onFlushProvenance, conciseMode, onEditorContent }: Props & { onEditorContent?: (html: string) => void }) {
   const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
   const { getTracker, initWithContentLength, scheduleSave, flushSave, provenanceLoaded } = useProvenanceTracker(projectId);
   const [initialSet, setInitialSet] = useState(false);
