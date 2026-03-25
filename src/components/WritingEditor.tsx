@@ -132,10 +132,11 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       prevDocLenRef.current = docLen;
       initWithContentLength(docLen);
       setInitialSet(true);
-      // Expose tracker to parent
+      // Expose tracker and flush function to parent
       onProvenanceTracker?.(getTracker());
+      onFlushProvenance?.(() => flushSave());
     }
-  }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker]);
+  }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker, onFlushProvenance, flushSave]);
 
   // Reset when projectId changes
   useEffect(() => {
