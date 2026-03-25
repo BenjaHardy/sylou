@@ -66,6 +66,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
   const [showLiveProvenance, setShowLiveProvenance] = useState(false);
   const [editorHtml, setEditorHtml] = useState("");
   const [provenanceKey, setProvenanceKey] = useState(0);
+  const flushProvenanceRef = useRef<(() => Promise<void>) | null>(null);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const { markWriting } = useActivityTracker(project?.id ?? null);
