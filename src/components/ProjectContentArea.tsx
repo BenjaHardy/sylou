@@ -152,10 +152,11 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
     }
   };
 
-  const handleTokenWarningConfirm = () => {
+  const handleTokenWarningConfirm = async () => {
     setShowTokenWarning(false);
     clearPreCheck();
     setShowFlowReport(true);
+    await flushProvenanceRef.current?.();
     runAnalysis();
   };
 
