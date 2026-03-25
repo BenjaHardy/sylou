@@ -236,6 +236,18 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
               Budget: ~{budgetError.estimated_cost.toLocaleString()} needed, {budgetError.budget_remaining.toLocaleString()} remaining
             </span>
           )}
+          <Button
+            variant={showLiveProvenance ? "secondary" : "ghost"}
+            size="sm"
+            className="h-7 gap-1.5 text-xs"
+            onClick={() => {
+              if (!showLiveProvenance) setProvenanceKey((k) => k + 1);
+              setShowLiveProvenance((v) => !v);
+            }}
+          >
+            <Eye className="h-3.5 w-3.5" />
+            Provenance
+          </Button>
         </div>
       </div>
 
