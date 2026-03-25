@@ -226,7 +226,7 @@ export class ProvenanceTracker {
     transaction: {
       mapping: {
         map: (pos: number, bias?: number) => number;
-        maps: Array<{ forEach: (fn: (oldStart: number, oldEnd: number, newStart: number, newEnd: number) => void) => void }>;
+        maps: readonly { forEach: (fn: (oldStart: number, oldEnd: number, newStart: number, newEnd: number) => void) => void }[];
       };
       doc: { content: { size: number }; textBetween: (from: number, to: number, blockSeparator: string) => string };
     }
