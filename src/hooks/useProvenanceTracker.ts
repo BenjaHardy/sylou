@@ -74,30 +74,42 @@ export function useProvenanceTracker(projectId: string | null) {
     }
   }, []);
 
+  const doSave = useCallback(async () => {
+    if (!projectId) return;
+    const json = JSON.stringify(trackerRef.current.toJSON());
+    if (json === lastSavedJsonRef.current) return;
+
+    const { error } = await supabase
+      .from("provenance_events")
+      .update({
+        segment_map: JSON.parse(json),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("project_id", projectId);
+
+    if (error) {
+      console.error("Failed to save provenance:", error);
+    } else {
+      lastSavedJsonRef.current = json;
+    }
+  }, [projectId]);
+
   /** Save segment map to DB (debounced) */
   const scheduleSave = useCallback(() => {
     if (!projectId) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => doSave(), 3000);
+  }, [projectId, doSave]);
 
-    saveTimerRef.current = setTimeout(async () => {
-      const json = JSON.stringify(trackerRef.current.toJSON());
-      if (json === lastSavedJsonRef.current) return;
-
-      const { error } = await supabase
-        .from("provenance_events")
-        .update({
-          segment_map: JSON.parse(json),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("project_id", projectId);
-
-      if (error) {
-        console.error("Failed to save provenance:", error);
-      } else {
-        lastSavedJsonRef.current = json;
-      }
-    }, 3000); // Same debounce as content save
-  }, [projectId]);
+  /** Immediately flush pending provenance save to DB */
+  const flushSave = useCallback(async () => {
+    if (!projectId) return;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    await doSave();
+  }, [projectId, doSave]);
 
   /** Get the tracker instance for direct method calls */
   const getTracker = useCallback(() => trackerRef.current, []);
@@ -106,6 +118,7 @@ export function useProvenanceTracker(projectId: string | null) {
     getTracker,
     initWithContentLength,
     scheduleSave,
+    flushSave,
     provenanceLoaded,
   };
 }
