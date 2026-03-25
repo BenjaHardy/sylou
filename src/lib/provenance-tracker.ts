@@ -256,6 +256,11 @@ export class ProvenanceTracker {
     // Step 2: Sort mapped segments by start position
     mapped.sort((a, b) => a.start - b.start);
 
+    console.log('[PROV DEBUG] after mapping', {
+      mappedSegments: mapped.map(s => ({ start: s.start, end: s.end, source: s.source })),
+      newDocSize,
+    });
+
     // Step 3: Identify gaps and fill with classified segments
     const result: ProvenanceSegment[] = [];
     let cursor = 0;
