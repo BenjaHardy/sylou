@@ -231,6 +231,12 @@ export class ProvenanceTracker {
     const mapping = transaction.mapping;
     const newDocSize = transaction.doc.content.size;
 
+    console.log('[PROV DEBUG] applyTransaction start', {
+      pasteOverrideSet: !!this._pasteOverride,
+      pasteOverrideSource: this._pasteOverride?.source ?? null,
+      existingSegments: this.segments.length,
+    });
+
     // Step 1: Map existing segments through the transaction mapping
     const mapped: ProvenanceSegment[] = [];
     for (const seg of this.segments) {
