@@ -63,6 +63,9 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
   const [chatRefreshTrigger, setChatRefreshTrigger] = useState(0);
   const [pendingChatMessages, setPendingChatMessages] = useState<ChatMessage[]>([]);
   const [provenanceTracker, setProvenanceTracker] = useState<ProvenanceTracker | null>(null);
+  const [showLiveProvenance, setShowLiveProvenance] = useState(false);
+  const [editorHtml, setEditorHtml] = useState("");
+  const [provenanceKey, setProvenanceKey] = useState(0);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const { markWriting } = useActivityTracker(project?.id ?? null);
