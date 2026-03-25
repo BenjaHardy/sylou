@@ -33,7 +33,7 @@ interface Props {
   conciseMode?: boolean;
 }
 
-export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, conciseMode }: Props) {
+export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, conciseMode, onEditorContent }: Props & { onEditorContent?: (html: string) => void }) {
   const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
   const { getTracker, initWithContentLength, scheduleSave, provenanceLoaded } = useProvenanceTracker(projectId);
   const [initialSet, setInitialSet] = useState(false);
@@ -106,6 +106,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     onUpdate: ({ editor: e, transaction }) => {
       const newHTML = e.getHTML();
       updateContent(newHTML);
+      onEditorContent?.(newHTML);
       onWritingActivity?.();
 
       // Track provenance changes using mapping-based approach

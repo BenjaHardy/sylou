@@ -1,12 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { ChatMessage } from "@/hooks/useChatMessages";
-import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Loader2, Eye, RefreshCw } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
 import { WritingEditor } from "@/components/WritingEditor";
 import { ChatPanel } from "@/components/ChatPanel";
 import { ProjectActivityBar } from "@/components/ProjectActivityBar";
 import { FlowReportView } from "@/components/FlowReportView";
+import { FlowHighlightedText } from "@/components/FlowHighlightedText";
 import { FlowConfirmDialog } from "@/components/FlowConfirmDialog";
 import { FlowTokenWarningDialog } from "@/components/FlowTokenWarningDialog";
 import { FlowReanalyzeDialog } from "@/components/FlowReanalyzeDialog";
@@ -62,6 +63,9 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
   const [chatRefreshTrigger, setChatRefreshTrigger] = useState(0);
   const [pendingChatMessages, setPendingChatMessages] = useState<ChatMessage[]>([]);
   const [provenanceTracker, setProvenanceTracker] = useState<ProvenanceTracker | null>(null);
+  const [showLiveProvenance, setShowLiveProvenance] = useState(false);
+  const [editorHtml, setEditorHtml] = useState("");
+  const [provenanceKey, setProvenanceKey] = useState(0);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const { markWriting } = useActivityTracker(project?.id ?? null);
@@ -232,6 +236,18 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
               Budget: ~{budgetError.estimated_cost.toLocaleString()} needed, {budgetError.budget_remaining.toLocaleString()} remaining
             </span>
           )}
+          <Button
+            variant={showLiveProvenance ? "secondary" : "ghost"}
+            size="sm"
+            className="h-7 gap-1.5 text-xs"
+            onClick={() => {
+              if (!showLiveProvenance) setProvenanceKey((k) => k + 1);
+              setShowLiveProvenance((v) => !v);
+            }}
+          >
+            <Eye className="h-3.5 w-3.5" />
+            Provenance
+          </Button>
         </div>
       </div>
 
@@ -251,7 +267,30 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
               onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
               onProvenanceTracker={setProvenanceTracker}
               conciseMode={conciseMode}
+              onEditorContent={setEditorHtml}
             />
+            {showLiveProvenance && provenanceTracker && (
+              <div className="border-t border-border h-[40%] min-h-[200px] overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-1 bg-[hsl(var(--ethos-surface))] border-b border-border">
+                  <span className="text-xs font-medium text-muted-foreground">Live Provenance View</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 gap-1 text-xs"
+                    onClick={() => setProvenanceKey((k) => k + 1)}
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Refresh
+                  </Button>
+                </div>
+                <FlowHighlightedText
+                  key={provenanceKey}
+                  segments={provenanceTracker.getSegments()}
+                  writingContent={editorHtml}
+                  onClose={() => setShowLiveProvenance(false)}
+                />
+              </div>
+            )}
             <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
               <ProjectActivityBar projectId={project.id} />
             </div>
