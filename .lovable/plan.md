@@ -1,73 +1,45 @@
 
 
-## Plan: Add Diagnostic Console Logs for Paste Classification
+## Fix: Insertion Range Calculation Bug in Step 2
 
-### Purpose
-Add temporary `console.log` statements to trace why `_pasteOverride` isn't reaching `classifyGap` when pasting external text, especially into a blank editor.
+### Root Cause
 
-### Changes
+Three bugs on lines 266-271 of `provenance-tracker.ts` prevent insertion ranges from being detected correctly:
 
-**File 1: `src/components/WritingEditor.tsx`** (line ~96-103, handlePaste)
+1. **Wrong mapping bias** (line 269): `mapping.map(oldStart, 1)` uses bias `1` (right), which maps `oldStart` to the **end** of the replacement, not the beginning. For a paste of 3976 chars at position 1, `mapping.map(1, 1)` returns `3977` — the finalStart is past the entire insertion, so the insertion range `[3977, 7953]` is outside the doc and never matches any segment.
 
-Add log after classification:
-```ts
-handlePaste: (_view, event) => {
-  const tracker = getTracker();
-  const pastedText = event.clipboardData?.getData("text/plain") ?? "";
-  if (pastedText) {
-    const classification = tracker.classifyPaste(pastedText);
-    console.log('[PASTE DEBUG] handlePaste fired', {
-      classifiedSource: classification.source,
-      pastedTextPreview: pastedText.slice(0, 50),
-    });
-    tracker.setPasteOverride(classification);
-  }
-  return false;
-},
+2. **Only counting net excess** (line 270): `insertionLength = newLen - oldLen` only captures the difference. For a replacement (select 10 chars, paste 15), only 5 chars are treated as "inserted" — the other 10 new chars inherit the old segment's source incorrectly.
+
+3. **Skipping replacements where newLen ≤ oldLen** (line 266): `newLen > oldLen` skips cases where you select 10 chars and paste 5. Those 5 new chars also need classification.
+
+### Fix
+
+**File: `src/lib/provenance-tracker.ts`** (lines 266-272)
+
+Change three things in the step map forEach callback:
+
+```
+if (newLen > 0) {                                    // was: newLen > oldLen
+  const finalStart = mapping.map(oldStart, -1);      // was: bias 1
+  const insertionLength = newLen;                     // was: newLen - oldLen
+  const finalEnd = finalStart + insertionLength;
+  insertionRanges.push({ start: finalStart, end: finalEnd });
+}
 ```
 
-**File 2: `src/lib/provenance-tracker.ts`**
+- **Bias -1**: maps `oldStart` to the position *before* the inserted content — the correct start of the insertion range
+- **Full newLen**: the entire new content range needs classification, not just the excess
+- **newLen > 0**: catches all insertions including replacements where fewer chars replace more
 
-1. **`applyTransaction`** (line ~231): log `_pasteOverride` at start, mapped segments + gaps after mapping:
-```ts
-// At start of applyTransaction:
-console.log('[PROV DEBUG] applyTransaction start', {
-  pasteOverrideSet: !!this._pasteOverride,
-  pasteOverrideSource: this._pasteOverride?.source ?? null,
-  existingSegments: this.segments.length,
-});
+### Why this works
 
-// After mapping loop (after line ~248), before gap fill:
-console.log('[PROV DEBUG] after mapping', {
-  mappedSegments: mapped.map(s => ({ start: s.start, end: s.end, source: s.source })),
-  newDocSize,
-});
+| Scenario | Old code | Fixed code |
+|----------|----------|------------|
+| Paste 3976 chars at pos 1 | `finalStart=3977` (past doc!) | `finalStart=1`, range `[1, 3977]` ✓ |
+| Paste 17 chars at pos 8 in [0,32] | `finalStart=25` (wrong) | `finalStart=8`, range `[8, 25]` ✓ |
+| Select [20,30] in [ai], paste 15 chars | `finalStart=35` (wrong) | `finalStart=20`, range `[20, 35]` ✓ |
+| Select [20,30] in [ai], paste 5 chars | Skipped entirely | `finalStart=20`, range `[20, 25]` ✓ |
+| Pure deletion | newLen=0, skipped | newLen=0, skipped ✓ |
 
-// Inside gap detection (line ~262, when segStart > cursor):
-console.log('[PROV DEBUG] gap found', {
-  gapStart: cursor, gapEnd: segStart,
-  gapTextPreview: gapText.slice(0, 50),
-  pasteOverrideStillSet: !!this._pasteOverride,
-});
-
-// After trailing gap (line ~282):
-console.log('[PROV DEBUG] trailing gap', {
-  gapStart: cursor, gapEnd: newDocSize,
-  gapTextPreview: gapText.slice(0, 50),
-  pasteOverrideStillSet: !!this._pasteOverride,
-});
-```
-
-2. **`classifyGap` / `classifyInsertionFull`** (line ~321/364): log when called and what it returns:
-```ts
-// In classifyInsertionFull, before return statements:
-console.log('[PROV DEBUG] classifyInsertionFull', {
-  textPreview: text.slice(0, 50),
-  pendingAi: this._pendingAiInsertion,
-  pasteOverride: this._pasteOverride?.source ?? null,
-});
-```
-
-### No functional changes
-These are purely diagnostic logs. After the user runs the two tests (blank editor paste, mid-text paste) and shares output, the logs will be removed and the actual fix implemented.
+The existing segment-splitting logic (lines 297-340) and gap classification (lines 342-384) work correctly once they receive the right insertion ranges. No other changes needed.
 
