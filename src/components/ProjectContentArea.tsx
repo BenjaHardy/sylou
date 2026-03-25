@@ -267,7 +267,30 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
               onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
               onProvenanceTracker={setProvenanceTracker}
               conciseMode={conciseMode}
+              onEditorContent={setEditorHtml}
             />
+            {showLiveProvenance && provenanceTracker && (
+              <div className="border-t border-border h-[40%] min-h-[200px] overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-1 bg-[hsl(var(--ethos-surface))] border-b border-border">
+                  <span className="text-xs font-medium text-muted-foreground">Live Provenance View</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 gap-1 text-xs"
+                    onClick={() => setProvenanceKey((k) => k + 1)}
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Refresh
+                  </Button>
+                </div>
+                <FlowHighlightedText
+                  key={provenanceKey}
+                  segments={provenanceTracker.getSegments()}
+                  writingContent={editorHtml}
+                  onClose={() => setShowLiveProvenance(false)}
+                />
+              </div>
+            )}
             <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
               <ProjectActivityBar projectId={project.id} />
             </div>
