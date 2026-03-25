@@ -273,6 +273,11 @@ export class ProvenanceTracker {
       if (segStart > cursor) {
         // Gap before this segment — newly inserted content
         const gapText = this.extractText(transaction.doc, cursor, segStart);
+        console.log('[PROV DEBUG] gap found', {
+          gapStart: cursor, gapEnd: segStart,
+          gapTextPreview: gapText.slice(0, 50),
+          pasteOverrideStillSet: !!this._pasteOverride,
+        });
         const classification = this.classifyGap(gapText);
         result.push({
           start: cursor,
