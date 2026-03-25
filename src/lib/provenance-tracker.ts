@@ -231,6 +231,12 @@ export class ProvenanceTracker {
     const mapping = transaction.mapping;
     const newDocSize = transaction.doc.content.size;
 
+    console.log('[PROV DEBUG] applyTransaction start', {
+      pasteOverrideSet: !!this._pasteOverride,
+      pasteOverrideSource: this._pasteOverride?.source ?? null,
+      existingSegments: this.segments.length,
+    });
+
     // Step 1: Map existing segments through the transaction mapping
     const mapped: ProvenanceSegment[] = [];
     for (const seg of this.segments) {
@@ -250,6 +256,11 @@ export class ProvenanceTracker {
     // Step 2: Sort mapped segments by start position
     mapped.sort((a, b) => a.start - b.start);
 
+    console.log('[PROV DEBUG] after mapping', {
+      mappedSegments: mapped.map(s => ({ start: s.start, end: s.end, source: s.source })),
+      newDocSize,
+    });
+
     // Step 3: Identify gaps and fill with classified segments
     const result: ProvenanceSegment[] = [];
     let cursor = 0;
@@ -262,6 +273,11 @@ export class ProvenanceTracker {
       if (segStart > cursor) {
         // Gap before this segment — newly inserted content
         const gapText = this.extractText(transaction.doc, cursor, segStart);
+        console.log('[PROV DEBUG] gap found', {
+          gapStart: cursor, gapEnd: segStart,
+          gapTextPreview: gapText.slice(0, 50),
+          pasteOverrideStillSet: !!this._pasteOverride,
+        });
         const classification = this.classifyGap(gapText);
         result.push({
           start: cursor,
@@ -281,6 +297,11 @@ export class ProvenanceTracker {
     // Fill trailing gap (content inserted at the end)
     if (cursor < newDocSize) {
       const gapText = this.extractText(transaction.doc, cursor, newDocSize);
+      console.log('[PROV DEBUG] trailing gap', {
+        gapStart: cursor, gapEnd: newDocSize,
+        gapTextPreview: gapText.slice(0, 50),
+        pasteOverrideStillSet: !!this._pasteOverride,
+      });
       const classification = this.classifyGap(gapText);
       result.push({
         start: cursor,
@@ -362,6 +383,11 @@ export class ProvenanceTracker {
 
   /** Classify inserted text using priority: AI flag → paste override → typed */
   private classifyInsertionFull(text: string): { source: SegmentSource; originalText: string | null } {
+    console.log('[PROV DEBUG] classifyInsertionFull', {
+      textPreview: text.slice(0, 50),
+      pendingAi: this._pendingAiInsertion,
+      pasteOverride: this._pasteOverride?.source ?? null,
+    });
     if (this._pendingAiInsertion) {
       this._pendingAiInsertion = false;
       return { source: "ai_editor", originalText: text };
