@@ -198,9 +198,10 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
           <FlowTokenWarningDialog
             open={showTokenWarning}
             estimation={preCheck}
-            onConfirm={() => {
+            onConfirm={async () => {
               setShowTokenWarning(false);
               clearPreCheck();
+              await flushProvenanceRef.current?.();
               runAnalysis();
             }}
             onCancel={() => {
