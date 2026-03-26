@@ -12,7 +12,13 @@ export function useProvenanceTracker(projectId: string | null) {
   const loadedProjectRef = useRef<string | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedJsonRef = useRef<string>("");
+  const projectIdRef = useRef<string | null>(projectId);
   const [provenanceLoaded, setProvenanceLoaded] = useState(false);
+
+  // Keep projectIdRef in sync
+  useEffect(() => {
+    projectIdRef.current = projectId;
+  }, [projectId]);
 
   // Load provenance data when project changes
   useEffect(() => {
