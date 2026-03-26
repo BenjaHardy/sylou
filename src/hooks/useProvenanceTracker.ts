@@ -59,10 +59,22 @@ export function useProvenanceTracker(projectId: string | null) {
     load();
 
     return () => {
-      // Flush pending save
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
+      }
+      // Flush old project's provenance before switching (fire-and-forget)
+      const oldProjectId = projectIdRef.current;
+      const json = JSON.stringify(trackerRef.current.toJSON());
+      if (json !== lastSavedJsonRef.current && oldProjectId) {
+        supabase
+          .from("provenance_events")
+          .update({
+            segment_map: JSON.parse(json),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("project_id", oldProjectId)
+          .then(() => {});
       }
     };
   }, [projectId]);
