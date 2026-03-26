@@ -1,48 +1,72 @@
 
-The example suggests the remaining issue is likely not the clipboard capture anymore, but a mismatch between the text coordinates used by provenance segments and the text rendered in the highlighted view.
 
-What I found:
-- The clipboard newline fix is present in `WritingEditor.tsx`.
-- Live provenance and FLOW highlighted text both render through `FlowHighlightedText`.
-- `FlowHighlightedText` walks the HTML DOM and manually advances positions using ProseMirror-style block offsets (`+1` before and after block nodes).
-- The tracker, however, extracts inserted text with `doc.textBetween(...)`, while the highlighted view derives positions from parsed HTML text nodes. Those two coordinate systems can drift, especially around paragraph boundaries and trailing characters.
-- Your screenshot is consistent with a boundary drift: most of “This is ” is shown as typed while only the tail (`[ce]`) is external, even though the pasted phrase should be a single external segment.
+## Fix: Provenance Lost When Leaving Editor Screen
 
-Plan:
-1. Verify and unify the coordinate system
-- Refactor `FlowHighlightedText` so it no longer reconstructs positions by walking the HTML DOM with custom block offsets.
-- Instead, derive the display text from the same plain-text model used by provenance tracking, then map segments directly onto that text.
+### Root Cause
 
-2. Make rendering segment-driven
-- Build the highlighted output from `segments` ranges over normalized plain text, rather than “find segment at DOM position”.
-- Preserve line/paragraph breaks visually, but keep character indexing identical to provenance segment indexing.
+When `showFlowReport` becomes true, `ProjectContentArea` returns early with the `FlowReportView` component — **`WritingEditor` is completely unmounted**. Same thing happens when switching projects. On unmount:
 
-3. Keep stats aligned with rendered text
-- Recompute percentages from the same normalized plain-text length used for highlighting so the legend/stats and highlights match exactly.
+1. `useProvenanceTracker`'s cleanup only clears the debounce timer — it **never flushes** unsaved segments to DB
+2. When `WritingEditor` remounts, `useProvenanceTracker` creates a brand-new `ProvenanceTracker` and reloads from DB
+3. The DB data may be stale (last debounced save was 3s ago or never happened), so the segments loaded are outdated or empty
+4. `initWithContentLength` then treats the content as all-typed if no segments were loaded
 
-4. Distinguish live-vs-snapshot behavior
-- Keep the live editor provenance view as the primary debugging surface.
-- Make clear in code that FLOW highlighted text is a snapshot from the last analysis, so stale reports do not get mistaken for current tracker state.
+This explains why it happens on View FLOW, Run FLOW, and project switching — all three unmount the editor.
 
-5. Add a small safeguard around analysis timing
-- When running FLOW, ensure the latest provenance save is flushed or the current in-memory tracker is used, so the report snapshot reflects recent paste actions instead of older DB state.
+### Fix
 
-Technical details:
-- Most likely file to change first: `src/components/FlowHighlightedText.tsx`
-- Likely follow-up file: `src/components/ProjectContentArea.tsx` or the FLOW trigger path, to ensure analysis uses current provenance
-- Likely root cause of your screenshot:
-  - either `FlowHighlightedText` is misprojecting segment boundaries onto the rendered text
-  - or FLOW is reading an older `provenance_snapshot` than the live tracker
-- I would investigate in this order:
-  1. Fix `FlowHighlightedText` coordinate drift
-  2. Then ensure FLOW analysis reads fresh provenance, not a stale debounced DB snapshot
+Two changes:
 
-Expected outcome:
-- A pasted external phrase like “This is [ce]” will render as one continuous external segment in the provenance view, rather than splitting with the last few characters only.
-- Live provenance and FLOW snapshot provenance should agree much more consistently.
+**1. Flush provenance on unmount** (`src/hooks/useProvenanceTracker.ts`)
 
-<lov-actions>
-<lov-suggestion message="Test the provenance flow end-to-end by pasting external text, refreshing the live provenance panel, then running FLOW and comparing both views">Verify end-to-end</lov-suggestion>
-<lov-suggestion message="Refactor the highlighted provenance renderer to use the same plain-text indexing model as the provenance tracker so segment boundaries stay accurate">Fix highlight mapping</lov-suggestion>
-<lov-suggestion message="Ensure FLOW analysis uses the latest in-memory provenance state or flushes pending provenance saves before creating the report snapshot">Prevent stale FLOW snapshots</lov-suggestion>
-</lov-actions>
+Add a separate `useEffect` with an unmount cleanup that calls `doSave()` synchronously (or as close as possible). The existing cleanup in the `projectId` effect only clears the timer. Add:
+
+```typescript
+useEffect(() => {
+  return () => {
+    // Flush on unmount
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    // Fire-and-forget save on unmount
+    const json = JSON.stringify(trackerRef.current.toJSON());
+    if (json !== lastSavedJsonRef.current && projectIdRef.current) {
+      supabase
+        .from("provenance_events")
+        .update({ segment_map: JSON.parse(json), updated_at: new Date().toISOString() })
+        .eq("project_id", projectIdRef.current)
+        .then(() => {});
+    }
+  };
+}, []);
+```
+
+This requires storing `projectId` in a ref (`projectIdRef`) so the unmount cleanup can access the current value without stale closure issues.
+
+**2. Prevent conditional unmounting of WritingEditor** (`src/components/ProjectContentArea.tsx`)
+
+As a belt-and-suspenders approach, instead of returning early when `showFlowReport` is true (which unmounts the editor), render both the editor and the report, hiding the editor with CSS (`display: none`). This keeps the editor mounted and its provenance tracker alive:
+
+```tsx
+// Instead of early returns for flow report, render both:
+<div style={{ display: showFlowReport ? 'none' : undefined }} className="flex-1 flex flex-col">
+  {/* existing editor layout */}
+</div>
+{showFlowReport && (flowReport || flowLoading) && (
+  <FlowReportView ... />
+)}
+```
+
+### Technical Details
+
+| File | Change |
+|------|--------|
+| `src/hooks/useProvenanceTracker.ts` | Add `projectIdRef`, add unmount-flush `useEffect` |
+| `src/components/ProjectContentArea.tsx` | Render editor + report side-by-side with CSS visibility toggle instead of conditional early returns |
+
+### Why both changes
+
+- The unmount flush handles project switching (where the editor genuinely needs to unmount for a different project)
+- The CSS hide handles FLOW report viewing (where the same project's editor should stay alive)
+
