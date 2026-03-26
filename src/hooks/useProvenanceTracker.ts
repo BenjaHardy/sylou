@@ -67,7 +67,27 @@ export function useProvenanceTracker(projectId: string | null) {
     };
   }, [projectId]);
 
-  /** Call once after editor content is loaded to finalize initialization */
+  // Flush provenance to DB on unmount (fire-and-forget)
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      const json = JSON.stringify(trackerRef.current.toJSON());
+      if (json !== lastSavedJsonRef.current && projectIdRef.current) {
+        supabase
+          .from("provenance_events")
+          .update({
+            segment_map: JSON.parse(json),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("project_id", projectIdRef.current)
+          .then(() => {});
+      }
+    };
+  }, []);
+
   const initWithContentLength = useCallback((contentLength: number) => {
     const tracker = trackerRef.current;
     const existingSegments = tracker.getSegments();
