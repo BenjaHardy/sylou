@@ -165,152 +165,150 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
     clearPreCheck();
   };
 
-  // Show FLOW report view
-  if (showFlowReport && (flowReport || flowLoading)) {
-    if (flowLoading) {
-      return (
-        <div className="flex-1 flex flex-col bg-background h-screen">
-          <FlowReportView
-            report={flowReport!}
-            projectName={project.name}
-            loading={true}
-            onBack={handleCloseFlowReport}
-            onSaveFeedback={() => {}}
-            onSaveAssessment={() => {}}
-            showPreAnalysis={false}
-          />
-        </div>
-      );
-    }
-
-    if (flowReport) {
-      return (
-        <>
-          <FlowReportView
-            report={flowReport}
-            projectName={project.name}
-            loading={false}
-            onBack={handleCloseFlowReport}
-            onSaveFeedback={saveFeedback}
-            onSaveAssessment={saveUserAssessment}
-            showPreAnalysis={isCurrentRunFirst}
-          />
-          <FlowTokenWarningDialog
-            open={showTokenWarning}
-            estimation={preCheck}
-            onConfirm={async () => {
-              setShowTokenWarning(false);
-              clearPreCheck();
-              await flushProvenanceRef.current?.();
-              runAnalysis();
-            }}
-            onCancel={() => {
-              setShowTokenWarning(false);
-              clearPreCheck();
-            }}
-          />
-        </>
-      );
-    }
-  }
-
-  if (showFlowReport && flowLoading && !flowReport) {
-    return (
-      <div className="flex-1 flex items-center justify-center bg-background h-screen">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
-          <div>
-            <p className="text-sm font-medium text-foreground">Analyzing your project…</p>
-            <p className="text-xs text-muted-foreground mt-1">This may take up to a minute</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const showingFlowReport = showFlowReport && (flowReport || flowLoading);
 
   return (
-    <div className="flex-1 flex flex-col bg-background h-screen [&_[data-panel]]:transition-all [&_[data-panel]]:duration-150 [&_[data-panel]]:ease-ethos-ease">
-      <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
-        <span className="text-sm font-medium text-foreground truncate max-w-[200px]">{project.name}</span>
-        <div className="flex items-center gap-2">
-          {flowError && (
-            <span className="text-xs text-destructive truncate max-w-[200px]">{flowError}</span>
-          )}
-          {budgetError && (
-            <span className="text-xs text-destructive truncate max-w-[260px]">
-              Budget: ~{budgetError.estimated_cost.toLocaleString()} needed, {budgetError.budget_remaining.toLocaleString()} remaining
-            </span>
-          )}
-          <Button
-            variant={showLiveProvenance ? "secondary" : "ghost"}
-            size="sm"
-            className="h-7 gap-1.5 text-xs"
-            onClick={() => {
-              if (!showLiveProvenance) setProvenanceKey((k) => k + 1);
-              setShowLiveProvenance((v) => !v);
-            }}
-          >
-            <Eye className="h-3.5 w-3.5" />
-            Provenance
-          </Button>
-        </div>
-      </div>
-
-      <ResizablePanelGroup direction="horizontal" className="flex-1">
-        <ResizablePanel ref={editorPanelRef} defaultSize={DEFAULT_EDITOR_SIZE} minSize={0}>
-          <div className="flex flex-col h-full">
-            <WritingEditor
-              projectId={project.id}
-              tutorMode={project.tutor_mode}
-              threadId={threadId}
-              onWritingActivity={markWriting}
-              onFlowClick={handleFlowClick}
-              onReanalyzeClick={handleReanalyzeClick}
-              flowLoading={flowLoading}
-              hasFlowReport={!!flowReport}
-              onAskComplete={(msgs) => setPendingChatMessages((prev) => [...prev, ...msgs])}
-              onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
-              onProvenanceTracker={setProvenanceTracker}
-              onFlushProvenance={(fn) => { flushProvenanceRef.current = fn; }}
-              conciseMode={conciseMode}
-              onEditorContent={setEditorHtml}
-            />
-            {showLiveProvenance && provenanceTracker && (
-              <div className="border-t border-border h-[40%] min-h-[200px] overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-1 bg-[hsl(var(--ethos-surface))] border-b border-border">
-                  <span className="text-xs font-medium text-muted-foreground">Live Provenance View</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 gap-1 text-xs"
-                    onClick={() => setProvenanceKey((k) => k + 1)}
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                    Refresh
-                  </Button>
-                </div>
-                <FlowHighlightedText
-                  key={provenanceKey}
-                  segments={provenanceTracker.getSegments()}
-                  writingContent={editorHtml}
-                  onClose={() => setShowLiveProvenance(false)}
-                />
+    <>
+      {/* FLOW report layer — rendered on top when active */}
+      {showingFlowReport && (
+        flowLoading && !flowReport ? (
+          <div className="flex-1 flex items-center justify-center bg-background h-screen">
+            <div className="text-center space-y-4">
+              <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
+              <div>
+                <p className="text-sm font-medium text-foreground">Analyzing your project…</p>
+                <p className="text-xs text-muted-foreground mt-1">This may take up to a minute</p>
               </div>
-            )}
-            <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
-              <ProjectActivityBar projectId={project.id} />
             </div>
           </div>
-        </ResizablePanel>
-        <ResizableHandle withHandle />
-        <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20}>
-          <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} conciseMode={conciseMode} onConciseModeChange={setConciseMode} />
-        </ResizablePanel>
-      </ResizablePanelGroup>
+        ) : flowLoading ? (
+          <div className="flex-1 flex flex-col bg-background h-screen">
+            <FlowReportView
+              report={flowReport!}
+              projectName={project.name}
+              loading={true}
+              onBack={handleCloseFlowReport}
+              onSaveFeedback={() => {}}
+              onSaveAssessment={() => {}}
+              showPreAnalysis={false}
+            />
+          </div>
+        ) : flowReport ? (
+          <>
+            <FlowReportView
+              report={flowReport}
+              projectName={project.name}
+              loading={false}
+              onBack={handleCloseFlowReport}
+              onSaveFeedback={saveFeedback}
+              onSaveAssessment={saveUserAssessment}
+              showPreAnalysis={isCurrentRunFirst}
+            />
+            <FlowTokenWarningDialog
+              open={showTokenWarning}
+              estimation={preCheck}
+              onConfirm={async () => {
+                setShowTokenWarning(false);
+                clearPreCheck();
+                await flushProvenanceRef.current?.();
+                runAnalysis();
+              }}
+              onCancel={() => {
+                setShowTokenWarning(false);
+                clearPreCheck();
+              }}
+            />
+          </>
+        ) : null
+      )}
 
-      <FlowConfirmDialog open={showConfirm} onConfirm={handleConfirmAnalysis} onCancel={() => setShowConfirm(false)} />
-      <FlowReanalyzeDialog open={showReanalyze} onConfirm={handleConfirmReanalyze} onCancel={() => setShowReanalyze(false)} />
-      <FlowTokenWarningDialog open={showTokenWarning} estimation={preCheck} onConfirm={handleTokenWarningConfirm} onCancel={handleTokenWarningCancel} />
-    </div>
+      {/* Editor layer — always mounted, hidden via CSS when FLOW report is showing */}
+      <div
+        className="flex-1 flex flex-col bg-background h-screen [&_[data-panel]]:transition-all [&_[data-panel]]:duration-150 [&_[data-panel]]:ease-ethos-ease"
+        style={{ display: showingFlowReport ? 'none' : undefined }}
+      >
+        <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
+          <span className="text-sm font-medium text-foreground truncate max-w-[200px]">{project.name}</span>
+          <div className="flex items-center gap-2">
+            {flowError && (
+              <span className="text-xs text-destructive truncate max-w-[200px]">{flowError}</span>
+            )}
+            {budgetError && (
+              <span className="text-xs text-destructive truncate max-w-[260px]">
+                Budget: ~{budgetError.estimated_cost.toLocaleString()} needed, {budgetError.budget_remaining.toLocaleString()} remaining
+              </span>
+            )}
+            <Button
+              variant={showLiveProvenance ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 gap-1.5 text-xs"
+              onClick={() => {
+                if (!showLiveProvenance) setProvenanceKey((k) => k + 1);
+                setShowLiveProvenance((v) => !v);
+              }}
+            >
+              <Eye className="h-3.5 w-3.5" />
+              Provenance
+            </Button>
+          </div>
+        </div>
+
+        <ResizablePanelGroup direction="horizontal" className="flex-1">
+          <ResizablePanel ref={editorPanelRef} defaultSize={DEFAULT_EDITOR_SIZE} minSize={0}>
+            <div className="flex flex-col h-full">
+              <WritingEditor
+                projectId={project.id}
+                tutorMode={project.tutor_mode}
+                threadId={threadId}
+                onWritingActivity={markWriting}
+                onFlowClick={handleFlowClick}
+                onReanalyzeClick={handleReanalyzeClick}
+                flowLoading={flowLoading}
+                hasFlowReport={!!flowReport}
+                onAskComplete={(msgs) => setPendingChatMessages((prev) => [...prev, ...msgs])}
+                onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
+                onProvenanceTracker={setProvenanceTracker}
+                onFlushProvenance={(fn) => { flushProvenanceRef.current = fn; }}
+                conciseMode={conciseMode}
+                onEditorContent={setEditorHtml}
+              />
+              {showLiveProvenance && provenanceTracker && (
+                <div className="border-t border-border h-[40%] min-h-[200px] overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-1 bg-[hsl(var(--ethos-surface))] border-b border-border">
+                    <span className="text-xs font-medium text-muted-foreground">Live Provenance View</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 gap-1 text-xs"
+                      onClick={() => setProvenanceKey((k) => k + 1)}
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Refresh
+                    </Button>
+                  </div>
+                  <FlowHighlightedText
+                    key={provenanceKey}
+                    segments={provenanceTracker.getSegments()}
+                    writingContent={editorHtml}
+                    onClose={() => setShowLiveProvenance(false)}
+                  />
+                </div>
+              )}
+              <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
+                <ProjectActivityBar projectId={project.id} />
+              </div>
+            </div>
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20}>
+            <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} conciseMode={conciseMode} onConciseModeChange={setConciseMode} />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+
+        <FlowConfirmDialog open={showConfirm} onConfirm={handleConfirmAnalysis} onCancel={() => setShowConfirm(false)} />
+        <FlowReanalyzeDialog open={showReanalyze} onConfirm={handleConfirmReanalyze} onCancel={() => setShowReanalyze(false)} />
+        <FlowTokenWarningDialog open={showTokenWarning} estimation={preCheck} onConfirm={handleTokenWarningConfirm} onCancel={handleTokenWarningCancel} />
+      </div>
+    </>
   );
 }
