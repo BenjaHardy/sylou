@@ -107,13 +107,20 @@ export function useProvenanceTracker(projectId: string | null) {
 
   const initWithContentLength = useCallback((contentLength: number) => {
     const tracker = trackerRef.current;
-    const existingSegments = tracker.getSegments();
-    if (existingSegments.length > 0) {
-      // Already loaded from DB — just clamp to current length
-      tracker.init(existingSegments, contentLength);
+    // Use deferred segments from DB load if available
+    const saved = loadedSegmentsRef.current;
+    if (saved) {
+      loadedSegmentsRef.current = null;
+      tracker.init(saved, contentLength);
     } else {
-      // No saved segments — initialize everything as typed
-      tracker.init(null, contentLength);
+      const existingSegments = tracker.getSegments();
+      if (existingSegments.length > 0) {
+        // Already initialized — just re-clamp
+        tracker.init(existingSegments, contentLength);
+      } else {
+        // No saved segments — initialize everything as typed
+        tracker.init(null, contentLength);
+      }
     }
   }, []);
 
