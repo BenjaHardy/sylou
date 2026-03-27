@@ -13,6 +13,7 @@ export function useProvenanceTracker(projectId: string | null) {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedJsonRef = useRef<string>("");
   const projectIdRef = useRef<string | null>(projectId);
+  const loadedSegmentsRef = useRef<ProvenanceSegment[] | null>(null);
   const [provenanceLoaded, setProvenanceLoaded] = useState(false);
 
   // Keep projectIdRef in sync
@@ -47,11 +48,15 @@ export function useProvenanceTracker(projectId: string | null) {
       }
 
       const segmentMap = data?.segment_map as unknown as ProvenanceSegment[] | null;
-      // We'll call init later when editor content length is known
+      // Store fetched segments — do NOT init with length 0 (would clamp them away)
       trackerRef.current = new ProvenanceTracker();
-      if (segmentMap && Array.isArray(segmentMap) && segmentMap.length > 0) {
-        trackerRef.current.init(segmentMap, 0); // Will be re-clamped on initWithContentLength
-      }
+      loadedSegmentsRef.current = (segmentMap && Array.isArray(segmentMap) && segmentMap.length > 0)
+        ? segmentMap
+        : null;
+      // Set baseline so we don't re-save identical data
+      lastSavedJsonRef.current = loadedSegmentsRef.current
+        ? JSON.stringify(loadedSegmentsRef.current)
+        : "";
       loadedProjectRef.current = projectId;
       setProvenanceLoaded(true);
     };
@@ -102,13 +107,20 @@ export function useProvenanceTracker(projectId: string | null) {
 
   const initWithContentLength = useCallback((contentLength: number) => {
     const tracker = trackerRef.current;
-    const existingSegments = tracker.getSegments();
-    if (existingSegments.length > 0) {
-      // Already loaded from DB — just clamp to current length
-      tracker.init(existingSegments, contentLength);
+    // Use deferred segments from DB load if available
+    const saved = loadedSegmentsRef.current;
+    if (saved) {
+      loadedSegmentsRef.current = null;
+      tracker.init(saved, contentLength);
     } else {
-      // No saved segments — initialize everything as typed
-      tracker.init(null, contentLength);
+      const existingSegments = tracker.getSegments();
+      if (existingSegments.length > 0) {
+        // Already initialized — just re-clamp
+        tracker.init(existingSegments, contentLength);
+      } else {
+        // No saved segments — initialize everything as typed
+        tracker.init(null, contentLength);
+      }
     }
   }, []);
 
