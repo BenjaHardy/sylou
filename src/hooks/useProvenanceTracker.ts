@@ -13,6 +13,7 @@ export function useProvenanceTracker(projectId: string | null) {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedJsonRef = useRef<string>("");
   const projectIdRef = useRef<string | null>(projectId);
+  const loadedSegmentsRef = useRef<ProvenanceSegment[] | null>(null);
   const [provenanceLoaded, setProvenanceLoaded] = useState(false);
 
   // Keep projectIdRef in sync
