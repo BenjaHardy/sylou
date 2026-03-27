@@ -1,95 +1,94 @@
 
-## Fix plan: make project switching wait for a real save before loading the next project
+I reviewed the code path end-to-end at the file/DB level, and the main project-switch flush work is not the real failure anymore.
 
-### What’s actually happening
-The current project-switch fix is not reliable because it saves provenance in a `useEffect` cleanup as a fire-and-forget request. On switch:
+## Root cause
 
-1. old project cleanup starts an async provenance update
-2. new project immediately loads
-3. if the user switches back before that write finishes, the app reloads stale/empty `provenance_events`
-4. `initWithContentLength` sees no saved segments and recreates everything as `[t]`
+The provenance is being destroyed on reload, not on save.
 
-There is also a second risk: writing content and provenance are persisted independently, so project switching can load fresh editor HTML with stale provenance.
+In `src/hooks/useProvenanceTracker.ts`:
+- the load path fetches `segment_map`
+- then immediately does `trackerRef.current.init(segmentMap, 0)`
 
-### Implementation approach
+In `src/lib/provenance-tracker.ts`, `init(savedSegments, contentLength)` always calls `clampToLength(contentLength)` when saved segments exist.
 
-#### 1) Move project-switch persistence out of cleanup and into the selection flow
-Instead of relying on `useEffect` cleanup timing, save explicitly before changing the selected project.
+So when `contentLength` is `0`, all loaded segments are trimmed away:
+```ts
+if (savedSegments && savedSegments.length > 0) {
+  this.segments = savedSegments;
+  this.clampToLength(contentLength); // contentLength = 0 here
+}
+```
 
-- In `Index.tsx`, replace direct `setSelectedId` usage with an async `handleSelectProject`
-- Keep a ref to a “flush current project” callback exposed by `ProjectContentArea`
-- When the user selects a different project:
-  - await the current editor flush
-  - then update `selectedId`
+Then later, when `WritingEditor` calls `initWithContentLength(docLen)`, `getSegments()` is already empty, so it falls into:
+```ts
+tracker.init(null, contentLength)
+```
+which recreates the whole document as one `[t]` segment.
 
-This makes switching deterministic.
+That exactly matches your symptom: leaving and returning reloads everything as typed.
 
-#### 2) Expose one combined flush from the editor screen
-In `ProjectContentArea.tsx`, expose a single callback upward that flushes:
-- writing content
-- provenance
+I also checked the DB state: the latest `provenance_events` rows for your recent test projects are already stored as a single typed segment (`[{ start: 0, end: N, source: "typed" }]`), while `writing_content` still contains the real text. That’s consistent with this destructive re-init path.
 
-in sequence before project switch.
+## Fix to implement
 
-This should live at the `ProjectContentArea` level because it owns the active project/editor context.
+### 1. Stop initializing saved provenance at length 0
+In `useProvenanceTracker`, do not call `tracker.init(segmentMap, 0)` during the fetch.
 
-#### 3) Make `WritingEditor` expose both flushes, not just provenance
-Right now it exposes only `flushProvenance`.
+Instead:
+- add a `loadedSegmentsRef`
+- on load, store fetched `segment_map` into that ref
+- keep `trackerRef.current` fresh but uninitialized
+- in `initWithContentLength(contentLength)`, initialize from `loadedSegmentsRef.current` once the editor’s real doc length is known
 
-Update it to expose a single `flushBeforeLeave(): Promise<void>` that:
-- clears and saves pending writing-content debounce
-- clears and saves pending provenance debounce
+Implementation shape:
+```ts
+const loadedSegmentsRef = useRef<ProvenanceSegment[] | null>(null);
 
-That avoids HTML/provenance drift.
+// after fetch
+loadedSegmentsRef.current = segmentMap ?? null;
+trackerRef.current = new ProvenanceTracker();
 
-#### 4) Add a real flush API to `useWritingContent`
-`useWritingContent` currently only supports debounced autosave and manual button save.
+// later
+const saved = loadedSegmentsRef.current;
+tracker.init(saved, contentLength);
+loadedSegmentsRef.current = null;
+```
 
-Add a dedicated async flush method that:
-- clears the debounce timer
-- awaits `saveNow(currentContent)`
-- can be safely called during project switching / navigation
+### 2. Reset save baselines when loading a project
+Also in `useProvenanceTracker`:
+- set `lastSavedJsonRef.current` from the fetched `segment_map`
+- clear it appropriately when no project / empty project loads
 
-#### 5) Keep the existing unmount/project cleanup as fallback only
-The cleanup-based provenance save is still worth keeping as a safety net, but it should no longer be the primary mechanism for project switching.
+That prevents cross-project stale comparisons and unnecessary rewrites.
 
-If kept:
-- update `lastSavedJsonRef` on successful fire-and-forget saves if practical
-- treat it as backup for abrupt unmounts, not navigation correctness
+### 3. Keep the awaited flush logic
+The recent `Index -> ProjectContentArea -> WritingEditor` flush chain is still correct and should stay:
+- it protects against race conditions during project switching
+- but it only works if the load path preserves the saved segments
 
-### Files to update
-- `src/pages/Index.tsx`
-  - intercept project selection and await flush before switching
-- `src/components/ProjectContentArea.tsx`
-  - expose current-project flush callback upward
-- `src/components/WritingEditor.tsx`
-  - compose and expose a combined flush method
-- `src/hooks/useWritingContent.ts`
-  - add `flushSave` / immediate save API
+## Files to update
+
 - `src/hooks/useProvenanceTracker.ts`
-  - keep existing fallback cleanup, but no longer depend on it for project switching
+  - replace the destructive `init(segmentMap, 0)` load path
+  - add `loadedSegmentsRef`
+  - reset `lastSavedJsonRef` correctly per project
+- optionally leave `src/lib/provenance-tracker.ts` unchanged
+  - cleaner to fix this in the hook than to give `init()` special “0 means defer” semantics
 
-### Why this should fix it
-This changes project switching from:
-```text
-click project B -> old project maybe saves later -> B loads now
-```
+## Verification after implementation
 
-to:
-```text
-click project B -> await old project save -> switch to B
-```
+1. In Project A, create mixed provenance (`[cc]`, `[ce]`, `[ai]`, `[t]`)
+2. Confirm live provenance panel shows mixed segments
+3. Switch to Project B, then immediately back to A
+4. Confirm mixed segments still appear
+5. Open `View FLOW`, go back, confirm segments still persist
+6. Refresh the page and re-open Project A
+7. Confirm DB `provenance_events.segment_map` still contains mixed segments, not a single typed span
 
-That removes the race condition causing stale provenance to reload as `[t]`.
+## Why I’m confident this is the real issue
 
-### Small related cleanup
-There is also a separate console warning in `FlowHighlightedText` caused by `<div>` inside `<p>` in tooltip content. I would fix that in the same pass only if you want, but it is unrelated to the provenance reset bug.
-
-### Verification
-After implementation, test this exact flow:
-
-1. add mixed provenance in Project A
-2. switch to Project B immediately
-3. switch back to Project A immediately
-4. confirm live provenance still shows original tags
-5. repeat after opening/closing FLOW to confirm both navigation paths are safe
+The current save/flush code may be imperfect, but even a correct save would still fail if the app reloads saved segments by first clamping them to length 0. That is the one code path that directly explains:
+- FLOW/view return resets
+- project switch resets
+- “everything becomes `[t]`”
+- recent DB rows ending up as one typed segment
