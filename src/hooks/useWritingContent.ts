@@ -126,5 +126,16 @@ export function useWritingContent(projectId: string | null) {
     saveNow(content);
   }, [isDirty, content, saveNow]);
 
-  return { content, loading, saveState, updateContent, isDirty, manualSave };
+  /** Immediately flush any pending debounced save. Returns a promise that resolves after DB write. */
+  const flushSave = useCallback(async () => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+      debounceTimer.current = null;
+    }
+    if (!projectId) return;
+    // Save current content (saveNow checks if it differs from last saved)
+    await saveNow(content);
+  }, [projectId, content, saveNow]);
+
+  return { content, loading, saveState, updateContent, isDirty, manualSave, flushSave };
 }

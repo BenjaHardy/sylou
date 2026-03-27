@@ -21,6 +21,7 @@ import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 interface Props {
   project: Project | null;
   onFlowLoadingChange?: (loading: boolean) => void;
+  onFlushRef?: (flush: (() => Promise<void>) | null) => void;
 }
 
 function WelcomeScreen() {
@@ -52,7 +53,7 @@ function WelcomeScreen() {
 const DEFAULT_EDITOR_SIZE = 70;
 const DEFAULT_CHAT_SIZE = 30;
 
-export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
+export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }: Props) {
   const [chatExpanded, setChatExpanded] = useState(false);
   const [conciseMode, setConciseMode] = useState(false);
   const [showFlowReport, setShowFlowReport] = useState(false);
@@ -89,6 +90,19 @@ export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
   useEffect(() => {
     onFlowLoadingChange?.(flowLoading);
   }, [flowLoading, onFlowLoadingChange]);
+
+  // Expose the combined flush callback upward so Index can await it before switching projects
+  useEffect(() => {
+    if (!project) {
+      onFlushRef?.(null);
+      return;
+    }
+    const flush = async () => {
+      await flushProvenanceRef.current?.();
+    };
+    onFlushRef?.(flush);
+    return () => onFlushRef?.(null);
+  }, [project, onFlushRef]);
 
   if (!project) return <WelcomeScreen />;
 

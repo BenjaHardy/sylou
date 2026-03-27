@@ -35,8 +35,8 @@ interface Props {
 }
 
 export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, onFlushProvenance, conciseMode, onEditorContent }: Props & { onEditorContent?: (html: string) => void }) {
-  const { content, loading, saveState, updateContent, isDirty, manualSave } = useWritingContent(projectId);
-  const { getTracker, initWithContentLength, scheduleSave, flushSave, provenanceLoaded } = useProvenanceTracker(projectId);
+  const { content, loading, saveState, updateContent, isDirty, manualSave, flushSave: flushWritingContent } = useWritingContent(projectId);
+  const { getTracker, initWithContentLength, scheduleSave, flushSave: flushProvenance, provenanceLoaded } = useProvenanceTracker(projectId);
   const [initialSet, setInitialSet] = useState(false);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
   const prevDocLenRef = useRef<number>(0);
@@ -188,9 +188,13 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       setInitialSet(true);
       // Expose tracker and flush function to parent
       onProvenanceTracker?.(tracker);
-      onFlushProvenance?.(() => flushSave());
+      const combinedFlush = async () => {
+        await flushWritingContent();
+        await flushProvenance();
+      };
+      onFlushProvenance?.(combinedFlush);
     }
-  }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker, onFlushProvenance, flushSave]);
+  }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker, onFlushProvenance, flushWritingContent, flushProvenance]);
 
   // Reset when projectId changes
   useEffect(() => {
