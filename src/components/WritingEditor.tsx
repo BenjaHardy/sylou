@@ -194,7 +194,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       };
       onFlushProvenance?.(combinedFlush);
     }
-  }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker, onFlushProvenance, flushSave]);
+  }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker, onFlushProvenance, flushWritingContent, flushProvenance]);
 
   // Reset when projectId changes
   useEffect(() => {
