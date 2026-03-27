@@ -188,7 +188,11 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       setInitialSet(true);
       // Expose tracker and flush function to parent
       onProvenanceTracker?.(tracker);
-      onFlushProvenance?.(() => flushSave());
+      const combinedFlush = async () => {
+        await flushWritingContent();
+        await flushProvenance();
+      };
+      onFlushProvenance?.(combinedFlush);
     }
   }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker, onFlushProvenance, flushSave]);
 
