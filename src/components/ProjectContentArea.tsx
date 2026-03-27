@@ -91,6 +91,19 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
     onFlowLoadingChange?.(flowLoading);
   }, [flowLoading, onFlowLoadingChange]);
 
+  // Expose the combined flush callback upward so Index can await it before switching projects
+  useEffect(() => {
+    if (!project) {
+      onFlushRef?.(null);
+      return;
+    }
+    const flush = async () => {
+      await flushProvenanceRef.current?.();
+    };
+    onFlushRef?.(flush);
+    return () => onFlushRef?.(null);
+  }, [project, onFlushRef]);
+
   if (!project) return <WelcomeScreen />;
 
   const handleToggleChat = () => {
