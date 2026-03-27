@@ -48,11 +48,15 @@ export function useProvenanceTracker(projectId: string | null) {
       }
 
       const segmentMap = data?.segment_map as unknown as ProvenanceSegment[] | null;
-      // We'll call init later when editor content length is known
+      // Store fetched segments — do NOT init with length 0 (would clamp them away)
       trackerRef.current = new ProvenanceTracker();
-      if (segmentMap && Array.isArray(segmentMap) && segmentMap.length > 0) {
-        trackerRef.current.init(segmentMap, 0); // Will be re-clamped on initWithContentLength
-      }
+      loadedSegmentsRef.current = (segmentMap && Array.isArray(segmentMap) && segmentMap.length > 0)
+        ? segmentMap
+        : null;
+      // Set baseline so we don't re-save identical data
+      lastSavedJsonRef.current = loadedSegmentsRef.current
+        ? JSON.stringify(loadedSegmentsRef.current)
+        : "";
       loadedProjectRef.current = projectId;
       setProvenanceLoaded(true);
     };
