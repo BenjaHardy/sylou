@@ -53,7 +53,7 @@ function WelcomeScreen() {
 const DEFAULT_EDITOR_SIZE = 70;
 const DEFAULT_CHAT_SIZE = 30;
 
-export function ProjectContentArea({ project, onFlowLoadingChange }: Props) {
+export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }: Props) {
   const [chatExpanded, setChatExpanded] = useState(false);
   const [conciseMode, setConciseMode] = useState(false);
   const [showFlowReport, setShowFlowReport] = useState(false);
