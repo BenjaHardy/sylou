@@ -109,7 +109,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           }
           return false;
         },
-        drop: (_view, event) => {
+      drop: (_view, event) => {
           // Capture the drag source's dominant provenance before the drop transaction fires
           const ed = editor;
           if (!ed) return false;
@@ -118,7 +118,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           const tracker = getTracker();
           const dominant = tracker.getDominantSource(from, to);
           const text = ed.state.doc.textBetween(from, to, "\n");
-          tracker.setDragOverride({
+          tracker.setPendingSignal({
             source: dominant,
             originalText: dominant === "typed" || dominant === "chat_user" ? null : text,
           });
