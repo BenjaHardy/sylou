@@ -49,7 +49,10 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   const [aiSelectionFrom, setAiSelectionFrom] = useState(0);
   const [aiSelectionTo, setAiSelectionTo] = useState(0);
 
-  // Refs to always hold the latest flush functions (avoids stale closures)
+  // Flush refs: useWritingContent and useProvenanceTracker return new flushSave
+  // callbacks when projectId changes (they close over the new project). Storing
+  // them in refs lets us expose a single stable flush callback to the parent
+  // without stale closure bugs — the parent always calls the latest versions.
   const flushWritingRef = useRef(flushWritingContent);
   const flushProvenanceRef = useRef(flushProvenance);
   useEffect(() => { flushWritingRef.current = flushWritingContent; }, [flushWritingContent]);
@@ -109,7 +112,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           }
           return false;
         },
-        drop: (_view, event) => {
+      drop: (_view, event) => {
           // Capture the drag source's dominant provenance before the drop transaction fires
           const ed = editor;
           if (!ed) return false;
@@ -118,7 +121,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           const tracker = getTracker();
           const dominant = tracker.getDominantSource(from, to);
           const text = ed.state.doc.textBetween(from, to, "\n");
-          tracker.setDragOverride({
+          tracker.setPendingSignal({
             source: dominant,
             originalText: dominant === "typed" || dominant === "chat_user" ? null : text,
           });
@@ -129,8 +132,10 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
         const tracker = getTracker();
         const pastedText = event.clipboardData?.getData("text/plain") ?? "";
         if (pastedText) {
-          const classification = tracker.classifyPaste(pastedText);
-          tracker.setPasteOverride(classification);
+          // classifyPaste runs the full priority chain (internal clipboard →
+          // AI registry → chat clipboard → external) then stores the result
+          // as the pending signal for the upcoming transaction.
+          tracker.setPendingSignal(tracker.classifyPaste(pastedText));
         }
         return false;
       },
@@ -227,7 +232,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     (replacementText: string) => {
       if (!editor) return;
       const tracker = getTracker();
-      tracker.setPendingAiInsertion();
+      tracker.setPendingSignal({ source: "ai_editor", originalText: null });
       editor.chain().focus().insertContent(replacementText).run();
     },
     [editor, getTracker]

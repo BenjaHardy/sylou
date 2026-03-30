@@ -13,9 +13,12 @@ export default function Index() {
 
   const selectedProject = projects?.find((p) => p.id === selectedId) ?? null;
 
+  // Deterministic project switch: await the flush of both writing content and
+  // provenance data for the current project before loading the new one.
+  // The flush is awaited (not fire-and-forget) to guarantee DB persistence
+  // completes before the editor remounts with a different projectId.
   const handleSelectProject = useCallback(async (newId: string | null) => {
     if (newId === selectedId) return;
-    // Flush current project's writing content + provenance before switching
     if (flushRef.current) {
       await flushRef.current();
     }

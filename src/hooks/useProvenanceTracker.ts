@@ -4,8 +4,18 @@ import { ProvenanceTracker, ProvenanceSegment } from "@/lib/provenance-tracker";
 
 /**
  * Hook that manages a ProvenanceTracker instance for a project.
- * Handles initialization (load from DB), saving (debounced with content saves),
- * and exposes methods for the editor and other components.
+ *
+ * Load/save lifecycle:
+ *   1. Load: on projectId change, fetch segment_map from DB. Segments are stored
+ *      in loadedSegmentsRef but NOT initialized yet (deferred until editor reports
+ *      a non-zero document length via initWithContentLength).
+ *   2. Save: scheduleSave() starts a 3s debounce → doSave() writes to DB.
+ *      Deduplicates via lastSavedJsonRef to skip no-op saves.
+ *   3. Flush: flushSave() clears the timer and saves immediately. Called by
+ *      WritingEditor's stable flush ref before project switching.
+ *   4. Unmount: fire-and-forget save as a safety net (parent should flush first).
+ *   5. Project switch cleanup: the [projectId] effect cleanup also does a
+ *      fire-and-forget save of the old project's provenance.
  */
 export function useProvenanceTracker(projectId: string | null) {
   const trackerRef = useRef<ProvenanceTracker>(new ProvenanceTracker());

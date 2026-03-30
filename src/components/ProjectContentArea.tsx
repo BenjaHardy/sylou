@@ -91,7 +91,11 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
     onFlowLoadingChange?.(flowLoading);
   }, [flowLoading, onFlowLoadingChange]);
 
-  // Expose the combined flush callback upward so Index can await it before switching projects
+  // Flush chain: Index.handleSelectProject → awaits flushRef.current()
+  //   → ProjectContentArea.flush → WritingEditor.stableFlush
+  //     → flushWritingContent (saves editor HTML to DB)
+  //     → flushProvenance (saves segment_map to DB)
+  // This ensures both content and provenance are persisted before switching projects.
   useEffect(() => {
     if (!project) {
       onFlushRef?.(null);
