@@ -13,6 +13,30 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   });
 }
 
+/**
+ * Extract the text delta from a streaming chunk, model-agnostic.
+ * - Mistral / OpenAI-compatible: choices[0].delta.content
+ * - Anthropic (future): delta.text on content_block_delta events
+ */
+function extractDeltaText(
+  parsed: Record<string, unknown>,
+  _provider: string
+): string | null {
+  // Mistral / OpenAI format
+  const choices = parsed.choices as
+    | Array<{ delta?: { content?: string } }>
+    | undefined;
+  if (choices?.[0]?.delta?.content) {
+    return choices[0].delta.content;
+  }
+  // Anthropic format (future)
+  if (parsed.type === "content_block_delta") {
+    const delta = parsed.delta as { text?: string } | undefined;
+    if (delta?.text) return delta.text;
+  }
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -59,6 +83,7 @@ Deno.serve(async (req) => {
     const threadId: string = body.thread_id;
     const message: string = body.message;
     const conciseMode: boolean = body.concise_mode ?? false;
+    const streamRequested: boolean = body.stream === true;
 
     if (!threadId || !message) {
       return jsonResponse({ error: "thread_id and message are required" }, 400);
@@ -172,12 +197,203 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       { role: "user", content: message.trim() },
     ];
 
-    // --- Call Mistral ---
+    // --- Mistral API key ---
     const mistralKey = Deno.env.get("MISTRAL_API_KEY");
     if (!mistralKey) {
       return jsonResponse({ error: "Mistral API key not configured" }, 500);
     }
 
+    // =========================================================
+    // STREAMING PATH
+    // =========================================================
+    if (streamRequested) {
+      const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${mistralKey}`,
+        },
+        body: JSON.stringify({
+          model: "mistral-large-latest",
+          messages: llmMessages,
+          max_tokens: 2000,
+          stream: true,
+        }),
+      });
+
+      if (!llmRes.ok) {
+        const errText = await llmRes.text();
+        console.error("Mistral API error:", llmRes.status, errText);
+        return jsonResponse(
+          { error: "AI service temporarily unavailable. Please try again." },
+          502
+        );
+      }
+
+      // We need the service role client for persistence after user's request scope
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
+
+      let fullResponse = "";
+      let clientDisconnected = false;
+      const encoder = new TextEncoder();
+      const decoder = new TextDecoder();
+
+      const stream = new ReadableStream({
+        async start(controller) {
+          const reader = llmRes.body!.getReader();
+
+          // Helper: safely write to the SSE stream
+          function sendSSE(eventData: string) {
+            if (clientDisconnected) return;
+            try {
+              controller.enqueue(encoder.encode(`data: ${eventData}\n\n`));
+            } catch {
+              clientDisconnected = true;
+            }
+          }
+
+          try {
+            let buffer = "";
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              // Keep last potentially incomplete line in buffer
+              buffer = lines.pop() ?? "";
+
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith("data:")) continue;
+                const payload = trimmed.slice(5).trim();
+                if (payload === "[DONE]") continue;
+
+                try {
+                  const parsed = JSON.parse(payload);
+                  const delta = extractDeltaText(parsed, "mistral");
+                  if (delta) {
+                    fullResponse += delta;
+                    sendSSE(JSON.stringify({ token: delta }));
+                  }
+                } catch {
+                  // skip malformed chunk
+                }
+              }
+            }
+          } catch (err) {
+            console.error("Error reading LLM stream:", err);
+          }
+
+          // --- Persist messages (always, even if client disconnected) ---
+          try {
+            const userMsg = {
+              thread_id: threadId,
+              role: "user",
+              content: message.trim(),
+              source_type: "chat",
+              flow_flag: "normal",
+              concise_mode: conciseMode,
+            };
+            const assistantMsg = {
+              thread_id: threadId,
+              role: "assistant",
+              content: fullResponse || "No response generated.",
+              source_type: "chat",
+              flow_flag: "normal",
+              concise_mode: conciseMode,
+              model_used: "mistral-large-latest",
+            };
+
+            const { data: insertedUser } = await adminSupabase
+              .from("chat_messages")
+              .insert(userMsg)
+              .select()
+              .single();
+
+            const { data: insertedAssistant } = await adminSupabase
+              .from("chat_messages")
+              .insert(assistantMsg)
+              .select()
+              .single();
+
+            // --- Token budget ---
+            const inputChars = llmMessages.reduce(
+              (sum, m) => sum + m.content.length,
+              0
+            );
+            const outputChars = fullResponse.length;
+            const estimatedTokens = Math.ceil((inputChars + outputChars) / 4);
+            const newTotal = profile.tokens_used_this_period + estimatedTokens;
+
+            await adminSupabase
+              .from("profiles")
+              .update({ tokens_used_this_period: newTotal })
+              .eq("id", user.id);
+
+            // --- Increment prompt count ---
+            const promptColumn = tutorMode
+              ? "chat_prompt_count_tutor"
+              : "chat_prompt_count_normal";
+
+            const { data: currentStats } = await adminSupabase
+              .from("project_stats")
+              .select(promptColumn)
+              .eq("project_id", thread.project_id)
+              .single();
+
+            if (currentStats) {
+              const currentCount =
+                (currentStats as Record<string, number>)[promptColumn] || 0;
+              await adminSupabase
+                .from("project_stats")
+                .update({ [promptColumn]: currentCount + 1 })
+                .eq("project_id", thread.project_id);
+            }
+
+            // Send final done event with persisted messages
+            sendSSE(
+              JSON.stringify({
+                done: true,
+                user_message: insertedUser,
+                assistant_message: insertedAssistant,
+                budget_remaining: profile.monthly_token_budget - newTotal,
+              })
+            );
+          } catch (persistErr) {
+            console.error("Error persisting streamed messages:", persistErr);
+            sendSSE(
+              JSON.stringify({
+                done: true,
+                error: "Messages may not have been saved.",
+              })
+            );
+          }
+
+          if (!clientDisconnected) {
+            try {
+              controller.close();
+            } catch {
+              // already closed
+            }
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
+    }
+
+    // =========================================================
+    // NON-STREAMING PATH (unchanged)
+    // =========================================================
     const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -256,7 +472,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       ? "chat_prompt_count_tutor"
       : "chat_prompt_count_normal";
 
-    // Fetch current count then increment
     const { data: currentStats } = await supabase
       .from("project_stats")
       .select(promptColumn)
