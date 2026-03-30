@@ -129,8 +129,10 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
         const tracker = getTracker();
         const pastedText = event.clipboardData?.getData("text/plain") ?? "";
         if (pastedText) {
-          const classification = tracker.classifyPaste(pastedText);
-          tracker.setPasteOverride(classification);
+          // classifyPaste runs the full priority chain (internal clipboard →
+          // AI registry → chat clipboard → external) then stores the result
+          // as the pending signal for the upcoming transaction.
+          tracker.setPendingSignal(tracker.classifyPaste(pastedText));
         }
         return false;
       },
