@@ -49,6 +49,21 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   const [aiSelectionFrom, setAiSelectionFrom] = useState(0);
   const [aiSelectionTo, setAiSelectionTo] = useState(0);
 
+  // Refs to always hold the latest flush functions (avoids stale closures)
+  const flushWritingRef = useRef(flushWritingContent);
+  const flushProvenanceRef = useRef(flushProvenance);
+  useEffect(() => { flushWritingRef.current = flushWritingContent; }, [flushWritingContent]);
+  useEffect(() => { flushProvenanceRef.current = flushProvenance; }, [flushProvenance]);
+
+  // Expose a stable flush callback to the parent that always calls the latest versions
+  useEffect(() => {
+    const stableFlush = async () => {
+      await flushWritingRef.current();
+      await flushProvenanceRef.current();
+    };
+    onFlushProvenance?.(stableFlush);
+  }, [onFlushProvenance]);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
