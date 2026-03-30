@@ -163,8 +163,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
     const container = chatContainerRef.current;
     if (!container || !provenanceTracker) return;
 
-    const handleCopy = (e: Event) => {
-      const clipEvent = e as ClipboardEvent;
+    const handleCopy = () => {
       const sel = window.getSelection();
       if (!sel || sel.rangeCount === 0) return;
       const anchor = sel.anchorNode;
@@ -175,8 +174,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
       while (el && el !== container) {
         if (el.dataset?.chatRole) {
           const role = el.dataset.chatRole as "user" | "assistant";
-          const copiedText = clipEvent.clipboardData?.getData("text/plain") ?? sel.toString();
-          provenanceTracker.setChatClipboard(copiedText, role);
+          provenanceTracker.setChatClipboardRole(role);
           return;
         }
         el = el.parentElement;
