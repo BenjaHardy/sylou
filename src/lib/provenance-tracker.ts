@@ -24,7 +24,7 @@ export class ProvenanceTracker {
   private segments: ProvenanceSegment[] = [];
   private _pendingAiInsertion = false;
   private _aiResultTexts = new Map<string, number>(); // text -> timestamp
-  private _chatClipboardRole: "assistant" | "user" | null = null;
+  private _chatClipboard: { text: string; role: "assistant" | "user" } | null = null;
   private _chatClipboardExpiry: ReturnType<typeof setTimeout> | null = null;
 
   /**
