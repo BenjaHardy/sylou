@@ -69,10 +69,9 @@ export function useChatMessages(threadId: string | null) {
     setLoading(false);
   }, [threadId]);
 
-  // Fetch on threadId change
-  // We use a simple pattern: the parent should call refreshMessages or rely on
-  // the initial load via useEffect in the component that consumes this hook.
-  // (The old useEffect was moved to the consumer to avoid double-fetching.)
+  useEffect(() => {
+    fetchMessages();
+  }, [fetchMessages]);
 
   const sendMessage = useCallback(
     async (content: string, conciseMode: boolean) => {
