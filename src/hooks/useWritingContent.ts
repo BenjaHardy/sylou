@@ -16,6 +16,10 @@ export function useWritingContent(projectId: string | null) {
   const lastVersionContent = useRef<string>("");
   const lastVersionTime = useRef<number>(Date.now());
   const currentProjectId = useRef<string | null>(null);
+  const contentRef = useRef<string>("");
+
+  // Keep contentRef in sync with state
+  useEffect(() => { contentRef.current = content; }, [content]);
 
   // Load content when project changes
   useEffect(() => {
@@ -62,6 +66,11 @@ export function useWritingContent(projectId: string | null) {
     load();
 
     return () => {
+      // Clear debounce timer on project change to prevent cross-project saves
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+        debounceTimer.current = null;
+      }
       currentProjectId.current = null;
     };
   }, [projectId]);
@@ -126,16 +135,16 @@ export function useWritingContent(projectId: string | null) {
     saveNow(content);
   }, [isDirty, content, saveNow]);
 
-  /** Immediately flush any pending debounced save. Returns a promise that resolves after DB write. */
+  /** Immediately flush any pending debounced save. Uses contentRef for latest value. */
   const flushSave = useCallback(async () => {
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current);
       debounceTimer.current = null;
     }
     if (!projectId) return;
-    // Save current content (saveNow checks if it differs from last saved)
-    await saveNow(content);
-  }, [projectId, content, saveNow]);
+    // Use ref to always get the latest content, avoiding stale closure
+    await saveNow(contentRef.current);
+  }, [projectId, saveNow]);
 
   return { content, loading, saveState, updateContent, isDirty, manualSave, flushSave };
 }
