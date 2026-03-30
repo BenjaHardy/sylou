@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
+import { consumeSSEStream } from "@/lib/sse-stream";
 
 type ActionId =
   | "fix-grammar"
@@ -17,7 +18,7 @@ type ActionId =
   | "propose"
   | "sanity-check";
 
-type Phase = "actions" | "loading" | "result" | "input" | "modify";
+type Phase = "actions" | "loading" | "streaming" | "result" | "input" | "modify";
 
 interface Props {
   selectedText: string;
@@ -34,6 +35,9 @@ interface Props {
   conciseMode?: boolean;
   selectionFrom?: number;
   selectionTo?: number;
+  /** For Ask streaming: set streaming message into chat */
+  appendMessages?: (msgs: ChatMessage[]) => void;
+  setMessages?: (updater: (prev: ChatMessage[]) => ChatMessage[]) => void;
 }
 
 const NORMAL_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
@@ -73,6 +77,18 @@ async function updateOutcome(actionId: string, outcome: string) {
   if (error) console.error("Failed to update action outcome:", error);
 }
 
+/** Get fresh auth headers for raw fetch calls */
+async function getAuthHeaders(): Promise<Record<string, string> | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) return null;
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+    apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  };
+}
+
 export function TextSelectionWindow({
   selectedText,
   anchorRect,
@@ -88,10 +104,13 @@ export function TextSelectionWindow({
   conciseMode,
   selectionFrom,
   selectionTo,
+  appendMessages,
+  setMessages,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("actions");
   const [activeAction, setActiveAction] = useState<ActionId | null>(null);
   const [proposedText, setProposedText] = useState("");
+  const [streamingText, setStreamingText] = useState("");
   const [inputText, setInputText] = useState("");
   const [editableText, setEditableText] = useState("");
   const [currentActionId, setCurrentActionId] = useState<string | null>(null);
@@ -147,50 +166,94 @@ export function TextSelectionWindow({
     return undefined;
   }, [provenanceTracker, selectionFrom, selectionTo]);
 
-  const callEditorAction = useCallback(
+  // ── Streaming editor-action (predefined actions) ──
+  const callEditorActionStreaming = useCallback(
     async (actionType: string, targetLanguage?: string) => {
       setPhase("loading");
       setLoadingStage("preparing");
+      setStreamingText("");
+
+      const headers = await getAuthHeaders();
+      if (!headers) {
+        toast.error("Not authenticated.");
+        setPhase("actions");
+        return;
+      }
+
       try {
         const selected_text_source = getSourceBreakdown();
-        const { data, error } = await supabase.functions.invoke("editor-action", {
-          body: {
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/editor-action`;
+
+        const res = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
             project_id: projectId,
             action_type: actionType,
             selected_text: selectedText,
+            stream: true,
             ...(targetLanguage ? { target_language: targetLanguage } : {}),
             ...(selected_text_source ? { selected_text_source } : {}),
-          },
+          }),
         });
 
-        if (error) {
-          console.error("Editor action error:", error);
-          toast.error("AI action failed. Please try again.");
+        if (!res.ok) {
+          const errText = await res.text();
+          let errMsg = "AI action failed. Please try again.";
+          try { errMsg = JSON.parse(errText).error || errMsg; } catch {}
+          toast.error(errMsg);
           setPhase("actions");
           return;
         }
 
-        if (data?.error) {
-          toast.error(data.error);
-          setPhase("actions");
-          return;
-        }
+        const contentType = res.headers.get("content-type") ?? "";
 
-        setProposedText(data.proposed_text);
-        setCurrentActionId(data.action_id);
-        // Register for manual copy/paste detection
-        provenanceTracker?.registerAiResultText(data.proposed_text);
-        setPhase("result");
+        if (contentType.includes("text/event-stream") && res.body) {
+          setPhase("streaming");
+
+          await consumeSSEStream(res.body, {
+            onToken: (text) => {
+              setStreamingText((prev) => prev + text);
+            },
+            onDone: (evt) => {
+              const result = (evt.result as string) || "";
+              setProposedText(result);
+              setCurrentActionId((evt.action_id as string) ?? null);
+              provenanceTracker?.registerAiResultText(result);
+              setPhase("result");
+            },
+            onError: (err) => {
+              console.error("Editor action stream error:", err);
+              toast.error("AI action failed. Please try again.");
+              setPhase("actions");
+              setStreamingText("");
+            },
+          });
+        } else {
+          // JSON fallback
+          const data = await res.json();
+          if (data?.error) {
+            toast.error(data.error);
+            setPhase("actions");
+            return;
+          }
+          setProposedText(data.proposed_text);
+          setCurrentActionId(data.action_id);
+          provenanceTracker?.registerAiResultText(data.proposed_text);
+          setPhase("result");
+        }
       } catch (err) {
         console.error("Editor action failed:", err);
         toast.error("Failed to process AI action.");
         setPhase("actions");
+        setStreamingText("");
       }
     },
-    [projectId, selectedText, getSourceBreakdown]
+    [projectId, selectedText, getSourceBreakdown, provenanceTracker]
   );
 
-  const callContextPrompt = useCallback(
+  // ── Streaming context-prompt (Ask / Propose) ──
+  const callContextPromptStreaming = useCallback(
     async (actionType: "ask" | "propose", userInstruction: string) => {
       if (!threadId) {
         toast.error("Chat thread not available.");
@@ -200,14 +263,23 @@ export function TextSelectionWindow({
 
       setPhase("loading");
       setLoadingStage("reviewing");
+      setStreamingText("");
 
-      // Simulate two-stage: switch to "preparing" after a delay
-      const stageTimer = setTimeout(() => setLoadingStage("preparing"), 3000);
+      const headers = await getAuthHeaders();
+      if (!headers) {
+        toast.error("Not authenticated.");
+        setPhase("actions");
+        return;
+      }
 
       try {
         const selected_text_source = getSourceBreakdown();
-        const { data, error } = await supabase.functions.invoke("context-prompt", {
-          body: {
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/context-prompt`;
+
+        const res = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
             project_id: projectId,
             thread_id: threadId,
             action_type: actionType,
@@ -215,48 +287,131 @@ export function TextSelectionWindow({
             instruction: userInstruction,
             source_module: "editor",
             concise_mode: conciseMode ?? false,
+            stream: true,
             ...(selected_text_source ? { selected_text_source } : {}),
-          },
+          }),
         });
 
-        clearTimeout(stageTimer);
-
-        if (error) {
-          console.error("Context prompt error:", error);
-          toast.error("AI action failed. Please try again.");
+        if (!res.ok) {
+          const errText = await res.text();
+          let errMsg = "AI action failed. Please try again.";
+          try { errMsg = JSON.parse(errText).error || errMsg; } catch {}
+          toast.error(errMsg);
           setPhase("actions");
           return;
         }
 
-        if (data?.error) {
-          toast.error(data.error);
-          setPhase("actions");
-          return;
-        }
+        const contentType = res.headers.get("content-type") ?? "";
 
-        if (actionType === "ask") {
-          // Messages returned by edge function — inject directly into chat
-          onAskComplete(data.inserted_messages ?? []);
-          onClose();
+        if (contentType.includes("text/event-stream") && res.body) {
+          // For Ask: insert streaming placeholder into chat
+          if (actionType === "ask" && setMessages) {
+            const streamingAskMsg: ChatMessage = {
+              id: "streaming-ask",
+              thread_id: threadId,
+              role: "assistant",
+              content: "",
+              created_at: new Date().toISOString(),
+              source_type: "ask_response",
+              flow_flag: null,
+              concise_mode: null,
+              tutor_mode: null,
+              model_used: null,
+            };
+            setMessages((prev) => [...prev, streamingAskMsg]);
+          }
+
+          // For Propose: show streaming in the window
+          if (actionType === "propose") {
+            setPhase("streaming");
+          }
+
+          await consumeSSEStream(res.body, {
+            onPhase: (p) => {
+              if (p === "responding") {
+                setLoadingStage("preparing");
+              }
+            },
+            onToken: (text) => {
+              if (actionType === "ask" && setMessages) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === "streaming-ask"
+                      ? { ...m, content: m.content + text }
+                      : m
+                  )
+                );
+              } else {
+                setStreamingText((prev) => prev + text);
+              }
+            },
+            onDone: (evt) => {
+              if (actionType === "ask") {
+                // Replace streaming placeholder with final messages
+                const insertedMessages = (evt.inserted_messages as ChatMessage[]) ?? [];
+                if (setMessages) {
+                  setMessages((prev) => {
+                    const without = prev.filter((m) => m.id !== "streaming-ask");
+                    const existingIds = new Set(without.map((m) => m.id));
+                    const deduped = insertedMessages.filter((m) => !existingIds.has(m.id));
+                    return [...without, ...deduped];
+                  });
+                } else {
+                  onAskComplete(insertedMessages);
+                }
+                onClose();
+              } else {
+                // Propose: populate result
+                const aiResponse = (evt.ai_response as string) || "";
+                setProposedText(aiResponse);
+                setCurrentActionId((evt.action_id as string) ?? null);
+                setPendingSummaryUpdate((evt.summary_update as string) ?? null);
+                setPendingInstruction(userInstruction);
+                setPendingSourceBreakdown(selected_text_source ?? null);
+                provenanceTracker?.registerAiResultText(aiResponse);
+                setPhase("result");
+              }
+            },
+            onError: (err) => {
+              console.error("Context prompt stream error:", err);
+              if (actionType === "ask" && setMessages) {
+                setMessages((prev) => prev.filter((m) => m.id !== "streaming-ask"));
+              }
+              toast.error("AI action failed. Please try again.");
+              setPhase("actions");
+              setStreamingText("");
+            },
+          });
         } else {
-          // Propose: show result panel with accept/modify/reject
-          setProposedText(data.ai_response);
-          setCurrentActionId(data.action_id);
-          setPendingSummaryUpdate(data.summary_update);
-          setPendingInstruction(userInstruction);
-          setPendingSourceBreakdown(selected_text_source ?? null);
-          // Register for manual copy/paste detection
-          provenanceTracker?.registerAiResultText(data.ai_response);
-          setPhase("result");
+          // JSON fallback (non-streaming)
+          const data = await res.json();
+          if (data?.error) {
+            toast.error(data.error);
+            setPhase("actions");
+            return;
+          }
+
+          if (actionType === "ask") {
+            onAskComplete(data.inserted_messages ?? []);
+            onClose();
+          } else {
+            setProposedText(data.ai_response);
+            setCurrentActionId(data.action_id);
+            setPendingSummaryUpdate(data.summary_update);
+            setPendingInstruction(userInstruction);
+            setPendingSourceBreakdown(selected_text_source ?? null);
+            provenanceTracker?.registerAiResultText(data.ai_response);
+            setPhase("result");
+          }
         }
       } catch (err) {
-        clearTimeout(stageTimer);
         console.error("Context prompt failed:", err);
         toast.error("Failed to process AI action.");
         setPhase("actions");
+        setStreamingText("");
       }
     },
-    [projectId, threadId, selectedText, onAskComplete, onClose, getSourceBreakdown]
+    [projectId, threadId, selectedText, onAskComplete, onClose, getSourceBreakdown, conciseMode, provenanceTracker, setMessages]
   );
 
   const handleAction = useCallback(
@@ -278,26 +433,26 @@ export function TextSelectionWindow({
           setPhase("input");
           return;
         }
-        callEditorAction(actionType);
+        callEditorActionStreaming(actionType);
       }
     },
-    [callEditorAction]
+    [callEditorActionStreaming]
   );
 
   const handleInputSubmit = () => {
     if (!inputText.trim()) return;
     if (activeAction === "ask") {
-      callContextPrompt("ask", inputText.trim());
+      callContextPromptStreaming("ask", inputText.trim());
       setInputText("");
       return;
     }
     if (activeAction === "propose") {
-      callContextPrompt("propose", inputText.trim());
+      callContextPromptStreaming("propose", inputText.trim());
       setInputText("");
       return;
     }
     if (activeAction === "translate") {
-      callEditorAction("translate", inputText.trim());
+      callEditorActionStreaming("translate", inputText.trim());
       setInputText("");
       return;
     }
@@ -409,6 +564,9 @@ export function TextSelectionWindow({
   const row1 = actions.filter((a) => a.row === 1);
   const row2 = actions.filter((a) => a.row === 2);
 
+  // The text to show in the "Proposed" area during streaming
+  const displayedProposedText = phase === "streaming" ? streamingText : proposedText;
+
   return (
     <div
       ref={panelRef}
@@ -477,6 +635,42 @@ export function TextSelectionWindow({
           </div>
         )}
 
+        {/* Streaming phase — show Original + growing Proposed, buttons disabled */}
+        {phase === "streaming" && (
+          <div className="space-y-3">
+            <div className="space-y-2 text-xs">
+              <div>
+                <span className="font-semibold text-muted-foreground">Original:</span>
+                <p className="mt-0.5 p-2 rounded-md bg-muted text-foreground leading-relaxed max-h-24 overflow-y-auto">
+                  {selectedText.slice(0, 200)}
+                  {selectedText.length > 200 && "…"}
+                </p>
+              </div>
+              <div>
+                <span className="font-semibold text-muted-foreground">Proposed:</span>
+                <p className="mt-0.5 p-2 rounded-md bg-primary/10 text-foreground leading-relaxed max-h-24 overflow-y-auto">
+                  {streamingText}
+                  <span className="inline-block w-1.5 h-3.5 bg-primary/60 animate-pulse ml-0.5 align-text-bottom" />
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 opacity-50 pointer-events-none">
+              <Button size="sm" className="h-7 text-xs gap-1" disabled>
+                <Check className="h-3.5 w-3.5" />
+                Accept
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled>
+                <Pencil className="h-3.5 w-3.5" />
+                Modify
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-destructive" disabled>
+                <XCircle className="h-3.5 w-3.5" />
+                Reject
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Result phase */}
         {phase === "result" && (
           <div className="space-y-3">
@@ -490,11 +684,9 @@ export function TextSelectionWindow({
               </div>
               <div>
                 <span className="font-semibold text-muted-foreground">Proposed:</span>
-                {phase === "result" && editableText ? null : (
-                  <p className="mt-0.5 p-2 rounded-md bg-primary/10 text-foreground leading-relaxed max-h-24 overflow-y-auto">
-                    {proposedText}
-                  </p>
-                )}
+                <p className="mt-0.5 p-2 rounded-md bg-primary/10 text-foreground leading-relaxed max-h-24 overflow-y-auto">
+                  {proposedText}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">

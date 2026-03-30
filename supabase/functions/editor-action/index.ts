@@ -13,6 +13,27 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   });
 }
 
+/**
+ * Extract the text delta from a streaming chunk, model-agnostic.
+ * Canonical version: supabase/functions/chat/index.ts
+ */
+function extractDeltaText(
+  parsed: Record<string, unknown>,
+  _provider: string
+): string | null {
+  const choices = parsed.choices as
+    | Array<{ delta?: { content?: string } }>
+    | undefined;
+  if (choices?.[0]?.delta?.content) {
+    return choices[0].delta.content;
+  }
+  if (parsed.type === "content_block_delta") {
+    const delta = parsed.delta as { text?: string } | undefined;
+    if (delta?.text) return delta.text;
+  }
+  return null;
+}
+
 const ACTION_PROMPTS: Record<string, string> = {
   fix_grammar:
     "Fix any grammar, spelling, and punctuation errors in the following text. Return only the corrected text.",
@@ -73,6 +94,7 @@ Deno.serve(async (req) => {
     const selectedText: string = body.selected_text;
     const targetLanguage: string | undefined = body.target_language;
     const selectedTextSource: string | undefined = body.selected_text_source;
+    const streamRequested: boolean = body.stream === true;
 
     if (!projectId || !actionType || !selectedText) {
       return jsonResponse(
@@ -115,12 +137,185 @@ Deno.serve(async (req) => {
       { role: "user", content: selectedText },
     ];
 
-    // --- Call Mistral ---
+    // --- Mistral API key ---
     const mistralKey = Deno.env.get("MISTRAL_API_KEY");
     if (!mistralKey) {
       return jsonResponse({ error: "Mistral API key not configured" }, 500);
     }
 
+    // =========================================================
+    // STREAMING PATH
+    // =========================================================
+    if (streamRequested) {
+      console.log("[stream:editor-action] entering streaming path");
+
+      const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${mistralKey}`,
+        },
+        body: JSON.stringify({
+          model: "mistral-large-latest",
+          messages: llmMessages,
+          max_tokens: 1000,
+          stream: true,
+        }),
+      });
+
+      if (!llmRes.ok) {
+        const errText = await llmRes.text();
+        console.error("[stream:editor-action] Mistral API error:", llmRes.status, errText);
+        return jsonResponse(
+          { error: "AI service temporarily unavailable. Please try again." },
+          502
+        );
+      }
+
+      console.log("[stream:editor-action] LLM response received, piping");
+
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
+
+      let fullResponse = "";
+      let clientDisconnected = false;
+      const encoder = new TextEncoder();
+      const decoder = new TextDecoder();
+      let sseBuffer = "";
+
+      const transform = new TransformStream({
+        transform(chunk, controller) {
+          sseBuffer += decoder.decode(chunk, { stream: true });
+          const lines = sseBuffer.split("\n");
+          sseBuffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data:")) continue;
+            const payload = trimmed.slice(5).trim();
+            if (payload === "[DONE]") continue;
+
+            try {
+              const parsed = JSON.parse(payload);
+              const delta = extractDeltaText(parsed, "mistral");
+              if (delta) {
+                fullResponse += delta;
+                if (!clientDisconnected) {
+                  try {
+                    controller.enqueue(
+                      encoder.encode(`data: ${JSON.stringify({ token: delta })}\n\n`)
+                    );
+                  } catch {
+                    clientDisconnected = true;
+                  }
+                }
+              }
+            } catch {
+              // skip malformed chunk
+            }
+          }
+        },
+
+        async flush(controller) {
+          console.log("[stream:editor-action] LLM stream complete, persisting");
+
+          try {
+            const proposedText = fullResponse || "No response generated.";
+            const inputChars = llmMessages.reduce((sum, m) => sum + m.content.length, 0);
+            const outputChars = proposedText.length;
+            const estimatedTokens = Math.ceil((inputChars + outputChars) / 4);
+
+            // Build instruction_text
+            let instructionText: string | null = actionType === "translate" ? `translate:${targetLanguage}` : null;
+            if (selectedTextSource) {
+              instructionText = instructionText
+                ? `${instructionText} | Source: ${selectedTextSource}`
+                : `Source: ${selectedTextSource}`;
+            }
+
+            const { data: actionRow } = await adminSupabase
+              .from("ai_editor_actions")
+              .insert({
+                project_id: projectId,
+                action_type: actionType,
+                selected_text_preview: selectedText.slice(0, 500),
+                ai_response_preview: proposedText.slice(0, 500),
+                char_count_original: selectedText.length,
+                char_count_result: proposedText.length,
+                outcome: "pending",
+                instruction_text: instructionText,
+              })
+              .select("id")
+              .single();
+
+            // Log token usage
+            await adminSupabase.from("token_usage").insert({
+              user_id: user.id,
+              project_id: projectId,
+              function_name: "editor-action",
+              model_used: "mistral-large-latest",
+              input_tokens: Math.ceil(inputChars / 4),
+              output_tokens: Math.ceil(outputChars / 4),
+            });
+
+            // Update budget
+            const newTotal = profile.tokens_used_this_period + estimatedTokens;
+            await adminSupabase
+              .from("profiles")
+              .update({ tokens_used_this_period: newTotal })
+              .eq("id", user.id);
+
+            if (!clientDisconnected) {
+              try {
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({
+                      done: true,
+                      result: proposedText,
+                      action_id: actionRow?.id ?? null,
+                      budget_remaining: profile.monthly_token_budget - newTotal,
+                    })}\n\n`
+                  )
+                );
+              } catch {
+                clientDisconnected = true;
+              }
+            }
+
+            console.log("[stream:editor-action] persistence complete");
+          } catch (persistErr) {
+            console.error("[stream:editor-action] persistence error:", persistErr);
+            if (!clientDisconnected) {
+              try {
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({ done: true, error: "Action may not have been saved." })}\n\n`
+                  )
+                );
+              } catch {
+                // client gone
+              }
+            }
+          }
+        },
+      });
+
+      const outputStream = llmRes.body!.pipeThrough(transform);
+
+      return new Response(outputStream, {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "X-Accel-Buffering": "no",
+          Connection: "keep-alive",
+        },
+      });
+    }
+
+    // =========================================================
+    // NON-STREAMING PATH (unchanged)
+    // =========================================================
     const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -152,8 +347,7 @@ Deno.serve(async (req) => {
     const outputChars = proposedText.length;
     const estimatedTokens = Math.ceil((inputChars + outputChars) / 4);
 
-    // --- Log to ai_editor_actions (outcome = 'pending') ---
-    // Build instruction_text with source breakdown appended
+    // --- Log to ai_editor_actions ---
     let instructionText: string | null = actionType === "translate" ? `translate:${targetLanguage}` : null;
     if (selectedTextSource) {
       instructionText = instructionText

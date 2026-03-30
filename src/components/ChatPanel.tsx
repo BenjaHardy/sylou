@@ -19,6 +19,7 @@ interface Props {
   provenanceTracker?: ProvenanceTracker;
   conciseMode: boolean;
   onConciseModeChange: (value: boolean) => void;
+  onSetMessages?: (setter: (updater: (prev: ChatMessage[]) => ChatMessage[]) => void) => void;
 }
 
 
@@ -149,14 +150,19 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker, conciseMode, onConciseModeChange }: Props) {
+export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker, conciseMode, onConciseModeChange, onSetMessages }: Props) {
   const { threadId, threadName } = useChatThread(projectId);
-  const { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages, appendMessages } = useChatMessages(threadId);
+  const { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages, appendMessages, setMessages } = useChatMessages(threadId);
   const [input, setInput] = useState("");
   const [tipDismissed, setTipDismissed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Expose setMessages to parent for Ask streaming
+  useEffect(() => {
+    onSetMessages?.(setMessages);
+  }, [onSetMessages, setMessages]);
 
   // Listen for copy events within chat to tag clipboard with message role
   useEffect(() => {
@@ -293,7 +299,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
           messages.map((msg) => <ChatBubble key={msg.id} message={msg} />)
         )}
 
-        {sending && !messages.some((m) => m.id === "streaming-assistant") && (
+        {sending && !messages.some((m) => m.id === "streaming-assistant" || m.id === "streaming-ask") && (
           <div className="flex gap-2.5">
             <div className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 bg-muted text-muted-foreground">
               <Bot className="h-3.5 w-3.5" />

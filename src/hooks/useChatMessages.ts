@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { consumeSSEStream } from "@/lib/sse-stream";
 
 export interface ChatMessage {
   id: string;
@@ -12,38 +13,6 @@ export interface ChatMessage {
   concise_mode: boolean | null;
   tutor_mode: boolean | null;
   model_used: string | null;
-}
-
-/**
- * SSE line parser: accumulates partial chunks, yields complete `data:` payloads.
- */
-function createSSEParser() {
-  let buffer = "";
-  return {
-    /** Feed raw text from the stream; returns parsed JSON events. */
-    feed(chunk: string): Array<Record<string, unknown>> {
-      buffer += chunk;
-      const events: Array<Record<string, unknown>> = [];
-      // Split on double-newline (SSE event boundary)
-      const parts = buffer.split("\n\n");
-      // Last part may be incomplete — keep in buffer
-      buffer = parts.pop() ?? "";
-      for (const part of parts) {
-        for (const line of part.split("\n")) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) continue;
-          const payload = trimmed.slice(5).trim();
-          if (payload === "[DONE]") continue;
-          try {
-            events.push(JSON.parse(payload));
-          } catch {
-            // skip malformed
-          }
-        }
-      }
-      return events;
-    },
-  };
 }
 
 export function useChatMessages(threadId: string | null) {
@@ -136,10 +105,6 @@ export function useChatMessages(threadId: string | null) {
 
         // ---- SSE streaming path ----
         if (contentType.includes("text/event-stream") && res.body) {
-          const reader = res.body.getReader();
-          const decoder = new TextDecoder();
-          const parser = createSSEParser();
-
           // Add a streaming placeholder for the assistant
           const streamingId = "streaming-assistant";
           const streamingMsg: ChatMessage = {
@@ -158,50 +123,38 @@ export function useChatMessages(threadId: string | null) {
 
           let receivedDone = false;
 
-          try {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
+          await consumeSSEStream(res.body, {
+            onToken: (text) => {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === streamingId
+                    ? { ...m, content: m.content + text }
+                    : m
+                )
+              );
+            },
+            onDone: (evt) => {
+              receivedDone = true;
+              setMessages((prev) => {
+                const without = prev.filter(
+                  (m) => m.id !== optimisticId && m.id !== streamingId
+                );
+                const next = [...without];
+                if (evt.user_message)
+                  next.push(evt.user_message as ChatMessage);
+                if (evt.assistant_message)
+                  next.push(evt.assistant_message as ChatMessage);
+                return next;
+              });
 
-              const chunk = decoder.decode(value, { stream: true });
-              const events = parser.feed(chunk);
-
-              for (const evt of events) {
-                if (evt.token && typeof evt.token === "string") {
-                  // Append token to streaming message
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === streamingId
-                        ? { ...m, content: m.content + (evt.token as string) }
-                        : m
-                    )
-                  );
-                }
-
-                if (evt.done === true) {
-                  receivedDone = true;
-                  // Replace optimistic + streaming with final persisted messages
-                  setMessages((prev) => {
-                    const without = prev.filter(
-                      (m) => m.id !== optimisticId && m.id !== streamingId
-                    );
-                    const next = [...without];
-                    if (evt.user_message)
-                      next.push(evt.user_message as ChatMessage);
-                    if (evt.assistant_message)
-                      next.push(evt.assistant_message as ChatMessage);
-                    return next;
-                  });
-
-                  if (evt.budget_remaining != null) {
-                    setBudgetRemaining(evt.budget_remaining as number);
-                  }
-                }
+              if (evt.budget_remaining != null) {
+                setBudgetRemaining(evt.budget_remaining as number);
               }
-            }
-          } catch (streamErr) {
-            console.error("Stream reading error:", streamErr);
-          }
+            },
+            onError: () => {
+              // handled below
+            },
+          });
 
           // If we never got a done event, clean up
           if (!receivedDone) {
@@ -262,5 +215,6 @@ export function useChatMessages(threadId: string | null) {
     budgetRemaining,
     refreshMessages: fetchMessages,
     appendMessages,
+    setMessages,
   };
 }
