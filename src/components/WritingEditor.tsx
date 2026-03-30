@@ -201,15 +201,10 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       prevDocLenRef.current = docLen;
       initWithContentLength(docLen);
       setInitialSet(true);
-      // Expose tracker and flush function to parent
+      // Expose tracker to parent (flush is handled by the stable ref-based effect above)
       onProvenanceTracker?.(tracker);
-      const combinedFlush = async () => {
-        await flushWritingContent();
-        await flushProvenance();
-      };
-      onFlushProvenance?.(combinedFlush);
     }
-  }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker, onFlushProvenance, flushWritingContent, flushProvenance]);
+  }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker]);
 
   // Reset when projectId changes
   useEffect(() => {
