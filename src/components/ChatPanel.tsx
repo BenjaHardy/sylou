@@ -159,6 +159,11 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
+  // Expose setMessages to parent for Ask streaming
+  useEffect(() => {
+    onSetMessages?.(setMessages);
+  }, [onSetMessages, setMessages]);
+
   // Listen for copy events within chat to tag clipboard with message role
   useEffect(() => {
     const container = chatContainerRef.current;
