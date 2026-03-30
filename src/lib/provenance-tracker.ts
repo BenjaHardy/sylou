@@ -489,8 +489,8 @@ export class ProvenanceTracker {
       return { source: "ai_editor", originalText: pastedText };
     }
 
-    // 2. Check chat clipboard role (not consumed — supports multiple pastes)
-    const chatRole = this.checkChatClipboardRole();
+    // 2. Check chat clipboard role — only if pasted text matches stored chat text
+    const chatRole = this.checkChatClipboardRole(pastedText);
     if (chatRole === "assistant") {
       return { source: "chat_ai", originalText: pastedText };
     }
