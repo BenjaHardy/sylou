@@ -26,6 +26,27 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+/**
+ * Extract the text delta from a streaming chunk, model-agnostic.
+ * Canonical version: supabase/functions/chat/index.ts
+ */
+function extractDeltaText(
+  parsed: Record<string, unknown>,
+  _provider: string
+): string | null {
+  const choices = parsed.choices as
+    | Array<{ delta?: { content?: string } }>
+    | undefined;
+  if (choices?.[0]?.delta?.content) {
+    return choices[0].delta.content;
+  }
+  if (parsed.type === "content_block_delta") {
+    const delta = parsed.delta as { text?: string } | undefined;
+    if (delta?.text) return delta.text;
+  }
+  return null;
+}
+
 async function callMistral(
   apiKey: string,
   messages: { role: string; content: string }[],
@@ -212,6 +233,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { project_id, thread_id, action_type, selected_text, instruction, source_module } = body;
     const selectedTextSource: string | undefined = body.selected_text_source;
+    const streamRequested: boolean = body.stream === true;
 
     // ── CONFIRM endpoint ────────────────────────────────────────────────
     if (body.confirm !== undefined) {
@@ -362,7 +384,7 @@ Deno.serve(async (req) => {
 
     const recentChat = (recentMessages ?? []).reverse();
 
-    // --- 4. LLM Call #1: Writing Summary ---
+    // --- 4. LLM Call #1: Writing Summary (non-streamed) ---
     const summaryMessages = buildSummaryPrompt(
       writingContent,
       existingSummary,
@@ -390,7 +412,7 @@ Deno.serve(async (req) => {
       summaryUpdate = summaryText;
     }
 
-    // --- 6. LLM Call #2: Context-Aware Response ---
+    // --- 6. Build LLM Call #2 prompt ---
     const tutorMode = project.tutor_mode ?? false;
     const conciseMode = body.concise_mode ?? false;
 
@@ -474,6 +496,244 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       projectLanguage,
     );
 
+    // =========================================================
+    // STREAMING PATH — LLM Call #2 streamed via TransformStream
+    // =========================================================
+    if (streamRequested) {
+      console.log("[stream:context-prompt] entering streaming path, action_type:", action_type);
+
+      const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${mistralKey}`,
+        },
+        body: JSON.stringify({
+          model: "mistral-large-latest",
+          messages: responseMessages,
+          max_tokens: 2000,
+          stream: true,
+        }),
+      });
+
+      if (!llmRes.ok) {
+        const errText = await llmRes.text();
+        console.error("[stream:context-prompt] Mistral API error:", llmRes.status, errText);
+        return jsonResponse(
+          { error: "AI service temporarily unavailable. Please try again." },
+          502
+        );
+      }
+
+      console.log("[stream:context-prompt] LLM response received, piping");
+
+      const adminClient = getAdminClient();
+      let fullResponse = "";
+      let clientDisconnected = false;
+      const encoder = new TextEncoder();
+      const decoder = new TextDecoder();
+      let sseBuffer = "";
+
+      const transform = new TransformStream({
+        start(controller) {
+          // Send phase event so client knows summary is done, response is starting
+          if (!clientDisconnected) {
+            try {
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ phase: "responding" })}\n\n`)
+              );
+            } catch {
+              clientDisconnected = true;
+            }
+          }
+        },
+
+        transform(chunk, controller) {
+          sseBuffer += decoder.decode(chunk, { stream: true });
+          const lines = sseBuffer.split("\n");
+          sseBuffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data:")) continue;
+            const payload = trimmed.slice(5).trim();
+            if (payload === "[DONE]") continue;
+
+            try {
+              const parsed = JSON.parse(payload);
+              const delta = extractDeltaText(parsed, "mistral");
+              if (delta) {
+                fullResponse += delta;
+                if (!clientDisconnected) {
+                  try {
+                    controller.enqueue(
+                      encoder.encode(`data: ${JSON.stringify({ token: delta })}\n\n`)
+                    );
+                  } catch {
+                    clientDisconnected = true;
+                  }
+                }
+              }
+            } catch {
+              // skip malformed chunk
+            }
+          }
+        },
+
+        async flush(controller) {
+          console.log("[stream:context-prompt] LLM stream complete, persisting");
+
+          try {
+            const aiResponse = fullResponse.trim() || "No response generated.";
+            const totalInputChars = summaryResult.inputChars + responseMessages.reduce((s, m) => s + m.content.length, 0);
+            const totalOutputChars = summaryResult.outputChars + aiResponse.length;
+            const totalTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
+
+            // Log to ai_editor_actions
+            const { data: actionRow } = await adminClient
+              .from("ai_editor_actions")
+              .insert({
+                project_id,
+                action_type: action_type === "ask" ? "ask" : "propose",
+                selected_text_preview: selected_text.slice(0, 500),
+                ai_response_preview: aiResponse.slice(0, 500),
+                ai_response_full: aiResponse,
+                char_count_original: selected_text.length,
+                char_count_result: aiResponse.length,
+                outcome: action_type === "ask" ? "delivered" : "pending",
+                instruction_text: selectedTextSource
+                  ? `${instruction.slice(0, 1000)} | Source: ${selectedTextSource}`
+                  : instruction.slice(0, 1000),
+              })
+              .select("id")
+              .single();
+
+            // Log token usage
+            await supabase.from("token_usage").insert({
+              user_id: user.id,
+              project_id,
+              function_name: "context-prompt",
+              model_used: "mistral-large-latest",
+              input_tokens: Math.ceil(totalInputChars / 4),
+              output_tokens: Math.ceil(totalOutputChars / 4),
+            });
+
+            // Atomic budget update
+            await supabase.rpc("increment_tokens_used", {
+              user_uuid: user.id,
+              amount: totalTokens,
+            });
+
+            const budgetRemaining = profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
+
+            // For Ask: persist chat messages and commit summary in flush
+            const insertedMessages: unknown[] = [];
+
+            if (action_type === "ask") {
+              const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
+              const userPromptContent = `[Ask] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\nQuestion: ${instruction}`;
+
+              const { data: promptMsg } = await supabase.from("chat_messages").insert({
+                thread_id,
+                role: "user",
+                content: userPromptContent,
+                source_type: "ask_prompt",
+                flow_flag: "normal",
+              }).select().single();
+              if (promptMsg) insertedMessages.push(promptMsg);
+
+              if (summaryUpdate !== "No update needed.") {
+                const { data: summaryMsg } = await supabase.from("chat_messages").insert({
+                  thread_id,
+                  role: "assistant",
+                  content: summaryUpdate,
+                  source_type: "writing_summary",
+                  flow_flag: "not_assessed",
+                }).select().single();
+                if (summaryMsg) insertedMessages.push(summaryMsg);
+              }
+
+              const { data: responseMsg } = await supabase.from("chat_messages").insert({
+                thread_id,
+                role: "assistant",
+                content: aiResponse,
+                source_type: "ask_response",
+                flow_flag: "normal",
+                model_used: "mistral-large-latest",
+              }).select().single();
+              if (responseMsg) insertedMessages.push(responseMsg);
+
+              // Update writing_summary_log
+              if (summaryUpdate !== "No update needed.") {
+                if (summaryRow) {
+                  await supabase
+                    .from("writing_summary_log")
+                    .update({ summary_text: updatedSummary, last_updated_at: new Date().toISOString() })
+                    .eq("id", summaryRow.id);
+                } else {
+                  await supabase.from("writing_summary_log").insert({
+                    project_id,
+                    summary_text: updatedSummary,
+                  });
+                }
+              }
+            }
+
+            // For Propose: do NOT persist messages in flush — only on user Accept
+            // Send done event with data needed by client
+            if (!clientDisconnected) {
+              try {
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({
+                      done: true,
+                      ai_response: aiResponse,
+                      summary_update: summaryUpdate,
+                      action_id: actionRow?.id ?? null,
+                      budget_remaining: budgetRemaining,
+                      inserted_messages: insertedMessages,
+                    })}\n\n`
+                  )
+                );
+              } catch {
+                clientDisconnected = true;
+              }
+            }
+
+            console.log("[stream:context-prompt] persistence complete");
+          } catch (persistErr) {
+            console.error("[stream:context-prompt] persistence error:", persistErr);
+            if (!clientDisconnected) {
+              try {
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({ done: true, error: "Action may not have been saved." })}\n\n`
+                  )
+                );
+              } catch {
+                // client gone
+              }
+            }
+          }
+        },
+      });
+
+      const outputStream = llmRes.body!.pipeThrough(transform);
+
+      return new Response(outputStream, {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "X-Accel-Buffering": "no",
+          Connection: "keep-alive",
+        },
+      });
+    }
+
+    // =========================================================
+    // NON-STREAMING PATH (unchanged)
+    // =========================================================
     const responseResult = await callMistral(mistralKey, responseMessages, 2000);
     const aiResponse = responseResult.text.trim();
 
