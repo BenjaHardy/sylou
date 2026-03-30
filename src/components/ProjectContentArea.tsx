@@ -66,6 +66,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const [provenanceTracker, setProvenanceTracker] = useState<ProvenanceTracker | null>(null);
   const [showLiveProvenance, setShowLiveProvenance] = useState(false);
   const [editorHtml, setEditorHtml] = useState("");
+  const chatSetMessagesRef = useRef<((updater: (prev: ChatMessage[]) => ChatMessage[]) => void) | null>(null);
   const [provenanceKey, setProvenanceKey] = useState(0);
   const flushProvenanceRef = useRef<(() => Promise<void>) | null>(null);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
