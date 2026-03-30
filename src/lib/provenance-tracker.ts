@@ -252,18 +252,23 @@ export class ProvenanceTracker {
   // ─── Chat Clipboard Tagging ──────────────────────────────
 
   /** Called when user copies text from the chat panel */
-  setChatClipboardRole(role: "assistant" | "user") {
-    this._chatClipboardRole = role;
+  setChatClipboard(text: string, role: "assistant" | "user") {
+    this._chatClipboard = { text: text.replace(/\s+/g, " ").trim(), role };
     if (this._chatClipboardExpiry) clearTimeout(this._chatClipboardExpiry);
     // Expire after 30s — user should paste quickly
     this._chatClipboardExpiry = setTimeout(() => {
-      this._chatClipboardRole = null;
+      this._chatClipboard = null;
     }, 30_000);
   }
 
-  /** Check chat clipboard role without clearing it (supports multiple pastes) */
-  private checkChatClipboardRole(): "assistant" | "user" | null {
-    return this._chatClipboardRole;
+  /** Check chat clipboard role — only matches if pasted text matches stored text */
+  private checkChatClipboardRole(pastedText: string): "assistant" | "user" | null {
+    if (!this._chatClipboard) return null;
+    const normalized = pastedText.replace(/\s+/g, " ").trim();
+    if (normalized === this._chatClipboard.text) {
+      return this._chatClipboard.role;
+    }
+    return null;
   }
 
   // ─── Drag-and-Drop Override ──────────────────────────────
