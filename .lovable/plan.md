@@ -1,94 +1,121 @@
 
-I reviewed the code path end-to-end at the file/DB level, and the main project-switch flush work is not the real failure anymore.
 
-## Root cause
+## Fix: Content Not Saving + Stale Provenance on Project Switch
 
-The provenance is being destroyed on reload, not on save.
+### Root Cause Analysis
 
-In `src/hooks/useProvenanceTracker.ts`:
-- the load path fetches `segment_map`
-- then immediately does `trackerRef.current.init(segmentMap, 0)`
+There are **three interacting bugs**, all caused by stale closures:
 
-In `src/lib/provenance-tracker.ts`, `init(savedSegments, contentLength)` always calls `clampToLength(contentLength)` when saved segments exist.
+#### Bug A: `combinedFlush` is created once and never updated
 
-So when `contentLength` is `0`, all loaded segments are trimmed away:
-```ts
-if (savedSegments && savedSegments.length > 0) {
-  this.segments = savedSegments;
-  this.clampToLength(contentLength); // contentLength = 0 here
-}
+In `WritingEditor.tsx` line 191-195, the combined flush callback is created inside a `useEffect` that only runs when `initialSet` transitions from false to true:
+
+```typescript
+// This runs ONCE per project load, capturing that moment's flushWritingContent and flushProvenance
+const combinedFlush = async () => {
+  await flushWritingContent();  // ← stale after content changes
+  await flushProvenance();
+};
+onFlushProvenance?.(combinedFlush);
 ```
 
-Then later, when `WritingEditor` calls `initWithContentLength(docLen)`, `getSegments()` is already empty, so it falls into:
-```ts
-tracker.init(null, contentLength)
-```
-which recreates the whole document as one `[t]` segment.
+After the user types, `flushWritingContent` (from `useWritingContent`) gets recreated (it depends on `[projectId, content, saveNow]`), but `combinedFlush` still references the **initial** version. When `Index.tsx` calls `flushRef.current()` before switching projects, it flushes the **initial content**, not the current content. The save is silently skipped (`html === lastSavedContent.current`), so the user's work is lost.
 
-That exactly matches your symptom: leaving and returning reloads everything as typed.
+#### Bug B: `useWritingContent.flushSave` captures `content` from React state
 
-I also checked the DB state: the latest `provenance_events` rows for your recent test projects are already stored as a single typed segment (`[{ start: 0, end: N, source: "typed" }]`), while `writing_content` still contains the real text. That’s consistent with this destructive re-init path.
+Even if the flush were fresh, `flushSave` reads `content` from its closure:
 
-## Fix to implement
-
-### 1. Stop initializing saved provenance at length 0
-In `useProvenanceTracker`, do not call `tracker.init(segmentMap, 0)` during the fetch.
-
-Instead:
-- add a `loadedSegmentsRef`
-- on load, store fetched `segment_map` into that ref
-- keep `trackerRef.current` fresh but uninitialized
-- in `initWithContentLength(contentLength)`, initialize from `loadedSegmentsRef.current` once the editor’s real doc length is known
-
-Implementation shape:
-```ts
-const loadedSegmentsRef = useRef<ProvenanceSegment[] | null>(null);
-
-// after fetch
-loadedSegmentsRef.current = segmentMap ?? null;
-trackerRef.current = new ProvenanceTracker();
-
-// later
-const saved = loadedSegmentsRef.current;
-tracker.init(saved, contentLength);
-loadedSegmentsRef.current = null;
+```typescript
+const flushSave = useCallback(async () => {
+  await saveNow(content);  // ← content is a snapshot from the render that created this callback
+}, [projectId, content, saveNow]);
 ```
 
-### 2. Reset save baselines when loading a project
-Also in `useProvenanceTracker`:
-- set `lastSavedJsonRef.current` from the fetched `segment_map`
-- clear it appropriately when no project / empty project loads
+This is fragile because React state isn't synchronous — there's always a render lag between `updateContent` setting state and `flushSave` capturing the new value.
 
-That prevents cross-project stale comparisons and unnecessary rewrites.
+#### Bug C: No debounce cleanup on project change
 
-### 3. Keep the awaited flush logic
-The recent `Index -> ProjectContentArea -> WritingEditor` flush chain is still correct and should stay:
-- it protects against race conditions during project switching
-- but it only works if the load path preserves the saved segments
+`useWritingContent`'s `[projectId]` effect cleanup (line 64-66) sets `currentProjectId.current = null` but **never clears the debounce timer**. A pending 3-second save can fire after the project has already switched, potentially saving to the wrong project.
 
-## Files to update
+### Fix Plan
 
-- `src/hooks/useProvenanceTracker.ts`
-  - replace the destructive `init(segmentMap, 0)` load path
-  - add `loadedSegmentsRef`
-  - reset `lastSavedJsonRef` correctly per project
-- optionally leave `src/lib/provenance-tracker.ts` unchanged
-  - cleaner to fix this in the hook than to give `init()` special “0 means defer” semantics
+#### 1. `useWritingContent.ts` — Use a content ref for flush reliability
 
-## Verification after implementation
+Add a `contentRef` that always holds the latest content. Change `flushSave` to read from the ref instead of React state. Also clear the debounce timer in the `[projectId]` effect cleanup:
 
-1. In Project A, create mixed provenance (`[cc]`, `[ce]`, `[ai]`, `[t]`)
-2. Confirm live provenance panel shows mixed segments
-3. Switch to Project B, then immediately back to A
-4. Confirm mixed segments still appear
-5. Open `View FLOW`, go back, confirm segments still persist
-6. Refresh the page and re-open Project A
-7. Confirm DB `provenance_events.segment_map` still contains mixed segments, not a single typed span
+```typescript
+const contentRef = useRef<string>("");
 
-## Why I’m confident this is the real issue
+// Keep ref in sync
+useEffect(() => { contentRef.current = content; }, [content]);
 
-The current save/flush code may be imperfect, but even a correct save would still fail if the app reloads saved segments by first clamping them to length 0. That is the one code path that directly explains:
-- FLOW/view return resets
-- project switch resets
-- “everything becomes `[t]`”
-- recent DB rows ending up as one typed segment
+const flushSave = useCallback(async () => {
+  if (debounceTimer.current) {
+    clearTimeout(debounceTimer.current);
+    debounceTimer.current = null;
+  }
+  if (!projectId) return;
+  await saveNow(contentRef.current);  // ← always latest
+}, [projectId, saveNow]);
+```
+
+And in the `[projectId]` effect cleanup:
+```typescript
+return () => {
+  if (debounceTimer.current) {
+    clearTimeout(debounceTimer.current);
+    debounceTimer.current = null;
+  }
+  currentProjectId.current = null;
+};
+```
+
+#### 2. `WritingEditor.tsx` — Use refs for flush functions
+
+Instead of capturing `flushWritingContent` and `flushProvenance` in a one-time closure, store them in refs and pass a stable callback to the parent:
+
+```typescript
+const flushWritingRef = useRef(flushWritingContent);
+const flushProvenanceRef = useRef(flushProvenance);
+useEffect(() => { flushWritingRef.current = flushWritingContent; }, [flushWritingContent]);
+useEffect(() => { flushProvenanceRef.current = flushProvenance; }, [flushProvenance]);
+
+// Pass a stable flush to parent — always calls latest versions
+useEffect(() => {
+  const stableFlush = async () => {
+    await flushWritingRef.current();
+    await flushProvenanceRef.current();
+  };
+  onFlushProvenance?.(stableFlush);
+}, [onFlushProvenance]);
+```
+
+Remove the stale `combinedFlush` from the `initialSet` effect (lines 191-195).
+
+#### 3. `WritingEditor.tsx` — Re-expose tracker after project switch
+
+The `onProvenanceTracker?.(tracker)` call only happens once when `initialSet` becomes true. After a project switch, `useProvenanceTracker` creates a new `ProvenanceTracker` instance, but the parent holds the old reference. The `initialSet` reset (line 201) should trigger re-exposure — just need to ensure the effect re-runs properly (it already should, since `initialSet` is in the deps).
+
+No additional code change needed here — Bug A/B fixes will make the init effect run correctly on project switch.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `src/hooks/useWritingContent.ts` | Add `contentRef`, fix `flushSave` to use ref, clear debounce on project change |
+| `src/components/WritingEditor.tsx` | Use refs for flush functions, pass stable callback to parent |
+
+### What This Fixes
+
+- **Content saves reliably** before project switch (flushes latest content, not stale initial)
+- **Provenance persists** across project switches (flushes latest provenance state)
+- **FLOW analysis** can read content from DB (because content is actually saved)
+- **Provenance panel** updates when switching projects (fresh tracker exposed)
+- **No cross-project contamination** from orphaned debounce timers
+
+### Why This Is Safe
+
+- All changes are ref-based plumbing — no functional logic changes
+- `saveNow` already handles deduplication (`html === lastSavedContent.current`)
+- Existing fallback flushes (unmount, cleanup) remain as safety nets
+
