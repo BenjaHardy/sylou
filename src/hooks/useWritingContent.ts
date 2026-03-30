@@ -5,6 +5,14 @@ interface SaveState {
   status: "idle" | "saving" | "saved";
 }
 
+/**
+ * Flush lifecycle:
+ *   1. User types → updateContent() sets React state + starts 3s debounce timer
+ *   2. Timer fires → saveNow() writes to DB (deduplicates via lastSavedContent ref)
+ *   3. On project switch → flushSave() clears timer and saves immediately using
+ *      contentRef (a ref that always holds the latest content, avoiding stale closures)
+ *   4. On unmount → debounce timer is cleared (parent calls flushSave before unmount)
+ */
 export function useWritingContent(projectId: string | null) {
   const [content, setContent] = useState<string>("");
   const [loading, setLoading] = useState(false);

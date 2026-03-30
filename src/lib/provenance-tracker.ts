@@ -1,5 +1,18 @@
 /**
- * ProvenanceTracker — tracks the origin of every text segment in the editor.
+ * Provenance Tracker
+ *
+ * Tracks the origin of every text segment in the TipTap/ProseMirror editor.
+ *
+ * Architecture:
+ *   - Segment positions are updated via ProseMirror's transaction.mapping.
+ *   - Insertions within existing segments are detected by analyzing StepMap ranges,
+ *     which identify newly inserted character ranges. Overlapping segments are split
+ *     so that newly inserted text gets its own provenance classification.
+ *   - Classification priority for new text:
+ *       pending signal (paste/drag/AI) → typed (default)
+ *     The pending signal is set *before* the transaction fires by the paste handler,
+ *     drop handler, or AI-accept handler. `classifyPaste` determines the signal using:
+ *       internal clipboard → AI result registry → chat clipboard → external
  *
  * Segment sources:
  *   typed       [t]   — user typed
@@ -22,7 +35,6 @@ const MAX_HISTORY = 100;
 
 export class ProvenanceTracker {
   private segments: ProvenanceSegment[] = [];
-  private _pendingAiInsertion = false;
   private _aiResultTexts = new Map<string, number>(); // text -> timestamp
   private _chatClipboardRole: "assistant" | "user" | null = null;
   private _chatClipboardExpiry: ReturnType<typeof setTimeout> | null = null;
@@ -34,8 +46,15 @@ export class ProvenanceTracker {
    */
   private _internalClipboard: { text: string; source: SegmentSource } | null = null;
 
-  /** Drag-and-drop override — set before drop transaction fires */
-  private _dragOverride: { source: SegmentSource; originalText: string | null } | null = null;
+  /**
+   * Unified pending signal for the next insertion classification.
+   * Set before a ProseMirror transaction fires by one of:
+   *   - Paste handler: setPendingSignal(classifyPaste(text))
+   *   - Drop handler:  setPendingSignal({ source, originalText })
+   *   - AI accept:     setPendingSignal({ source: "ai_editor", originalText: null })
+   * Consumed (and cleared) by classifyInsertion() when filling gaps.
+   */
+  private _pendingSignal: { source: SegmentSource; originalText: string | null } | null = null;
 
   /** Skip tracking flag — used during programmatic content resets */
   private _skipTracking = false;
@@ -205,12 +224,18 @@ export class ProvenanceTracker {
     return null;
   }
 
-  // ─── AI Editor Flags ─────────────────────────────────────
+  // ─── Pending Signal (unified override for next insertion) ─
 
-  /** Call before programmatic insertion from TextSelectionWindow */
-  setPendingAiInsertion() {
-    this._pendingAiInsertion = true;
+  /**
+   * Set a pending signal that will classify the next insertion.
+   * Called by paste, drag-drop, and AI-accept handlers *before*
+   * the ProseMirror transaction fires.
+   */
+  setPendingSignal(signal: { source: SegmentSource; originalText: string | null }) {
+    this._pendingSignal = signal;
   }
+
+  // ─── AI Result Registry ─────────────────────────────────
 
   /** Register an AI result text for manual copy/paste detection */
   registerAiResultText(text: string) {
@@ -266,17 +291,45 @@ export class ProvenanceTracker {
     return this._chatClipboardRole;
   }
 
-  // ─── Drag-and-Drop Override ──────────────────────────────
+  // ─── Paste Classification ───────────────────────────────
 
-  /** Set before a drop transaction fires, with the dominant source of the dragged range */
-  setDragOverride(override: { source: SegmentSource; originalText: string | null }) {
-    this._dragOverride = override;
-  }
+  /**
+   * Classify pasted text using the full priority chain.
+   * Called from the paste event handler *before* the transaction fires.
+   * The result should be passed to setPendingSignal().
+   *
+   * Priority:
+   *   1. Internal editor clipboard (exact match)
+   *   2. AI result registry (exact / normalized / substring ≥20 chars)
+   *   3. Chat clipboard role (assistant → chat_ai, user → chat_user)
+   *   4. External (fallback)
+   */
+  classifyPaste(pastedText: string): { source: SegmentSource; originalText: string | null } {
+    // 1. Check internal editor clipboard first (supports multiple pastes)
+    const internalSource = this.checkInternalClipboard(pastedText);
+    if (internalSource) {
+      const originalText = internalSource === "typed" || internalSource === "chat_user"
+        ? null
+        : pastedText;
+      return { source: internalSource, originalText };
+    }
 
-  private consumeDragOverride(): { source: SegmentSource; originalText: string | null } | null {
-    const o = this._dragOverride;
-    this._dragOverride = null;
-    return o;
+    // 2. Check AI result text match
+    if (this.consumeAiResultText(pastedText)) {
+      return { source: "ai_editor", originalText: pastedText };
+    }
+
+    // 3. Check chat clipboard role (not consumed — supports multiple pastes)
+    const chatRole = this.checkChatClipboardRole();
+    if (chatRole === "assistant") {
+      return { source: "chat_ai", originalText: pastedText };
+    }
+    if (chatRole === "user") {
+      return { source: "chat_user", originalText: null };
+    }
+
+    // 4. External
+    return { source: "external", originalText: pastedText };
   }
 
   // ─── Transaction Handling (Mapping-Based) ────────────────
@@ -332,7 +385,7 @@ export class ProvenanceTracker {
 
     // Step 2: Extract insertion ranges from step maps and split segments
     // that absorbed insertions they shouldn't own.
-    const hasSignal = !!(this._pasteOverride || this._pendingAiInsertion || this._dragOverride);
+    const hasSignal = !!this._pendingSignal;
     const insertionRanges: Array<{ start: number; end: number }> = [];
 
     const maps = mapping.maps;
@@ -415,7 +468,7 @@ export class ProvenanceTracker {
 
       if (segStart > cursor) {
         const gapText = this.extractText(transaction.doc, cursor, segStart);
-        const classification = this.classifyGap(gapText);
+        const classification = this.classifyInsertion(gapText);
         result.push({
           start: cursor,
           end: segStart,
@@ -434,7 +487,7 @@ export class ProvenanceTracker {
     // Fill trailing gap
     if (cursor < newDocSize) {
       const gapText = this.extractText(transaction.doc, cursor, newDocSize);
-      const classification = this.classifyGap(gapText);
+      const classification = this.classifyInsertion(gapText);
       result.push({
         start: cursor,
         end: newDocSize,
@@ -467,67 +520,18 @@ export class ProvenanceTracker {
   }
 
   /**
-   * Classify a gap (newly inserted content) using the existing
-   * classification priority: pending AI flag → paste override →
-   * drag override → internal clipboard → AI result registry →
-   * chat clipboard → typed.
+   * Classify a gap (newly inserted content).
+   * Consumes _pendingSignal if set, otherwise defaults to "typed".
+   * For AI insertions where originalText is null, uses the gap text itself.
    */
-  private classifyGap(text: string): { source: SegmentSource; originalText: string | null } {
-    return this.classifyInsertionFull(text);
-  }
-
-
-  /** Called from paste event handler before the transaction fires */
-  classifyPaste(pastedText: string): { source: SegmentSource; originalText: string | null } {
-    // 1. Check AI result text match
-    if (this.consumeAiResultText(pastedText)) {
-      return { source: "ai_editor", originalText: pastedText };
-    }
-
-    // 2. Check chat clipboard role (not consumed — supports multiple pastes)
-    const chatRole = this.checkChatClipboardRole();
-    if (chatRole === "assistant") {
-      return { source: "chat_ai", originalText: pastedText };
-    }
-    if (chatRole === "user") {
-      return { source: "chat_user", originalText: null };
-    }
-
-    // 3. Check internal editor clipboard (not consumed — supports multiple pastes)
-    const internalSource = this.checkInternalClipboard(pastedText);
-    if (internalSource) {
-      const originalText = internalSource === "typed" || internalSource === "chat_user"
-        ? null
-        : pastedText;
-      return { source: internalSource, originalText };
-    }
-
-    // 4. External
-    return { source: "external", originalText: pastedText };
-  }
-
-  /** Temporary override for the next insertion classification */
-  private _pasteOverride: { source: SegmentSource; originalText: string | null } | null = null;
-
-  setPasteOverride(override: { source: SegmentSource; originalText: string | null }) {
-    this._pasteOverride = override;
-  }
-
-  /** Classify inserted text using priority: AI flag → paste override → drag override → typed */
-  private classifyInsertionFull(text: string): { source: SegmentSource; originalText: string | null } {
-    if (this._pendingAiInsertion) {
-      this._pendingAiInsertion = false;
-      return { source: "ai_editor", originalText: text };
-    }
-    if (this._pasteOverride) {
-      const o = this._pasteOverride;
-      this._pasteOverride = null;
-      return o;
-    }
-    if (this._dragOverride) {
-      const o = this._dragOverride;
-      this._dragOverride = null;
-      return o;
+  private classifyInsertion(text: string): { source: SegmentSource; originalText: string | null } {
+    if (this._pendingSignal) {
+      const s = this._pendingSignal;
+      this._pendingSignal = null;
+      return {
+        source: s.source,
+        originalText: s.originalText ?? (s.source === "ai_editor" ? text : null),
+      };
     }
     return { source: "typed", originalText: null };
   }

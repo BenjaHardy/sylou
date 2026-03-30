@@ -49,7 +49,10 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   const [aiSelectionFrom, setAiSelectionFrom] = useState(0);
   const [aiSelectionTo, setAiSelectionTo] = useState(0);
 
-  // Refs to always hold the latest flush functions (avoids stale closures)
+  // Flush refs: useWritingContent and useProvenanceTracker return new flushSave
+  // callbacks when projectId changes (they close over the new project). Storing
+  // them in refs lets us expose a single stable flush callback to the parent
+  // without stale closure bugs — the parent always calls the latest versions.
   const flushWritingRef = useRef(flushWritingContent);
   const flushProvenanceRef = useRef(flushProvenance);
   useEffect(() => { flushWritingRef.current = flushWritingContent; }, [flushWritingContent]);
