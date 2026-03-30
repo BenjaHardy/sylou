@@ -174,7 +174,8 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
       while (el && el !== container) {
         if (el.dataset?.chatRole) {
           const role = el.dataset.chatRole as "user" | "assistant";
-          provenanceTracker.setChatClipboardRole(role);
+          const copiedText = sel.toString() || "";
+          provenanceTracker.setChatClipboard(copiedText, role);
           return;
         }
         el = el.parentElement;
