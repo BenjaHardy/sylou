@@ -215,5 +215,6 @@ export function useChatMessages(threadId: string | null) {
     budgetRemaining,
     refreshMessages: fetchMessages,
     appendMessages,
+    setMessages,
   };
 }
