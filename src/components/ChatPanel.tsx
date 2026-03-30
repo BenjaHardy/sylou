@@ -19,6 +19,7 @@ interface Props {
   provenanceTracker?: ProvenanceTracker;
   conciseMode: boolean;
   onConciseModeChange: (value: boolean) => void;
+  onSetMessages?: (setter: (updater: (prev: ChatMessage[]) => ChatMessage[]) => void) => void;
 }
 
 
