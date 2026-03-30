@@ -229,7 +229,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     (replacementText: string) => {
       if (!editor) return;
       const tracker = getTracker();
-      tracker.setPendingAiInsertion();
+      tracker.setPendingSignal({ source: "ai_editor", originalText: null });
       editor.chain().focus().insertContent(replacementText).run();
     },
     [editor, getTracker]
