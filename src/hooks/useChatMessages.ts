@@ -46,6 +46,9 @@ function createSSEParser() {
   };
 }
 
+import { useState, useCallback, useEffect } from "react";
+
+// Re-export with useEffect for initial fetch
 export function useChatMessages(threadId: string | null) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
