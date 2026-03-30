@@ -204,9 +204,11 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
     }
 
     // =========================================================
-    // STREAMING PATH
+    // STREAMING PATH — TransformStream pipe pattern
     // =========================================================
     if (streamRequested) {
+      console.log("[stream] entering streaming path for thread", threadId);
+
       const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -223,14 +225,16 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
       if (!llmRes.ok) {
         const errText = await llmRes.text();
-        console.error("Mistral API error:", llmRes.status, errText);
+        console.error("[stream] Mistral API error:", llmRes.status, errText);
         return jsonResponse(
           { error: "AI service temporarily unavailable. Please try again." },
           502
         );
       }
 
-      // We need the service role client for persistence after user's request scope
+      console.log("[stream] LLM response received, piping");
+
+      // Service role client for persistence after stream ends
       const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
 
@@ -238,55 +242,44 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       let clientDisconnected = false;
       const encoder = new TextEncoder();
       const decoder = new TextDecoder();
+      let sseBuffer = "";
 
-      const stream = new ReadableStream({
-        async start(controller) {
-          const reader = llmRes.body!.getReader();
+      const transform = new TransformStream({
+        transform(chunk, controller) {
+          sseBuffer += decoder.decode(chunk, { stream: true });
+          const lines = sseBuffer.split("\n");
+          sseBuffer = lines.pop() ?? "";
 
-          // Helper: safely write to the SSE stream
-          function sendSSE(eventData: string) {
-            if (clientDisconnected) return;
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data:")) continue;
+            const payload = trimmed.slice(5).trim();
+            if (payload === "[DONE]") continue;
+
             try {
-              controller.enqueue(encoder.encode(`data: ${eventData}\n\n`));
-            } catch {
-              clientDisconnected = true;
-            }
-          }
-
-          try {
-            let buffer = "";
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-
-              buffer += decoder.decode(value, { stream: true });
-              const lines = buffer.split("\n");
-              // Keep last potentially incomplete line in buffer
-              buffer = lines.pop() ?? "";
-
-              for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || !trimmed.startsWith("data:")) continue;
-                const payload = trimmed.slice(5).trim();
-                if (payload === "[DONE]") continue;
-
-                try {
-                  const parsed = JSON.parse(payload);
-                  const delta = extractDeltaText(parsed, "mistral");
-                  if (delta) {
-                    fullResponse += delta;
-                    sendSSE(JSON.stringify({ token: delta }));
+              const parsed = JSON.parse(payload);
+              const delta = extractDeltaText(parsed, "mistral");
+              if (delta) {
+                fullResponse += delta;
+                if (!clientDisconnected) {
+                  try {
+                    controller.enqueue(
+                      encoder.encode(`data: ${JSON.stringify({ token: delta })}\n\n`)
+                    );
+                  } catch {
+                    clientDisconnected = true;
                   }
-                } catch {
-                  // skip malformed chunk
                 }
               }
+            } catch {
+              // skip malformed chunk
             }
-          } catch (err) {
-            console.error("Error reading LLM stream:", err);
           }
+        },
 
-          // --- Persist messages (always, even if client disconnected) ---
+        async flush(controller) {
+          console.log("[stream] LLM stream complete, persisting messages");
+
           try {
             const userMsg = {
               thread_id: threadId,
@@ -318,7 +311,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
               .select()
               .single();
 
-            // --- Token budget ---
+            // Token budget
             const inputChars = llmMessages.reduce(
               (sum, m) => sum + m.content.length,
               0
@@ -332,7 +325,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
               .update({ tokens_used_this_period: newTotal })
               .eq("id", user.id);
 
-            // --- Increment prompt count ---
+            // Increment prompt count
             const promptColumn = tutorMode
               ? "chat_prompt_count_tutor"
               : "chat_prompt_count_normal";
@@ -352,40 +345,53 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
                 .eq("project_id", thread.project_id);
             }
 
-            // Send final done event with persisted messages
-            sendSSE(
-              JSON.stringify({
-                done: true,
-                user_message: insertedUser,
-                assistant_message: insertedAssistant,
-                budget_remaining: profile.monthly_token_budget - newTotal,
-              })
-            );
-          } catch (persistErr) {
-            console.error("Error persisting streamed messages:", persistErr);
-            sendSSE(
-              JSON.stringify({
-                done: true,
-                error: "Messages may not have been saved.",
-              })
-            );
-          }
+            if (!clientDisconnected) {
+              try {
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({
+                      done: true,
+                      user_message: insertedUser,
+                      assistant_message: insertedAssistant,
+                      budget_remaining: profile.monthly_token_budget - newTotal,
+                    })}\n\n`
+                  )
+                );
+              } catch {
+                clientDisconnected = true;
+              }
+            }
 
-          if (!clientDisconnected) {
-            try {
-              controller.close();
-            } catch {
-              // already closed
+            console.log("[stream] persistence complete");
+          } catch (persistErr) {
+            console.error("[stream] persistence error:", persistErr);
+            if (!clientDisconnected) {
+              try {
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({
+                      done: true,
+                      error: "Messages may not have been saved.",
+                    })}\n\n`
+                  )
+                );
+              } catch {
+                // client gone
+              }
             }
           }
         },
       });
 
-      return new Response(stream, {
+      // Pipe LLM response through our transform
+      const outputStream = llmRes.body!.pipeThrough(transform);
+
+      return new Response(outputStream, {
         headers: {
           ...corsHeaders,
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
+          "X-Accel-Buffering": "no",
           Connection: "keep-alive",
         },
       });
