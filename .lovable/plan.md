@@ -1,53 +1,61 @@
 
 
-## Cleanup Pass: Provenance Tracker Code (revised)
+## Plan: Enable Streaming for AI Chat Responses
 
-### 1. Dead code removal
-Remove `classifyGap()` (pass-through wrapper), `consumeDragOverride()` (never called), and relocate scattered `_pasteOverride` declaration.
+### Overview
 
-### 2. Consolidate into `_pendingSignal`
+Switch the chat from "wait for full response" to progressive token-by-token display using Server-Sent Events (SSE). The implementation is model-agnostic, ready for both Mistral and future Anthropic support.
 
-Replace `_pendingAiInsertion`, `_pasteOverride`, `_dragOverride` with one field:
-```typescript
-private _pendingSignal: { source: SegmentSource; originalText: string | null } | null = null;
-```
+### Files Changed
 
-**Confirmed**: `classifyPaste` keeps its full priority chain (internal clipboard → AI registry → chat clipboard → external) untouched. Only its *result* is passed to `setPendingSignal` instead of stored in `_pasteOverride`. The consolidation changes storage, not classification logic.
+| File | Change |
+|------|--------|
+| `supabase/functions/chat/index.ts` | Add streaming path with SSE response, model-agnostic chunk parser |
+| `src/hooks/useChatMessages.ts` | Replace `supabase.functions.invoke` with raw `fetch()` + SSE reader |
+| `src/components/ChatPanel.tsx` | Show streaming message progressively instead of bounce dots |
 
-Callers update to:
-- Paste: `tracker.setPendingSignal(tracker.classifyPaste(text))`
-- Drag: `tracker.setPendingSignal({ source, originalText })`
-- AI accept: `tracker.setPendingSignal({ source: "ai_editor", originalText: null })`
+### 1. Edge Function — Streaming Path
 
-`classifyInsertionFull` consumes `_pendingSignal` instead of checking three fields.
+When `body.stream === true`:
 
-### 3. Lifecycle comments
+- Call Mistral with `stream: true`
+- Return `ReadableStream` with SSE headers (`text/event-stream`)
+- For each chunk, extract delta text via `extractDeltaText(chunk, provider)`:
+  - Mistral: `choices[0].delta.content`
+  - Anthropic (future): `delta.text` from `content_block_delta` events
+- Forward as `data: {"token":"<text>"}\n\n`
+- Accumulate full response server-side in a buffer
+- After stream ends: persist both messages, log tokens, update budget, update stats
+- Send final event: `data: {"done":true, "user_message":..., "assistant_message":..., "budget_remaining":...}\n\n`
+- If client disconnects mid-stream, still finish reading LLM response and persist everything (wrap writer errors in try/catch, continue accumulating)
+- When `stream` is false/missing, keep existing non-streaming path unchanged
 
-**`provenance-tracker.ts` top-of-file** — architecture summary:
-```
-// Provenance Tracker
-// Segment positions are updated via ProseMirror's transaction.mapping.
-// Insertions within segments are detected by analyzing StepMap ranges.
-// Classification priority: internal clipboard → AI registry → chat → external.
-```
+### 2. Client Hook — SSE Consumer
 
-Plus comments at:
-- `useWritingContent.ts`: debounce → saveNow → flushSave pipeline
-- `useProvenanceTracker.ts`: deferred init → debounced save → flush lifecycle
-- `WritingEditor.tsx`: why refs avoid stale closures in the flush chain
-- `ProjectContentArea.tsx`: awaited flush chain diagram
-- `Index.tsx`: deterministic switch pattern
+In `sendMessage`:
 
-### Files changed
+- Build URL as `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`
+- Get fresh token via `supabase.auth.getSession()` at call time
+- Pass `Authorization: Bearer <token>` and `apikey` headers
+- Add `stream: true` to request body
+- Read response body as stream, parse `data:` lines
+- On `{"token":"..."}`: append token to a streaming placeholder message (id: `streaming-assistant`)
+- On `{"done":true, ...}`: replace optimistic user msg + streaming placeholder with final persisted messages, update `budgetRemaining`
+- On error/drop (no `done` received): remove streaming placeholder, show error via toast
+- `sending` stays `true` until `done` event
 
-| File | Changes |
-|------|---------|
-| `src/lib/provenance-tracker.ts` | Dead code removal, `_pendingSignal` consolidation, architecture comment |
-| `src/components/WritingEditor.tsx` | Update callers to `setPendingSignal`, flush lifecycle comments |
-| `src/hooks/useWritingContent.ts` | Flush lifecycle docstring |
-| `src/hooks/useProvenanceTracker.ts` | Load/save lifecycle docstring |
-| `src/components/ProjectContentArea.tsx` | Flush chain comment |
-| `src/pages/Index.tsx` | Project-switch comment |
+### 3. ChatPanel — Progressive Display
 
-All changes are structural refactors — no behavioral changes.
+- When a message with id `streaming-assistant` exists in the list, render it as a normal assistant `ChatBubble` (content grows progressively)
+- Remove the bounce-dots indicator when streaming is active (the growing message replaces it)
+- The existing auto-scroll effect (`useEffect` on `[messages, sending]`) already triggers on message changes, so progressive content will auto-scroll naturally
+- No other UI changes needed
+
+### Technical Details
+
+**SSE parsing** on the client: read chunks with `TextDecoder`, split on `\n\n`, extract `data:` prefix, `JSON.parse` each event. Handle partial chunks with a line buffer.
+
+**Client disconnect resilience**: The edge function's `ReadableStream` pull function wraps `controller.enqueue()` in try/catch. If write fails (client gone), it sets a `clientDisconnected` flag but continues reading from LLM and accumulating text. After the LLM stream ends, persistence runs regardless.
+
+**Auth token freshness**: `getSession()` is called inside `sendMessage` (not at hook init), so tokens are always current even during long writing sessions.
 
