@@ -290,6 +290,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
                 onFlushProvenance={(fn) => { flushProvenanceRef.current = fn; }}
                 conciseMode={conciseMode}
                 onEditorContent={setEditorHtml}
+                chatSetMessages={chatSetMessagesRef.current ?? undefined}
               />
               {showLiveProvenance && provenanceTracker && (
                 <div className="border-t border-border h-[40%] min-h-[200px] overflow-hidden">
