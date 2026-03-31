@@ -240,6 +240,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
       let fullResponse = "";
       let clientDisconnected = false;
+      let promptCounted = false;
       const encoder = new TextEncoder();
       const decoder = new TextDecoder();
       let sseBuffer = "";
@@ -254,7 +255,33 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
             const trimmed = line.trim();
             if (!trimmed || !trimmed.startsWith("data:")) continue;
             const payload = trimmed.slice(5).trim();
-            if (payload === "[DONE]") continue;
+            if (payload === "[DONE]") {
+              // Increment prompt count immediately at [DONE] — more reliable than flush()
+              if (!promptCounted) {
+                promptCounted = true;
+                const promptColumn = tutorMode
+                  ? "chat_prompt_count_tutor"
+                  : "chat_prompt_count_normal";
+                adminSupabase
+                  .from("project_stats")
+                  .select(promptColumn)
+                  .eq("project_id", thread.project_id)
+                  .single()
+                  .then(({ data: cs }) => {
+                    if (cs) {
+                      const cnt = (cs as Record<string, number>)[promptColumn] || 0;
+                      adminSupabase
+                        .from("project_stats")
+                        .update({ [promptColumn]: cnt + 1 })
+                        .eq("project_id", thread.project_id)
+                        .then(() =>
+                          console.log("[stream] prompt count incremented for", thread.project_id)
+                        );
+                    }
+                  });
+              }
+              continue;
+            }
 
             try {
               const parsed = JSON.parse(payload);
@@ -278,7 +305,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
         },
 
         async flush(controller) {
-          console.log("[stream] LLM stream complete, persisting messages");
+          console.log("[stream] flush() started");
 
           try {
             const userMsg = {
@@ -325,26 +352,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
               .update({ tokens_used_this_period: newTotal })
               .eq("id", user.id);
 
-            // Increment prompt count
-            const promptColumn = tutorMode
-              ? "chat_prompt_count_tutor"
-              : "chat_prompt_count_normal";
-
-            const { data: currentStats } = await adminSupabase
-              .from("project_stats")
-              .select(promptColumn)
-              .eq("project_id", thread.project_id)
-              .single();
-
-            if (currentStats) {
-              const currentCount =
-                (currentStats as Record<string, number>)[promptColumn] || 0;
-              await adminSupabase
-                .from("project_stats")
-                .update({ [promptColumn]: currentCount + 1 })
-                .eq("project_id", thread.project_id);
-            }
-
             if (!clientDisconnected) {
               try {
                 controller.enqueue(
@@ -362,7 +369,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
               }
             }
 
-            console.log("[stream] persistence complete");
+            console.log("[stream] flush() completed — persistence done");
           } catch (persistErr) {
             console.error("[stream] persistence error:", persistErr);
             if (!clientDisconnected) {
@@ -379,6 +386,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
                 // client gone
               }
             }
+            console.log("[stream] flush() completed — with error");
           }
         },
       });
