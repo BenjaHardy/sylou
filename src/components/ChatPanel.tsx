@@ -355,6 +355,21 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
     }
   };
 
+  // Keyboard shortcut: Ctrl/Cmd + Shift + K → toggle Bookmarks
+  useEffect(() => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.shiftKey && (e.metaKey || e.ctrlKey) && (e.key === "K" || e.key === "k")) {
+        e.preventDefault();
+        setShowBookmarkList((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const isMac = useMemo(() => typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform), []);
+  const bookmarkShortcutLabel = isMac ? "⌘⇧K" : "Ctrl+Shift+K";
+
   const dismissTip = () => {
     setTipDismissed(true);
   };
