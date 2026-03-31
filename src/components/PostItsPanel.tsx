@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Plus, Trash2, X, StickyNote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PostIt } from "@/hooks/usePostIts";
@@ -135,10 +135,23 @@ export function PostItsPanel({ postIts, loading, onCreate, onUpdate, onUpdatePos
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasBounds, setCanvasBounds] = useState<DOMRect | null>(null);
 
-  // Update bounds on mount and resize
+  // Update bounds on mount and resize via effect + ResizeObserver
   const updateBounds = useCallback(() => {
     if (canvasRef.current) setCanvasBounds(canvasRef.current.getBoundingClientRect());
   }, []);
+
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    updateBounds();
+    const ro = new ResizeObserver(updateBounds);
+    ro.observe(el);
+    window.addEventListener("resize", updateBounds);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", updateBounds);
+    };
+  }, [updateBounds]);
 
   return (
     <div className="flex-1 flex flex-col bg-background h-full">
@@ -158,10 +171,7 @@ export function PostItsPanel({ postIts, loading, onCreate, onUpdate, onUpdatePos
 
       {/* Canvas */}
       <div
-        ref={(el) => {
-          (canvasRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-          if (el) setCanvasBounds(el.getBoundingClientRect());
-        }}
+        ref={canvasRef}
         className="flex-1 relative overflow-auto bg-muted/40"
         onMouseEnter={updateBounds}
         style={{
