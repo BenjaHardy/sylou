@@ -374,14 +374,25 @@ Deno.serve(async (req) => {
 
     const existingSummary = summaryRow?.summary_text ?? null;
 
-    // --- 3. Fetch recent chat messages (last 20) ---
-    const { data: recentMessages } = await supabase
-      .from("chat_messages")
-      .select("role, content")
-      .eq("thread_id", thread_id)
-      .order("created_at", { ascending: false })
-      .limit(20);
+    // --- 3. Fetch recent chat messages (last 20, cross-thread) ---
+    // Fetch all thread IDs for the project, then query messages across all threads
+    const { data: projectThreads } = await supabase
+      .from("chat_threads")
+      .select("id")
+      .eq("project_id", project_id);
 
+    const threadIds = (projectThreads ?? []).map((t: { id: string }) => t.id);
+
+    const { data: recentMessages } = threadIds.length > 0
+      ? await supabase
+          .from("chat_messages")
+          .select("role, content")
+          .in("thread_id", threadIds)
+          .order("created_at", { ascending: false })
+          .limit(20)
+      : { data: [] };
+
+    // Reverse to chronological order for LLM context
     const recentChat = (recentMessages ?? []).reverse();
 
     // --- 4. LLM Call #1: Writing Summary (non-streamed) ---
