@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, KeyboardEvent } from "react";
-import { ChevronDown, Plus, Check, X } from "lucide-react";
+import { ChevronDown, Plus, Check, X, MoreHorizontal, Pencil } from "lucide-react";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import type { ChatThread } from "@/hooks/useChatThread";
