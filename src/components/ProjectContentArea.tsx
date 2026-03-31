@@ -13,7 +13,6 @@ import { FlowTokenWarningDialog } from "@/components/FlowTokenWarningDialog";
 import { FlowReanalyzeDialog } from "@/components/FlowReanalyzeDialog";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useFlowAnalysis } from "@/hooks/useFlowAnalysis";
-import { useChatThread } from "@/hooks/useChatThread";
 import type { Project } from "@/hooks/useProjects";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
@@ -72,7 +71,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const { markWriting } = useActivityTracker(project?.id ?? null);
-  const { threadId } = useChatThread(project?.id ?? null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
 
   const {
     preCheck,
@@ -278,7 +277,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
               <WritingEditor
                 projectId={project.id}
                 tutorMode={project.tutor_mode}
-                threadId={threadId}
+                threadId={activeThreadId}
                 onWritingActivity={markWriting}
                 onFlowClick={handleFlowClick}
                 onReanalyzeClick={handleReanalyzeClick}
@@ -321,7 +320,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20}>
-            <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} conciseMode={conciseMode} onConciseModeChange={setConciseMode} onSetMessages={(setter) => { chatSetMessagesRef.current = setter; }} />
+            <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} conciseMode={conciseMode} onConciseModeChange={setConciseMode} onSetMessages={(setter) => { chatSetMessagesRef.current = setter; }} onActiveThreadChange={setActiveThreadId} />
           </ResizablePanel>
         </ResizablePanelGroup>
 

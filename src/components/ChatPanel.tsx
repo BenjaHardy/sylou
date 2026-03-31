@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { useChatThread } from "@/hooks/useChatThread";
 import { useChatMessages, ChatMessage } from "@/hooks/useChatMessages";
+import { ChatThreadSelector } from "@/components/ChatThreadSelector";
 import { format } from "date-fns";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 
@@ -20,6 +21,7 @@ interface Props {
   conciseMode: boolean;
   onConciseModeChange: (value: boolean) => void;
   onSetMessages?: (setter: (updater: (prev: ChatMessage[]) => ChatMessage[]) => void) => void;
+  onActiveThreadChange?: (threadId: string | null) => void;
 }
 
 
@@ -150,14 +152,19 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker, conciseMode, onConciseModeChange, onSetMessages }: Props) {
-  const { threadId, threadName } = useChatThread(projectId);
-  const { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages, appendMessages, setMessages } = useChatMessages(threadId);
+export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker, conciseMode, onConciseModeChange, onSetMessages, onActiveThreadChange }: Props) {
+  const { threads, activeThreadId, activeThreadName, setActiveThreadId, createThread, renameThread } = useChatThread(projectId);
+  const { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages, appendMessages, setMessages } = useChatMessages(activeThreadId);
   const [input, setInput] = useState("");
   const [tipDismissed, setTipDismissed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Notify parent of active thread (including initial load)
+  useEffect(() => {
+    onActiveThreadChange?.(activeThreadId);
+  }, [activeThreadId, onActiveThreadChange]);
 
   // Expose setMessages to parent for Ask streaming
   useEffect(() => {
@@ -256,7 +263,13 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
             </button>
           )}
           <MessageSquare className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">{threadName}</span>
+          <ChatThreadSelector
+            threads={threads}
+            activeThreadId={activeThreadId}
+            onSelect={(id) => { setActiveThreadId(id); onActiveThreadChange?.(id); }}
+            onCreate={(name) => { createThread(name); }}
+            onRename={renameThread}
+          />
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">Concise</span>
