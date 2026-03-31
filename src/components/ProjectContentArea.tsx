@@ -71,7 +71,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const { markWriting } = useActivityTracker(project?.id ?? null);
-  const { threadId } = useChatThread(project?.id ?? null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
 
   const {
     preCheck,
