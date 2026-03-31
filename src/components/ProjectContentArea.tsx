@@ -113,6 +113,21 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
     return () => onFlushRef?.(null);
   }, [project, onFlushRef]);
 
+  // Keyboard shortcut: Ctrl/Cmd + Shift + N → toggle Post-its
+  useEffect(() => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.shiftKey && (e.metaKey || e.ctrlKey) && (e.key === "N" || e.key === "n")) {
+        e.preventDefault();
+        setShowPostIts((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const isMac = useMemo(() => typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform), []);
+  const postItsShortcutLabel = isMac ? "⌘⇧N" : "Ctrl+Shift+N";
+
   if (!project) return <WelcomeScreen />;
 
   const handleToggleChat = () => {
@@ -162,7 +177,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
 
   const handleConfirmReanalyze = async () => {
     setShowReanalyze(false);
-    setIsCurrentRunFirst(false); // Re-analysis never shows pre-analysis feedback
+    setIsCurrentRunFirst(false);
     const estimation = await runPreCheck();
     if (!estimation) return;
 
@@ -187,21 +202,6 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
     setShowTokenWarning(false);
     clearPreCheck();
   };
-
-  // Keyboard shortcut: Ctrl/Cmd + Shift + N → toggle Post-its
-  useEffect(() => {
-    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      if (e.shiftKey && (e.metaKey || e.ctrlKey) && (e.key === "N" || e.key === "n")) {
-        e.preventDefault();
-        setShowPostIts((v) => !v);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  const isMac = useMemo(() => typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform), []);
-  const postItsShortcutLabel = isMac ? "⌘⇧N" : "Ctrl+Shift+N";
 
   const showingFlowReport = showFlowReport && (flowReport || flowLoading);
   const showingPostIts = showPostIts && !showingFlowReport;
