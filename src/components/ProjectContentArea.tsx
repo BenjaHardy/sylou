@@ -188,6 +188,21 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
     clearPreCheck();
   };
 
+  // Keyboard shortcut: Ctrl/Cmd + Shift + N → toggle Post-its
+  useEffect(() => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.shiftKey && (e.metaKey || e.ctrlKey) && (e.key === "N" || e.key === "n")) {
+        e.preventDefault();
+        setShowPostIts((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const isMac = useMemo(() => typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform), []);
+  const postItsShortcutLabel = isMac ? "⌘⇧N" : "Ctrl+Shift+N";
+
   const showingFlowReport = showFlowReport && (flowReport || flowLoading);
   const showingPostIts = showPostIts && !showingFlowReport;
 
