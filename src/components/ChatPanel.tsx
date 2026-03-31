@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect, KeyboardEvent, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
-import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp } from "lucide-react";
+import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp, BookmarkIcon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { useChatThread } from "@/hooks/useChatThread";
 import { useChatMessages, ChatMessage } from "@/hooks/useChatMessages";
 import { ChatThreadSelector } from "@/components/ChatThreadSelector";
+import { BookmarkPopover } from "@/components/BookmarkPopover";
+import { BookmarkListPanel } from "@/components/BookmarkListPanel";
+import { useBookmarks } from "@/hooks/useBookmarks";
 import { format } from "date-fns";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 
@@ -24,7 +27,13 @@ interface Props {
   onActiveThreadChange?: (threadId: string | null) => void;
 }
 
-
+const BOOKMARK_BAR_COLORS: Record<string, string> = {
+  blue: "bg-blue-500",
+  green: "bg-green-500",
+  yellow: "bg-yellow-500",
+  red: "bg-red-500",
+  purple: "bg-purple-500",
+};
 
 const SOURCE_LABELS: Record<string, string> = {
   ask_prompt: "Ask · Text Selection",
@@ -65,89 +74,141 @@ function WritingSummaryBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-function ChatBubble({ message }: { message: ChatMessage }) {
+interface ChatBubbleProps {
+  message: ChatMessage;
+  bookmark: ReturnType<ReturnType<typeof useBookmarks>["getBookmarkForMessage"]>;
+  onCreateBookmark: () => void;
+  onUpdateBookmark: (id: string, updates: { color?: string; annotation?: string }) => void;
+  onDeleteBookmark: (id: string) => void;
+}
+
+function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onDeleteBookmark }: ChatBubbleProps) {
   const isUser = message.role === "user";
   const sourceType = message.source_type ?? "chat";
   const isContextMessage = ["ask_prompt", "ask_response", "propose_prompt", "propose_response"].includes(sourceType);
 
-  // Writing summary messages get special collapsed treatment
   if (sourceType === "writing_summary") {
-    return <WritingSummaryBubble message={message} />;
+    return (
+      <div data-message-id={message.id} className="relative group/msg">
+        <WritingSummaryBubble message={message} />
+        {/* Bookmark hover icon */}
+        {!bookmark && (
+          <button
+            onClick={onCreateBookmark}
+            className="absolute right-0 top-2 opacity-0 group-hover/msg:opacity-100 transition-opacity p-1 text-muted-foreground hover:text-primary"
+            aria-label="Bookmark this message"
+          >
+            <BookmarkIcon className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {/* Bookmark bar */}
+        {bookmark && (
+          <BookmarkPopover bookmark={bookmark} onUpdate={onUpdateBookmark} onDelete={onDeleteBookmark}>
+            <button
+              className={`absolute right-0 top-0 bottom-0 w-[3px] rounded-r ${BOOKMARK_BAR_COLORS[bookmark.color] ?? BOOKMARK_BAR_COLORS.blue} cursor-pointer hover:w-[5px] transition-all`}
+              aria-label="Edit bookmark"
+            />
+          </BookmarkPopover>
+        )}
+      </div>
+    );
   }
 
   const sourceLabel = SOURCE_LABELS[sourceType];
 
   return (
-    <div className={`flex gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`} data-chat-role={message.role}>
-      <div
-        className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 ${
-          isUser
-            ? "bg-primary/15 text-primary"
-            : "bg-muted text-muted-foreground"
-        }`}
-      >
-        {isUser ? <User className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
-      </div>
-      <div
-        className={`max-w-[80%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed ${
-          isContextMessage
-            ? isUser
-              ? "bg-primary/5 text-foreground border border-primary/20"
-              : "bg-muted/80 text-foreground border border-border"
-            : isUser
-              ? "bg-primary/10 text-foreground"
-              : "bg-muted text-foreground"
-        }`}
-      >
-        {sourceLabel && (
-          <span className="block text-[10px] uppercase tracking-wider font-semibold text-primary/60 mb-1">
-            {sourceLabel}
-          </span>
-        )}
-        {isUser ? (
-          <p className="whitespace-pre-wrap break-words">{message.content}</p>
-        ) : (
-          <div className="prose-chat break-words">
-            <ReactMarkdown
-              components={{
-                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                ul: ({ children }) => <ul className="list-disc pl-4 mb-2 last:mb-0 space-y-1">{children}</ul>,
-                ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 last:mb-0 space-y-1">{children}</ol>,
-                li: ({ children }) => <li>{children}</li>,
-                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                em: ({ children }) => <em>{children}</em>,
-                code: ({ children, className }) => {
-                  const isBlock = className?.includes("language-");
-                  return isBlock ? (
-                    <code className={`block bg-muted/60 rounded px-2 py-1.5 text-xs my-2 overflow-x-auto ${className}`}>{children}</code>
-                  ) : (
-                    <code className="bg-muted/60 rounded px-1 py-0.5 text-xs">{children}</code>
-                  );
-                },
-                pre: ({ children }) => <pre className="mb-2 last:mb-0">{children}</pre>,
-                h1: ({ children }) => <p className="font-bold mb-2">{children}</p>,
-                h2: ({ children }) => <p className="font-bold mb-2">{children}</p>,
-                h3: ({ children }) => <p className="font-semibold mb-1.5">{children}</p>,
-                a: ({ href, children }) => (
-                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">{children}</a>
-                ),
-                blockquote: ({ children }) => (
-                  <blockquote className="border-l-2 border-primary/30 pl-3 my-2 text-muted-foreground italic">{children}</blockquote>
-                ),
-              }}
-            >
-              {message.content}
-            </ReactMarkdown>
-          </div>
-        )}
-        <span
-          className={`block text-[10px] mt-1.5 ${
-            isUser ? "text-primary/50 text-right" : "text-muted-foreground/60"
+    <div data-message-id={message.id} className="relative group/msg">
+      <div className={`flex gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`} data-chat-role={message.role}>
+        <div
+          className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 ${
+            isUser
+              ? "bg-primary/15 text-primary"
+              : "bg-muted text-muted-foreground"
           }`}
         >
-          {format(new Date(message.created_at), "h:mm a")}
-        </span>
+          {isUser ? <User className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
+        </div>
+        <div
+          className={`max-w-[80%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed ${
+            isContextMessage
+              ? isUser
+                ? "bg-primary/5 text-foreground border border-primary/20"
+                : "bg-muted/80 text-foreground border border-border"
+              : isUser
+                ? "bg-primary/10 text-foreground"
+                : "bg-muted text-foreground"
+          }`}
+        >
+          {sourceLabel && (
+            <span className="block text-[10px] uppercase tracking-wider font-semibold text-primary/60 mb-1">
+              {sourceLabel}
+            </span>
+          )}
+          {isUser ? (
+            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+          ) : (
+            <div className="prose-chat break-words">
+              <ReactMarkdown
+                components={{
+                  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                  ul: ({ children }) => <ul className="list-disc pl-4 mb-2 last:mb-0 space-y-1">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 last:mb-0 space-y-1">{children}</ol>,
+                  li: ({ children }) => <li>{children}</li>,
+                  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                  em: ({ children }) => <em>{children}</em>,
+                  code: ({ children, className }) => {
+                    const isBlock = className?.includes("language-");
+                    return isBlock ? (
+                      <code className={`block bg-muted/60 rounded px-2 py-1.5 text-xs my-2 overflow-x-auto ${className}`}>{children}</code>
+                    ) : (
+                      <code className="bg-muted/60 rounded px-1 py-0.5 text-xs">{children}</code>
+                    );
+                  },
+                  pre: ({ children }) => <pre className="mb-2 last:mb-0">{children}</pre>,
+                  h1: ({ children }) => <p className="font-bold mb-2">{children}</p>,
+                  h2: ({ children }) => <p className="font-bold mb-2">{children}</p>,
+                  h3: ({ children }) => <p className="font-semibold mb-1.5">{children}</p>,
+                  a: ({ href, children }) => (
+                    <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">{children}</a>
+                  ),
+                  blockquote: ({ children }) => (
+                    <blockquote className="border-l-2 border-primary/30 pl-3 my-2 text-muted-foreground italic">{children}</blockquote>
+                  ),
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+            </div>
+          )}
+          <span
+            className={`block text-[10px] mt-1.5 ${
+              isUser ? "text-primary/50 text-right" : "text-muted-foreground/60"
+            }`}
+          >
+            {format(new Date(message.created_at), "h:mm a")}
+          </span>
+        </div>
       </div>
+
+      {/* Bookmark hover icon (right edge) */}
+      {!bookmark && (
+        <button
+          onClick={onCreateBookmark}
+          className="absolute right-0 top-2 opacity-0 group-hover/msg:opacity-100 transition-opacity p-1 text-muted-foreground hover:text-primary"
+          aria-label="Bookmark this message"
+        >
+          <BookmarkIcon className="h-3.5 w-3.5" />
+        </button>
+      )}
+      {/* Bookmark colored bar */}
+      {bookmark && (
+        <BookmarkPopover bookmark={bookmark} onUpdate={onUpdateBookmark} onDelete={onDeleteBookmark}>
+          <button
+            className={`absolute right-0 top-0 bottom-0 w-[3px] rounded-r ${BOOKMARK_BAR_COLORS[bookmark.color] ?? BOOKMARK_BAR_COLORS.blue} cursor-pointer hover:w-[5px] transition-all`}
+            aria-label="Edit bookmark"
+          />
+        </BookmarkPopover>
+      )}
     </div>
   );
 }
@@ -155,11 +216,61 @@ function ChatBubble({ message }: { message: ChatMessage }) {
 export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker, conciseMode, onConciseModeChange, onSetMessages, onActiveThreadChange }: Props) {
   const { threads, activeThreadId, activeThreadName, setActiveThreadId, createThread, renameThread } = useChatThread(projectId);
   const { messages, loading, sending, sendMessage, budgetRemaining, refreshMessages, appendMessages, setMessages } = useChatMessages(activeThreadId);
+  const { bookmarks, createBookmark, updateBookmark, deleteBookmark, getBookmarkForMessage } = useBookmarks(projectId);
   const [input, setInput] = useState("");
   const [tipDismissed, setTipDismissed] = useState(false);
+  const [showBookmarkList, setShowBookmarkList] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const pendingScrollTarget = useRef<string | null>(null);
+
+  // Scroll-to-bookmark: watch messages for the target appearing
+  useEffect(() => {
+    if (!pendingScrollTarget.current) return;
+    const targetId = pendingScrollTarget.current;
+    const found = messages.find((m) => m.id === targetId);
+    if (found) {
+      pendingScrollTarget.current = null;
+      // Use requestAnimationFrame to ensure DOM is rendered
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-message-id="${targetId}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("ring-2", "ring-primary/50");
+          setTimeout(() => el.classList.remove("ring-2", "ring-primary/50"), 2000);
+        }
+      });
+    }
+  }, [messages]);
+
+  const handleBookmarkNavigate = useCallback((threadId: string, messageId: string) => {
+    pendingScrollTarget.current = messageId;
+    setShowBookmarkList(false);
+    if (threadId !== activeThreadId) {
+      setActiveThreadId(threadId);
+      onActiveThreadChange?.(threadId);
+    } else {
+      // Same thread — scroll immediately
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-message-id="${messageId}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("ring-2", "ring-primary/50");
+          setTimeout(() => el.classList.remove("ring-2", "ring-primary/50"), 2000);
+          pendingScrollTarget.current = null;
+        }
+      });
+    }
+  }, [activeThreadId, setActiveThreadId, onActiveThreadChange]);
+
+  // Build allMessages map for bookmark list previews
+  const allMessagesRef = useRef<Record<string, ChatMessage[]>>({});
+  useEffect(() => {
+    if (activeThreadId && messages.length > 0) {
+      allMessagesRef.current = { ...allMessagesRef.current, [activeThreadId]: messages };
+    }
+  }, [activeThreadId, messages]);
 
   // Notify parent of active thread (including initial load)
   useEffect(() => {
@@ -182,7 +293,6 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
       const anchor = sel.anchorNode;
       if (!anchor) return;
 
-      // Walk up from the selection to find the nearest [data-chat-role] element
       let el: HTMLElement | null = anchor instanceof HTMLElement ? anchor : anchor.parentElement;
       while (el && el !== container) {
         if (el.dataset?.chatRole) {
@@ -224,7 +334,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-      const maxH = 4 * 24; // ~4 lines
+      const maxH = 4 * 24;
       textareaRef.current.style.height =
         Math.min(textareaRef.current.scrollHeight, maxH) + "px";
     }
@@ -249,7 +359,18 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   };
 
   return (
-    <div ref={chatContainerRef} className="flex flex-col h-full bg-[hsl(var(--ethos-surface))]">
+    <div ref={chatContainerRef} className="relative flex flex-col h-full bg-[hsl(var(--ethos-surface))]">
+      {/* Bookmark list overlay */}
+      {showBookmarkList && (
+        <BookmarkListPanel
+          bookmarks={bookmarks}
+          threads={threads}
+          allMessages={allMessagesRef.current}
+          onNavigate={handleBookmarkNavigate}
+          onClose={() => setShowBookmarkList(false)}
+        />
+      )}
+
       {/* Header */}
       <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-2">
@@ -272,6 +393,15 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
           />
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowBookmarkList((v) => !v)}
+            className={`p-1 rounded-md transition-colors ${
+              showBookmarkList ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+            }`}
+            aria-label="Toggle bookmarks"
+          >
+            <BookmarkIcon className="h-4 w-4" />
+          </button>
           <span className="text-xs text-muted-foreground">Concise</span>
           <Switch
             checked={conciseMode}
@@ -309,7 +439,16 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
             </p>
           </div>
         ) : (
-          messages.map((msg) => <ChatBubble key={msg.id} message={msg} />)
+          messages.map((msg) => (
+            <ChatBubble
+              key={msg.id}
+              message={msg}
+              bookmark={getBookmarkForMessage(msg.id)}
+              onCreateBookmark={() => activeThreadId && createBookmark(activeThreadId, msg.id)}
+              onUpdateBookmark={updateBookmark}
+              onDeleteBookmark={deleteBookmark}
+            />
+          ))
         )}
 
         {sending && !messages.some((m) => m.id === "streaming-assistant" || m.id === "streaming-ask") && (
