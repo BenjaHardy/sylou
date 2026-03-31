@@ -1,25 +1,35 @@
 
+You’re right to question it — based on the latest logs, it is not fully fixed yet. The app is still crashing when Post-its mounts.
 
-## Fix: Post-its Panel Blank Screen
+### What I found
+- The blank screen is a runtime crash (React error boundary message appears right after PostItsPanel renders).
+- There’s also a ref warning: `Function components cannot be given refs... Check the render method of ProjectContentArea`.
 
-### Root Cause
+### Most likely crash trigger
+In `src/components/PostItsPanel.tsx`, the canvas uses an inline callback ref that calls `setCanvasBounds(...)` during ref assignment. Because that callback is recreated each render, React repeatedly clears/sets the ref, which can create a render loop and crash the view.
 
-`ProjectContentArea` returns a React fragment (`<>...</>`) containing up to three children: the FLOW report, the PostItsPanel, and the editor div. Since fragments don't create DOM elements, all three become direct children of the `flex` container in `Index.tsx`. When PostItsPanel renders, it has `flex-1 h-screen` but competes with the hidden editor div (which also has `flex-1 h-screen` with `display: none`). The result is layout confusion — the PostItsPanel doesn't size correctly and appears blank.
+### Fix plan
+1. **Refactor canvas ref handling in `PostItsPanel.tsx`**
+   - Replace inline callback ref with a stable `ref={canvasRef}`.
+   - Move `setCanvasBounds(canvasRef.current.getBoundingClientRect())` into an effect (`useLayoutEffect`/`useEffect`) so state updates happen after mount, not during ref assignment.
 
-### Fix
+2. **Make bounds updates stable**
+   - Add a `ResizeObserver` (and window resize fallback) to recompute bounds safely.
+   - Keep `updateBounds` as a memoized function and call it from the observer/events.
 
-**`src/components/ProjectContentArea.tsx`** — two changes:
+3. **Add defensive drag guards**
+   - Ensure drag calculations no-op when `canvasBounds` is null/invalid.
+   - Clamp with safe width/height defaults to avoid NaN position writes.
 
-1. **PostItsPanel**: Change `h-screen` to `h-full` and wrap it in a sizing container within ProjectContentArea that ensures it fills the space properly. Specifically, change the fragment wrapper to a single `div` with `className="flex-1 flex flex-col"` so there's one flex child for the parent layout.
+4. **Resolve ref warning from `ProjectContentArea` path**
+   - Audit the Post-its render path in `ProjectContentArea.tsx` and remove any accidental ref forwarding to function components.
+   - Confirm the warning disappears after step 1 (likely related to current ref wiring and rerender churn).
 
-2. **PostItsPanel.tsx**: 
-   - Change outer container from `h-screen` to `h-full`
-   - Add a visible canvas background (subtle dot-grid CSS pattern via `bg-muted/40` + radial-gradient) so the empty state is clearly distinguishable from a blank page
-   - Enlarge the empty-state prompt with a `StickyNote` icon
+5. **Verification**
+   - Open project → click **Post-its** repeatedly.
+   - Confirm no blank screen, no ref warning, and no React runtime error.
+   - Create/move/edit/delete a note to confirm interaction stability.
 
-### Detail
-
-In `ProjectContentArea.tsx`, replace the fragment `<>...</>` with a wrapper `<div className="flex-1 flex flex-col overflow-hidden">` so the component is a single flex child. The FLOW report, PostItsPanel, and editor div all render inside this wrapper and their `flex-1` + `display: none` toggling works correctly within this local flex context.
-
-In `PostItsPanel.tsx`, change `h-screen` → `h-full` on the outer div, and add a subtle dot-grid background pattern to the canvas area so it reads as an interactive space rather than a blank white page.
-
+### Files to update
+- `src/components/PostItsPanel.tsx` (primary fix)
+- `src/components/ProjectContentArea.tsx` (ref warning cleanup if still present after panel refactor)
