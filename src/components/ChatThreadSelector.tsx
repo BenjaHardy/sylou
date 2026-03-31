@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, KeyboardEvent } from "react";
-import { ChevronDown, Plus, Check, X } from "lucide-react";
+import { ChevronDown, Plus, Check, X, MoreHorizontal, Pencil } from "lucide-react";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import type { ChatThread } from "@/hooks/useChatThread";
@@ -95,21 +96,37 @@ export function ChatThreadSelector({ threads, activeThreadId, onSelect, onCreate
                   </button>
                 </div>
               ) : (
-                <button
-                  onClick={() => { onSelect(thread.id); setOpen(false); }}
-                  onDoubleClick={(e) => {
-                    e.preventDefault();
-                    setEditingId(thread.id);
-                    setEditName(thread.name);
-                  }}
-                  className={`w-full text-left text-sm px-2 py-1.5 rounded transition-colors ${
-                    thread.id === activeThreadId
-                      ? "bg-primary/10 text-primary font-medium"
-                      : "text-foreground hover:bg-accent/50"
-                  }`}
-                >
-                  {thread.name}
-                </button>
+                <div className="flex items-center group/row">
+                  <button
+                    onClick={() => { onSelect(thread.id); setOpen(false); }}
+                    className={`flex-1 text-left text-sm px-2 py-1.5 rounded transition-colors ${
+                      thread.id === activeThreadId
+                        ? "bg-primary/10 text-primary font-medium"
+                        : "text-foreground hover:bg-accent/50"
+                    }`}
+                  >
+                    {thread.name}
+                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="opacity-0 group-hover/row:opacity-100 transition-opacity p-1 rounded hover:bg-accent/50 text-muted-foreground hover:text-foreground mr-1">
+                        <MoreHorizontal className="h-3.5 w-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-32">
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingId(thread.id);
+                          setEditName(thread.name);
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5 mr-2" />
+                        Rename
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               )}
             </div>
           ))}
