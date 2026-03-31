@@ -12,6 +12,8 @@ import { FlowConfirmDialog } from "@/components/FlowConfirmDialog";
 import { FlowTokenWarningDialog } from "@/components/FlowTokenWarningDialog";
 import { FlowReanalyzeDialog } from "@/components/FlowReanalyzeDialog";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { usePostIts } from "@/hooks/usePostIts";
+import { PostItsPanel } from "@/components/PostItsPanel";
 import { useFlowAnalysis } from "@/hooks/useFlowAnalysis";
 import type { Project } from "@/hooks/useProjects";
 import type { ImperativePanelHandle } from "react-resizable-panels";
