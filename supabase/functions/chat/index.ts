@@ -240,6 +240,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
       let fullResponse = "";
       let clientDisconnected = false;
+      let promptCounted = false;
       const encoder = new TextEncoder();
       const decoder = new TextDecoder();
       let sseBuffer = "";
