@@ -141,7 +141,7 @@ export function PostItsPanel({ postIts, loading, onCreate, onUpdate, onUpdatePos
   }, []);
 
   return (
-    <div className="flex-1 flex flex-col bg-background h-screen">
+    <div className="flex-1 flex flex-col bg-background h-full">
       {/* Header */}
       <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
         <span className="text-sm font-medium text-foreground">Post-it Notes</span>
