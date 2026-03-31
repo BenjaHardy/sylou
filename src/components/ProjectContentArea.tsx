@@ -355,6 +355,6 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
         <FlowReanalyzeDialog open={showReanalyze} onConfirm={handleConfirmReanalyze} onCancel={() => setShowReanalyze(false)} />
         <FlowTokenWarningDialog open={showTokenWarning} estimation={preCheck} onConfirm={handleTokenWarningConfirm} onCancel={handleTokenWarningCancel} />
       </div>
-    </>
+    </div>
   );
 }

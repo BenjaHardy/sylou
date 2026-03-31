@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2, X, StickyNote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PostIt } from "@/hooks/usePostIts";
 
