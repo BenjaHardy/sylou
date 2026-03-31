@@ -258,7 +258,13 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
             </button>
           )}
           <MessageSquare className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">{threadName}</span>
+          <ChatThreadSelector
+            threads={threads}
+            activeThreadId={activeThreadId}
+            onSelect={(id) => { setActiveThreadId(id); onActiveThreadChange?.(id); }}
+            onCreate={(name) => { createThread(name); }}
+            onRename={renameThread}
+          />
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">Concise</span>
