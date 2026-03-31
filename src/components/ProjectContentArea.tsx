@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { ChatMessage } from "@/hooks/useChatMessages";
-import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Loader2, Eye, RefreshCw } from "lucide-react";
+import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Loader2, Eye, RefreshCw, StickyNote } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
 import { WritingEditor } from "@/components/WritingEditor";
@@ -12,6 +12,8 @@ import { FlowConfirmDialog } from "@/components/FlowConfirmDialog";
 import { FlowTokenWarningDialog } from "@/components/FlowTokenWarningDialog";
 import { FlowReanalyzeDialog } from "@/components/FlowReanalyzeDialog";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { usePostIts } from "@/hooks/usePostIts";
+import { PostItsPanel } from "@/components/PostItsPanel";
 import { useFlowAnalysis } from "@/hooks/useFlowAnalysis";
 import type { Project } from "@/hooks/useProjects";
 import type { ImperativePanelHandle } from "react-resizable-panels";
@@ -56,6 +58,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const [chatExpanded, setChatExpanded] = useState(false);
   const [conciseMode, setConciseMode] = useState(false);
   const [showFlowReport, setShowFlowReport] = useState(false);
+  const [showPostIts, setShowPostIts] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showTokenWarning, setShowTokenWarning] = useState(false);
   const [showReanalyze, setShowReanalyze] = useState(false);
@@ -72,6 +75,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const { markWriting } = useActivityTracker(project?.id ?? null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const { postIts, loading: postItsLoading, createPostIt, updatePostIt, updatePosition, deletePostIt } = usePostIts(project?.id ?? null);
 
   const {
     preCheck,
@@ -184,6 +188,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   };
 
   const showingFlowReport = showFlowReport && (flowReport || flowLoading);
+  const showingPostIts = showPostIts && !showingFlowReport;
 
   return (
     <>
@@ -240,10 +245,23 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
         ) : null
       )}
 
-      {/* Editor layer — always mounted, hidden via CSS when FLOW report is showing */}
+      {/* Post-its layer — rendered on top when active, hides editor via CSS */}
+      {showingPostIts && (
+        <PostItsPanel
+          postIts={postIts}
+          loading={postItsLoading}
+          onCreate={createPostIt}
+          onUpdate={updatePostIt}
+          onUpdatePosition={updatePosition}
+          onDelete={deletePostIt}
+          onClose={() => setShowPostIts(false)}
+        />
+      )}
+
+      {/* Editor layer — always mounted, hidden via CSS when FLOW report or Post-its are showing */}
       <div
         className="flex-1 flex flex-col bg-background h-screen [&_[data-panel]]:transition-all [&_[data-panel]]:duration-150 [&_[data-panel]]:ease-ethos-ease"
-        style={{ display: showingFlowReport ? 'none' : undefined }}
+        style={{ display: showingFlowReport || showingPostIts ? 'none' : undefined }}
       >
         <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
           <span className="text-sm font-medium text-foreground truncate max-w-[200px]">{project.name}</span>
@@ -267,6 +285,15 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
             >
               <Eye className="h-3.5 w-3.5" />
               Provenance
+            </Button>
+            <Button
+              variant={showPostIts ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 gap-1.5 text-xs"
+              onClick={() => setShowPostIts((v) => !v)}
+            >
+              <StickyNote className="h-3.5 w-3.5" />
+              Post-its
             </Button>
           </div>
         </div>
