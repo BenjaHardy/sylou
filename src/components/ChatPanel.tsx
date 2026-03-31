@@ -21,6 +21,7 @@ interface Props {
   conciseMode: boolean;
   onConciseModeChange: (value: boolean) => void;
   onSetMessages?: (setter: (updater: (prev: ChatMessage[]) => ChatMessage[]) => void) => void;
+  onActiveThreadChange?: (threadId: string | null) => void;
 }
 
 
