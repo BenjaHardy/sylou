@@ -191,7 +191,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const showingPostIts = showPostIts && !showingFlowReport;
 
   return (
-    <>
+    <div className="flex-1 flex flex-col overflow-hidden">
       {/* FLOW report layer — rendered on top when active */}
       {showingFlowReport && (
         flowLoading && !flowReport ? (
