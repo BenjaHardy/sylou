@@ -51,7 +51,7 @@ export function usePostIts(projectId: string | null) {
 
     const { data, error } = await supabase
       .from("post_its")
-      .insert(newPostIt)
+      .insert([newPostIt as any])
       .select()
       .single();
     if (data) {
