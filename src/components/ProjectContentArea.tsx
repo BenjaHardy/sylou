@@ -75,6 +75,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const { markWriting } = useActivityTracker(project?.id ?? null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const { postIts, loading: postItsLoading, createPostIt, updatePostIt, updatePosition, deletePostIt } = usePostIts(project?.id ?? null);
 
   const {
     preCheck,
