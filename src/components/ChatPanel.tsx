@@ -409,15 +409,24 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
           />
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowBookmarkList((v) => !v)}
-            className={`p-1 rounded-md transition-colors ${
-              showBookmarkList ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
-            }`}
-            aria-label="Toggle bookmarks"
-          >
-            <BookmarkIcon className="h-4 w-4" />
-          </button>
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setShowBookmarkList((v) => !v)}
+                  className={`p-1 rounded-md transition-colors ${
+                    showBookmarkList ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  aria-label="Toggle bookmarks"
+                >
+                  <BookmarkIcon className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <span>Toggle Bookmarks ({bookmarkShortcutLabel})</span>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <span className="text-xs text-muted-foreground">Concise</span>
           <Switch
             checked={conciseMode}

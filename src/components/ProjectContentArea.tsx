@@ -302,15 +302,24 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
               <Eye className="h-3.5 w-3.5" />
               Provenance
             </Button>
-            <Button
-              variant={showPostIts ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 gap-1.5 text-xs"
-              onClick={() => setShowPostIts((v) => !v)}
-            >
-              <StickyNote className="h-3.5 w-3.5" />
-              Post-its
-            </Button>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={showPostIts ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={() => setShowPostIts((v) => !v)}
+                  >
+                    <StickyNote className="h-3.5 w-3.5" />
+                    Post-its
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <span>Toggle Post-its ({postItsShortcutLabel})</span>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
 
