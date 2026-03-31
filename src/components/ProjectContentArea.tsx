@@ -1,6 +1,7 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import type { ChatMessage } from "@/hooks/useChatMessages";
 import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Loader2, Eye, RefreshCw, StickyNote } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
 import { WritingEditor } from "@/components/WritingEditor";
@@ -112,6 +113,21 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
     return () => onFlushRef?.(null);
   }, [project, onFlushRef]);
 
+  // Keyboard shortcut: Ctrl/Cmd + Shift + N → toggle Post-its
+  useEffect(() => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.shiftKey && (e.metaKey || e.ctrlKey) && (e.key === "N" || e.key === "n")) {
+        e.preventDefault();
+        setShowPostIts((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const isMac = useMemo(() => typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform), []);
+  const postItsShortcutLabel = isMac ? "⌘⇧N" : "Ctrl+Shift+N";
+
   if (!project) return <WelcomeScreen />;
 
   const handleToggleChat = () => {
@@ -161,7 +177,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
 
   const handleConfirmReanalyze = async () => {
     setShowReanalyze(false);
-    setIsCurrentRunFirst(false); // Re-analysis never shows pre-analysis feedback
+    setIsCurrentRunFirst(false);
     const estimation = await runPreCheck();
     if (!estimation) return;
 
@@ -286,15 +302,24 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
               <Eye className="h-3.5 w-3.5" />
               Provenance
             </Button>
-            <Button
-              variant={showPostIts ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 gap-1.5 text-xs"
-              onClick={() => setShowPostIts((v) => !v)}
-            >
-              <StickyNote className="h-3.5 w-3.5" />
-              Post-its
-            </Button>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={showPostIts ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={() => setShowPostIts((v) => !v)}
+                  >
+                    <StickyNote className="h-3.5 w-3.5" />
+                    Post-its
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <span>Toggle Post-its ({postItsShortcutLabel})</span>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
 

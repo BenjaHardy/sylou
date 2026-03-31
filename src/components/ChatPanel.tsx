@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect, KeyboardEvent, useCallback } from "react";
+import { useState, useRef, useEffect, KeyboardEvent, useCallback, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp, BookmarkIcon } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
@@ -354,6 +355,21 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
     }
   };
 
+  // Keyboard shortcut: Ctrl/Cmd + Shift + K → toggle Bookmarks
+  useEffect(() => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.shiftKey && (e.metaKey || e.ctrlKey) && (e.key === "K" || e.key === "k")) {
+        e.preventDefault();
+        setShowBookmarkList((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const isMac = useMemo(() => typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform), []);
+  const bookmarkShortcutLabel = isMac ? "⌘⇧K" : "Ctrl+Shift+K";
+
   const dismissTip = () => {
     setTipDismissed(true);
   };
@@ -393,15 +409,24 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
           />
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowBookmarkList((v) => !v)}
-            className={`p-1 rounded-md transition-colors ${
-              showBookmarkList ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
-            }`}
-            aria-label="Toggle bookmarks"
-          >
-            <BookmarkIcon className="h-4 w-4" />
-          </button>
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setShowBookmarkList((v) => !v)}
+                  className={`p-1 rounded-md transition-colors ${
+                    showBookmarkList ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  aria-label="Toggle bookmarks"
+                >
+                  <BookmarkIcon className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <span>Toggle Bookmarks ({bookmarkShortcutLabel})</span>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <span className="text-xs text-muted-foreground">Concise</span>
           <Switch
             checked={conciseMode}
