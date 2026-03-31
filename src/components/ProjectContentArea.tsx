@@ -187,6 +187,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   };
 
   const showingFlowReport = showFlowReport && (flowReport || flowLoading);
+  const showingPostIts = showPostIts && !showingFlowReport;
 
   return (
     <>
