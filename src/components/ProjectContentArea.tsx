@@ -245,10 +245,23 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
         ) : null
       )}
 
-      {/* Editor layer — always mounted, hidden via CSS when FLOW report is showing */}
+      {/* Post-its layer — rendered on top when active, hides editor via CSS */}
+      {showingPostIts && (
+        <PostItsPanel
+          postIts={postIts}
+          loading={postItsLoading}
+          onCreate={createPostIt}
+          onUpdate={updatePostIt}
+          onUpdatePosition={updatePosition}
+          onDelete={deletePostIt}
+          onClose={() => setShowPostIts(false)}
+        />
+      )}
+
+      {/* Editor layer — always mounted, hidden via CSS when FLOW report or Post-its are showing */}
       <div
         className="flex-1 flex flex-col bg-background h-screen [&_[data-panel]]:transition-all [&_[data-panel]]:duration-150 [&_[data-panel]]:ease-ethos-ease"
-        style={{ display: showingFlowReport ? 'none' : undefined }}
+        style={{ display: showingFlowReport || showingPostIts ? 'none' : undefined }}
       >
         <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
           <span className="text-sm font-medium text-foreground truncate max-w-[200px]">{project.name}</span>
