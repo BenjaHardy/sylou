@@ -64,6 +64,39 @@ export type Database = {
           },
         ]
       }
+      chat_bookmarks: {
+        Row: {
+          annotation: string | null
+          char_offset: number | null
+          color: string | null
+          created_at: string
+          id: string
+          message_id: string
+          project_id: string
+          thread_id: string
+        }
+        Insert: {
+          annotation?: string | null
+          char_offset?: number | null
+          color?: string | null
+          created_at?: string
+          id?: string
+          message_id: string
+          project_id: string
+          thread_id: string
+        }
+        Update: {
+          annotation?: string | null
+          char_offset?: number | null
+          color?: string | null
+          created_at?: string
+          id?: string
+          message_id?: string
+          project_id?: string
+          thread_id?: string
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           concise_mode: boolean | null
