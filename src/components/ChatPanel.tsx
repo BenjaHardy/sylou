@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { useChatThread } from "@/hooks/useChatThread";
 import { useChatMessages, ChatMessage } from "@/hooks/useChatMessages";
+import { ChatThreadSelector } from "@/components/ChatThreadSelector";
 import { format } from "date-fns";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 
