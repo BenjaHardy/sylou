@@ -161,6 +161,11 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
+  // Notify parent of active thread (including initial load)
+  useEffect(() => {
+    onActiveThreadChange?.(activeThreadId);
+  }, [activeThreadId, onActiveThreadChange]);
+
   // Expose setMessages to parent for Ask streaming
   useEffect(() => {
     onSetMessages?.(setMessages);
