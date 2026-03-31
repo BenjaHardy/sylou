@@ -1,51 +1,25 @@
 
 
-## Plan: Add Post-it Notes (revised)
+## Fix: Post-its Panel Blank Screen
 
-### Addressing Your Comments
+### Root Cause
 
-1. **`owns_project` function**: Confirmed it exists (see db-functions). RLS policies will use it directly, consistent with bookmarks and other tables.
+`ProjectContentArea` returns a React fragment (`<>...</>`) containing up to three children: the FLOW report, the PostItsPanel, and the editor div. Since fragments don't create DOM elements, all three become direct children of the `flex` container in `Index.tsx`. When PostItsPanel renders, it has `flex-1 h-screen` but competes with the hidden editor div (which also has `flex-1 h-screen` with `display: none`). The result is layout confusion — the PostItsPanel doesn't size correctly and appears blank.
 
-2. **Editor preservation**: The FLOW report already uses `style={{ display: showingFlowReport ? 'none' : undefined }}` (line 246) to hide the editor without unmounting. Post-its will use the same pattern — a `showPostIts` state that hides the editor/chat via CSS while rendering the PostItsPanel. No early returns, no unmounting.
+### Fix
 
-3. **Drag debounce**: Position updates will use optimistic local state for responsiveness. DB persistence on `onMouseUp` will be debounced at 500ms — rapid nudges only trigger one write after the user stops.
+**`src/components/ProjectContentArea.tsx`** — two changes:
 
----
+1. **PostItsPanel**: Change `h-screen` to `h-full` and wrap it in a sizing container within ProjectContentArea that ensures it fills the space properly. Specifically, change the fragment wrapper to a single `div` with `className="flex-1 flex flex-col"` so there's one flex child for the parent layout.
 
-### Database
+2. **PostItsPanel.tsx**: 
+   - Change outer container from `h-screen` to `h-full`
+   - Add a visible canvas background (subtle dot-grid CSS pattern via `bg-muted/40` + radial-gradient) so the empty state is clearly distinguishable from a blank page
+   - Enlarge the empty-state prompt with a `StickyNote` icon
 
-```sql
-CREATE TABLE public.post_its (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id uuid NOT NULL,
-  content text NOT NULL DEFAULT '',
-  color text NOT NULL DEFAULT 'yellow',
-  position_x int NOT NULL DEFAULT 50,
-  position_y int NOT NULL DEFAULT 50,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
+### Detail
 
-ALTER TABLE public.post_its ENABLE ROW LEVEL SECURITY;
+In `ProjectContentArea.tsx`, replace the fragment `<>...</>` with a wrapper `<div className="flex-1 flex flex-col overflow-hidden">` so the component is a single flex child. The FLOW report, PostItsPanel, and editor div all render inside this wrapper and their `flex-1` + `display: none` toggling works correctly within this local flex context.
 
-CREATE POLICY "select_own_post_its" ON public.post_its FOR SELECT TO authenticated USING (owns_project(project_id));
-CREATE POLICY "insert_own_post_its" ON public.post_its FOR INSERT TO authenticated WITH CHECK (owns_project(project_id));
-CREATE POLICY "update_own_post_its" ON public.post_its FOR UPDATE TO authenticated USING (owns_project(project_id)) WITH CHECK (owns_project(project_id));
-CREATE POLICY "delete_own_post_its" ON public.post_its FOR DELETE TO authenticated USING (owns_project(project_id));
-```
-
-### Files
-
-| File | Change |
-|------|--------|
-| `src/hooks/usePostIts.ts` | **New.** CRUD hook: fetch by project, create/update (debounced position)/delete |
-| `src/components/PostItsPanel.tsx` | **New.** Canvas with draggable sticky notes, inline editing, color picker, delete |
-| `src/components/ProjectContentArea.tsx` | Add "Post-its" button in header; `showPostIts` state; hide editor/chat via CSS (same `display: none` pattern as FLOW) |
-
-### Implementation Details
-
-- **Drag**: `onMouseDown`/`onMouseMove`/`onMouseUp` on each note. Local state updates immediately. A 500ms debounced function persists `position_x`/`position_y` to DB after the last `onMouseUp`.
-- **Colors**: yellow `#FEF3C7`, blue `#DBEAFE`, green `#D1FAE5`, pink `#FCE7F3`, purple `#EDE9FE`
-- **Note UI**: ~160×160px card, editable textarea, hover toolbar with color dots + trash icon (with confirmation)
-- **"+" button**: Fixed position on canvas, creates note at a staggered default position
-- **Close**: Returns to editor view (sets `showPostIts = false`)
+In `PostItsPanel.tsx`, change `h-screen` → `h-full` on the outer div, and add a subtle dot-grid background pattern to the canvas area so it reads as an interactive space rather than a blank white page.
 
