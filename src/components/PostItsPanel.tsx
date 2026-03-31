@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2, X, StickyNote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PostIt } from "@/hooks/usePostIts";
 
@@ -141,7 +141,7 @@ export function PostItsPanel({ postIts, loading, onCreate, onUpdate, onUpdatePos
   }, []);
 
   return (
-    <div className="flex-1 flex flex-col bg-background h-screen">
+    <div className="flex-1 flex flex-col bg-background h-full">
       {/* Header */}
       <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
         <span className="text-sm font-medium text-foreground">Post-it Notes</span>
@@ -162,9 +162,13 @@ export function PostItsPanel({ postIts, loading, onCreate, onUpdate, onUpdatePos
           (canvasRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
           if (el) setCanvasBounds(el.getBoundingClientRect());
         }}
-        className="flex-1 relative overflow-auto bg-muted/30"
+        className="flex-1 relative overflow-auto bg-muted/40"
         onMouseEnter={updateBounds}
-        style={{ minHeight: 400 }}
+        style={{
+          minHeight: 400,
+          backgroundImage: 'radial-gradient(circle, hsl(var(--muted-foreground) / 0.15) 1px, transparent 1px)',
+          backgroundSize: '24px 24px',
+        }}
       >
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center">
@@ -172,8 +176,9 @@ export function PostItsPanel({ postIts, loading, onCreate, onUpdate, onUpdatePos
           </div>
         )}
         {!loading && postIts.length === 0 && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-            <p className="text-sm text-muted-foreground">No post-it notes yet</p>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+            <StickyNote className="h-10 w-10 text-muted-foreground/50" />
+            <p className="text-base font-medium text-muted-foreground">No post-it notes yet</p>
             <Button variant="outline" size="sm" className="gap-1.5" onClick={onCreate}>
               <Plus className="h-4 w-4" />
               Create your first note
