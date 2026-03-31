@@ -277,7 +277,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
               <WritingEditor
                 projectId={project.id}
                 tutorMode={project.tutor_mode}
-                threadId={threadId}
+                threadId={activeThreadId}
                 onWritingActivity={markWriting}
                 onFlowClick={handleFlowClick}
                 onReanalyzeClick={handleReanalyzeClick}
