@@ -255,7 +255,33 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
             const trimmed = line.trim();
             if (!trimmed || !trimmed.startsWith("data:")) continue;
             const payload = trimmed.slice(5).trim();
-            if (payload === "[DONE]") continue;
+            if (payload === "[DONE]") {
+              // Increment prompt count immediately at [DONE] — more reliable than flush()
+              if (!promptCounted) {
+                promptCounted = true;
+                const promptColumn = tutorMode
+                  ? "chat_prompt_count_tutor"
+                  : "chat_prompt_count_normal";
+                adminSupabase
+                  .from("project_stats")
+                  .select(promptColumn)
+                  .eq("project_id", thread.project_id)
+                  .single()
+                  .then(({ data: cs }) => {
+                    if (cs) {
+                      const cnt = (cs as Record<string, number>)[promptColumn] || 0;
+                      adminSupabase
+                        .from("project_stats")
+                        .update({ [promptColumn]: cnt + 1 })
+                        .eq("project_id", thread.project_id)
+                        .then(() =>
+                          console.log("[stream] prompt count incremented for", thread.project_id)
+                        );
+                    }
+                  });
+              }
+              continue;
+            }
 
             try {
               const parsed = JSON.parse(payload);
