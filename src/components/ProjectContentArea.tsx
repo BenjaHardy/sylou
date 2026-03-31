@@ -58,6 +58,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const [chatExpanded, setChatExpanded] = useState(false);
   const [conciseMode, setConciseMode] = useState(false);
   const [showFlowReport, setShowFlowReport] = useState(false);
+  const [showPostIts, setShowPostIts] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showTokenWarning, setShowTokenWarning] = useState(false);
   const [showReanalyze, setShowReanalyze] = useState(false);
