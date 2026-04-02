@@ -46,7 +46,7 @@ export function ImportedDocumentsPanel({ documents, loading, uploading, onUpload
       <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">Imported Documents</span>
+          <span className="text-sm font-medium text-foreground">Project Documents</span>
           <span className="text-xs text-muted-foreground">({documents.length})</span>
         </div>
         <div className="flex items-center gap-2">
