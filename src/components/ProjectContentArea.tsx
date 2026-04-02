@@ -279,6 +279,18 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
         />
       )}
 
+      {/* Imported Documents layer */}
+      {showingDocuments && (
+        <ImportedDocumentsPanel
+          documents={documents}
+          loading={docsLoading}
+          uploading={docsUploading}
+          onUpload={uploadDocument}
+          onDelete={deleteDocument}
+          onClose={() => setShowDocuments(false)}
+        />
+      )}
+
       {/* Editor layer — always mounted, hidden via CSS when FLOW report or Post-its are showing */}
       <div
         className="flex-1 flex flex-col bg-background h-screen [&_[data-panel]]:transition-all [&_[data-panel]]:duration-150 [&_[data-panel]]:ease-ethos-ease"
