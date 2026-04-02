@@ -28,7 +28,6 @@ function estimateTokens(text: string): number {
 
 /**
  * Extract the text delta from a streaming chunk, model-agnostic.
- * Canonical version: supabase/functions/chat/index.ts
  */
 function extractDeltaText(
   parsed: Record<string, unknown>,
@@ -45,6 +44,57 @@ function extractDeltaText(
     if (delta?.text) return delta.text;
   }
   return null;
+}
+
+/**
+ * Extract tool calls from a non-streaming LLM response.
+ */
+function extractToolCalls(
+  response: Record<string, unknown>
+): Array<{ id: string; name: string; arguments: Record<string, unknown> }> {
+  const choices = response.choices as
+    | Array<{
+        message?: {
+          tool_calls?: Array<{
+            id: string;
+            function: { name: string; arguments: string };
+          }>;
+        };
+      }>
+    | undefined;
+
+  const toolCalls = choices?.[0]?.message?.tool_calls;
+  if (!toolCalls || toolCalls.length === 0) return [];
+
+  return toolCalls.map((tc) => ({
+    id: tc.id,
+    name: tc.function.name,
+    arguments: JSON.parse(tc.function.arguments),
+  }));
+}
+
+/**
+ * Build the tool definition for document retrieval.
+ */
+function buildDocumentTool() {
+  return {
+    type: "function",
+    function: {
+      name: "read_imported_document",
+      description:
+        "Retrieve the full text of an imported reference document. Use this when the user's question requires information from a specific imported document.",
+      parameters: {
+        type: "object",
+        properties: {
+          document_id: {
+            type: "string",
+            description: "The ID of the document to retrieve",
+          },
+        },
+        required: ["document_id"],
+      },
+    },
+  };
 }
 
 async function callMistral(
@@ -266,6 +316,9 @@ Deno.serve(async (req) => {
           aiResponseContent = body.ai_response;
         }
 
+        // Parse documents_referenced from body (only present on confirm)
+        const documentsReferenced: string[] | undefined = body.documents_referenced;
+
         // Log to chat_messages and collect inserted rows
         const insertedMessages = [];
 
@@ -291,14 +344,21 @@ Deno.serve(async (req) => {
           if (summaryMsg) insertedMessages.push(summaryMsg);
         }
 
-        const { data: responseMsg } = await supabase.from("chat_messages").insert({
+        const responseMsgRow: Record<string, unknown> = {
           thread_id,
           role: "assistant",
           content: aiResponseContent,
           source_type: "propose_response",
           flow_flag: "normal",
           model_used: "mistral-large-latest",
-        }).select().single();
+        };
+
+        // Only attach documents_referenced on accepted proposals
+        if (documentsReferenced && documentsReferenced.length > 0) {
+          responseMsgRow.documents_referenced = documentsReferenced;
+        }
+
+        const { data: responseMsg } = await supabase.from("chat_messages").insert(responseMsgRow).select().single();
         if (responseMsg) insertedMessages.push(responseMsg);
 
         // Commit summary
@@ -375,7 +435,6 @@ Deno.serve(async (req) => {
     const existingSummary = summaryRow?.summary_text ?? null;
 
     // --- 3. Fetch recent chat messages (last 20, cross-thread) ---
-    // Fetch all thread IDs for the project, then query messages across all threads
     const { data: projectThreads } = await supabase
       .from("chat_threads")
       .select("id")
@@ -392,7 +451,6 @@ Deno.serve(async (req) => {
           .limit(20)
       : { data: [] };
 
-    // Reverse to chronological order for LLM context
     const recentChat = (recentMessages ?? []).reverse();
 
     // --- 4. LLM Call #1: Writing Summary (non-streamed) ---
@@ -496,6 +554,25 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       systemPrompt += "\n\n" + CONCISE_MODE_MODIFIER;
     }
 
+    // --- Fetch imported documents for document index ---
+    const adminClient = getAdminClient();
+
+    const { data: importedDocs } = await adminClient
+      .from("imported_documents")
+      .select("id, file_name, summary")
+      .eq("project_id", project_id);
+
+    const hasDocuments = importedDocs && importedDocs.length > 0;
+
+    // Append document index to system prompt if documents exist
+    if (hasDocuments) {
+      let docIndex = `\n\n# IMPORTED DOCUMENTS\n\nThe user has imported the following reference documents into this project. You can see their titles and summaries below. If you need the full text of any document to answer the user's question or fulfill their request, use the read_imported_document tool. Only retrieve documents that are directly relevant.\n\n`;
+      for (const doc of importedDocs) {
+        docIndex += `- Document: "${doc.file_name}" (ID: ${doc.id})\n  Summary: ${doc.summary ?? "No summary available"}\n\n`;
+      }
+      systemPrompt += docIndex;
+    }
+
     const responseMessages = buildResponsePrompt(
       systemPrompt,
       updatedSummary,
@@ -507,11 +584,349 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       projectLanguage,
     );
 
+    // Track totals across all calls
+    let totalInputChars = summaryResult.inputChars;
+    let totalOutputChars = summaryResult.outputChars;
+    const documentsReferenced: string[] = [];
+
     // =========================================================
-    // STREAMING PATH — LLM Call #2 streamed via TransformStream
+    // STREAMING PATH — LLM Call #2 with optional tool-use
     // =========================================================
     if (streamRequested) {
-      console.log("[stream:context-prompt] entering streaming path, action_type:", action_type);
+      console.log("[stream:context-prompt] entering streaming path, action_type:", action_type, "hasDocuments:", hasDocuments);
+
+      const encoder = new TextEncoder();
+
+      function sseEvent(data: Record<string, unknown>): Uint8Array {
+        return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
+      }
+
+      function createSSEResponse(readable: ReadableStream) {
+        return new Response(readable, {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            Connection: "keep-alive",
+          },
+        });
+      }
+
+      // Helper: persist results after streaming completes
+      async function persistResults(
+        aiResponse: string,
+        extraInputChars: number,
+        extraOutputChars: number,
+      ) {
+        const finalInputChars = totalInputChars + extraInputChars;
+        const finalOutputChars = totalOutputChars + extraOutputChars;
+        const totalTokens = Math.ceil((finalInputChars + finalOutputChars) / 4);
+
+        // Log to ai_editor_actions
+        const { data: actionRow } = await adminClient
+          .from("ai_editor_actions")
+          .insert({
+            project_id,
+            action_type: action_type === "ask" ? "ask" : "propose",
+            selected_text_preview: selected_text.slice(0, 500),
+            ai_response_preview: aiResponse.slice(0, 500),
+            ai_response_full: aiResponse,
+            char_count_original: selected_text.length,
+            char_count_result: aiResponse.length,
+            outcome: action_type === "ask" ? "delivered" : "pending",
+            instruction_text: selectedTextSource
+              ? `${instruction.slice(0, 1000)} | Source: ${selectedTextSource}`
+              : instruction.slice(0, 1000),
+          })
+          .select("id")
+          .single();
+
+        // Log token usage
+        await supabase.from("token_usage").insert({
+          user_id: user.id,
+          project_id,
+          function_name: "context-prompt",
+          model_used: "mistral-large-latest",
+          input_tokens: Math.ceil(finalInputChars / 4),
+          output_tokens: Math.ceil(finalOutputChars / 4),
+        });
+
+        // Atomic budget update
+        await supabase.rpc("increment_tokens_used", {
+          user_uuid: user.id,
+          amount: totalTokens,
+        });
+
+        const budgetRemaining = profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
+
+        // For Ask: persist chat messages and commit summary
+        const insertedMessages: unknown[] = [];
+
+        if (action_type === "ask") {
+          const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
+          const userPromptContent = `[Ask] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\nQuestion: ${instruction}`;
+
+          const { data: promptMsg } = await supabase.from("chat_messages").insert({
+            thread_id,
+            role: "user",
+            content: userPromptContent,
+            source_type: "ask_prompt",
+            flow_flag: "normal",
+          }).select().single();
+          if (promptMsg) insertedMessages.push(promptMsg);
+
+          if (summaryUpdate !== "No update needed.") {
+            const { data: summaryMsg } = await supabase.from("chat_messages").insert({
+              thread_id,
+              role: "assistant",
+              content: summaryUpdate,
+              source_type: "writing_summary",
+              flow_flag: "not_assessed",
+            }).select().single();
+            if (summaryMsg) insertedMessages.push(summaryMsg);
+          }
+
+          const askResponseRow: Record<string, unknown> = {
+            thread_id,
+            role: "assistant",
+            content: aiResponse,
+            source_type: "ask_response",
+            flow_flag: "normal",
+            model_used: "mistral-large-latest",
+          };
+          if (documentsReferenced.length > 0) {
+            askResponseRow.documents_referenced = documentsReferenced;
+          }
+
+          const { data: responseMsg } = await supabase.from("chat_messages").insert(askResponseRow).select().single();
+          if (responseMsg) insertedMessages.push(responseMsg);
+
+          // Update writing_summary_log
+          if (summaryUpdate !== "No update needed.") {
+            if (summaryRow) {
+              await supabase
+                .from("writing_summary_log")
+                .update({ summary_text: updatedSummary, last_updated_at: new Date().toISOString() })
+                .eq("id", summaryRow.id);
+            } else {
+              await supabase.from("writing_summary_log").insert({
+                project_id,
+                summary_text: updatedSummary,
+              });
+            }
+          }
+        }
+
+        return { actionRow, budgetRemaining, insertedMessages };
+      }
+
+      // ── TWO-PASS FLOW when documents exist ──
+      if (hasDocuments) {
+        console.log("[stream:context-prompt] documents exist, two-pass flow");
+
+        // Call #2a: non-streamed with tools
+        const call2aBody = {
+          model: "mistral-large-latest",
+          messages: responseMessages,
+          max_tokens: 2000,
+          tools: [buildDocumentTool()],
+          tool_choice: "auto",
+        };
+
+        const call2aRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${mistralKey}`,
+          },
+          body: JSON.stringify(call2aBody),
+        });
+
+        if (!call2aRes.ok) {
+          const errText = await call2aRes.text();
+          console.error("[stream:context-prompt] Call #2a error:", call2aRes.status, errText);
+          return jsonResponse({ error: "AI service temporarily unavailable. Please try again." }, 502);
+        }
+
+        const call2aData = await call2aRes.json();
+        const toolCalls = extractToolCalls(call2aData);
+        const call2aContent = call2aData.choices?.[0]?.message?.content ?? "";
+        const call2aInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
+        totalInputChars += call2aInputChars;
+        totalOutputChars += call2aContent.length;
+
+        if (toolCalls.length === 0) {
+          // No tool use — emit Call #2a text as rapid SSE
+          console.log("[stream:context-prompt] no tool use, emitting Call #2a directly");
+          const responseText = call2aContent || "No response generated.";
+
+          const { readable, writable } = new TransformStream();
+          const writer = writable.getWriter();
+
+          (async () => {
+            try {
+              // Send responding phase
+              await writer.write(sseEvent({ phase: "responding" }));
+
+              const chunkSize = 20;
+              for (let i = 0; i < responseText.length; i += chunkSize) {
+                await writer.write(sseEvent({ token: responseText.slice(i, i + chunkSize) }));
+              }
+
+              const { actionRow, budgetRemaining, insertedMessages } = await persistResults(responseText, 0, 0);
+
+              await writer.write(sseEvent({
+                done: true,
+                ai_response: responseText,
+                summary_update: summaryUpdate,
+                action_id: actionRow?.id ?? null,
+                budget_remaining: budgetRemaining,
+                inserted_messages: insertedMessages,
+                ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
+              }));
+            } catch (err) {
+              console.error("[stream:context-prompt] error in no-tool path:", err);
+              try {
+                await writer.write(sseEvent({ done: true, error: "Action may not have been saved." }));
+              } catch { /* client gone */ }
+            } finally {
+              await writer.close();
+            }
+          })();
+
+          return createSSEResponse(readable);
+        }
+
+        // ── Tool use detected — resolve, then stream Call #2b ──
+        console.log("[stream:context-prompt] tool use detected:", toolCalls.length, "calls");
+
+        const toolMessages: Array<Record<string, unknown>> = [
+          ...responseMessages,
+          call2aData.choices[0].message,
+        ];
+
+        for (const tc of toolCalls.slice(0, 5)) {
+          if (tc.name === "read_imported_document") {
+            const docId = tc.arguments.document_id as string;
+            console.log("[stream:context-prompt] reading document:", docId);
+            documentsReferenced.push(docId);
+
+            const { data: docData } = await adminClient
+              .from("imported_documents")
+              .select("extracted_text, file_name")
+              .eq("id", docId)
+              .single();
+
+            const toolResult = docData?.extracted_text
+              ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
+              : `Document not found or text not yet extracted.`;
+
+            totalInputChars += toolResult.length;
+
+            toolMessages.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: toolResult,
+            });
+          }
+        }
+
+        // Call #2b: streaming with tool results
+        const call2bRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${mistralKey}`,
+          },
+          body: JSON.stringify({
+            model: "mistral-large-latest",
+            messages: toolMessages,
+            max_tokens: 2000,
+            stream: true,
+          }),
+        });
+
+        if (!call2bRes.ok) {
+          const errText = await call2bRes.text();
+          console.error("[stream:context-prompt] Call #2b error:", call2bRes.status, errText);
+          return jsonResponse({ error: "AI service temporarily unavailable. Please try again." }, 502);
+        }
+
+        let fullResponse = "";
+        let clientDisconnected = false;
+        const decoder = new TextDecoder();
+        let sseBuffer = "";
+
+        const transform = new TransformStream({
+          start(controller) {
+            try {
+              controller.enqueue(sseEvent({ phase: "reading_documents" }));
+            } catch { /* */ }
+          },
+          transform(chunk, controller) {
+            sseBuffer += decoder.decode(chunk, { stream: true });
+            const lines = sseBuffer.split("\n");
+            sseBuffer = lines.pop() ?? "";
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || !trimmed.startsWith("data:")) continue;
+              const payload = trimmed.slice(5).trim();
+              if (payload === "[DONE]") continue;
+
+              try {
+                const parsed = JSON.parse(payload);
+                const delta = extractDeltaText(parsed, "mistral");
+                if (delta) {
+                  fullResponse += delta;
+                  if (!clientDisconnected) {
+                    try {
+                      controller.enqueue(sseEvent({ token: delta }));
+                    } catch {
+                      clientDisconnected = true;
+                    }
+                  }
+                }
+              } catch { /* skip malformed */ }
+            }
+          },
+          async flush(controller) {
+            console.log("[stream:context-prompt] Call #2b flush, persisting");
+            try {
+              const aiResponse = fullResponse.trim() || "No response generated.";
+              const { actionRow, budgetRemaining, insertedMessages } = await persistResults(aiResponse, 0, aiResponse.length);
+
+              if (!clientDisconnected) {
+                try {
+                  controller.enqueue(sseEvent({
+                    done: true,
+                    ai_response: aiResponse,
+                    summary_update: summaryUpdate,
+                    action_id: actionRow?.id ?? null,
+                    budget_remaining: budgetRemaining,
+                    inserted_messages: insertedMessages,
+                    ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
+                  }));
+                } catch { clientDisconnected = true; }
+              }
+            } catch (persistErr) {
+              console.error("[stream:context-prompt] persistence error:", persistErr);
+              if (!clientDisconnected) {
+                try {
+                  controller.enqueue(sseEvent({ done: true, error: "Action may not have been saved." }));
+                } catch { /* */ }
+              }
+            }
+          },
+        });
+
+        const outputStream = call2bRes.body!.pipeThrough(transform);
+        return createSSEResponse(outputStream);
+      }
+
+      // ── NO DOCUMENTS — original streaming Call #2 ──
+      console.log("[stream:context-prompt] no documents, standard streaming");
 
       const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
         method: "POST",
@@ -536,23 +951,16 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
         );
       }
 
-      console.log("[stream:context-prompt] LLM response received, piping");
-
-      const adminClient = getAdminClient();
       let fullResponse = "";
       let clientDisconnected = false;
-      const encoder = new TextEncoder();
       const decoder = new TextDecoder();
       let sseBuffer = "";
 
       const transform = new TransformStream({
         start(controller) {
-          // Send phase event so client knows summary is done, response is starting
           if (!clientDisconnected) {
             try {
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ phase: "responding" })}\n\n`)
-              );
+              controller.enqueue(sseEvent({ phase: "responding" }));
             } catch {
               clientDisconnected = true;
             }
@@ -577,9 +985,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
                 fullResponse += delta;
                 if (!clientDisconnected) {
                   try {
-                    controller.enqueue(
-                      encoder.encode(`data: ${JSON.stringify({ token: delta })}\n\n`)
-                    );
+                    controller.enqueue(sseEvent({ token: delta }));
                   } catch {
                     clientDisconnected = true;
                   }
@@ -596,116 +1002,19 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
           try {
             const aiResponse = fullResponse.trim() || "No response generated.";
-            const totalInputChars = summaryResult.inputChars + responseMessages.reduce((s, m) => s + m.content.length, 0);
-            const totalOutputChars = summaryResult.outputChars + aiResponse.length;
-            const totalTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
+            const extraInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
+            const { actionRow, budgetRemaining, insertedMessages } = await persistResults(aiResponse, extraInputChars, aiResponse.length);
 
-            // Log to ai_editor_actions
-            const { data: actionRow } = await adminClient
-              .from("ai_editor_actions")
-              .insert({
-                project_id,
-                action_type: action_type === "ask" ? "ask" : "propose",
-                selected_text_preview: selected_text.slice(0, 500),
-                ai_response_preview: aiResponse.slice(0, 500),
-                ai_response_full: aiResponse,
-                char_count_original: selected_text.length,
-                char_count_result: aiResponse.length,
-                outcome: action_type === "ask" ? "delivered" : "pending",
-                instruction_text: selectedTextSource
-                  ? `${instruction.slice(0, 1000)} | Source: ${selectedTextSource}`
-                  : instruction.slice(0, 1000),
-              })
-              .select("id")
-              .single();
-
-            // Log token usage
-            await supabase.from("token_usage").insert({
-              user_id: user.id,
-              project_id,
-              function_name: "context-prompt",
-              model_used: "mistral-large-latest",
-              input_tokens: Math.ceil(totalInputChars / 4),
-              output_tokens: Math.ceil(totalOutputChars / 4),
-            });
-
-            // Atomic budget update
-            await supabase.rpc("increment_tokens_used", {
-              user_uuid: user.id,
-              amount: totalTokens,
-            });
-
-            const budgetRemaining = profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
-
-            // For Ask: persist chat messages and commit summary in flush
-            const insertedMessages: unknown[] = [];
-
-            if (action_type === "ask") {
-              const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
-              const userPromptContent = `[Ask] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\nQuestion: ${instruction}`;
-
-              const { data: promptMsg } = await supabase.from("chat_messages").insert({
-                thread_id,
-                role: "user",
-                content: userPromptContent,
-                source_type: "ask_prompt",
-                flow_flag: "normal",
-              }).select().single();
-              if (promptMsg) insertedMessages.push(promptMsg);
-
-              if (summaryUpdate !== "No update needed.") {
-                const { data: summaryMsg } = await supabase.from("chat_messages").insert({
-                  thread_id,
-                  role: "assistant",
-                  content: summaryUpdate,
-                  source_type: "writing_summary",
-                  flow_flag: "not_assessed",
-                }).select().single();
-                if (summaryMsg) insertedMessages.push(summaryMsg);
-              }
-
-              const { data: responseMsg } = await supabase.from("chat_messages").insert({
-                thread_id,
-                role: "assistant",
-                content: aiResponse,
-                source_type: "ask_response",
-                flow_flag: "normal",
-                model_used: "mistral-large-latest",
-              }).select().single();
-              if (responseMsg) insertedMessages.push(responseMsg);
-
-              // Update writing_summary_log
-              if (summaryUpdate !== "No update needed.") {
-                if (summaryRow) {
-                  await supabase
-                    .from("writing_summary_log")
-                    .update({ summary_text: updatedSummary, last_updated_at: new Date().toISOString() })
-                    .eq("id", summaryRow.id);
-                } else {
-                  await supabase.from("writing_summary_log").insert({
-                    project_id,
-                    summary_text: updatedSummary,
-                  });
-                }
-              }
-            }
-
-            // For Propose: do NOT persist messages in flush — only on user Accept
-            // Send done event with data needed by client
             if (!clientDisconnected) {
               try {
-                controller.enqueue(
-                  encoder.encode(
-                    `data: ${JSON.stringify({
-                      done: true,
-                      ai_response: aiResponse,
-                      summary_update: summaryUpdate,
-                      action_id: actionRow?.id ?? null,
-                      budget_remaining: budgetRemaining,
-                      inserted_messages: insertedMessages,
-                    })}\n\n`
-                  )
-                );
+                controller.enqueue(sseEvent({
+                  done: true,
+                  ai_response: aiResponse,
+                  summary_update: summaryUpdate,
+                  action_id: actionRow?.id ?? null,
+                  budget_remaining: budgetRemaining,
+                  inserted_messages: insertedMessages,
+                }));
               } catch {
                 clientDisconnected = true;
               }
@@ -716,11 +1025,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
             console.error("[stream:context-prompt] persistence error:", persistErr);
             if (!clientDisconnected) {
               try {
-                controller.enqueue(
-                  encoder.encode(
-                    `data: ${JSON.stringify({ done: true, error: "Action may not have been saved." })}\n\n`
-                  )
-                );
+                controller.enqueue(sseEvent({ done: true, error: "Action may not have been saved." }));
               } catch {
                 // client gone
               }
@@ -730,31 +1035,174 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       });
 
       const outputStream = llmRes.body!.pipeThrough(transform);
-
-      return new Response(outputStream, {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          "X-Accel-Buffering": "no",
-          Connection: "keep-alive",
-        },
-      });
+      return createSSEResponse(outputStream);
     }
 
     // =========================================================
-    // NON-STREAMING PATH (unchanged)
+    // NON-STREAMING PATH — with optional two-pass document flow
     // =========================================================
+
+    if (hasDocuments) {
+      // Call #2a: non-streamed with tools
+      const call2aRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${mistralKey}`,
+        },
+        body: JSON.stringify({
+          model: "mistral-large-latest",
+          messages: responseMessages,
+          max_tokens: 2000,
+          tools: [buildDocumentTool()],
+          tool_choice: "auto",
+        }),
+      });
+
+      if (!call2aRes.ok) {
+        const errText = await call2aRes.text();
+        console.error("Call #2a error:", call2aRes.status, errText);
+        throw new Error("AI service temporarily unavailable");
+      }
+
+      const call2aData = await call2aRes.json();
+      const toolCalls = extractToolCalls(call2aData);
+      const call2aContent = call2aData.choices?.[0]?.message?.content ?? "";
+      totalInputChars += responseMessages.reduce((s, m) => s + m.content.length, 0);
+      totalOutputChars += call2aContent.length;
+
+      let aiResponse: string;
+
+      if (toolCalls.length === 0) {
+        aiResponse = call2aContent || "No response generated.";
+      } else {
+        // Resolve tool calls
+        const toolMessages: Array<Record<string, unknown>> = [
+          ...responseMessages,
+          call2aData.choices[0].message,
+        ];
+
+        for (const tc of toolCalls.slice(0, 5)) {
+          if (tc.name === "read_imported_document") {
+            const docId = tc.arguments.document_id as string;
+            documentsReferenced.push(docId);
+            const { data: docData } = await adminClient
+              .from("imported_documents")
+              .select("extracted_text, file_name")
+              .eq("id", docId)
+              .single();
+
+            const toolResult = docData?.extracted_text
+              ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
+              : `Document not found or text not yet extracted.`;
+            totalInputChars += toolResult.length;
+
+            toolMessages.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: toolResult,
+            });
+          }
+        }
+
+        // Call #2b: non-streamed final response
+        const call2bResult = await callMistral(mistralKey, toolMessages as { role: string; content: string }[], 2000);
+        totalInputChars += call2bResult.inputChars;
+        totalOutputChars += call2bResult.outputChars;
+        aiResponse = call2bResult.text.trim() || "No response generated.";
+      }
+
+      // Persist
+      const totalTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
+
+      const { data: actionRow, error: actionErr } = await adminClient
+        .from("ai_editor_actions")
+        .insert({
+          project_id,
+          action_type: action_type === "ask" ? "ask" : "propose",
+          selected_text_preview: selected_text.slice(0, 500),
+          ai_response_preview: aiResponse.slice(0, 500),
+          ai_response_full: aiResponse,
+          char_count_original: selected_text.length,
+          char_count_result: aiResponse.length,
+          outcome: action_type === "ask" ? "delivered" : "pending",
+          instruction_text: selectedTextSource
+            ? `${instruction.slice(0, 1000)} | Source: ${selectedTextSource}`
+            : instruction.slice(0, 1000),
+        })
+        .select("id")
+        .single();
+
+      if (actionErr) console.error("ai_editor_actions insert failed:", JSON.stringify(actionErr));
+
+      await supabase.from("token_usage").insert({
+        user_id: user.id,
+        project_id,
+        function_name: "context-prompt",
+        model_used: "mistral-large-latest",
+        input_tokens: Math.ceil(totalInputChars / 4),
+        output_tokens: Math.ceil(totalOutputChars / 4),
+      });
+
+      await supabase.rpc("increment_tokens_used", { user_uuid: user.id, amount: totalTokens });
+
+      const budgetRemaining = profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
+
+      const insertedMessages = [];
+      if (action_type === "ask") {
+        const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
+        const userPromptContent = `[Ask] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\nQuestion: ${instruction}`;
+
+        const { data: promptMsg } = await supabase.from("chat_messages").insert({
+          thread_id, role: "user", content: userPromptContent, source_type: "ask_prompt", flow_flag: "normal",
+        }).select().single();
+        if (promptMsg) insertedMessages.push(promptMsg);
+
+        if (summaryUpdate !== "No update needed.") {
+          const { data: summaryMsg } = await supabase.from("chat_messages").insert({
+            thread_id, role: "assistant", content: summaryUpdate, source_type: "writing_summary", flow_flag: "not_assessed",
+          }).select().single();
+          if (summaryMsg) insertedMessages.push(summaryMsg);
+        }
+
+        const askResponseRow: Record<string, unknown> = {
+          thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: "mistral-large-latest",
+        };
+        if (documentsReferenced.length > 0) askResponseRow.documents_referenced = documentsReferenced;
+
+        const { data: responseMsg } = await supabase.from("chat_messages").insert(askResponseRow).select().single();
+        if (responseMsg) insertedMessages.push(responseMsg);
+
+        if (summaryUpdate !== "No update needed.") {
+          if (summaryRow) {
+            await supabase.from("writing_summary_log")
+              .update({ summary_text: updatedSummary, last_updated_at: new Date().toISOString() })
+              .eq("id", summaryRow.id);
+          } else {
+            await supabase.from("writing_summary_log").insert({ project_id, summary_text: updatedSummary });
+          }
+        }
+      }
+
+      return jsonResponse({
+        ai_response: aiResponse,
+        summary_update: summaryUpdate,
+        action_id: actionRow?.id ?? null,
+        tokens_used: totalTokens,
+        budget_remaining: budgetRemaining,
+        inserted_messages: insertedMessages,
+        ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
+      });
+    }
+
+    // ── NO DOCUMENTS — original non-streaming path ──
     const responseResult = await callMistral(mistralKey, responseMessages, 2000);
     const aiResponse = responseResult.text.trim();
 
-    // --- Token totals ---
-    const totalInputChars = summaryResult.inputChars + responseResult.inputChars;
-    const totalOutputChars = summaryResult.outputChars + responseResult.outputChars;
-    const totalTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
+    const finalInputChars = totalInputChars + responseResult.inputChars;
+    const finalOutputChars = totalOutputChars + responseResult.outputChars;
+    const totalTokens = Math.ceil((finalInputChars + finalOutputChars) / 4);
 
-    // --- 9. Log to ai_editor_actions (store full AI response) ---
-    const adminClient = getAdminClient();
     const { data: actionRow, error: actionErr } = await adminClient
       .from("ai_editor_actions")
       .insert({
@@ -773,83 +1221,53 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       .select("id")
       .single();
 
-    if (actionErr) {
-      console.error("ai_editor_actions insert failed:", JSON.stringify(actionErr));
-    }
+    if (actionErr) console.error("ai_editor_actions insert failed:", JSON.stringify(actionErr));
 
-    // --- Log token usage ---
     await supabase.from("token_usage").insert({
       user_id: user.id,
       project_id,
       function_name: "context-prompt",
       model_used: "mistral-large-latest",
-      input_tokens: Math.ceil(totalInputChars / 4),
-      output_tokens: Math.ceil(totalOutputChars / 4),
+      input_tokens: Math.ceil(finalInputChars / 4),
+      output_tokens: Math.ceil(finalOutputChars / 4),
     });
 
-    // --- Atomic budget update ---
-    await supabase.rpc("increment_tokens_used", {
-      user_uuid: user.id,
-      amount: totalTokens,
-    });
+    await supabase.rpc("increment_tokens_used", { user_uuid: user.id, amount: totalTokens });
 
     const budgetRemaining = profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
 
-    // --- 7. For 'ask': insert chat messages & commit summary ---
     const insertedMessages = [];
-
     if (action_type === "ask") {
       const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
       const userPromptContent = `[Ask] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\nQuestion: ${instruction}`;
 
       const { data: promptMsg } = await supabase.from("chat_messages").insert({
-        thread_id,
-        role: "user",
-        content: userPromptContent,
-        source_type: "ask_prompt",
-        flow_flag: "normal",
+        thread_id, role: "user", content: userPromptContent, source_type: "ask_prompt", flow_flag: "normal",
       }).select().single();
       if (promptMsg) insertedMessages.push(promptMsg);
 
       if (summaryUpdate !== "No update needed.") {
         const { data: summaryMsg } = await supabase.from("chat_messages").insert({
-          thread_id,
-          role: "assistant",
-          content: summaryUpdate,
-          source_type: "writing_summary",
-          flow_flag: "not_assessed",
+          thread_id, role: "assistant", content: summaryUpdate, source_type: "writing_summary", flow_flag: "not_assessed",
         }).select().single();
         if (summaryMsg) insertedMessages.push(summaryMsg);
       }
 
       const { data: responseMsg } = await supabase.from("chat_messages").insert({
-        thread_id,
-        role: "assistant",
-        content: aiResponse,
-        source_type: "ask_response",
-        flow_flag: "normal",
-        model_used: "mistral-large-latest",
+        thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: "mistral-large-latest",
       }).select().single();
       if (responseMsg) insertedMessages.push(responseMsg);
 
-      // Update writing_summary_log
       if (summaryUpdate !== "No update needed.") {
         if (summaryRow) {
-          await supabase
-            .from("writing_summary_log")
+          await supabase.from("writing_summary_log")
             .update({ summary_text: updatedSummary, last_updated_at: new Date().toISOString() })
             .eq("id", summaryRow.id);
         } else {
-          await supabase.from("writing_summary_log").insert({
-            project_id,
-            summary_text: updatedSummary,
-          });
+          await supabase.from("writing_summary_log").insert({ project_id, summary_text: updatedSummary });
         }
       }
     }
-
-    // --- 8. For 'propose': return data, summary stored as pending ---
-    // (Summary committed via /confirm endpoint)
 
     return jsonResponse({
       ai_response: aiResponse,
