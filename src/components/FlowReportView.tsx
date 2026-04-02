@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, Component, type ReactNode, type ErrorInfo } from "react";
+import { useEffect, useRef, useState, useCallback, Component, type ReactNode, type ErrorInfo } from "react";
 
 class HighlightedTextErrorBoundary extends Component<
   { children: ReactNode; onClose: () => void },
