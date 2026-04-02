@@ -375,7 +375,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   };
 
   return (
-    <div ref={chatContainerRef} className="relative flex flex-col h-full bg-[hsl(var(--ethos-surface))]">
+    <div ref={chatContainerRef} className="relative flex flex-col h-full min-h-0 bg-[hsl(var(--ethos-surface))]">
       {/* Bookmark list overlay */}
       {showBookmarkList && (
         <BookmarkListPanel

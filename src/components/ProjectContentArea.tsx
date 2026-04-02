@@ -212,11 +212,11 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const showingDocuments = showDocuments && !showingFlowReport && !showingPostIts;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 flex flex-col overflow-hidden min-h-0">
       {/* FLOW report layer — rendered on top when active */}
       {showingFlowReport && (
         flowLoading && !flowReport ? (
-          <div className="flex-1 flex items-center justify-center bg-background h-screen">
+          <div className="flex-1 flex items-center justify-center bg-background h-full">
             <div className="text-center space-y-4">
               <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
               <div>
@@ -226,7 +226,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
             </div>
           </div>
         ) : flowLoading ? (
-          <div className="flex-1 flex flex-col bg-background h-screen">
+          <div className="flex-1 flex flex-col bg-background h-full min-h-0">
             <FlowReportView
               report={flowReport!}
               projectName={project.name}
@@ -293,7 +293,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
 
       {/* Editor layer — always mounted, hidden via CSS when FLOW report or Post-its are showing */}
       <div
-        className="flex-1 flex flex-col bg-background h-full [&_[data-panel]]:transition-all [&_[data-panel]]:duration-150 [&_[data-panel]]:ease-ethos-ease"
+        className="flex-1 flex flex-col bg-background h-full min-h-0 [&_[data-panel]]:transition-all [&_[data-panel]]:duration-150 [&_[data-panel]]:ease-ethos-ease"
         style={{ display: showingFlowReport || showingPostIts || showingDocuments ? 'none' : undefined }}
       >
         <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
@@ -361,9 +361,9 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
           </div>
         </div>
 
-        <ResizablePanelGroup direction="horizontal" className="flex-1">
+        <ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0">
           <ResizablePanel ref={editorPanelRef} defaultSize={DEFAULT_EDITOR_SIZE} minSize={0}>
-            <div className="flex flex-col h-full">
+            <div className="flex flex-col h-full min-h-0">
               <WritingEditor
                 projectId={project.id}
                 tutorMode={project.tutor_mode}
