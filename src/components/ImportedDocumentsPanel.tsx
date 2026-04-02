@@ -167,8 +167,7 @@ export function ImportedDocumentsPanel({ documents, loading, uploading, onUpload
                     ) : (
                       <button
                         onClick={() => setConfirmDelete(doc.id)}
-                        className="p-1 text-muted-foreground hover:text-destructive transition-colors rounded-md opacity-0 group-hover:opacity-100 hover:opacity-100"
-                        style={{ opacity: undefined }}
+                        className="p-1 text-muted-foreground/40 hover:text-destructive transition-colors rounded-md"
                         aria-label="Delete document"
                       >
                         <Trash2 className="h-3.5 w-3.5" />

@@ -85,8 +85,9 @@ Deno.serve(async (req) => {
     } else if (ext === "docx") {
       try {
         const mammoth = await import("https://esm.sh/mammoth@1.6.0");
-        const buffer = await fileData.arrayBuffer();
-        const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+        const { Buffer } = await import("node:buffer");
+        const buffer = Buffer.from(await fileData.arrayBuffer());
+        const result = await mammoth.extractRawText({ buffer });
         extractedText = result.value || "";
       } catch (docxErr) {
         console.error("DOCX parse error:", docxErr);
