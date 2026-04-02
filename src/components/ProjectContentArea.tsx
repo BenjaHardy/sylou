@@ -323,6 +323,27 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
+                    variant={showDocuments ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={() => setShowDocuments((v) => !v)}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Docs
+                    {documents.length > 0 && (
+                      <span className="text-[10px] text-muted-foreground">({documents.length})</span>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <span>Imported Documents</span>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
                     variant={showPostIts ? "secondary" : "ghost"}
                     size="sm"
                     className="h-7 gap-1.5 text-xs"
