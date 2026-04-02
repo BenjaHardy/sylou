@@ -114,11 +114,12 @@ export function TextSelectionWindow({
   const [inputText, setInputText] = useState("");
   const [editableText, setEditableText] = useState("");
   const [currentActionId, setCurrentActionId] = useState<string | null>(null);
-  const [loadingStage, setLoadingStage] = useState<"reviewing" | "preparing">("reviewing");
+  const [loadingStage, setLoadingStage] = useState<"reviewing" | "reading_documents" | "preparing">("reviewing");
   // For propose confirm flow
   const [pendingSummaryUpdate, setPendingSummaryUpdate] = useState<string | null>(null);
   const [pendingInstruction, setPendingInstruction] = useState<string>("");
   const [pendingSourceBreakdown, setPendingSourceBreakdown] = useState<string | null>(null);
+  const [pendingDocumentsReferenced, setPendingDocumentsReferenced] = useState<string[] | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const actions = tutorMode ? TUTOR_ACTIONS : NORMAL_ACTIONS;
