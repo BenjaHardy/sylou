@@ -638,6 +638,8 @@ export function TextSelectionWindow({
             <Loader2 className="h-4 w-4 animate-spin" />
             {loadingStage === "reviewing"
               ? "Reviewing your writing…"
+              : loadingStage === "reading_documents"
+              ? "Reading imported documents…"
               : "Preparing response…"}
           </div>
         )}
