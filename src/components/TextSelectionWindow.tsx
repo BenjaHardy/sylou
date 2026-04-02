@@ -404,6 +404,7 @@ export function TextSelectionWindow({
             setPendingSummaryUpdate(data.summary_update);
             setPendingInstruction(userInstruction);
             setPendingSourceBreakdown(selected_text_source ?? null);
+            setPendingDocumentsReferenced(data.documents_referenced ?? null);
             provenanceTracker?.registerAiResultText(data.ai_response);
             setPhase("result");
           }
