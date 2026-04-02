@@ -482,11 +482,18 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
               <Bot className="h-3.5 w-3.5" />
             </div>
             <div className="bg-muted rounded-xl px-3.5 py-2.5">
-              <div className="flex gap-1">
-                <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />
-                <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:150ms]" />
-                <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:300ms]" />
-              </div>
+              {phase === "reading_documents" ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span>Reading imported documents…</span>
+                </div>
+              ) : (
+                <div className="flex gap-1">
+                  <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />
+                  <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:150ms]" />
+                  <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:300ms]" />
+                </div>
+              )}
             </div>
           </div>
         )}
