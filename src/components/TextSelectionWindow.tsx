@@ -520,6 +520,7 @@ export function TextSelectionWindow({
             instruction: pendingInstruction,
             ai_response: editableText,
             ...(pendingSourceBreakdown ? { selected_text_source: pendingSourceBreakdown } : {}),
+            ...(pendingDocumentsReferenced && pendingDocumentsReferenced.length > 0 ? { documents_referenced: pendingDocumentsReferenced } : {}),
           },
         });
         if (error) {
