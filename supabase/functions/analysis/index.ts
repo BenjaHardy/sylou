@@ -423,7 +423,7 @@ Deno.serve(async (req) => {
     }
 
     // --- Fetch all project data in parallel ---
-    const [writingRes, threadsRes, provenanceRes, editorActionsRes, statsRes] =
+    const [writingRes, threadsRes, provenanceRes, editorActionsRes, statsRes, importedDocsRes] =
       await Promise.all([
         supabase
           .from("writing_content")
