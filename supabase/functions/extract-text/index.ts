@@ -73,10 +73,10 @@ Deno.serve(async (req) => {
       extractedText = await fileData.text();
     } else if (ext === "pdf") {
       try {
-        // Use pdf-parse via esm.sh
-        const pdfParse = (await import("https://esm.sh/pdf-parse@1.1.1")).default;
-        const buffer = await fileData.arrayBuffer();
-        const pdfData = await pdfParse(new Uint8Array(buffer));
+        const pdfParse = (await import("npm:pdf-parse@1.1.1/lib/pdf-parse.js")).default;
+        const { Buffer } = await import("node:buffer");
+        const buffer = Buffer.from(await fileData.arrayBuffer());
+        const pdfData = await pdfParse(buffer);
         extractedText = pdfData.text || "";
       } catch (pdfErr) {
         console.error("PDF parse error:", pdfErr);
@@ -85,8 +85,9 @@ Deno.serve(async (req) => {
     } else if (ext === "docx") {
       try {
         const mammoth = await import("https://esm.sh/mammoth@1.6.0");
-        const buffer = await fileData.arrayBuffer();
-        const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+        const { Buffer } = await import("node:buffer");
+        const buffer = Buffer.from(await fileData.arrayBuffer());
+        const result = await mammoth.extractRawText({ buffer });
         extractedText = result.value || "";
       } catch (docxErr) {
         console.error("DOCX parse error:", docxErr);
