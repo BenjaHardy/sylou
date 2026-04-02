@@ -293,7 +293,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
 
       {/* Editor layer — always mounted, hidden via CSS when FLOW report or Post-its are showing */}
       <div
-        className="flex-1 flex flex-col bg-background h-screen [&_[data-panel]]:transition-all [&_[data-panel]]:duration-150 [&_[data-panel]]:ease-ethos-ease"
+        className="flex-1 flex flex-col bg-background h-full [&_[data-panel]]:transition-all [&_[data-panel]]:duration-150 [&_[data-panel]]:ease-ethos-ease"
         style={{ display: showingFlowReport || showingPostIts || showingDocuments ? 'none' : undefined }}
       >
         <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
