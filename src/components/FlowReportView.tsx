@@ -602,6 +602,13 @@ export function FlowReportView({
   const [preFeedbackViewed, setPreFeedbackViewed] = useState(false);
   const [feedbackToggle, setFeedbackToggle] = useState<"pre" | "post">("post");
   const [showHighlighted, setShowHighlighted] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (showHighlighted) {
+      containerRef.current?.scrollTo(0, 0);
+    }
+  }, [showHighlighted]);
   const [writingContent, setWritingContent] = useState<string>("");
 
   // Fetch writing content when report loads (needed for highlighted text view)
