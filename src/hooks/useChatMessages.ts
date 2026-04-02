@@ -126,6 +126,7 @@ export function useChatMessages(threadId: string | null) {
 
           await consumeSSEStream(res.body, {
             onToken: (text) => {
+              setPhase(null); // Clear phase once tokens start arriving
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === streamingId
@@ -134,8 +135,12 @@ export function useChatMessages(threadId: string | null) {
                 )
               );
             },
+            onPhase: (p) => {
+              setPhase(p);
+            },
             onDone: (evt) => {
               receivedDone = true;
+              setPhase(null);
               setMessages((prev) => {
                 const without = prev.filter(
                   (m) => m.id !== optimisticId && m.id !== streamingId
@@ -153,7 +158,7 @@ export function useChatMessages(threadId: string | null) {
               }
             },
             onError: () => {
-              // handled below
+              setPhase(null);
             },
           });
 
