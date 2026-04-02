@@ -1,24 +1,18 @@
 
 
-## Plan: Add Error Boundary around FlowHighlightedText
+## Fix: Scroll to Top When Opening Highlighted Text View
 
-### What
-Wrap `<FlowHighlightedText>` in a React Error Boundary so rendering crashes show a fallback message and log to `console.error` instead of blanking the screen.
+### Problem
+When the user scrolls down in the FLOW report to reach the "View Highlighted Text" button and clicks it, the scroll position remains at the bottom. The highlighted text view renders at the top, so the user sees a blank area until they manually scroll up.
 
-### Changes
+### Solution
+In `FlowReportView.tsx`, when `showHighlighted` is set to `true`, scroll the container to the top. Add a `useEffect` that watches `showHighlighted` and calls `scrollTo(0, 0)` on the scrollable container (or the window/parent element).
 
-**`src/components/FlowReportView.tsx`**
-- Add an inline `ErrorBoundary` class component (small, ~20 lines) at the top of the file
-- Wrap lines 684–692 (the highlighted text overlay) in `<ErrorBoundary>`:
-  ```tsx
-  <ErrorBoundary>
-    <div className="absolute inset-0 z-10 bg-background">
-      <FlowHighlightedText ... />
-    </div>
-  </ErrorBoundary>
-  ```
-- The boundary's `componentDidCatch` logs the error + stack to `console.error`
-- Fallback UI: a centered message with "Back" button that calls `setShowHighlighted(false)`
+### File: `src/components/FlowReportView.tsx`
+- Add a ref to the outer container (or use the existing one)
+- Add `useEffect`: when `showHighlighted` becomes `true`, scroll the container to top (`ref.current?.scrollTo(0, 0)`)
+- This is a 3-line change
 
-No other files changed.
+### Bonus
+The Error Boundary added previously is still valuable as a safety net, so it stays in place.
 
