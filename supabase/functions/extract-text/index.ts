@@ -73,10 +73,10 @@ Deno.serve(async (req) => {
       extractedText = await fileData.text();
     } else if (ext === "pdf") {
       try {
-        // Use pdf-parse via esm.sh
-        const pdfParse = (await import("https://esm.sh/pdf-parse@1.1.1")).default;
-        const buffer = await fileData.arrayBuffer();
-        const pdfData = await pdfParse(new Uint8Array(buffer));
+        const pdfParse = (await import("npm:pdf-parse@1.1.1/lib/pdf-parse.js")).default;
+        const { Buffer } = await import("node:buffer");
+        const buffer = Buffer.from(await fileData.arrayBuffer());
+        const pdfData = await pdfParse(buffer);
         extractedText = pdfData.text || "";
       } catch (pdfErr) {
         console.error("PDF parse error:", pdfErr);
