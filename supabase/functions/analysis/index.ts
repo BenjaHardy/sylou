@@ -210,7 +210,9 @@ function buildChatHistoryString(
     source_type: string | null;
     flow_flag: string | null;
     thread_name: string;
-  }>
+    documents_referenced?: string[] | null;
+  }>,
+  docNameMap: Record<string, string>
 ): string {
   return messages
     .map((m) => {
@@ -219,6 +221,10 @@ function buildChatHistoryString(
       let line = `[${ts} — Thread: ${m.thread_name}] ${m.role}: ${m.content}`;
       if (m.source_type && m.source_type !== "chat") {
         line += ` [${m.source_type}]`;
+      }
+      if (m.documents_referenced && Array.isArray(m.documents_referenced) && m.documents_referenced.length > 0) {
+        const names = m.documents_referenced.map((id: string) => docNameMap[id] || id).map(n => `"${n}"`).join(", ");
+        line += ` [Documents referenced: ${names}]`;
       }
       if (m.flow_flag === "not_assessed") {
         line = `[NOT ASSESSED] ${line}`;
