@@ -20,6 +20,7 @@ export function useChatMessages(threadId: string | null) {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [budgetRemaining, setBudgetRemaining] = useState<number | null>(null);
+  const [phase, setPhase] = useState<string | null>(null);
 
   const fetchMessages = useCallback(async () => {
     if (!threadId) {
