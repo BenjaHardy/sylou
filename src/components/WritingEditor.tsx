@@ -257,7 +257,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   const editorDom = editorWrapperRef.current;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       <EditorToolbar editor={editor} />
       <div ref={editorWrapperRef} className="flex-1 overflow-y-auto bg-background relative">
         <EditorContent editor={editor} className="h-full" />

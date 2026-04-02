@@ -26,7 +26,7 @@ export default function Index() {
   }, [selectedId]);
 
   return (
-    <div className="flex min-h-screen w-full">
+    <div className="flex h-screen w-full overflow-hidden">
       <DashboardSidebar
         selectedProjectId={selectedId}
         onSelectProject={handleSelectProject}
