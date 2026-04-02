@@ -361,7 +361,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
           </div>
         </div>
 
-        <ResizablePanelGroup direction="horizontal" className="flex-1">
+        <ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0">
           <ResizablePanel ref={editorPanelRef} defaultSize={DEFAULT_EDITOR_SIZE} minSize={0}>
             <div className="flex flex-col h-full">
               <WritingEditor
