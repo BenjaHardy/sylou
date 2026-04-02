@@ -774,6 +774,9 @@ ${writePillarNotice}`;
       measured_at: new Date().toISOString(),
       similarity_pct: similarityPct,
       write_score_capped: similarityPct >= 35,
+      imported_documents_mode: importedDocsMode,
+      imported_documents_count: importedDocs.length,
+      imported_documents_total_chars: importedDocsTotalChars,
     };
 
     // --- Store FLOW report ---

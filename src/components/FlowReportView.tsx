@@ -843,6 +843,20 @@ export function FlowReportView({
               {/* Token Usage */}
               {report.flow_meta && <TokenUsageSection meta={report.flow_meta} />}
 
+              {/* Imported Documents Notice */}
+              {report.flow_meta?.imported_documents_mode === "summaries" && (
+                <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                  <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <span>Imported documents were included as summaries due to context length limits.</span>
+                </div>
+              )}
+              {report.flow_meta?.imported_documents_mode === "excluded" && (
+                <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                  <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <span>Imported documents ({report.flow_meta.imported_documents_count}) were excluded from this analysis due to context length limits.</span>
+                </div>
+              )}
+
               {/* Project Activity */}
               {report.metrics_snapshot && <ProjectActivitySection metrics={report.metrics_snapshot} />}
 
