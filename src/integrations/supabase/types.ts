@@ -102,6 +102,7 @@ export type Database = {
           concise_mode: boolean | null
           content: string
           created_at: string
+          documents_referenced: Json | null
           flow_flag: string | null
           id: string
           model_used: string | null
@@ -114,6 +115,7 @@ export type Database = {
           concise_mode?: boolean | null
           content: string
           created_at?: string
+          documents_referenced?: Json | null
           flow_flag?: string | null
           id?: string
           model_used?: string | null
@@ -126,6 +128,7 @@ export type Database = {
           concise_mode?: boolean | null
           content?: string
           created_at?: string
+          documents_referenced?: Json | null
           flow_flag?: string | null
           id?: string
           model_used?: string | null
@@ -249,6 +252,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "flow_reports_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      imported_documents: {
+        Row: {
+          extracted_text: string | null
+          file_name: string
+          file_path: string
+          file_size_bytes: number | null
+          id: string
+          project_id: string
+          summary: string | null
+          uploaded_at: string
+        }
+        Insert: {
+          extracted_text?: string | null
+          file_name: string
+          file_path: string
+          file_size_bytes?: number | null
+          id?: string
+          project_id: string
+          summary?: string | null
+          uploaded_at?: string
+        }
+        Update: {
+          extracted_text?: string | null
+          file_name?: string
+          file_path?: string
+          file_size_bytes?: number | null
+          id?: string
+          project_id?: string
+          summary?: string | null
+          uploaded_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "imported_documents_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
