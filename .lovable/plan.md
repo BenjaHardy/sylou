@@ -1,46 +1,22 @@
 
 
-## Fix: PDF/DOCX Extraction + Delete Icon Visibility
+## Fix: Pin Bottom Bars in Editor and Chat Panels
 
-### Issue 1: PDF extraction failure
+### Root Cause
 
-The `pdf-parse` npm package, when imported via `esm.sh`, tries to read a local test file (`./test/data/05-versions-space.pdf`) during initialization — this is a known issue with pdf-parse. The fix is to import the inner module directly (`pdf-parse/lib/pdf-parse.js`) and pass a `Buffer` instead of `Uint8Array`, matching the pattern from the stack overflow context.
+In `ProjectContentArea.tsx` line 296, the editor layer div has `h-screen` (100vh). This div is nested inside a flex column that already accounts for a 40px project header. The explicit `100vh` height exceeds the available space, causing the entire editor+chat area to overflow and scroll as a whole — which drags the bottom bars (word count / FLOW button, chat input) out of view.
 
-### Issue 2: DOCX extraction failure
+### Fix
 
-The edge function logs show: `Could not find file in options`. Mammoth's `extractRawText({ arrayBuffer })` doesn't work correctly via the ESM bundle in Deno. The fix is to pass a `Buffer` wrapping the array buffer, using `mammoth.extractRawText({ buffer })` instead.
+**`src/components/ProjectContentArea.tsx`** — Line 296: change `h-screen` to `h-full`.
 
-### Issue 3: Delete icon visibility
+```diff
+- className="flex-1 flex flex-col bg-background h-screen ..."
++ className="flex-1 flex flex-col bg-background h-full ..."
+```
 
-The trash icon uses `opacity-0 group-hover:opacity-100` but the parent `div` doesn't have the `group` class, so the hover never triggers. Fix: always show the icon but greyed out, coloring it on hover.
+This single change makes the editor layer respect the flex container's height constraint. The `flex-1` already stretches it to fill available space, and `h-full` ensures it doesn't exceed the parent. The chat panel's internal layout (`flex-col h-full` with `flex-1 overflow-y-auto` messages and `shrink-0` input) then works as intended — only the messages area scrolls.
 
----
-
-### Changes
-
-**`supabase/functions/extract-text/index.ts`**
-
-1. **PDF fix** (lines 76–80): Replace `pdf-parse` import with the inner module to avoid the test-file read:
-   ```ts
-   import pdfParse from "npm:pdf-parse@1.1.1/lib/pdf-parse.js";
-   // ...
-   const { Buffer } = await import("node:buffer");
-   const buffer = Buffer.from(await fileData.arrayBuffer());
-   const pdfData = await pdfParse(buffer);
-   ```
-
-2. **DOCX fix** (lines 87–89): Pass `buffer` instead of `arrayBuffer`:
-   ```ts
-   const { Buffer } = await import("node:buffer");
-   const buffer = Buffer.from(await fileData.arrayBuffer());
-   const result = await mammoth.extractRawText({ buffer });
-   ```
-
-**`src/components/ImportedDocumentsPanel.tsx`**
-
-3. **Delete icon** (line 170): Remove `opacity-0 group-hover:opacity-100 hover:opacity-100` classes. Replace with always-visible but muted styling that colors on hover:
-   ```tsx
-   className="p-1 text-muted-foreground/40 hover:text-destructive transition-colors rounded-md"
-   ```
-   Also remove the `style={{ opacity: undefined }}` override on line 171.
+### Files
+- `src/components/ProjectContentArea.tsx` (1 line change)
 
