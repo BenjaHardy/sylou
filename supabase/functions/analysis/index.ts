@@ -479,12 +479,13 @@ Deno.serve(async (req) => {
       flow_flag: string | null;
       thread_id: string;
       thread_name: string;
+      documents_referenced?: string[] | null;
     }> = [];
 
     if (threadIds.length > 0) {
       const { data: msgs } = await supabase
         .from("chat_messages")
-        .select("created_at, role, content, source_type, flow_flag, thread_id")
+        .select("created_at, role, content, source_type, flow_flag, thread_id, documents_referenced")
         .in("thread_id", threadIds)
         .order("created_at", { ascending: true });
 
@@ -496,6 +497,7 @@ Deno.serve(async (req) => {
         flow_flag: m.flow_flag as string | null,
         thread_id: m.thread_id as string,
         thread_name: threadNameMap[m.thread_id as string] ?? "Unknown",
+        documents_referenced: m.documents_referenced as string[] | null,
       }));
     }
 
