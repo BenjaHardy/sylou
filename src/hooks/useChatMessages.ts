@@ -217,6 +217,7 @@ export function useChatMessages(threadId: string | null) {
     messages,
     loading,
     sending,
+    phase,
     sendMessage,
     budgetRemaining,
     refreshMessages: fetchMessages,
