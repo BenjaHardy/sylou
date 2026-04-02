@@ -736,7 +736,7 @@ export function FlowReportView({
       )}
 
       {/* Content */}
-      <ScrollArea className="flex-1">
+      <ScrollArea ref={scrollAreaRef} className="flex-1">
         <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
           {/* Pre-feedback (reflexivity) — only on first-ever analysis */}
           {showPreFeedback && (
