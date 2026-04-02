@@ -449,6 +449,10 @@ Deno.serve(async (req) => {
           .select("*")
           .eq("project_id", projectId)
           .single(),
+        supabase
+          .from("imported_documents")
+          .select("id, file_name, extracted_text, summary, file_size_bytes")
+          .eq("project_id", projectId),
       ]);
 
     const writingContent = writingRes.data?.content ?? "";
