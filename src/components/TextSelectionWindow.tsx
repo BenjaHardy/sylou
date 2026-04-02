@@ -371,6 +371,7 @@ export function TextSelectionWindow({
                 setPendingSummaryUpdate((evt.summary_update as string) ?? null);
                 setPendingInstruction(userInstruction);
                 setPendingSourceBreakdown(selected_text_source ?? null);
+                setPendingDocumentsReferenced((evt.documents_referenced as string[]) ?? null);
                 provenanceTracker?.registerAiResultText(aiResponse);
                 setPhase("result");
               }
