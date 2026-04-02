@@ -95,9 +95,9 @@ export function ImportedDocumentsPanel({ documents, loading, uploading, onUpload
         ) : documents.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <File className="h-10 w-10 text-muted-foreground/40 mb-3" />
-            <p className="text-sm text-muted-foreground mb-1">No documents imported</p>
+            <p className="text-sm text-muted-foreground mb-1">No documents in this project</p>
             <p className="text-xs text-muted-foreground/60 max-w-[250px]">
-              Import PDF, TXT, MD, or DOCX files to use as reference material in your chat conversations.
+              Import PDF, TXT, MD, or DOCX files as project-specific reference material. The AI chat will use them to inform its responses for this project.
             </p>
             <Button
               variant="outline"
