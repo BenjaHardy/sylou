@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, Component, type ReactNode, type ErrorInfo } from "react";
+import { useEffect, useRef, useState, useCallback, Component, type ReactNode, type ErrorInfo } from "react";
 
 class HighlightedTextErrorBoundary extends Component<
   { children: ReactNode; onClose: () => void },
@@ -602,6 +602,13 @@ export function FlowReportView({
   const [preFeedbackViewed, setPreFeedbackViewed] = useState(false);
   const [feedbackToggle, setFeedbackToggle] = useState<"pre" | "post">("post");
   const [showHighlighted, setShowHighlighted] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (showHighlighted) {
+      containerRef.current?.scrollTo(0, 0);
+    }
+  }, [showHighlighted]);
   const [writingContent, setWritingContent] = useState<string>("");
 
   // Fetch writing content when report loads (needed for highlighted text view)
@@ -693,7 +700,7 @@ export function FlowReportView({
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-background h-screen relative">
+    <div ref={containerRef} className="flex-1 flex flex-col bg-background h-screen relative overflow-auto">
       {/* Header */}
       <div className="h-12 border-b border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
         <Button variant="ghost" size="sm" onClick={onBack} className="gap-1.5 text-muted-foreground hover:text-foreground">
