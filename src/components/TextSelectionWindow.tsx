@@ -331,6 +331,8 @@ export function TextSelectionWindow({
             onPhase: (p) => {
               if (p === "responding") {
                 setLoadingStage("preparing");
+              } else if (p === "reading_documents") {
+                setLoadingStage("reading_documents");
               }
             },
             onToken: (text) => {
