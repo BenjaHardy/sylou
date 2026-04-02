@@ -107,7 +107,7 @@ export function ImportedDocumentsPanel({ documents, loading, uploading, onUpload
               disabled={uploading}
             >
               <FileUp className="h-3.5 w-3.5" />
-              Import your first document
+              Import a document to this project
             </Button>
           </div>
         ) : (
