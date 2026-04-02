@@ -1,35 +1,105 @@
 
-You’re right to question it — based on the latest logs, it is not fully fixed yet. The app is still crashing when Post-its mounts.
 
-### What I found
-- The blank screen is a runtime crash (React error boundary message appears right after PostItsPanel renders).
-- There’s also a ref warning: `Function components cannot be given refs... Check the render method of ProjectContentArea`.
+## Plan: Project-Level Document Import with Tool-Use Chat Integration
 
-### Most likely crash trigger
-In `src/components/PostItsPanel.tsx`, the canvas uses an inline callback ref that calls `setCanvasBounds(...)` during ref assignment. Because that callback is recreated each render, React repeatedly clears/sets the ref, which can create a render loop and crash the view.
+Given the complexity, this will be split into **two implementation phases** as you suggested.
 
-### Fix plan
-1. **Refactor canvas ref handling in `PostItsPanel.tsx`**
-   - Replace inline callback ref with a stable `ref={canvasRef}`.
-   - Move `setCanvasBounds(canvasRef.current.getBoundingClientRect())` into an effect (`useLayoutEffect`/`useEffect`) so state updates happen after mount, not during ref assignment.
+---
 
-2. **Make bounds updates stable**
-   - Add a `ResizeObserver` (and window resize fallback) to recompute bounds safely.
-   - Keep `updateBounds` as a memoized function and call it from the observer/events.
+### Phase 1: Upload, Extraction, Summary Pipeline
 
-3. **Add defensive drag guards**
-   - Ensure drag calculations no-op when `canvasBounds` is null/invalid.
-   - Clamp with safe width/height defaults to avoid NaN position writes.
+#### Database Migration
 
-4. **Resolve ref warning from `ProjectContentArea` path**
-   - Audit the Post-its render path in `ProjectContentArea.tsx` and remove any accidental ref forwarding to function components.
-   - Confirm the warning disappears after step 1 (likely related to current ref wiring and rerender churn).
+1. **`imported_documents` table**:
+   - Columns: `id`, `project_id` (FK → projects, CASCADE), `file_name`, `file_path`, `extracted_text`, `summary`, `file_size_bytes`, `uploaded_at`
+   - RLS: SELECT/INSERT/DELETE using `owns_project(project_id)` (consistent with bookmarks, post-its)
 
-5. **Verification**
-   - Open project → click **Post-its** repeatedly.
-   - Confirm no blank screen, no ref warning, and no React runtime error.
-   - Create/move/edit/delete a note to confirm interaction stability.
+2. **`chat_messages.documents_referenced`** — add nullable JSONB column for future use by Phase 2
 
-### Files to update
-- `src/components/PostItsPanel.tsx` (primary fix)
-- `src/components/ProjectContentArea.tsx` (ref warning cleanup if still present after panel refactor)
+#### Storage
+
+- Create `imports` bucket (not public — RLS-controlled)
+- RLS policies on `storage.objects`: owner can INSERT/SELECT/DELETE under path `{user_id}/{project_id}/`
+
+#### Edge Function: `extract-text`
+
+- Receives `{ file_path, project_id, file_name }` (the Supabase Storage path)
+- Downloads file from storage using service role
+- Extracts text:
+  - `.txt` / `.md`: read directly as UTF-8
+  - `.pdf`: use `pdf-parse` (npm package via esm.sh)
+  - `.docx`: use `mammoth` (npm package via esm.sh)
+- If extracted text < 500 chars → use full text as summary (no LLM call)
+- Otherwise → call Mistral with summarization prompt (first 10,000 chars), log token usage
+- Updates `imported_documents` row with `extracted_text` and `summary`
+- Returns success/error
+
+#### UI: Imported Documents Panel
+
+- Add an "Imported Documents" collapsible section inside `ProjectContentArea`, accessible via a button in the project header bar (next to Post-its)
+- Panel shows list of imported docs: file name, size, date, delete button (with confirmation)
+- Upload button accepting `.pdf`, `.txt`, `.md`, `.docx` (max 10MB)
+- Upload flow:
+  1. Client uploads to Supabase Storage `imports/{user_id}/{project_id}/{file_name}`
+  2. Inserts row into `imported_documents` (without `extracted_text`/`summary` yet)
+  3. Calls `extract-text` edge function
+  4. On success, refetch document list (summary now populated)
+  5. Loading indicator during extraction/summary
+
+#### New Files
+| File | Purpose |
+|------|---------|
+| `src/hooks/useImportedDocuments.ts` | CRUD hook for imported_documents table + upload logic |
+| `src/components/ImportedDocumentsPanel.tsx` | UI panel with list + upload |
+| `supabase/functions/extract-text/index.ts` | Text extraction + summary generation |
+
+#### Modified Files
+| File | Change |
+|------|--------|
+| `src/components/ProjectContentArea.tsx` | Add documents button in header, render panel |
+| `supabase/config.toml` | Add `[functions.extract-text]` with `verify_jwt = false` |
+
+---
+
+### Phase 2: Chat Integration via Tool Use
+
+#### Chat Edge Function Changes (`supabase/functions/chat/index.ts`)
+
+The two-pass flow (analogous to context-prompt's summary → response pattern):
+
+1. **Before LLM call**: Fetch `imported_documents` for the project (id, file_name, summary only). If documents exist, append document index to system prompt and add tool definition.
+
+2. **LLM Call #1** (non-streaming): Send messages with tool available. Check response:
+   - If **text response** (no tool use): emit all tokens as rapid SSE sequence, then done. Simple path.
+   - If **tool call** (`read_imported_document`): fetch `extracted_text` from DB, send tool result back to LLM. Loop up to 5 tool calls.
+
+3. **LLM Call #2+** (streaming): After resolving all tool calls, make final streaming call. Pipe to client as today.
+
+4. **Phase event**: Send `data: {"phase":"reading_documents"}` to client before document retrieval so UI can show "Reading imported documents..."
+
+5. **Persistence**: Store `documents_referenced` (array of doc IDs) on assistant message. Accumulate token usage across all calls in the chain.
+
+#### Tool-use adapter
+
+Add `extractToolCalls(response, provider)` helper that normalizes Mistral's `tool_calls` format (OpenAI-compatible: `response.choices[0].message.tool_calls`).
+
+#### Client Changes
+
+- `useChatMessages.ts`: Handle `phase` events in SSE stream (already supported by `consumeSSEStream` via `onPhase`)
+- `ChatPanel.tsx`: Show "Reading imported documents..." loading state when `phase === "reading_documents"`
+
+#### What NOT to change (per spec)
+- Context-prompt (Ask/Propose): no document integration
+- FLOW analysis: no changes now, just ensure `documents_referenced` is stored
+- Projects without documents: zero changes to chat behavior
+
+---
+
+### Technical Notes
+
+- **Model**: Mistral (existing provider) — supports OpenAI-compatible tool calling format with `tools` parameter and `tool_calls` in response
+- **RLS**: Uses `owns_project()` function (confirmed exists in DB)
+- **Token budget**: All LLM calls in the chain (extraction summary + tool-use calls) deducted from user budget
+- **File size validation**: Client-side 10MB check before upload
+- **Duplicate file names**: Append timestamp suffix if file already exists
+
