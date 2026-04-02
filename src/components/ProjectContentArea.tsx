@@ -226,7 +226,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
             </div>
           </div>
         ) : flowLoading ? (
-          <div className="flex-1 flex flex-col bg-background h-screen">
+          <div className="flex-1 flex flex-col bg-background h-full min-h-0">
             <FlowReportView
               report={flowReport!}
               projectName={project.name}
