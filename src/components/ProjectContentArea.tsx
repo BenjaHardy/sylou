@@ -216,7 +216,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
       {/* FLOW report layer — rendered on top when active */}
       {showingFlowReport && (
         flowLoading && !flowReport ? (
-          <div className="flex-1 flex items-center justify-center bg-background h-screen">
+          <div className="flex-1 flex items-center justify-center bg-background h-full">
             <div className="text-center space-y-4">
               <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
               <div>
