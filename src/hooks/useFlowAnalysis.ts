@@ -16,6 +16,9 @@ export interface FlowMeta {
   measured_at: string;
   similarity_pct?: number;
   write_score_capped?: boolean;
+  imported_documents_mode?: "full_text" | "summaries" | "excluded" | "none";
+  imported_documents_count?: number;
+  imported_documents_total_chars?: number;
 }
 
 export interface MetricsSnapshot {

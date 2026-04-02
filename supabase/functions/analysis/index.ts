@@ -210,7 +210,9 @@ function buildChatHistoryString(
     source_type: string | null;
     flow_flag: string | null;
     thread_name: string;
-  }>
+    documents_referenced?: string[] | null;
+  }>,
+  docNameMap: Record<string, string>
 ): string {
   return messages
     .map((m) => {
@@ -219,6 +221,10 @@ function buildChatHistoryString(
       let line = `[${ts} — Thread: ${m.thread_name}] ${m.role}: ${m.content}`;
       if (m.source_type && m.source_type !== "chat") {
         line += ` [${m.source_type}]`;
+      }
+      if (m.documents_referenced && Array.isArray(m.documents_referenced) && m.documents_referenced.length > 0) {
+        const names = m.documents_referenced.map((id: string) => docNameMap[id] || id).map(n => `"${n}"`).join(", ");
+        line += ` [Documents referenced: ${names}]`;
       }
       if (m.flow_flag === "not_assessed") {
         line = `[NOT ASSESSED] ${line}`;
@@ -417,7 +423,7 @@ Deno.serve(async (req) => {
     }
 
     // --- Fetch all project data in parallel ---
-    const [writingRes, threadsRes, provenanceRes, editorActionsRes, statsRes] =
+    const [writingRes, threadsRes, provenanceRes, editorActionsRes, statsRes, importedDocsRes] =
       await Promise.all([
         supabase
           .from("writing_content")
@@ -443,6 +449,10 @@ Deno.serve(async (req) => {
           .select("*")
           .eq("project_id", projectId)
           .single(),
+        supabase
+          .from("imported_documents")
+          .select("id, file_name, extracted_text, summary, file_size_bytes")
+          .eq("project_id", projectId),
       ]);
 
     const writingContent = writingRes.data?.content ?? "";
@@ -469,12 +479,13 @@ Deno.serve(async (req) => {
       flow_flag: string | null;
       thread_id: string;
       thread_name: string;
+      documents_referenced?: string[] | null;
     }> = [];
 
     if (threadIds.length > 0) {
       const { data: msgs } = await supabase
         .from("chat_messages")
-        .select("created_at, role, content, source_type, flow_flag, thread_id")
+        .select("created_at, role, content, source_type, flow_flag, thread_id, documents_referenced")
         .in("thread_id", threadIds)
         .order("created_at", { ascending: true });
 
@@ -486,6 +497,7 @@ Deno.serve(async (req) => {
         flow_flag: m.flow_flag as string | null,
         thread_id: m.thread_id as string,
         thread_name: threadNameMap[m.thread_id as string] ?? "Unknown",
+        documents_referenced: m.documents_referenced as string[] | null,
       }));
     }
 
@@ -515,10 +527,23 @@ Character-count breakdown by provenance type:
 - Copied from external source: ${provenanceStats.copy_external}%
 - AI-generated (editor): ${provenanceStats.ai}%`;
 
+    // --- Build imported documents name map ---
+    const importedDocs = (importedDocsRes.data ?? []) as Array<{
+      id: string;
+      file_name: string;
+      extracted_text: string | null;
+      summary: string | null;
+      file_size_bytes: number | null;
+    }>;
+    const docNameMap: Record<string, string> = {};
+    for (const doc of importedDocs) {
+      docNameMap[doc.id] = doc.file_name;
+    }
+
     // --- Build chat history string ---
     const chatHistoryStr =
       chatMessages.length > 0
-        ? buildChatHistoryString(chatMessages)
+        ? buildChatHistoryString(chatMessages, docNameMap)
         : "No chat history recorded.";
 
     // --- Build editor stats ---
@@ -546,39 +571,68 @@ Character-count breakdown by provenance type:
       writePillarNotice = `\n# === WRITE PILLAR NOTICE ===\n\nAutomated similarity analysis detected that ${similarityPct}% of the writing content closely matches AI assistant responses from the chat history. This is a significant indicator for Write pillar scoring. Consider this alongside the provenance annotations ([t], [cc], [ce], [ai] tags) in the writing content.`;
     }
 
+    // --- 3-tier imported documents budget ---
+    // Context limit: 200k tokens for Claude minus 4k output reserve ≈ 196k tokens
+    // 1 token ≈ 4 chars
+    const CONTEXT_CHAR_LIMIT = 196_000 * 4; // 784,000 chars
+
+    // Build the prompt WITHOUT imported documents first to measure baseline
+    const basePromptParts = [
+      `# LANGUAGE\n\nRespond entirely in ${project.language}. All summaries, analyses, evidence items, reasoning, and narratives must be written in ${project.language}. Only JSON structure and field names remain in English.`,
+      `# WRITING CONTENT (PROVENANCE-ANNOTATED)\n\nThe writing content below is annotated with provenance tags indicating the origin of each text segment. Use these annotations to inform your assessment, particularly for the Write pillar:\n\n- [t] = typed by the user (original user writing, including text copied from the user's own chat messages)\n- [cc] = copied from AI assistant chat messages (AI-originated text)\n- [ce] = copied from an external source (neither user nor AI contribution; pay attention not to wrongly attribute to user)\n- [ai] = AI-generated text accepted from the text selection window (the user selected text in their editor and requested an AI rewrite, expansion, simplification, or proposal, then accepted the result)\n\n${annotatedWriting}\n\n${provenanceSection}`,
+      `# CHAT HISTORY\n\nThe following chat messages are from all project threads, merged in chronological order. Each message is prefixed with a timestamp and thread label.\n\nSome messages originate from the text selection window, a feature that allows the user to select text in their editor and either ask the AI a question about it (Ask) or request the AI to propose a rewritten version (Propose). These messages are flagged with their source type below.\n\nWriting summaries are marked "[NOT ASSESSED]" — they provide context for the subsequent discussion but should not be scored as either party's contribution, because they are AI-generated condensations of the writing and creative tools data at that point in time that may include contributions from any party. Consider the whole chat log and other contents to properly identify the respective contributions of each party, noting that new ideas or contributions appearing for the first time in a writing summary and not found in earlier chat messages would normally be user contributions unless copied from external sources.\n\n${chatHistoryStr}`,
+    ];
+    const baseChars = FLOW_PROMPT_TEMPLATE.length + basePromptParts.join("\n\n").length;
+
+    let importedDocsSection = "";
+    let importedDocsMode: "full_text" | "summaries" | "excluded" | "none" = "none";
+    let importedDocsTotalChars = 0;
+
+    if (importedDocs.length > 0) {
+      // Calculate full text size
+      const fullTextEntries = importedDocs.map(d => {
+        const text = d.extracted_text ?? "(no text extracted)";
+        importedDocsTotalChars += text.length;
+        return `--- ${d.file_name} ---\n${text}`;
+      });
+      const fullTextSection = fullTextEntries.join("\n\n");
+
+      // Calculate summary size
+      const summaryEntries = importedDocs.map(d => {
+        const sum = d.summary ?? "(no summary available)";
+        return `--- ${d.file_name} ---\n${sum}`;
+      });
+      const summarySection = summaryEntries.join("\n\n");
+
+      const remainingBudget = CONTEXT_CHAR_LIMIT - baseChars;
+
+      if (fullTextSection.length < remainingBudget * 0.8) {
+        // Tier 1: full text fits
+        importedDocsMode = "full_text";
+        importedDocsSection = fullTextSection;
+      } else if (summarySection.length < remainingBudget * 0.8) {
+        // Tier 2: summaries fit
+        importedDocsMode = "summaries";
+        const wordEstimate = Math.round(importedDocsTotalChars / 5);
+        importedDocsSection = `Note: The full text of imported documents (~${wordEstimate.toLocaleString()} words total) exceeded the context window. Summaries are provided instead.\n\n${summarySection}`;
+      } else {
+        // Tier 3: exclude
+        importedDocsMode = "excluded";
+        const wordEstimate = Math.round(importedDocsTotalChars / 5);
+        importedDocsSection = `Note: ${importedDocs.length} imported document(s) (~${wordEstimate.toLocaleString()} words total) were excluded from this analysis because they exceed the available context window, even as summaries. The documents' titles are: ${importedDocs.map(d => `"${d.file_name}"`).join(", ")}.`;
+      }
+    } else {
+      importedDocsSection = "None";
+    }
+
     // --- Build full prompt ---
-    const userPrompt = `# LANGUAGE
-
-Respond entirely in ${project.language}. All summaries, analyses, evidence items, reasoning, and narratives must be written in ${project.language}. Only JSON structure and field names remain in English.
-
-# WRITING CONTENT (PROVENANCE-ANNOTATED)
-
-The writing content below is annotated with provenance tags indicating the origin of each text segment. Use these annotations to inform your assessment, particularly for the Write pillar:
-
-- [t] = typed by the user (original user writing, including text copied from the user's own chat messages)
-- [cc] = copied from AI assistant chat messages (AI-originated text)
-- [ce] = copied from an external source (neither user nor AI contribution; pay attention not to wrongly attribute to user)
-- [ai] = AI-generated text accepted from the text selection window (the user selected text in their editor and requested an AI rewrite, expansion, simplification, or proposal, then accepted the result)
-
-${annotatedWriting}
-
-${provenanceSection}
-
-# CHAT HISTORY
-
-The following chat messages are from all project threads, merged in chronological order. Each message is prefixed with a timestamp and thread label.
-
-Some messages originate from the text selection window, a feature that allows the user to select text in their editor and either ask the AI a question about it (Ask) or request the AI to propose a rewritten version (Propose). These messages are flagged with their source type below.
-
-Writing summaries are marked "[NOT ASSESSED]" — they provide context for the subsequent discussion but should not be scored as either party's contribution, because they are AI-generated condensations of the writing and creative tools data at that point in time that may include contributions from any party. Consider the whole chat log and other contents to properly identify the respective contributions of each party, noting that new ideas or contributions appearing for the first time in a writing summary and not found in earlier chat messages would normally be user contributions unless copied from external sources.
-
-${chatHistoryStr}
+    const userPrompt = `${basePromptParts.join("\n\n")}
 
 # === IMPORTED DOCUMENTS ===
 
 The following documents were imported by the user as reference material. They are neither user nor AI contributions. If the writing closely mirrors imported document content, note this in your analysis but do not score it as AI contribution.
 
-None
+${importedDocsSection}
 
 # === AI EDITOR ACTIVITY ===
 
@@ -720,6 +774,9 @@ ${writePillarNotice}`;
       measured_at: new Date().toISOString(),
       similarity_pct: similarityPct,
       write_score_capped: similarityPct >= 35,
+      imported_documents_mode: importedDocsMode,
+      imported_documents_count: importedDocs.length,
+      imported_documents_total_chars: importedDocsTotalChars,
     };
 
     // --- Store FLOW report ---
