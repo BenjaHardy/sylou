@@ -527,10 +527,23 @@ Character-count breakdown by provenance type:
 - Copied from external source: ${provenanceStats.copy_external}%
 - AI-generated (editor): ${provenanceStats.ai}%`;
 
+    // --- Build imported documents name map ---
+    const importedDocs = (importedDocsRes.data ?? []) as Array<{
+      id: string;
+      file_name: string;
+      extracted_text: string | null;
+      summary: string | null;
+      file_size_bytes: number | null;
+    }>;
+    const docNameMap: Record<string, string> = {};
+    for (const doc of importedDocs) {
+      docNameMap[doc.id] = doc.file_name;
+    }
+
     // --- Build chat history string ---
     const chatHistoryStr =
       chatMessages.length > 0
-        ? buildChatHistoryString(chatMessages)
+        ? buildChatHistoryString(chatMessages, docNameMap)
         : "No chat history recorded.";
 
     // --- Build editor stats ---
