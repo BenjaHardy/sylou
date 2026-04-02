@@ -22,19 +22,69 @@ function extractDeltaText(
   parsed: Record<string, unknown>,
   _provider: string
 ): string | null {
-  // Mistral / OpenAI format
   const choices = parsed.choices as
     | Array<{ delta?: { content?: string } }>
     | undefined;
   if (choices?.[0]?.delta?.content) {
     return choices[0].delta.content;
   }
-  // Anthropic format (future)
   if (parsed.type === "content_block_delta") {
     const delta = parsed.delta as { text?: string } | undefined;
     if (delta?.text) return delta.text;
   }
   return null;
+}
+
+/**
+ * Extract tool calls from a non-streaming LLM response.
+ * Handles Mistral/OpenAI-compatible format.
+ */
+function extractToolCalls(
+  response: Record<string, unknown>
+): Array<{ id: string; name: string; arguments: Record<string, unknown> }> {
+  const choices = response.choices as
+    | Array<{
+        message?: {
+          tool_calls?: Array<{
+            id: string;
+            function: { name: string; arguments: string };
+          }>;
+        };
+      }>
+    | undefined;
+
+  const toolCalls = choices?.[0]?.message?.tool_calls;
+  if (!toolCalls || toolCalls.length === 0) return [];
+
+  return toolCalls.map((tc) => ({
+    id: tc.id,
+    name: tc.function.name,
+    arguments: JSON.parse(tc.function.arguments),
+  }));
+}
+
+/**
+ * Build the tool definition for document retrieval.
+ */
+function buildDocumentTool() {
+  return {
+    type: "function",
+    function: {
+      name: "read_imported_document",
+      description:
+        "Retrieve the full text of an imported reference document. Use this when the user's question requires information from a specific imported document.",
+      parameters: {
+        type: "object",
+        properties: {
+          document_id: {
+            type: "string",
+            description: "The ID of the document to retrieve",
+          },
+        },
+        required: ["document_id"],
+      },
+    },
+  };
 }
 
 Deno.serve(async (req) => {
@@ -179,6 +229,26 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       systemPrompt += "\n\n" + CONCISE_MODE_MODIFIER;
     }
 
+    // --- Fetch imported documents for document index ---
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
+
+    const { data: importedDocs } = await adminSupabase
+      .from("imported_documents")
+      .select("id, file_name, summary")
+      .eq("project_id", thread.project_id);
+
+    const hasDocuments = importedDocs && importedDocs.length > 0;
+
+    // Append document index to system prompt if documents exist
+    if (hasDocuments) {
+      let docIndex = `\n\n# IMPORTED DOCUMENTS\n\nThe user has imported the following reference documents into this project. You can see their titles and summaries below. If you need the full text of any document to answer the user's question, use the read_imported_document tool. Only retrieve documents that are directly relevant to the user's query.\n\n`;
+      for (const doc of importedDocs) {
+        docIndex += `- Document: "${doc.file_name}" (ID: ${doc.id})\n  Summary: ${doc.summary ?? "No summary available"}\n\n`;
+      }
+      systemPrompt += docIndex;
+    }
+
     // --- Fetch last 50 messages ---
     const { data: history } = await supabase
       .from("chat_messages")
@@ -188,7 +258,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       .limit(50);
 
     // --- Build messages array ---
-    const llmMessages = [
+    const llmMessages: Array<{ role: string; content: string; tool_call_id?: string }> = [
       { role: "system", content: systemPrompt },
       ...(history ?? []).map((m: { role: string; content: string }) => ({
         role: m.role,
@@ -203,11 +273,371 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       return jsonResponse({ error: "Mistral API key not configured" }, 500);
     }
 
+    // Track total token usage across all calls in the chain
+    let totalInputChars = 0;
+    let totalOutputChars = 0;
+    const documentsReferenced: string[] = [];
+
     // =========================================================
-    // STREAMING PATH — TransformStream pipe pattern
+    // STREAMING PATH — with tool-use support
     // =========================================================
     if (streamRequested) {
       console.log("[stream] entering streaming path for thread", threadId);
+
+      const encoder = new TextEncoder();
+
+      // Helper to create an SSE response stream
+      function createSSEResponse(readable: ReadableStream) {
+        return new Response(readable, {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            Connection: "keep-alive",
+          },
+        });
+      }
+
+      // Helper to send an SSE event
+      function sseEvent(data: Record<string, unknown>): Uint8Array {
+        return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
+      }
+
+      // ---- TWO-PASS FLOW when documents exist ----
+      if (hasDocuments) {
+        console.log("[stream] documents exist, using two-pass flow");
+
+        // LLM Call #1: non-streaming with tools
+        const call1Body: Record<string, unknown> = {
+          model: "mistral-large-latest",
+          messages: llmMessages,
+          max_tokens: 2000,
+          tools: [buildDocumentTool()],
+          tool_choice: "auto",
+        };
+
+        const call1Res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${mistralKey}`,
+          },
+          body: JSON.stringify(call1Body),
+        });
+
+        if (!call1Res.ok) {
+          const errText = await call1Res.text();
+          console.error("[stream] Call #1 error:", call1Res.status, errText);
+          return jsonResponse(
+            { error: "AI service temporarily unavailable. Please try again." },
+            502
+          );
+        }
+
+        const call1Data = await call1Res.json();
+        const toolCalls = extractToolCalls(call1Data);
+
+        // Track tokens from Call #1
+        totalInputChars += llmMessages.reduce((s, m) => s + m.content.length, 0);
+        const call1Content = call1Data.choices?.[0]?.message?.content ?? "";
+        totalOutputChars += call1Content.length;
+
+        if (toolCalls.length === 0) {
+          // No tool use — emit Call #1 text as rapid SSE sequence
+          console.log("[stream] no tool use, emitting Call #1 response directly");
+          const responseText = call1Content || "No response generated.";
+
+          const { readable, writable } = new TransformStream();
+          const writer = writable.getWriter();
+
+          // Background task: emit tokens rapidly, then persist
+          (async () => {
+            try {
+              // Emit tokens in chunks for a natural feel
+              const chunkSize = 20;
+              for (let i = 0; i < responseText.length; i += chunkSize) {
+                const chunk = responseText.slice(i, i + chunkSize);
+                await writer.write(sseEvent({ token: chunk }));
+              }
+
+              // Persist messages
+              const userMsgRow = {
+                thread_id: threadId,
+                role: "user",
+                content: message.trim(),
+                source_type: "chat",
+                flow_flag: "normal",
+                concise_mode: conciseMode,
+              };
+              const assistantMsgRow = {
+                thread_id: threadId,
+                role: "assistant",
+                content: responseText,
+                source_type: "chat",
+                flow_flag: "normal",
+                concise_mode: conciseMode,
+                model_used: "mistral-large-latest",
+              };
+
+              const { data: insertedUser } = await adminSupabase
+                .from("chat_messages")
+                .insert(userMsgRow)
+                .select()
+                .single();
+
+              const { data: insertedAssistant } = await adminSupabase
+                .from("chat_messages")
+                .insert(assistantMsgRow)
+                .select()
+                .single();
+
+              // Token budget
+              const estimatedTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
+              const newTotal = profile.tokens_used_this_period + estimatedTokens;
+              await adminSupabase
+                .from("profiles")
+                .update({ tokens_used_this_period: newTotal })
+                .eq("id", user.id);
+
+              // Prompt count
+              const promptColumn = tutorMode ? "chat_prompt_count_tutor" : "chat_prompt_count_normal";
+              const { data: cs } = await adminSupabase
+                .from("project_stats")
+                .select(promptColumn)
+                .eq("project_id", thread.project_id)
+                .single();
+              if (cs) {
+                const cnt = (cs as Record<string, number>)[promptColumn] || 0;
+                await adminSupabase
+                  .from("project_stats")
+                  .update({ [promptColumn]: cnt + 1 })
+                  .eq("project_id", thread.project_id);
+              }
+
+              await writer.write(
+                sseEvent({
+                  done: true,
+                  user_message: insertedUser,
+                  assistant_message: insertedAssistant,
+                  budget_remaining: profile.monthly_token_budget - newTotal,
+                })
+              );
+            } catch (err) {
+              console.error("[stream] error in no-tool path:", err);
+              try {
+                await writer.write(sseEvent({ done: true, error: "Messages may not have been saved." }));
+              } catch { /* client gone */ }
+            } finally {
+              await writer.close();
+            }
+          })();
+
+          return createSSEResponse(readable);
+        }
+
+        // ---- Tool use detected — resolve tools, then stream Call #2 ----
+        console.log("[stream] tool use detected:", toolCalls.length, "calls");
+
+        // Build the conversation with tool results
+        const toolMessages: Array<Record<string, unknown>> = [
+          ...llmMessages,
+          call1Data.choices[0].message, // assistant message with tool_calls
+        ];
+
+        // Resolve tool calls (up to 5)
+        for (const tc of toolCalls.slice(0, 5)) {
+          if (tc.name === "read_imported_document") {
+            const docId = tc.arguments.document_id as string;
+            console.log("[stream] reading document:", docId);
+            documentsReferenced.push(docId);
+
+            const { data: docData } = await adminSupabase
+              .from("imported_documents")
+              .select("extracted_text, file_name")
+              .eq("id", docId)
+              .single();
+
+            const toolResult = docData?.extracted_text
+              ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
+              : `Document not found or text not yet extracted.`;
+
+            totalInputChars += toolResult.length;
+
+            toolMessages.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: toolResult,
+            });
+          }
+        }
+
+        // LLM Call #2: streaming with tool results (no tools available this time)
+        const call2Res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${mistralKey}`,
+          },
+          body: JSON.stringify({
+            model: "mistral-large-latest",
+            messages: toolMessages,
+            max_tokens: 2000,
+            stream: true,
+          }),
+        });
+
+        if (!call2Res.ok) {
+          const errText = await call2Res.text();
+          console.error("[stream] Call #2 error:", call2Res.status, errText);
+          return jsonResponse(
+            { error: "AI service temporarily unavailable. Please try again." },
+            502
+          );
+        }
+
+        // Pipe Call #2 through transform, but first send phase event
+        let fullResponse = "";
+        let clientDisconnected = false;
+        let promptCounted = false;
+        const decoder = new TextDecoder();
+        let sseBuffer = "";
+
+        const transform = new TransformStream({
+          start(controller) {
+            // Send phase event before streaming begins
+            try {
+              controller.enqueue(sseEvent({ phase: "reading_documents" }));
+            } catch { /* */ }
+          },
+          transform(chunk, controller) {
+            sseBuffer += decoder.decode(chunk, { stream: true });
+            const lines = sseBuffer.split("\n");
+            sseBuffer = lines.pop() ?? "";
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || !trimmed.startsWith("data:")) continue;
+              const payload = trimmed.slice(5).trim();
+              if (payload === "[DONE]") {
+                if (!promptCounted) {
+                  promptCounted = true;
+                  const promptColumn = tutorMode ? "chat_prompt_count_tutor" : "chat_prompt_count_normal";
+                  adminSupabase
+                    .from("project_stats")
+                    .select(promptColumn)
+                    .eq("project_id", thread.project_id)
+                    .single()
+                    .then(({ data: cs }) => {
+                      if (cs) {
+                        const cnt = (cs as Record<string, number>)[promptColumn] || 0;
+                        adminSupabase
+                          .from("project_stats")
+                          .update({ [promptColumn]: cnt + 1 })
+                          .eq("project_id", thread.project_id)
+                          .then(() => console.log("[stream] prompt count incremented"));
+                      }
+                    });
+                }
+                continue;
+              }
+
+              try {
+                const parsed = JSON.parse(payload);
+                const delta = extractDeltaText(parsed, "mistral");
+                if (delta) {
+                  fullResponse += delta;
+                  if (!clientDisconnected) {
+                    try {
+                      controller.enqueue(sseEvent({ token: delta }));
+                    } catch {
+                      clientDisconnected = true;
+                    }
+                  }
+                }
+              } catch { /* skip malformed */ }
+            }
+          },
+
+          async flush(controller) {
+            console.log("[stream] flush() started");
+            try {
+              totalOutputChars += fullResponse.length;
+
+              const userMsgRow = {
+                thread_id: threadId,
+                role: "user",
+                content: message.trim(),
+                source_type: "chat",
+                flow_flag: "normal",
+                concise_mode: conciseMode,
+              };
+              const assistantMsgRow: Record<string, unknown> = {
+                thread_id: threadId,
+                role: "assistant",
+                content: fullResponse || "No response generated.",
+                source_type: "chat",
+                flow_flag: "normal",
+                concise_mode: conciseMode,
+                model_used: "mistral-large-latest",
+              };
+
+              if (documentsReferenced.length > 0) {
+                assistantMsgRow.documents_referenced = documentsReferenced;
+              }
+
+              const { data: insertedUser } = await adminSupabase
+                .from("chat_messages")
+                .insert(userMsgRow)
+                .select()
+                .single();
+
+              const { data: insertedAssistant } = await adminSupabase
+                .from("chat_messages")
+                .insert(assistantMsgRow)
+                .select()
+                .single();
+
+              const estimatedTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
+              const newTotal = profile.tokens_used_this_period + estimatedTokens;
+              await adminSupabase
+                .from("profiles")
+                .update({ tokens_used_this_period: newTotal })
+                .eq("id", user.id);
+
+              if (!clientDisconnected) {
+                try {
+                  controller.enqueue(
+                    sseEvent({
+                      done: true,
+                      user_message: insertedUser,
+                      assistant_message: insertedAssistant,
+                      budget_remaining: profile.monthly_token_budget - newTotal,
+                    })
+                  );
+                } catch {
+                  clientDisconnected = true;
+                }
+              }
+              console.log("[stream] flush() completed — persistence done");
+            } catch (persistErr) {
+              console.error("[stream] persistence error:", persistErr);
+              if (!clientDisconnected) {
+                try {
+                  controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
+                } catch { /* */ }
+              }
+              console.log("[stream] flush() completed — with error");
+            }
+          },
+        });
+
+        const outputStream = call2Res.body!.pipeThrough(transform);
+        return createSSEResponse(outputStream);
+      }
+
+      // ---- NO DOCUMENTS — original streaming path ----
+      console.log("[stream] no documents, standard streaming path");
 
       const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
         method: "POST",
@@ -234,14 +664,9 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
       console.log("[stream] LLM response received, piping");
 
-      // Service role client for persistence after stream ends
-      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
-
       let fullResponse = "";
       let clientDisconnected = false;
       let promptCounted = false;
-      const encoder = new TextEncoder();
       const decoder = new TextDecoder();
       let sseBuffer = "";
 

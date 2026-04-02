@@ -20,6 +20,7 @@ export function useChatMessages(threadId: string | null) {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [budgetRemaining, setBudgetRemaining] = useState<number | null>(null);
+  const [phase, setPhase] = useState<string | null>(null);
 
   const fetchMessages = useCallback(async () => {
     if (!threadId) {
@@ -125,6 +126,7 @@ export function useChatMessages(threadId: string | null) {
 
           await consumeSSEStream(res.body, {
             onToken: (text) => {
+              setPhase(null); // Clear phase once tokens start arriving
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === streamingId
@@ -133,8 +135,12 @@ export function useChatMessages(threadId: string | null) {
                 )
               );
             },
+            onPhase: (p) => {
+              setPhase(p);
+            },
             onDone: (evt) => {
               receivedDone = true;
+              setPhase(null);
               setMessages((prev) => {
                 const without = prev.filter(
                   (m) => m.id !== optimisticId && m.id !== streamingId
@@ -152,7 +158,7 @@ export function useChatMessages(threadId: string | null) {
               }
             },
             onError: () => {
-              // handled below
+              setPhase(null);
             },
           });
 
@@ -211,6 +217,7 @@ export function useChatMessages(threadId: string | null) {
     messages,
     loading,
     sending,
+    phase,
     sendMessage,
     budgetRemaining,
     refreshMessages: fetchMessages,

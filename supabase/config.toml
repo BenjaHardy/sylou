@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.context-prompt]
 verify_jwt = false
+
+[functions.extract-text]
+verify_jwt = false

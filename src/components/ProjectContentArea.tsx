@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import type { ChatMessage } from "@/hooks/useChatMessages";
-import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Loader2, Eye, RefreshCw, StickyNote } from "lucide-react";
+import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Loader2, Eye, RefreshCw, StickyNote, FileText } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,9 @@ import { FlowTokenWarningDialog } from "@/components/FlowTokenWarningDialog";
 import { FlowReanalyzeDialog } from "@/components/FlowReanalyzeDialog";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { usePostIts } from "@/hooks/usePostIts";
+import { useImportedDocuments } from "@/hooks/useImportedDocuments";
 import { PostItsPanel } from "@/components/PostItsPanel";
+import { ImportedDocumentsPanel } from "@/components/ImportedDocumentsPanel";
 import { useFlowAnalysis } from "@/hooks/useFlowAnalysis";
 import type { Project } from "@/hooks/useProjects";
 import type { ImperativePanelHandle } from "react-resizable-panels";
@@ -60,6 +62,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const [conciseMode, setConciseMode] = useState(false);
   const [showFlowReport, setShowFlowReport] = useState(false);
   const [showPostIts, setShowPostIts] = useState(false);
+  const [showDocuments, setShowDocuments] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showTokenWarning, setShowTokenWarning] = useState(false);
   const [showReanalyze, setShowReanalyze] = useState(false);
@@ -77,6 +80,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const { markWriting } = useActivityTracker(project?.id ?? null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const { postIts, loading: postItsLoading, createPostIt, updatePostIt, updatePosition, deletePostIt } = usePostIts(project?.id ?? null);
+  const { documents, loading: docsLoading, uploading: docsUploading, uploadDocument, deleteDocument } = useImportedDocuments(project?.id ?? null);
 
   const {
     preCheck,
@@ -205,6 +209,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
 
   const showingFlowReport = showFlowReport && (flowReport || flowLoading);
   const showingPostIts = showPostIts && !showingFlowReport;
+  const showingDocuments = showDocuments && !showingFlowReport && !showingPostIts;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -274,10 +279,22 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
         />
       )}
 
+      {/* Imported Documents layer */}
+      {showingDocuments && (
+        <ImportedDocumentsPanel
+          documents={documents}
+          loading={docsLoading}
+          uploading={docsUploading}
+          onUpload={uploadDocument}
+          onDelete={deleteDocument}
+          onClose={() => setShowDocuments(false)}
+        />
+      )}
+
       {/* Editor layer — always mounted, hidden via CSS when FLOW report or Post-its are showing */}
       <div
         className="flex-1 flex flex-col bg-background h-screen [&_[data-panel]]:transition-all [&_[data-panel]]:duration-150 [&_[data-panel]]:ease-ethos-ease"
-        style={{ display: showingFlowReport || showingPostIts ? 'none' : undefined }}
+        style={{ display: showingFlowReport || showingPostIts || showingDocuments ? 'none' : undefined }}
       >
         <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
           <span className="text-sm font-medium text-foreground truncate max-w-[200px]">{project.name}</span>
@@ -302,6 +319,27 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
               <Eye className="h-3.5 w-3.5" />
               Provenance
             </Button>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={showDocuments ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={() => setShowDocuments((v) => !v)}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Docs
+                    {documents.length > 0 && (
+                      <span className="text-[10px] text-muted-foreground">({documents.length})</span>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <span>Imported Documents</span>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <TooltipProvider delayDuration={300}>
               <Tooltip>
                 <TooltipTrigger asChild>
