@@ -603,11 +603,17 @@ export function FlowReportView({
   const [feedbackToggle, setFeedbackToggle] = useState<"pre" | "post">("post");
   const [showHighlighted, setShowHighlighted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (showHighlighted) {
-      containerRef.current?.scrollTo(0, 0);
-    }
+    if (!showHighlighted) return;
+
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      containerRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      const viewport = scrollAreaRef.current?.querySelector("[data-radix-scroll-area-viewport]") as HTMLDivElement | null;
+      viewport?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
   }, [showHighlighted]);
   const [writingContent, setWritingContent] = useState<string>("");
 
@@ -730,7 +736,7 @@ export function FlowReportView({
       )}
 
       {/* Content */}
-      <ScrollArea className="flex-1">
+      <ScrollArea ref={scrollAreaRef} className="flex-1">
         <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
           {/* Pre-feedback (reflexivity) — only on first-ever analysis */}
           {showPreFeedback && (
