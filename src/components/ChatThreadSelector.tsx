@@ -69,9 +69,9 @@ export function ChatThreadSelector({ threads, activeThreadId, onSelect, onCreate
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button className="flex items-center gap-1 text-sm font-medium text-foreground hover:text-primary transition-colors rounded px-1.5 py-0.5 hover:bg-accent/50">
-          {activeThread?.name ?? "Main"}
-          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+        <button className="flex items-center gap-1 text-sm font-medium text-foreground hover:text-primary transition-colors rounded px-1.5 py-0.5 hover:bg-accent/50 max-w-[180px]">
+          <span className="truncate">{activeThread?.name ?? "Main"}</span>
+          <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-56 p-1.5">
