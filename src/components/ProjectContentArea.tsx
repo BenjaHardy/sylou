@@ -209,6 +209,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
 
   const showingFlowReport = showFlowReport && (flowReport || flowLoading);
   const showingPostIts = showPostIts && !showingFlowReport;
+  const showingDocuments = showDocuments && !showingFlowReport && !showingPostIts;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
