@@ -711,13 +711,15 @@ export function FlowReportView({
 
       {/* Highlighted Text Panel (overlays the report) */}
       {showHighlighted && report?.provenance_snapshot && (
-        <div className="absolute inset-0 z-10 bg-background">
-          <FlowHighlightedText
-            segments={report.provenance_snapshot}
-            writingContent={writingContent}
-            onClose={() => setShowHighlighted(false)}
-          />
-        </div>
+        <HighlightedTextErrorBoundary onClose={() => setShowHighlighted(false)}>
+          <div className="absolute inset-0 z-10 bg-background">
+            <FlowHighlightedText
+              segments={report.provenance_snapshot}
+              writingContent={writingContent}
+              onClose={() => setShowHighlighted(false)}
+            />
+          </div>
+        </HighlightedTextErrorBoundary>
       )}
 
       {/* Content */}
