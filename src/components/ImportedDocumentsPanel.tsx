@@ -46,7 +46,7 @@ export function ImportedDocumentsPanel({ documents, loading, uploading, onUpload
       <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">Imported Documents</span>
+          <span className="text-sm font-medium text-foreground">Project Documents</span>
           <span className="text-xs text-muted-foreground">({documents.length})</span>
         </div>
         <div className="flex items-center gap-2">
@@ -95,9 +95,9 @@ export function ImportedDocumentsPanel({ documents, loading, uploading, onUpload
         ) : documents.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <File className="h-10 w-10 text-muted-foreground/40 mb-3" />
-            <p className="text-sm text-muted-foreground mb-1">No documents imported</p>
+            <p className="text-sm text-muted-foreground mb-1">No documents in this project</p>
             <p className="text-xs text-muted-foreground/60 max-w-[250px]">
-              Import PDF, TXT, MD, or DOCX files to use as reference material in your chat conversations.
+              Import PDF, TXT, MD, or DOCX files as project-specific reference material. The AI chat will use them to inform its responses for this project.
             </p>
             <Button
               variant="outline"
@@ -107,7 +107,7 @@ export function ImportedDocumentsPanel({ documents, loading, uploading, onUpload
               disabled={uploading}
             >
               <FileUp className="h-3.5 w-3.5" />
-              Import your first document
+              Import a document to this project
             </Button>
           </div>
         ) : (
