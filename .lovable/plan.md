@@ -1,67 +1,104 @@
 
 
-## Fix: Web Search and Streaming in Context Prompts (Ask/Propose)
+## Plan: FLOW Report Sharing and Certification
 
-### Root Causes
+### Summary
 
-**Issue 1 — Web search never triggers**: `TextSelectionWindow.tsx` does not include `web_search_enabled` in the request body sent to the `context-prompt` function. The toggle state lives only in `ChatPanel.tsx` and is never passed down to the text selection window.
+Add share/unshare via a server-side edge function, a public read-only report page at `/report/:token`, certificate ID generation, QR code, and an "Ethos — FLOW Analysed" footer. Extract reusable report sub-components into `src/components/flow-report/`.
 
-**Issue 2 — No streaming/phase events when tools are present**: The two-pass tool path in `context-prompt/index.ts` awaits the entire Call #2a (non-streamed planning call) *before* creating the `ReadableStream` and returning the HTTP response. This means:
-- The client's `fetch()` doesn't resolve until Call #2a completes (can take 5-15s)
-- During that time, no SSE events can reach the client — the user sees only "Reviewing your writing..."
-- Once Call #2a completes, tool resolution and Call #2b happen inside `start()`, but by then the delay has already occurred
-- The edge function logs confirm this: many entries show `no tool use, emitting Call #2a directly` because web search was never requested
+### Database Migration
 
-### Fix
+```sql
+ALTER TABLE public.flow_reports
+  ADD COLUMN IF NOT EXISTS project_name text;
 
-#### 1. Pass `webSearchEnabled` to TextSelectionWindow
-
-The `webSearchEnabled` state currently lives in `ChatPanel.tsx`. It needs to be lifted or passed so `TextSelectionWindow` can include it in its request body.
-
-**`ProjectContentArea.tsx`**: Lift `webSearchEnabled` state up from `ChatPanel` (or add a shared state), and pass it as a prop to both `ChatPanel` and `WritingEditor` → `TextSelectionWindow`.
-
-**`TextSelectionWindow.tsx`**: Accept `webSearchEnabled` prop and include `web_search_enabled: true` in the request body when the flag is set (line ~284-294).
-
-#### 2. Move Call #2a inside the ReadableStream
-
-Restructure the tool-use path in `context-prompt/index.ts` so Call #2a happens *inside* the `ReadableStream.start()` callback, matching the pattern already used in `chat/index.ts`. This ensures:
-- The HTTP response is returned immediately
-- Phase events (`searching_web`, `reading_documents`) reach the client in real-time
-- Call #2b tokens stream progressively
-
-```text
-Current flow:
-  await Call #2a          ← blocks response
-  return ReadableStream   ← too late for phase events
-
-Fixed flow:
-  return ReadableStream {
-    start() {
-      emit phase("reviewing")
-      await Call #2a
-      if tools requested:
-        emit phase("searching_web" / "reading_documents")
-        resolve tools
-        stream Call #2b tokens
-      else:
-        emit Call #2a text as rapid tokens
-    }
-  }
+ALTER TABLE public.flow_reports
+  ADD CONSTRAINT flow_reports_certificate_id_unique UNIQUE (certificate_id);
 ```
+
+No new RLS policies needed — the existing "Public can view shared flow_reports" policy already handles anon SELECT where `share_enabled = true AND share_visibility = 'public'`.
+
+### Changes
+
+#### 1. New edge function: `supabase/functions/share-report/index.ts`
+
+- **POST** `{ report_id }`: Validates JWT via `getClaims()` — unauthenticated requests get 401. Confirms user owns the report via project ownership. Generates `share_token` (UUID v4) and `certificate_id` (`FLOW-` + 8 uppercase alphanumeric chars) with retry-on-conflict (up to 3 attempts) for uniqueness. Always fetches and overwrites `project_name` from `projects` table at share time (so the shared report reflects the current project name, even if renamed). Sets `share_enabled: true`, `share_visibility: 'public'`. Returns `{ share_token, certificate_id, project_name }`.
+
+- **PATCH** `{ report_id, share_enabled }`: Validates JWT, confirms ownership. Toggles `share_enabled` without changing token or certificate_id. Returns updated status.
+
+Both POST and PATCH return 401 for missing/invalid JWT. CORS headers on all responses including errors.
+
+Register in `supabase/config.toml`:
+```toml
+[functions.share-report]
+verify_jwt = false
+```
+
+#### 2. Extract shared report components into `src/components/flow-report/`
+
+Move from `FlowReportView.tsx` into separate files:
+
+| New file | Contains |
+|----------|----------|
+| `FlowRadarChart.tsx` | `FlowRadarChart`, `CustomRadarTooltip` |
+| `ScoreCard.tsx` | `ScoreCard` |
+| `FlowInfoSection.tsx` | `FlowInfoSection` |
+| `FlowReportFooter.tsx` | `FlowReportFooter` |
+| `TokenUsageSection.tsx` | `TokenUsageSection` |
+| `ProjectActivitySection.tsx` | `ProjectActivitySection` |
+| `shared-utils.ts` | `getScoreLabel`, `getScoreColor`, `PILLAR_ICONS`, `PILLAR_LABELS`, `PILLAR_TOOLTIPS`, `PILLAR_KEYS`, `extractUserAssessment`, `extractFeedbackScores` |
+
+`FlowReportView.tsx` imports from these — no functional changes.
+
+#### 3. New page: `src/pages/SharedReport.tsx`
+
+- Public route at `/report/:token` (no auth)
+- Fetches `flow_reports` by `share_token` using Supabase anon client
+- Shows "Report not available" if not found, `share_enabled = false`, or `share_visibility != 'public'`
+- Renders read-only using extracted components: FlowInfoSection, FlowRadarChart (AI scores only, no user overlay), ScoreCards, Overall Summary, TokenUsageSection, ProjectActivitySection
+- **Excluded**: No feedback forms, no "View Highlighted Text", no editing, no back button
+- **Certificate header**: "FLOW Certificate #[certificate_id]" displayed prominently
+- **Ethos footer**: "This report was generated by Ethos — FLOW Analysed" with certificate ID, linking to thisisethos.eu
+- Metadata footer: project name, date, model used
+
+#### 4. Update `src/App.tsx`
+
+Add outside `ProtectedRoute`, before catch-all:
+```tsx
+<Route path="/report/:token" element={<SharedReport />} />
+```
+
+#### 5. Add sharing controls to `FlowReportView.tsx`
+
+In the header bar (next to "FLOW Report" label):
+- **Share Report** button — calls `share-report` POST via `supabase.functions.invoke()`
+- Once shared: shareable URL with copy-to-clipboard, QR code (via `qrcode.react` QRCodeSVG), certificate ID display, toggle to disable/re-enable sharing (calls PATCH)
+- Re-enabling restores the same URL (token/certificate preserved)
+
+#### 6. Update `src/hooks/useFlowAnalysis.ts`
+
+Add to `FlowReport` interface: `share_token`, `share_enabled`, `certificate_id`, `share_visibility`, `project_name` (all optional).
+
+#### 7. Update `supabase/functions/analysis/index.ts`
+
+When inserting a new flow_report, fetch `project_name` from `projects` table and store it. This is belt-and-suspenders with the share function (which always overwrites with latest name at share time).
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/ProjectContentArea.tsx` | Lift `webSearchEnabled` state, pass to ChatPanel and WritingEditor |
-| `src/components/ChatPanel.tsx` | Accept `webSearchEnabled` + `setWebSearchEnabled` as props instead of local state |
-| `src/components/WritingEditor.tsx` | Pass `webSearchEnabled` through to TextSelectionWindow |
-| `src/components/TextSelectionWindow.tsx` | Accept `webSearchEnabled` prop, include in request body |
-| `supabase/functions/context-prompt/index.ts` | Move Call #2a inside ReadableStream.start() so phase events stream immediately |
+| `supabase/functions/share-report/index.ts` | New — server-side share/unshare with JWT validation |
+| `supabase/config.toml` | Register share-report |
+| `src/components/flow-report/` (7 files) | New — extracted sub-components |
+| `src/components/FlowReportView.tsx` | Import from flow-report/, add sharing UI |
+| `src/pages/SharedReport.tsx` | New — public report page |
+| `src/App.tsx` | Add `/report/:token` route |
+| `src/hooks/useFlowAnalysis.ts` | Extend FlowReport interface |
+| `supabase/functions/analysis/index.ts` | Populate project_name on insert |
+| Migration | Add `project_name` column, `certificate_id` unique constraint |
 
 ### What's NOT Changed
-- Chat function (already working correctly)
-- Database schema
-- FLOW analysis
-- Non-streaming fallback path
+- Existing RLS policies
+- Chat, editor, web search functionality
+- FLOW prompt template
 
