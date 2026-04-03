@@ -120,6 +120,7 @@ export function TextSelectionWindow({
   const [pendingInstruction, setPendingInstruction] = useState<string>("");
   const [pendingSourceBreakdown, setPendingSourceBreakdown] = useState<string | null>(null);
   const [pendingDocumentsReferenced, setPendingDocumentsReferenced] = useState<string[] | null>(null);
+  const [pendingWebSearchesPerformed, setPendingWebSearchesPerformed] = useState<string[] | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const actions = tutorMode ? TUTOR_ACTIONS : NORMAL_ACTIONS;
