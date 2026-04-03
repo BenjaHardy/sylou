@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, KeyboardEvent, useCallback, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
-import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp, BookmarkIcon, Globe } from "lucide-react";
+import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp, BookmarkIcon, Globe, Paperclip } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,8 @@ interface Props {
   onConciseModeChange: (value: boolean) => void;
   onSetMessages?: (setter: (updater: (prev: ChatMessage[]) => ChatMessage[]) => void) => void;
   onActiveThreadChange?: (threadId: string | null) => void;
+  onUploadDocument?: (file: File) => void;
+  documentUploading?: boolean;
 }
 
 const BOOKMARK_BAR_COLORS: Record<string, string> = {
@@ -214,7 +216,7 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
   );
 }
 
-export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker, conciseMode, onConciseModeChange, onSetMessages, onActiveThreadChange }: Props) {
+export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker, conciseMode, onConciseModeChange, onSetMessages, onActiveThreadChange, onUploadDocument, documentUploading }: Props) {
   const { threads, activeThreadId, activeThreadName, setActiveThreadId, createThread, renameThread } = useChatThread(projectId);
   const { messages, loading, sending, phase, sendMessage, budgetRemaining, refreshMessages, appendMessages, setMessages } = useChatMessages(activeThreadId);
   const { bookmarks, createBookmark, updateBookmark, deleteBookmark, getBookmarkForMessage } = useBookmarks(projectId);
@@ -224,6 +226,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   const [showBookmarkList, setShowBookmarkList] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const docFileInputRef = useRef<HTMLInputElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const pendingScrollTarget = useRef<string | null>(null);
 
@@ -517,26 +520,6 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
             rows={1}
             className="flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
           />
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={() => setWebSearchEnabled((v) => !v)}
-                  className={`h-9 w-9 shrink-0 flex items-center justify-center rounded-md transition-colors ${
-                    webSearchEnabled
-                      ? "text-primary bg-primary/10"
-                      : "text-muted-foreground/40 hover:text-muted-foreground"
-                  }`}
-                  aria-label="Toggle web search"
-                >
-                  <Globe className="h-4 w-4" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                <span>{webSearchEnabled ? "Web search enabled" : "Enable web search"}</span>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
           <Button
             size="icon"
             onClick={handleSend}
@@ -546,11 +529,69 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
             <Send className="h-4 w-4" />
           </Button>
         </div>
-        {budgetRemaining != null && (
-          <p className="text-[10px] text-muted-foreground/60 mt-1.5 text-right">
-            {budgetRemaining.toLocaleString()} tokens remaining
-          </p>
-        )}
+        <div className="flex items-center gap-1 mt-1.5">
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setWebSearchEnabled((v) => !v)}
+                  className={`h-7 w-7 shrink-0 flex items-center justify-center rounded-md transition-colors ${
+                    webSearchEnabled
+                      ? "text-primary bg-primary/10"
+                      : "text-muted-foreground/40 hover:text-muted-foreground"
+                  }`}
+                  aria-label="Toggle web search"
+                >
+                  <Globe className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <span>{webSearchEnabled ? "Web search enabled" : "Enable web search"}</span>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          {onUploadDocument && (
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => docFileInputRef.current?.click()}
+                    disabled={documentUploading}
+                    className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md transition-colors text-muted-foreground/40 hover:text-muted-foreground disabled:opacity-50"
+                    aria-label="Upload document to project"
+                  >
+                    {documentUploading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Paperclip className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <span>Upload document to project (.pdf, .docx, .txt, .md)</span>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          <input
+            ref={docFileInputRef}
+            type="file"
+            accept=".pdf,.docx,.txt,.md"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file && onUploadDocument) {
+                onUploadDocument(file);
+                if (docFileInputRef.current) docFileInputRef.current.value = "";
+              }
+            }}
+          />
+          {budgetRemaining != null && (
+            <p className="text-[10px] text-muted-foreground/60 ml-auto">
+              {budgetRemaining.toLocaleString()} tokens remaining
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
