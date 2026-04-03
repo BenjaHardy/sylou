@@ -44,7 +44,7 @@ export function useChatMessages(threadId: string | null) {
   }, [fetchMessages]);
 
   const sendMessage = useCallback(
-    async (content: string, conciseMode: boolean) => {
+    async (content: string, conciseMode: boolean, webSearchEnabled?: boolean) => {
       if (!threadId || !content.trim()) return;
       setSending(true);
 
