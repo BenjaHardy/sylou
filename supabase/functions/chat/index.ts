@@ -14,6 +14,22 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
 }
 
 /**
+ * Clean LLM content that may be wrapped in Mistral's structured JSON format.
+ */
+function cleanLLMContent(content: string): string {
+  if (!content) return content;
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("[")) return content;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(b => b?.type === "text")) {
+      return parsed.map(b => b.text ?? b.content ?? "").join("");
+    }
+  } catch { /* not JSON */ }
+  return content;
+}
+
+/**
  * Extract the text delta from a streaming chunk, model-agnostic.
  */
 function extractDeltaText(
@@ -60,9 +76,6 @@ function extractToolCalls(
   }));
 }
 
-/**
- * Build the tool definition for document retrieval.
- */
 function buildDocumentTool() {
   return {
     type: "function",
@@ -84,9 +97,6 @@ function buildDocumentTool() {
   };
 }
 
-/**
- * Build the tool definition for web search.
- */
 function buildWebSearchTool() {
   return {
     type: "function",
@@ -108,9 +118,6 @@ function buildWebSearchTool() {
   };
 }
 
-/**
- * Search the web using Brave Search API. Returns transient results (not persisted).
- */
 async function searchWeb(query: string): Promise<{ title: string; url: string; snippet: string }[]> {
   const apiKey = Deno.env.get("BRAVE_SEARCH_API_KEY");
   if (!apiKey) {
@@ -148,9 +155,6 @@ async function searchWeb(query: string): Promise<{ title: string; url: string; s
   }
 }
 
-/**
- * Format web search results for LLM consumption (transient, not persisted).
- */
 function formatWebSearchResults(query: string, results: { title: string; url: string; snippet: string }[]): string {
   if (results.length === 0) {
     return `Web search results for: "${query}"\n\nNo results found.`;
@@ -326,11 +330,19 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
     // Append web search instructions to system prompt
     if (webSearchEnabled) {
-      if (hasDocuments) {
-        systemPrompt += `\n\n# WEB SEARCH\n\nYou have access to web search. Prefer the project's imported documents when they contain relevant information. Use web search for current events, recent data, or information not available in the imported documents.`;
-      } else {
-        systemPrompt += `\n\n# WEB SEARCH\n\nYou have access to web search for finding current information, recent data, or facts beyond your training knowledge.`;
-      }
+      const docsContext = hasDocuments
+        ? " or in the imported documents"
+        : "";
+      systemPrompt += `\n\n# WEB SEARCH
+
+You have access to a web_search tool, but using it is OPTIONAL. Only use it when the user's message genuinely requires current information, recent data, or facts you don't have in your training data${docsContext}.
+
+Do NOT use web search for:
+- Simple conversational replies, greetings, or acknowledgments
+- Topics you can answer confidently from your training knowledge
+- Follow-up questions about information you already provided
+
+When citing information from web search results, always include the source URL inline in your response text (e.g. "According to [Source Title](URL), ..."). This ensures the user can verify and revisit the sources later.`;
     }
 
     // --- Fetch last 50 messages ---
@@ -377,7 +389,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
       const encoder = new TextEncoder();
 
-      // Helper to create an SSE response stream
       function createSSEResponse(readable: ReadableStream) {
         return new Response(readable, {
           headers: {
@@ -390,7 +401,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
         });
       }
 
-      // Helper to send an SSE event
       function sseEvent(data: Record<string, unknown>): Uint8Array {
         return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
       }
@@ -431,7 +441,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
         // Track tokens from Call #1
         totalInputChars += llmMessages.reduce((s, m) => s + m.content.length, 0);
-        const call1Content = call1Data.choices?.[0]?.message?.content ?? "";
+        const call1Content = cleanLLMContent(call1Data.choices?.[0]?.message?.content ?? "");
         totalOutputChars += call1Content.length;
 
         if (toolCalls.length === 0) {
@@ -442,17 +452,14 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
           const { readable, writable } = new TransformStream();
           const writer = writable.getWriter();
 
-          // Background task: emit tokens rapidly, then persist
           (async () => {
             try {
-              // Emit tokens in chunks for a natural feel
               const chunkSize = 20;
               for (let i = 0; i < responseText.length; i += chunkSize) {
                 const chunk = responseText.slice(i, i + chunkSize);
                 await writer.write(sseEvent({ token: chunk }));
               }
 
-              // Persist messages
               const userMsgRow = {
                 thread_id: threadId,
                 role: "user",
@@ -483,7 +490,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
                 .select()
                 .single();
 
-              // Token budget
               const estimatedTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
               const newTotal = profile.tokens_used_this_period + estimatedTokens;
               await adminSupabase
@@ -491,7 +497,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
                 .update({ tokens_used_this_period: newTotal })
                 .eq("id", user.id);
 
-              // Prompt count
               const promptColumn = tutorMode ? "chat_prompt_count_tutor" : "chat_prompt_count_normal";
               const { data: cs } = await adminSupabase
                 .from("project_stats")
@@ -527,110 +532,113 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
           return createSSEResponse(readable);
         }
 
-        // ---- Tool use detected — resolve tools iteratively, then stream final ----
-        console.log("[stream] tool use detected:", toolCalls.length, "calls");
+        // ---- Tool use detected — STREAM-FIRST approach ----
+        // Create stream immediately, emit phase events DURING tool resolution
+        console.log("[stream] tool use detected:", toolCalls.length, "calls — using stream-first approach");
 
-        // Build the conversation with tool results
-        const toolMessages: Array<Record<string, unknown>> = [
-          ...llmMessages,
-          call1Data.choices[0].message, // assistant message with tool_calls
-        ];
+        const { readable, writable } = new TransformStream();
+        const writer = writable.getWriter();
 
-        // Resolve tool calls iteratively (up to 5 iterations)
-        let iteration = 0;
-        const MAX_ITERATIONS = 5;
+        // Return the SSE response immediately, do tool resolution + Call #2 in background
+        (async () => {
+          try {
+            // Build conversation with tool results
+            const toolMessages: Array<Record<string, unknown>> = [
+              ...llmMessages,
+              call1Data.choices[0].message,
+            ];
 
-        while (toolCalls.length > 0 && iteration < MAX_ITERATIONS) {
-          iteration++;
-          console.log(`[stream] tool iteration ${iteration}, ${toolCalls.length} calls`);
+            // Resolve tool calls iteratively (up to 5 iterations)
+            let iteration = 0;
+            const MAX_ITERATIONS = 5;
+            let currentToolCalls = toolCalls;
 
-          for (const tc of toolCalls.slice(0, 5)) {
-            if (tc.name === "read_imported_document") {
-              const docId = tc.arguments.document_id as string;
-              console.log("[stream] reading document:", docId);
-              documentsReferenced.push(docId);
+            while (currentToolCalls.length > 0 && iteration < MAX_ITERATIONS) {
+              iteration++;
+              console.log(`[stream] tool iteration ${iteration}, ${currentToolCalls.length} calls`);
 
-              const { data: docData } = await adminSupabase
-                .from("imported_documents")
-                .select("extracted_text, file_name")
-                .eq("id", docId)
-                .single();
+              for (const tc of currentToolCalls.slice(0, 5)) {
+                if (tc.name === "read_imported_document") {
+                  const docId = tc.arguments.document_id as string;
+                  console.log("[stream] reading document:", docId);
+                  documentsReferenced.push(docId);
 
-              const toolResult = docData?.extracted_text
-                ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
-                : `Document not found or text not yet extracted.`;
+                  // Emit phase event BEFORE the actual tool call
+                  try { await writer.write(sseEvent({ phase: "reading_documents" })); } catch { /* */ }
 
-              totalInputChars += toolResult.length;
+                  const { data: docData } = await adminSupabase
+                    .from("imported_documents")
+                    .select("extracted_text, file_name")
+                    .eq("id", docId)
+                    .single();
 
-              toolMessages.push({
-                role: "tool",
-                tool_call_id: tc.id,
-                content: toolResult,
-              });
-            } else if (tc.name === "web_search") {
-              const query = tc.arguments.query as string;
-              console.log("[stream] web search:", query);
-              webSearchesPerformed.push(query);
+                  const toolResult = docData?.extracted_text
+                    ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
+                    : `Document not found or text not yet extracted.`;
 
-              const results = await searchWeb(query);
-              const toolResult = formatWebSearchResults(query, results);
-              totalInputChars += toolResult.length;
+                  totalInputChars += toolResult.length;
 
-              toolMessages.push({
-                role: "tool",
-                tool_call_id: tc.id,
-                content: toolResult,
-              });
-            }
-          }
+                  toolMessages.push({
+                    role: "tool",
+                    tool_call_id: tc.id,
+                    content: toolResult,
+                  });
+                } else if (tc.name === "web_search") {
+                  const query = tc.arguments.query as string;
+                  console.log("[stream] web search:", query);
+                  webSearchesPerformed.push(query);
 
-          // Check if the LLM wants to make more tool calls
-          if (iteration < MAX_ITERATIONS) {
-            const nextRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${mistralKey}`,
-              },
-              body: JSON.stringify({
-                model: "mistral-large-latest",
-                messages: toolMessages,
-                max_tokens: 2000,
-                tools,
-                tool_choice: "auto",
-              }),
-            });
+                  // Emit phase event BEFORE the actual tool call
+                  try { await writer.write(sseEvent({ phase: "searching_web" })); } catch { /* */ }
 
-            if (!nextRes.ok) break;
+                  const results = await searchWeb(query);
+                  const toolResult = formatWebSearchResults(query, results);
+                  totalInputChars += toolResult.length;
 
-            const nextData = await nextRes.json();
-            const nextContent = nextData.choices?.[0]?.message?.content ?? "";
-            totalOutputChars += nextContent.length;
-            toolCalls = extractToolCalls(nextData);
+                  toolMessages.push({
+                    role: "tool",
+                    tool_call_id: tc.id,
+                    content: toolResult,
+                  });
+                }
+              }
 
-            if (toolCalls.length > 0) {
-              toolMessages.push(nextData.choices[0].message);
-            } else {
-              // No more tool calls — if there's text content, use it directly
-              if (nextContent) {
-                // Stream this as the final response
-                const responseText = nextContent;
-                const { readable, writable } = new TransformStream();
-                const writer = writable.getWriter();
+              // Check if the LLM wants to make more tool calls
+              if (iteration < MAX_ITERATIONS) {
+                const nextRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${mistralKey}`,
+                  },
+                  body: JSON.stringify({
+                    model: "mistral-large-latest",
+                    messages: toolMessages,
+                    max_tokens: 2000,
+                    tools,
+                    tool_choice: "auto",
+                  }),
+                });
 
-                (async () => {
-                  try {
-                    // Send phase events
-                    if (documentsReferenced.length > 0) {
-                      await writer.write(sseEvent({ phase: "reading_documents" }));
-                    }
-                    if (webSearchesPerformed.length > 0) {
-                      await writer.write(sseEvent({ phase: "searching_web" }));
-                    }
+                if (!nextRes.ok) {
+                  currentToolCalls = [];
+                  break;
+                }
 
+                const nextData = await nextRes.json();
+                const nextContent = cleanLLMContent(nextData.choices?.[0]?.message?.content ?? "");
+                totalOutputChars += nextContent.length;
+                currentToolCalls = extractToolCalls(nextData);
+
+                if (currentToolCalls.length > 0) {
+                  toolMessages.push(nextData.choices[0].message);
+                } else {
+                  // No more tool calls — if there's text content, emit it
+                  if (nextContent) {
+                    const responseText = nextContent;
                     const chunkSize = 20;
                     for (let i = 0; i < responseText.length; i += chunkSize) {
-                      await writer.write(sseEvent({ token: responseText.slice(i, i + chunkSize) }));
+                      try { await writer.write(sseEvent({ token: responseText.slice(i, i + chunkSize) })); } catch { /* */ }
                     }
 
                     const userMsgRow = {
@@ -667,197 +675,166 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
                       await adminSupabase.from("project_stats").update({ [promptColumn]: cnt + 1 }).eq("project_id", thread.project_id);
                     }
 
-                    await writer.write(sseEvent({
-                      done: true,
-                      user_message: insertedUser,
-                      assistant_message: insertedAssistant,
-                      budget_remaining: profile.monthly_token_budget - newTotal,
-                    }));
-                  } catch (err) {
-                    console.error("[stream] error in multi-tool path:", err);
-                    try { await writer.write(sseEvent({ done: true, error: "Messages may not have been saved." })); } catch { /* */ }
-                  } finally {
-                    await writer.close();
-                  }
-                })();
-
-                return createSSEResponse(readable);
-              }
-              break;
-            }
-          }
-        }
-
-        // LLM Call #2: streaming with tool results (no tools available this time)
-        const call2Res = await fetch("https://api.mistral.ai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${mistralKey}`,
-          },
-          body: JSON.stringify({
-            model: "mistral-large-latest",
-            messages: toolMessages,
-            max_tokens: 2000,
-            stream: true,
-          }),
-        });
-
-        if (!call2Res.ok) {
-          const errText = await call2Res.text();
-          console.error("[stream] Call #2 error:", call2Res.status, errText);
-          return jsonResponse(
-            { error: "AI service temporarily unavailable. Please try again." },
-            502
-          );
-        }
-
-        // Pipe Call #2 through transform, but first send phase event
-        let fullResponse = "";
-        let clientDisconnected = false;
-        let promptCounted = false;
-        const decoder = new TextDecoder();
-        let sseBuffer = "";
-
-        const transform = new TransformStream({
-          start(controller) {
-            // Send phase events before streaming begins
-            try {
-              if (documentsReferenced.length > 0) {
-                controller.enqueue(sseEvent({ phase: "reading_documents" }));
-              }
-              if (webSearchesPerformed.length > 0) {
-                controller.enqueue(sseEvent({ phase: "searching_web" }));
-              }
-            } catch { /* */ }
-          },
-          transform(chunk, controller) {
-            sseBuffer += decoder.decode(chunk, { stream: true });
-            const lines = sseBuffer.split("\n");
-            sseBuffer = lines.pop() ?? "";
-
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed || !trimmed.startsWith("data:")) continue;
-              const payload = trimmed.slice(5).trim();
-              if (payload === "[DONE]") {
-                if (!promptCounted) {
-                  promptCounted = true;
-                  const promptColumn = tutorMode ? "chat_prompt_count_tutor" : "chat_prompt_count_normal";
-                  adminSupabase
-                    .from("project_stats")
-                    .select(promptColumn)
-                    .eq("project_id", thread.project_id)
-                    .single()
-                    .then(({ data: cs }) => {
-                      if (cs) {
-                        const cnt = (cs as Record<string, number>)[promptColumn] || 0;
-                        adminSupabase
-                          .from("project_stats")
-                          .update({ [promptColumn]: cnt + 1 })
-                          .eq("project_id", thread.project_id)
-                          .then(() => console.log("[stream] prompt count incremented"));
-                      }
-                    });
-                }
-                continue;
-              }
-
-              try {
-                const parsed = JSON.parse(payload);
-                const delta = extractDeltaText(parsed, "mistral");
-                if (delta) {
-                  fullResponse += delta;
-                  if (!clientDisconnected) {
                     try {
-                      controller.enqueue(sseEvent({ token: delta }));
-                    } catch {
-                      clientDisconnected = true;
-                    }
+                      await writer.write(sseEvent({
+                        done: true,
+                        user_message: insertedUser,
+                        assistant_message: insertedAssistant,
+                        budget_remaining: profile.monthly_token_budget - newTotal,
+                      }));
+                    } catch { /* */ }
+                    await writer.close();
+                    return; // done
                   }
+                  break;
                 }
-              } catch { /* skip malformed */ }
+              }
             }
-          },
 
-          async flush(controller) {
-            console.log("[stream] flush() started");
+            // LLM Call #2: streaming with tool results (no tools this time)
+            const call2Res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${mistralKey}`,
+              },
+              body: JSON.stringify({
+                model: "mistral-large-latest",
+                messages: toolMessages,
+                max_tokens: 2000,
+                stream: true,
+              }),
+            });
+
+            if (!call2Res.ok) {
+              const errText = await call2Res.text();
+              console.error("[stream] Call #2 error:", call2Res.status, errText);
+              try { await writer.write(sseEvent({ done: true, error: "AI service temporarily unavailable." })); } catch { /* */ }
+              await writer.close();
+              return;
+            }
+
+            // Read Call #2 stream manually and forward tokens
+            let fullResponse = "";
+            let promptCounted = false;
+            const decoder = new TextDecoder();
+            let sseBuffer = "";
+            const reader = call2Res.body!.getReader();
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              sseBuffer += decoder.decode(value, { stream: true });
+              const lines = sseBuffer.split("\n");
+              sseBuffer = lines.pop() ?? "";
+
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith("data:")) continue;
+                const payload = trimmed.slice(5).trim();
+                if (payload === "[DONE]") {
+                  if (!promptCounted) {
+                    promptCounted = true;
+                    const promptColumn = tutorMode ? "chat_prompt_count_tutor" : "chat_prompt_count_normal";
+                    adminSupabase
+                      .from("project_stats")
+                      .select(promptColumn)
+                      .eq("project_id", thread.project_id)
+                      .single()
+                      .then(({ data: cs }) => {
+                        if (cs) {
+                          const cnt = (cs as Record<string, number>)[promptColumn] || 0;
+                          adminSupabase
+                            .from("project_stats")
+                            .update({ [promptColumn]: cnt + 1 })
+                            .eq("project_id", thread.project_id);
+                        }
+                      });
+                  }
+                  continue;
+                }
+
+                try {
+                  const parsed = JSON.parse(payload);
+                  const delta = extractDeltaText(parsed, "mistral");
+                  if (delta) {
+                    fullResponse += delta;
+                    try { await writer.write(sseEvent({ token: delta })); } catch { /* client gone */ }
+                  }
+                } catch { /* skip malformed */ }
+              }
+            }
+
+            // Clean and persist
+            fullResponse = cleanLLMContent(fullResponse);
+            totalOutputChars += fullResponse.length;
+
+            const userMsgRow = {
+              thread_id: threadId,
+              role: "user",
+              content: message.trim(),
+              source_type: "chat",
+              flow_flag: "normal",
+              concise_mode: conciseMode,
+            };
+            const assistantMsgRow: Record<string, unknown> = {
+              thread_id: threadId,
+              role: "assistant",
+              content: fullResponse || "No response generated.",
+              source_type: "chat",
+              flow_flag: "normal",
+              concise_mode: conciseMode,
+              model_used: "mistral-large-latest",
+            };
+
+            if (documentsReferenced.length > 0) {
+              assistantMsgRow.documents_referenced = documentsReferenced;
+            }
+            if (webSearchesPerformed.length > 0) {
+              assistantMsgRow.web_searches_performed = webSearchesPerformed;
+            }
+
+            const { data: insertedUser } = await adminSupabase
+              .from("chat_messages")
+              .insert(userMsgRow)
+              .select()
+              .single();
+
+            const { data: insertedAssistant } = await adminSupabase
+              .from("chat_messages")
+              .insert(assistantMsgRow)
+              .select()
+              .single();
+
+            const estimatedTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
+            const newTotal = profile.tokens_used_this_period + estimatedTokens;
+            await adminSupabase
+              .from("profiles")
+              .update({ tokens_used_this_period: newTotal })
+              .eq("id", user.id);
+
             try {
-              totalOutputChars += fullResponse.length;
+              await writer.write(
+                sseEvent({
+                  done: true,
+                  user_message: insertedUser,
+                  assistant_message: insertedAssistant,
+                  budget_remaining: profile.monthly_token_budget - newTotal,
+                })
+              );
+            } catch { /* client gone */ }
+          } catch (err) {
+            console.error("[stream] error in tool-use path:", err);
+            try {
+              await writer.write(sseEvent({ done: true, error: "AI service temporarily unavailable." }));
+            } catch { /* client gone */ }
+          } finally {
+            try { await writer.close(); } catch { /* */ }
+          }
+        })();
 
-              const userMsgRow = {
-                thread_id: threadId,
-                role: "user",
-                content: message.trim(),
-                source_type: "chat",
-                flow_flag: "normal",
-                concise_mode: conciseMode,
-              };
-              const assistantMsgRow: Record<string, unknown> = {
-                thread_id: threadId,
-                role: "assistant",
-                content: fullResponse || "No response generated.",
-                source_type: "chat",
-                flow_flag: "normal",
-                concise_mode: conciseMode,
-                model_used: "mistral-large-latest",
-              };
-
-              if (documentsReferenced.length > 0) {
-                assistantMsgRow.documents_referenced = documentsReferenced;
-              }
-              if (webSearchesPerformed.length > 0) {
-                assistantMsgRow.web_searches_performed = webSearchesPerformed;
-              }
-
-              const { data: insertedUser } = await adminSupabase
-                .from("chat_messages")
-                .insert(userMsgRow)
-                .select()
-                .single();
-
-              const { data: insertedAssistant } = await adminSupabase
-                .from("chat_messages")
-                .insert(assistantMsgRow)
-                .select()
-                .single();
-
-              const estimatedTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
-              const newTotal = profile.tokens_used_this_period + estimatedTokens;
-              await adminSupabase
-                .from("profiles")
-                .update({ tokens_used_this_period: newTotal })
-                .eq("id", user.id);
-
-              if (!clientDisconnected) {
-                try {
-                  controller.enqueue(
-                    sseEvent({
-                      done: true,
-                      user_message: insertedUser,
-                      assistant_message: insertedAssistant,
-                      budget_remaining: profile.monthly_token_budget - newTotal,
-                    })
-                  );
-                } catch {
-                  clientDisconnected = true;
-                }
-              }
-              console.log("[stream] flush() completed — persistence done");
-            } catch (persistErr) {
-              console.error("[stream] persistence error:", persistErr);
-              if (!clientDisconnected) {
-                try {
-                  controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
-                } catch { /* */ }
-              }
-              console.log("[stream] flush() completed — with error");
-            }
-          },
-        });
-
-        const outputStream = call2Res.body!.pipeThrough(transform);
-        return createSSEResponse(outputStream);
+        return createSSEResponse(readable);
       }
 
       // ---- NO TOOLS — original streaming path ----
@@ -956,6 +933,8 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
           console.log("[stream] flush() started");
 
           try {
+            fullResponse = cleanLLMContent(fullResponse);
+
             const userMsg = {
               thread_id: threadId,
               role: "user",
@@ -1039,7 +1018,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
         },
       });
 
-      // Pipe LLM response through our transform
       const outputStream = llmRes.body!.pipeThrough(transform);
 
       return new Response(outputStream, {
@@ -1079,8 +1057,9 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
     }
 
     const llmData = await llmRes.json();
-    const assistantText =
-      llmData.choices?.[0]?.message?.content ?? "No response generated.";
+    const assistantText = cleanLLMContent(
+      llmData.choices?.[0]?.message?.content ?? "No response generated."
+    );
 
     // --- Persist messages ---
     const userMsg = {
