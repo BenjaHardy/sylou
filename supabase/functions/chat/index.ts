@@ -45,10 +45,18 @@ function extractDeltaText(
   _provider: string
 ): string | null {
   const choices = parsed.choices as
-    | Array<{ delta?: { content?: string } }>
+    | Array<{ delta?: { content?: unknown } }>
     | undefined;
-  if (choices?.[0]?.delta?.content) {
-    return choices[0].delta.content;
+  const content = choices?.[0]?.delta?.content;
+  if (content) {
+    if (typeof content === "string") return content;
+    if (Array.isArray(content)) {
+      return content
+        .filter((b: any) => b?.type === "text")
+        .map((b: any) => b.text ?? "")
+        .join("");
+    }
+    return String(content);
   }
   if (parsed.type === "content_block_delta") {
     const delta = parsed.delta as { text?: string } | undefined;
