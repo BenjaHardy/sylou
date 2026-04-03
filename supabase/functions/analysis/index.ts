@@ -800,7 +800,8 @@ ${writePillarNotice}`;
         flow_meta: flowMeta,
         provenance_snapshot: segmentMap,
         model_used: "claude-sonnet-4-6",
-      })
+        project_name: project.name ?? null,
+      } as any)
       .select()
       .single();
 
