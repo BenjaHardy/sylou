@@ -165,8 +165,7 @@ export function FlowReportView({
     setSharing(true);
     try {
       const { error } = await supabase.functions.invoke("share-report", {
-        body: { report_id: report.id, share_enabled: enabled },
-        method: "PATCH" as any,
+        body: { report_id: report.id, action: "toggle", share_enabled: enabled },
       });
       if (error) throw error;
       setShareEnabled(enabled);
