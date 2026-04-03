@@ -114,7 +114,7 @@ export function TextSelectionWindow({
   const [inputText, setInputText] = useState("");
   const [editableText, setEditableText] = useState("");
   const [currentActionId, setCurrentActionId] = useState<string | null>(null);
-  const [loadingStage, setLoadingStage] = useState<"reviewing" | "reading_documents" | "preparing">("reviewing");
+  const [loadingStage, setLoadingStage] = useState<"reviewing" | "reading_documents" | "searching_web" | "preparing">("reviewing");
   // For propose confirm flow
   const [pendingSummaryUpdate, setPendingSummaryUpdate] = useState<string | null>(null);
   const [pendingInstruction, setPendingInstruction] = useState<string>("");
