@@ -412,7 +412,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20}>
-            <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} conciseMode={conciseMode} onConciseModeChange={setConciseMode} onSetMessages={(setter) => { chatSetMessagesRef.current = setter; }} onActiveThreadChange={setActiveThreadId} onUploadDocument={uploadDocument} documentUploading={docsUploading} />
+            <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} conciseMode={conciseMode} onConciseModeChange={setConciseMode} onSetMessages={(setter) => { chatSetMessagesRef.current = setter; }} onActiveThreadChange={setActiveThreadId} onUploadDocument={uploadDocument} documentUploading={docsUploading} webSearchEnabled={webSearchEnabled} onWebSearchEnabledChange={setWebSearchEnabled} />
           </ResizablePanel>
         </ResizablePanelGroup>
 

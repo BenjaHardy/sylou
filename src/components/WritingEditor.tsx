@@ -289,6 +289,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
             selectionFrom={aiSelectionFrom}
             selectionTo={aiSelectionTo}
             setMessages={chatSetMessages}
+            webSearchEnabled={webSearchEnabled}
           />
         )}
       </div>

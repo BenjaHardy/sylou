@@ -293,6 +293,7 @@ export function TextSelectionWindow({
             concise_mode: conciseMode ?? false,
             stream: true,
             ...(selected_text_source ? { selected_text_source } : {}),
+            ...(webSearchEnabled ? { web_search_enabled: true } : {}),
           }),
         });
 

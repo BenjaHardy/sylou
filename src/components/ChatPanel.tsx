@@ -218,12 +218,14 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
   );
 }
 
-export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker, conciseMode, onConciseModeChange, onSetMessages, onActiveThreadChange, onUploadDocument, documentUploading }: Props) {
+export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker, conciseMode, onConciseModeChange, onSetMessages, onActiveThreadChange, onUploadDocument, documentUploading, webSearchEnabled: webSearchEnabledProp, onWebSearchEnabledChange }: Props) {
   const { threads, activeThreadId, activeThreadName, setActiveThreadId, createThread, renameThread } = useChatThread(projectId);
   const { messages, loading, sending, phase, sendMessage, budgetRemaining, refreshMessages, appendMessages, setMessages } = useChatMessages(activeThreadId);
   const { bookmarks, createBookmark, updateBookmark, deleteBookmark, getBookmarkForMessage } = useBookmarks(projectId);
   const [input, setInput] = useState("");
-  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [localWebSearchEnabled, setLocalWebSearchEnabled] = useState(false);
+  const webSearchEnabled = webSearchEnabledProp ?? localWebSearchEnabled;
+  const setWebSearchEnabled = onWebSearchEnabledChange ?? setLocalWebSearchEnabled;
   const [tipDismissed, setTipDismissed] = useState(false);
   const [showBookmarkList, setShowBookmarkList] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
