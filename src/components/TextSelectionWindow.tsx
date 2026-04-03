@@ -642,6 +642,8 @@ export function TextSelectionWindow({
               ? "Reviewing your writing…"
               : loadingStage === "reading_documents"
               ? "Reading imported documents…"
+              : loadingStage === "searching_web"
+              ? "Searching the web…"
               : "Preparing response…"}
           </div>
         )}
