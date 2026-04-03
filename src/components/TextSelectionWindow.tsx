@@ -38,6 +38,7 @@ interface Props {
   /** For Ask streaming: set streaming message into chat */
   appendMessages?: (msgs: ChatMessage[]) => void;
   setMessages?: (updater: (prev: ChatMessage[]) => ChatMessage[]) => void;
+  webSearchEnabled?: boolean;
 }
 
 const NORMAL_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
@@ -106,6 +107,7 @@ export function TextSelectionWindow({
   selectionTo,
   appendMessages,
   setMessages,
+  webSearchEnabled,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("actions");
   const [activeAction, setActiveAction] = useState<ActionId | null>(null);
@@ -291,6 +293,7 @@ export function TextSelectionWindow({
             concise_mode: conciseMode ?? false,
             stream: true,
             ...(selected_text_source ? { selected_text_source } : {}),
+            ...(webSearchEnabled ? { web_search_enabled: true } : {}),
           }),
         });
 

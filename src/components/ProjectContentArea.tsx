@@ -74,6 +74,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const [editorHtml, setEditorHtml] = useState("");
   const chatSetMessagesRef = useRef<((updater: (prev: ChatMessage[]) => ChatMessage[]) => void) | null>(null);
   const [provenanceKey, setProvenanceKey] = useState(0);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const flushProvenanceRef = useRef<(() => Promise<void>) | null>(null);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
@@ -380,6 +381,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
                 conciseMode={conciseMode}
                 onEditorContent={setEditorHtml}
                 chatSetMessages={chatSetMessagesRef.current ?? undefined}
+                webSearchEnabled={webSearchEnabled}
               />
               {showLiveProvenance && provenanceTracker && (
                 <div className="border-t border-border h-[40%] min-h-[200px] overflow-hidden">
@@ -410,7 +412,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20}>
-            <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} conciseMode={conciseMode} onConciseModeChange={setConciseMode} onSetMessages={(setter) => { chatSetMessagesRef.current = setter; }} onActiveThreadChange={setActiveThreadId} onUploadDocument={uploadDocument} documentUploading={docsUploading} />
+            <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} conciseMode={conciseMode} onConciseModeChange={setConciseMode} onSetMessages={(setter) => { chatSetMessagesRef.current = setter; }} onActiveThreadChange={setActiveThreadId} onUploadDocument={uploadDocument} documentUploading={docsUploading} webSearchEnabled={webSearchEnabled} onWebSearchEnabledChange={setWebSearchEnabled} />
           </ResizablePanel>
         </ResizablePanelGroup>
 

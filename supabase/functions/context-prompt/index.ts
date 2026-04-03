@@ -842,48 +842,53 @@ When citing information from web search results, always include the source URL i
       }
 
       // ── TWO-PASS FLOW when tools exist ──
+      // Move entire Call #2a inside ReadableStream so phase events stream immediately
       if (hasTools) {
-        console.log("[stream:context-prompt] tools available, two-pass flow");
+        console.log("[stream:context-prompt] tools available, two-pass flow (stream-first)");
 
-        // Call #2a: non-streamed with tools
-        const call2aBody = {
-          model: "mistral-large-latest",
-          messages: responseMessages,
-          max_tokens: 2000,
-          tools,
-          tool_choice: "auto",
-        };
+        const readable = new ReadableStream({
+          async start(controller) {
+            try {
+              // Emit initial phase so the client knows we're working
+              controller.enqueue(sseEvent({ phase: "reviewing" }));
 
-        const call2aRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${mistralKey}`,
-          },
-          body: JSON.stringify(call2aBody),
-        });
+              // Call #2a: non-streamed with tools (inside stream so response is already sent)
+              const call2aBody = {
+                model: "mistral-large-latest",
+                messages: responseMessages,
+                max_tokens: 2000,
+                tools,
+                tool_choice: "auto",
+              };
 
-        if (!call2aRes.ok) {
-          const errText = await call2aRes.text();
-          console.error("[stream:context-prompt] Call #2a error:", call2aRes.status, errText);
-          return jsonResponse({ error: "AI service temporarily unavailable. Please try again." }, 502);
-        }
+              const call2aRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${mistralKey}`,
+                },
+                body: JSON.stringify(call2aBody),
+              });
 
-        const call2aData = await call2aRes.json();
-        const toolCalls = extractToolCalls(call2aData);
-        const call2aContent = cleanLLMContent(call2aData.choices?.[0]?.message?.content ?? "");
-        const call2aInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
-        totalInputChars += call2aInputChars;
-        totalOutputChars += call2aContent.length;
+              if (!call2aRes.ok) {
+                const errText = await call2aRes.text();
+                console.error("[stream:context-prompt] Call #2a error:", call2aRes.status, errText);
+                controller.enqueue(sseEvent({ error: "AI service temporarily unavailable. Please try again." }));
+                return;
+              }
 
-        if (toolCalls.length === 0) {
-          // No tool use — emit Call #2a text as rapid SSE
-          console.log("[stream:context-prompt] no tool use, emitting Call #2a directly");
-          const responseText = call2aContent || "No response generated.";
+              const call2aData = await call2aRes.json();
+              const toolCalls = extractToolCalls(call2aData);
+              const call2aContent = cleanLLMContent(call2aData.choices?.[0]?.message?.content ?? "");
+              const call2aInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
+              totalInputChars += call2aInputChars;
+              totalOutputChars += call2aContent.length;
 
-          const readable = new ReadableStream({
-            async start(controller) {
-              try {
+              if (toolCalls.length === 0) {
+                // No tool use — emit Call #2a text as rapid SSE tokens
+                console.log("[stream:context-prompt] no tool use, emitting Call #2a directly");
+                const responseText = call2aContent || "No response generated.";
+
                 controller.enqueue(sseEvent({ phase: "responding" }));
 
                 const chunkSize = 20;
@@ -903,145 +908,131 @@ When citing information from web search results, always include the source URL i
                   ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
                   ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
                 }));
-              } catch (err) {
-                console.error("[stream:context-prompt] error in no-tool path:", err);
-                try { controller.enqueue(sseEvent({ done: true, error: "Action may not have been saved." })); } catch { /* */ }
-              } finally {
-                controller.close();
-              }
-            },
-          });
+              } else {
+                // ── Tool use detected ──
+                console.log("[stream:context-prompt] tool use detected:", toolCalls.length, "calls");
 
-          return createSSEResponse(readable);
-        }
+                const toolMessages: Array<Record<string, unknown>> = [
+                  ...responseMessages,
+                  call2aData.choices[0].message,
+                ];
 
-        // ── Tool use detected — ReadableStream approach ──
-        console.log("[stream:context-prompt] tool use detected:", toolCalls.length, "calls — stream-first");
+                for (const tc of toolCalls.slice(0, 5)) {
+                  if (tc.name === "read_imported_document") {
+                    const docId = tc.arguments.document_id as string;
+                    console.log("[stream:context-prompt] reading document:", docId);
+                    documentsReferenced.push(docId);
 
-        const readable = new ReadableStream({
-          async start(controller) {
-            try {
-              const toolMessages: Array<Record<string, unknown>> = [
-                ...responseMessages,
-                call2aData.choices[0].message,
-              ];
+                    try { controller.enqueue(sseEvent({ phase: "reading_documents" })); } catch { /* */ }
 
-              for (const tc of toolCalls.slice(0, 5)) {
-                if (tc.name === "read_imported_document") {
-                  const docId = tc.arguments.document_id as string;
-                  console.log("[stream:context-prompt] reading document:", docId);
-                  documentsReferenced.push(docId);
+                    const { data: docData } = await adminClient
+                      .from("imported_documents")
+                      .select("extracted_text, file_name")
+                      .eq("id", docId)
+                      .single();
 
-                  try { controller.enqueue(sseEvent({ phase: "reading_documents" })); } catch { /* */ }
+                    const toolResult = docData?.extracted_text
+                      ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
+                      : `Document not found or text not yet extracted.`;
 
-                  const { data: docData } = await adminClient
-                    .from("imported_documents")
-                    .select("extracted_text, file_name")
-                    .eq("id", docId)
-                    .single();
+                    totalInputChars += toolResult.length;
 
-                  const toolResult = docData?.extracted_text
-                    ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
-                    : `Document not found or text not yet extracted.`;
+                    toolMessages.push({
+                      role: "tool",
+                      tool_call_id: tc.id,
+                      content: toolResult,
+                    });
+                  } else if (tc.name === "web_search") {
+                    const query = tc.arguments.query as string;
+                    console.log("[stream:context-prompt] web search:", query);
+                    webSearchesPerformed.push(query);
 
-                  totalInputChars += toolResult.length;
+                    try { controller.enqueue(sseEvent({ phase: "searching_web" })); } catch { /* */ }
 
-                  toolMessages.push({
-                    role: "tool",
-                    tool_call_id: tc.id,
-                    content: toolResult,
-                  });
-                } else if (tc.name === "web_search") {
-                  const query = tc.arguments.query as string;
-                  console.log("[stream:context-prompt] web search:", query);
-                  webSearchesPerformed.push(query);
+                    const results = await searchWeb(query);
+                    const toolResult = formatWebSearchResults(query, results);
+                    totalInputChars += toolResult.length;
 
-                  try { controller.enqueue(sseEvent({ phase: "searching_web" })); } catch { /* */ }
-
-                  const results = await searchWeb(query);
-                  const toolResult = formatWebSearchResults(query, results);
-                  totalInputChars += toolResult.length;
-
-                  toolMessages.push({
-                    role: "tool",
-                    tool_call_id: tc.id,
-                    content: toolResult,
-                  });
+                    toolMessages.push({
+                      role: "tool",
+                      tool_call_id: tc.id,
+                      content: toolResult,
+                    });
+                  }
                 }
-              }
 
-              // Call #2b: streaming with tool results
-              console.log("[stream:context-prompt] starting Call #2b streaming");
-              const call2bRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${mistralKey}`,
-                },
-                body: JSON.stringify({
-                  model: "mistral-large-latest",
-                  messages: toolMessages,
-                  max_tokens: 2000,
-                  stream: true,
-                }),
-              });
+                // Call #2b: streaming with tool results
+                console.log("[stream:context-prompt] starting Call #2b streaming");
+                const call2bRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${mistralKey}`,
+                  },
+                  body: JSON.stringify({
+                    model: "mistral-large-latest",
+                    messages: toolMessages,
+                    max_tokens: 2000,
+                    stream: true,
+                  }),
+                });
 
-              if (!call2bRes.ok) {
-                const errText = await call2bRes.text();
-                console.error("[stream:context-prompt] Call #2b error:", call2bRes.status, errText);
-                try { controller.enqueue(sseEvent({ done: true, error: "AI service temporarily unavailable." })); } catch { /* */ }
-                controller.close();
-                return;
-              }
-
-              // Read Call #2b stream manually and forward tokens
-              let fullResponse = "";
-              const decoder = new TextDecoder();
-              let sseBuffer = "";
-              const reader = call2bRes.body!.getReader();
-
-              while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                sseBuffer += decoder.decode(value, { stream: true });
-                const lines = sseBuffer.split("\n");
-                sseBuffer = lines.pop() ?? "";
-
-                for (const line of lines) {
-                  const trimmed = line.trim();
-                  if (!trimmed || !trimmed.startsWith("data:")) continue;
-                  const payload = trimmed.slice(5).trim();
-                  if (payload === "[DONE]") continue;
-
-                  try {
-                    const parsed = JSON.parse(payload);
-                    const delta = extractDeltaText(parsed, "mistral");
-                    if (delta) {
-                      fullResponse += delta;
-                      try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
-                    }
-                  } catch { /* skip malformed */ }
+                if (!call2bRes.ok) {
+                  const errText = await call2bRes.text();
+                  console.error("[stream:context-prompt] Call #2b error:", call2bRes.status, errText);
+                  controller.enqueue(sseEvent({ done: true, error: "AI service temporarily unavailable." }));
+                  return;
                 }
+
+                // Read Call #2b stream and forward tokens
+                let fullResponse = "";
+                const decoder = new TextDecoder();
+                let sseBuffer = "";
+                const reader = call2bRes.body!.getReader();
+
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+
+                  sseBuffer += decoder.decode(value, { stream: true });
+                  const lines = sseBuffer.split("\n");
+                  sseBuffer = lines.pop() ?? "";
+
+                  for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!trimmed || !trimmed.startsWith("data:")) continue;
+                    const payload = trimmed.slice(5).trim();
+                    if (payload === "[DONE]") continue;
+
+                    try {
+                      const parsed = JSON.parse(payload);
+                      const delta = extractDeltaText(parsed, "mistral");
+                      if (delta) {
+                        fullResponse += delta;
+                        try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
+                      }
+                    } catch { /* skip malformed */ }
+                  }
+                }
+
+                // Clean and persist
+                fullResponse = cleanLLMContent(fullResponse);
+                const aiResponse = fullResponse.trim() || "No response generated.";
+                const { actionRow, budgetRemaining, insertedMessages } = await persistResults(aiResponse, 0, aiResponse.length);
+
+                try {
+                  controller.enqueue(sseEvent({
+                    done: true,
+                    ai_response: aiResponse,
+                    summary_update: summaryUpdate,
+                    action_id: actionRow?.id ?? null,
+                    budget_remaining: budgetRemaining,
+                    inserted_messages: insertedMessages,
+                    ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
+                    ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
+                  }));
+                } catch { /* client gone */ }
               }
-
-              // Clean and persist
-              fullResponse = cleanLLMContent(fullResponse);
-              const aiResponse = fullResponse.trim() || "No response generated.";
-              const { actionRow, budgetRemaining, insertedMessages } = await persistResults(aiResponse, 0, aiResponse.length);
-
-              try {
-                controller.enqueue(sseEvent({
-                  done: true,
-                  ai_response: aiResponse,
-                  summary_update: summaryUpdate,
-                  action_id: actionRow?.id ?? null,
-                  budget_remaining: budgetRemaining,
-                  inserted_messages: insertedMessages,
-                  ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
-                  ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
-                }));
-              } catch { /* client gone */ }
             } catch (err) {
               console.error("[stream:context-prompt] error in tool-use path:", err);
               try { controller.enqueue(sseEvent({ done: true, error: "AI service temporarily unavailable." })); } catch { /* */ }

@@ -33,9 +33,10 @@ interface Props {
   onFlushProvenance?: (flush: () => Promise<void>) => void;
   conciseMode?: boolean;
   chatSetMessages?: (updater: (prev: ChatMessage[]) => ChatMessage[]) => void;
+  webSearchEnabled?: boolean;
 }
 
-export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, onFlushProvenance, conciseMode, onEditorContent, chatSetMessages }: Props & { onEditorContent?: (html: string) => void }) {
+export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, onFlushProvenance, conciseMode, onEditorContent, chatSetMessages, webSearchEnabled }: Props & { onEditorContent?: (html: string) => void }) {
   const { content, loading, saveState, updateContent, isDirty, manualSave, flushSave: flushWritingContent } = useWritingContent(projectId);
   const { getTracker, initWithContentLength, scheduleSave, flushSave: flushProvenance, provenanceLoaded } = useProvenanceTracker(projectId);
   const [initialSet, setInitialSet] = useState(false);
@@ -288,6 +289,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
             selectionFrom={aiSelectionFrom}
             selectionTo={aiSelectionTo}
             setMessages={chatSetMessages}
+            webSearchEnabled={webSearchEnabled}
           />
         )}
       </div>
