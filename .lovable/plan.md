@@ -1,48 +1,67 @@
 
 
-## Fix: `[object Object]` in Chat Messages from Streaming Deltas
+## Fix: Web Search and Streaming in Context Prompts (Ask/Propose)
 
-### Root Cause
+### Root Causes
 
-In `supabase/functions/chat/index.ts`, `extractDeltaText()` (line 43-58) checks `choices[0].delta.content` for truthiness and returns it assuming it's a string. But Mistral sometimes returns `delta.content` as an array of content blocks (e.g., `[{type:"text", text:"..."}]`). When this non-string value is concatenated via `fullResponse += delta`, JavaScript coerces the array to the string `"[object Object]"` — producing exactly the output shown in the screenshot.
+**Issue 1 — Web search never triggers**: `TextSelectionWindow.tsx` does not include `web_search_enabled` in the request body sent to the `context-prompt` function. The toggle state lives only in `ChatPanel.tsx` and is never passed down to the text selection window.
 
-The same `extractDeltaText` function exists in `context-prompt/index.ts` and needs the same fix.
+**Issue 2 — No streaming/phase events when tools are present**: The two-pass tool path in `context-prompt/index.ts` awaits the entire Call #2a (non-streamed planning call) *before* creating the `ReadableStream` and returning the HTTP response. This means:
+- The client's `fetch()` doesn't resolve until Call #2a completes (can take 5-15s)
+- During that time, no SSE events can reach the client — the user sees only "Reviewing your writing..."
+- Once Call #2a completes, tool resolution and Call #2b happen inside `start()`, but by then the delay has already occurred
+- The edge function logs confirm this: many entries show `no tool use, emitting Call #2a directly` because web search was never requested
 
 ### Fix
 
-Update `extractDeltaText` in both files to normalize non-string `content`:
+#### 1. Pass `webSearchEnabled` to TextSelectionWindow
 
-```typescript
-function extractDeltaText(
-  parsed: Record<string, unknown>,
-  _provider: string
-): string | null {
-  const choices = parsed.choices as
-    | Array<{ delta?: { content?: unknown } }>
-    | undefined;
-  const content = choices?.[0]?.delta?.content;
-  if (content) {
-    if (typeof content === "string") return content;
-    if (Array.isArray(content)) {
-      return content
-        .filter((b: any) => b?.type === "text")
-        .map((b: any) => b.text ?? "")
-        .join("");
+The `webSearchEnabled` state currently lives in `ChatPanel.tsx`. It needs to be lifted or passed so `TextSelectionWindow` can include it in its request body.
+
+**`ProjectContentArea.tsx`**: Lift `webSearchEnabled` state up from `ChatPanel` (or add a shared state), and pass it as a prop to both `ChatPanel` and `WritingEditor` → `TextSelectionWindow`.
+
+**`TextSelectionWindow.tsx`**: Accept `webSearchEnabled` prop and include `web_search_enabled: true` in the request body when the flag is set (line ~284-294).
+
+#### 2. Move Call #2a inside the ReadableStream
+
+Restructure the tool-use path in `context-prompt/index.ts` so Call #2a happens *inside* the `ReadableStream.start()` callback, matching the pattern already used in `chat/index.ts`. This ensures:
+- The HTTP response is returned immediately
+- Phase events (`searching_web`, `reading_documents`) reach the client in real-time
+- Call #2b tokens stream progressively
+
+```text
+Current flow:
+  await Call #2a          ← blocks response
+  return ReadableStream   ← too late for phase events
+
+Fixed flow:
+  return ReadableStream {
+    start() {
+      emit phase("reviewing")
+      await Call #2a
+      if tools requested:
+        emit phase("searching_web" / "reading_documents")
+        resolve tools
+        stream Call #2b tokens
+      else:
+        emit Call #2a text as rapid tokens
     }
-    return String(content);
   }
-  if (parsed.type === "content_block_delta") {
-    const delta = parsed.delta as { text?: string } | undefined;
-    if (delta?.text) return delta.text;
-  }
-  return null;
-}
 ```
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/chat/index.ts` | `extractDeltaText` handles array content |
-| `supabase/functions/context-prompt/index.ts` | Same fix |
+| `src/components/ProjectContentArea.tsx` | Lift `webSearchEnabled` state, pass to ChatPanel and WritingEditor |
+| `src/components/ChatPanel.tsx` | Accept `webSearchEnabled` + `setWebSearchEnabled` as props instead of local state |
+| `src/components/WritingEditor.tsx` | Pass `webSearchEnabled` through to TextSelectionWindow |
+| `src/components/TextSelectionWindow.tsx` | Accept `webSearchEnabled` prop, include in request body |
+| `supabase/functions/context-prompt/index.ts` | Move Call #2a inside ReadableStream.start() so phase events stream immediately |
+
+### What's NOT Changed
+- Chat function (already working correctly)
+- Database schema
+- FLOW analysis
+- Non-streaming fallback path
 
