@@ -16,8 +16,16 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
 /**
  * Clean LLM content that may be wrapped in Mistral's structured JSON format.
  */
-function cleanLLMContent(content: string): string {
-  if (!content) return content;
+function cleanLLMContent(content: unknown): string {
+  if (!content) return "";
+  // Already an array (Mistral structured format passed as object, not string)
+  if (Array.isArray(content)) {
+    return content
+      .filter(b => b?.type === "text")
+      .map(b => b.text ?? b.content ?? "")
+      .join("");
+  }
+  if (typeof content !== "string") return String(content);
   const trimmed = content.trim();
   if (!trimmed.startsWith("[")) return content;
   try {
@@ -440,7 +448,7 @@ When citing information from web search results, always include the source URL i
         let toolCalls = extractToolCalls(call1Data);
 
         // Track tokens from Call #1
-        totalInputChars += llmMessages.reduce((s, m) => s + m.content.length, 0);
+        totalInputChars += llmMessages.reduce((s, m) => s + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length), 0);
         const call1Content = cleanLLMContent(call1Data.choices?.[0]?.message?.content ?? "");
         totalOutputChars += call1Content.length;
 
@@ -967,7 +975,7 @@ When citing information from web search results, always include the source URL i
 
             // Token budget
             const inputChars = llmMessages.reduce(
-              (sum, m) => sum + m.content.length,
+              (sum, m) => sum + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length),
               0
             );
             const outputChars = fullResponse.length;
@@ -1094,7 +1102,7 @@ When citing information from web search results, always include the source URL i
 
     // --- Estimate tokens & update budget ---
     const inputChars = llmMessages.reduce(
-      (sum, m) => sum + m.content.length,
+      (sum, m) => sum + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length),
       0
     );
     const outputChars = assistantText.length;
