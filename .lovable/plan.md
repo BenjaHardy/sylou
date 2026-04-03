@@ -1,98 +1,97 @@
 
 
-## Plan: Add Web Search to Chat via Brave Search API (ToS-Compliant)
+## Plan: Fix Web Search Formatting, Streaming, and Phase Events
 
 ### Summary
 
-Add a `web_search` tool to chat and context-prompt workflows, controlled by a user toggle. When enabled, the LLM can search the web alongside reading imported documents using the existing two-pass flow. Per Brave ToS compliance, only search query strings are persisted — no titles, URLs, or snippets are stored in the database. Results are shown transiently during the streaming session only.
+Fix three bugs in the web search integration: (1) raw JSON appearing in chat messages, (2) missing "Searching the web..." phase indicators, (3) broken streaming when tools are used. Also refine the web search prompt to be truly optional and include source URLs inline.
 
----
+### Changes
 
-### Prerequisite: BRAVE_SEARCH_API_KEY Secret
+#### 1. Add `cleanLLMContent()` helper (both files)
 
-The user will need to add `BRAVE_SEARCH_API_KEY` as a Supabase Edge Function secret before this feature works.
+Add to both `chat/index.ts` and `context-prompt/index.ts`:
 
-### Database Migration
-
-Add `web_searches_performed` JSONB column to `chat_messages`:
-```sql
-ALTER TABLE public.chat_messages
-ADD COLUMN web_searches_performed JSONB DEFAULT NULL;
+```typescript
+function cleanLLMContent(content: string): string {
+  if (!content) return content;
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("[")) return content;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(b => b?.type === "text")) {
+      return parsed.map(b => b.text ?? b.content ?? "").join("");
+    }
+  } catch { /* not JSON */ }
+  return content;
+}
 ```
 
-Schema: a simple array of query strings, e.g. `["latest GDPR enforcement actions 2026", "EU AI Act timeline"]`
+**Applied to every response path:**
+- `chat/index.ts`: `call1Content` (line 434), `nextContent` (line 607), `fullResponse` before persistence in flush() (lines 799, 970), non-streaming path `assistantText` (line 1083)
+- `context-prompt/index.ts`: `summaryResult.text` (line 550), `call2aContent` (line 856), `fullResponse` in flush() (line 1019), `callMistral` result in non-streaming paths (lines 1248, 1338)
 
-### Edge Function: `supabase/functions/chat/index.ts`
+#### 2. Restructure tool-use path to stream-first (both files)
 
-1. **Accept `web_search_enabled: boolean`** in request body (default false)
+**Current problem:** Phase events are emitted in the TransformStream's `start()` callback — which fires only when Call #2 streaming begins, AFTER tools are already resolved. The user never sees "Searching the web..." because by the time the stream starts, the search is done.
 
-2. **Add `buildWebSearchTool()`** — tool definition with `query` parameter
+**Fix for `chat/index.ts`:** Replace the current tool-use path (lines 530-860) with a stream-first approach:
 
-3. **Add `searchWeb(query)`** — calls `GET https://api.search.brave.com/res/v1/web/search?q={query}&count=5` with `X-Subscription-Token` header. Returns `{ title, url, snippet }[]` for the LLM context (transient only)
+1. Create `TransformStream` + writer immediately when tool calls are detected
+2. Return `createSSEResponse(readable)` right away
+3. In a background async block:
+   - For each tool call, emit `{"phase":"searching_web"}` or `{"phase":"reading_documents"}` via `writer.write()` BEFORE calling the Brave API or reading the document
+   - After tool resolution, make Call #2 as streaming
+   - Read Call #2's body manually with `getReader()`, forwarding each token delta via `writer.write()` 
+   - After stream completes, clean response with `cleanLLMContent`, persist, emit `done` event with accurate `tokensUsed` and `budgetRemaining`, then `writer.close()`
+   - On error: emit `{"done":true, "error":"..."}` via writer, then close
 
-4. **Tool array logic**: Build tools array based on `hasDocuments` and `webSearchEnabled`:
-   - Both → include both tools
-   - Documents only → document tool only (existing behavior)
-   - Web search only → web search tool only (new: enters two-pass flow)
-   - Neither → no tools, direct streaming (existing behavior)
+**Fix for `context-prompt/index.ts`:** Same restructuring for the Call #2 tool-use path (lines 826-1048):
+- Create stream before tool resolution
+- Emit phase events during tool calls
+- Read Call #2b stream manually via `getReader()`
+- Persist via `persistResults()` after stream completes
+- Only applies to Call #2 (Call #1 writing summary is unaffected)
 
-5. **Tool dispatch**: In existing tool-use loop, add `web_search` case alongside `read_imported_document`. Format results for LLM consumption. Accumulate query strings in `webSearchesPerformed: string[]`.
+#### 3. Refine web search system prompt (both files)
 
-6. **Phase event**: Send `{"phase":"searching_web"}` when web search tool call detected
+Replace the current web search prompt section with:
 
-7. **System prompt**: Append web search instructions based on toggle state + document availability
+```
+# WEB SEARCH
 
-8. **Persistence**: Store `web_searches_performed` (query strings only) on assistant message row. No titles/URLs/snippets persisted.
+You have access to a web_search tool, but using it is OPTIONAL. Only use it when
+the user's message genuinely requires current information, recent data, or facts
+you don't have in your training data [or in the imported documents].
 
-### Edge Function: `supabase/functions/context-prompt/index.ts`
+Do NOT use web search for:
+- Simple conversational replies, greetings, or acknowledgments
+- Topics you can answer confidently from your training knowledge
+- Follow-up questions about information you already provided
 
-Same additions in Call #2:
-- Accept `web_search_enabled` in request body
-- Include `web_search` tool alongside `read_imported_document` when enabled
-- Handle in existing tool-use loop, send `"searching_web"` phase event
-- Store `web_searches_performed` (query strings) on Ask messages / in done event for Propose
+When citing information from web search results, always include the source URL
+inline in your response text (e.g. "According to [Source Title](URL), ...").
+This ensures the user can verify and revisit the sources later.
+```
 
-### Edge Function: `supabase/functions/analysis/index.ts`
+This addresses both the "forced to search on every message" latency issue and the "follow-up queries can't find URLs" issue (URLs will be in the persisted message text).
 
-- Add `web_searches_performed` to the chat messages query select
-- In `buildChatHistoryString`, append `[Web searches performed: "query1", "query2"]` when present (queries only, no results)
+### Error Handling
 
-### UI: `src/hooks/useChatMessages.ts`
-
-- Accept `webSearchEnabled` parameter in `sendMessage`, pass to Edge Function body
-
-### UI: `src/components/ChatPanel.tsx`
-
-- Add `webSearchEnabled` state toggle (globe icon) in the input area, next to the send button
-- Handle `phase === "searching_web"` in loading indicator: show "Searching the web..."
-- No persistent "Sources" display since we don't store URLs/titles (results visible transiently during streaming only)
-
-### UI: `src/components/TextSelectionWindow.tsx`
-
-- Handle `"searching_web"` phase in loading stages: show "Searching the web..."
-
----
+- If Brave API times out or fails mid-stream: the `searchWeb()` helper already returns `[]` on error. The stream continues with an empty result rather than hanging.
+- If Call #2 fails after tools are resolved: emit `{"done":true, "error":"AI service temporarily unavailable."}` via the writer and close the stream gracefully.
+- `done` event always includes accurate `tokensUsed` and `budgetRemaining` because token counting for all calls completes before the done event is written.
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| Migration SQL | Add `web_searches_performed` JSONB column |
-| `supabase/functions/chat/index.ts` | Web search tool, Brave API wrapper, tool dispatch, phase event, persist query strings |
-| `supabase/functions/context-prompt/index.ts` | Same web search additions in Call #2 |
-| `supabase/functions/analysis/index.ts` | Include `web_searches_performed` in chat history formatting |
-| `src/hooks/useChatMessages.ts` | Pass `web_search_enabled` to Edge Function |
-| `src/components/ChatPanel.tsx` | Globe toggle, "searching_web" phase |
-| `src/components/TextSelectionWindow.tsx` | Handle "searching_web" loading phase |
+| `supabase/functions/chat/index.ts` | `cleanLLMContent` helper, stream-first tool-use path, refined web search prompt |
+| `supabase/functions/context-prompt/index.ts` | `cleanLLMContent` helper, stream-first Call #2 tool-use path, refined web search prompt |
 
 ### What's NOT Changed
-- Behavior when toggle is off (zero overhead)
-- FLOW prompt template
-- Editor actions
-- Sanity checks (separate feature)
-
-### ToS Compliance Summary
-- **Persisted**: Query strings only (user-owned Search Query Data per Section 9(b))
-- **Transient only**: Titles, URLs, snippets shown during streaming session but never written to database
-- **FLOW**: Uses only `[Web searches performed: "query"]` — no search results
+- Database schema
+- UI components (phase handling already correct in ChatPanel and TextSelectionWindow)
+- FLOW analysis function
+- Non-streaming paths (just add `cleanLLMContent` to response text)
 
