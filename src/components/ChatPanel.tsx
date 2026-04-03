@@ -517,6 +517,26 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
             rows={1}
             className="flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
           />
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setWebSearchEnabled((v) => !v)}
+                  className={`h-9 w-9 shrink-0 flex items-center justify-center rounded-md transition-colors ${
+                    webSearchEnabled
+                      ? "text-primary bg-primary/10"
+                      : "text-muted-foreground/40 hover:text-muted-foreground"
+                  }`}
+                  aria-label="Toggle web search"
+                >
+                  <Globe className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <span>{webSearchEnabled ? "Web search enabled" : "Enable web search"}</span>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Button
             size="icon"
             onClick={handleSend}

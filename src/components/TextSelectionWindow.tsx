@@ -333,6 +333,8 @@ export function TextSelectionWindow({
                 setLoadingStage("preparing");
               } else if (p === "reading_documents") {
                 setLoadingStage("reading_documents");
+              } else if (p === "searching_web") {
+                setLoadingStage("searching_web");
               }
             },
             onToken: (text) => {
