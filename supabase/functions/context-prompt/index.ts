@@ -29,8 +29,16 @@ function estimateTokens(text: string): number {
 /**
  * Clean LLM content that may be wrapped in Mistral's structured JSON format.
  */
-function cleanLLMContent(content: string): string {
-  if (!content) return content;
+function cleanLLMContent(content: unknown): string {
+  if (!content) return "";
+  // Already an array (Mistral structured format passed as object, not string)
+  if (Array.isArray(content)) {
+    return content
+      .filter(b => b?.type === "text")
+      .map(b => b.text ?? b.content ?? "")
+      .join("");
+  }
+  if (typeof content !== "string") return String(content);
   const trimmed = content.trim();
   if (!trimmed.startsWith("[")) return content;
   try {
