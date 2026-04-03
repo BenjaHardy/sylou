@@ -1,48 +1,98 @@
 
 
-## Plan: FLOW Analysis — Imported Documents Integration
+## Plan: Add Web Search to Chat via Brave Search API (ToS-Compliant)
 
 ### Summary
 
-Populate the existing `=== IMPORTED DOCUMENTS ===` placeholder in the FLOW analysis prompt with actual document data, add `documents_referenced` to chat history formatting, implement a 3-tier token budget fallback, store the tier in `flow_meta`, and show an info notice in the report UI.
+Add a `web_search` tool to chat and context-prompt workflows, controlled by a user toggle. When enabled, the LLM can search the web alongside reading imported documents using the existing two-pass flow. Per Brave ToS compliance, only search query strings are persisted — no titles, URLs, or snippets are stored in the database. Results are shown transiently during the streaming session only.
 
-### Changes
+---
 
-#### 1. Edge Function: `supabase/functions/analysis/index.ts`
+### Prerequisite: BRAVE_SEARCH_API_KEY Secret
 
-**Fetch imported documents** — Add to the parallel data fetch (line ~420):
-```typescript
-supabase.from("imported_documents")
-  .select("id, file_name, extracted_text, summary, file_size_bytes")
-  .eq("project_id", projectId)
+The user will need to add `BRAVE_SEARCH_API_KEY` as a Supabase Edge Function secret before this feature works.
+
+### Database Migration
+
+Add `web_searches_performed` JSONB column to `chat_messages`:
+```sql
+ALTER TABLE public.chat_messages
+ADD COLUMN web_searches_performed JSONB DEFAULT NULL;
 ```
 
-**Include `documents_referenced` in chat history** — Update chat messages query (line ~476) to also select `documents_referenced`. In `buildChatHistoryString`, when a message has `documents_referenced`, look up file names from the imported docs array and append `[Documents referenced: "file1.pdf", "file2.docx"]`.
+Schema: a simple array of query strings, e.g. `["latest GDPR enforcement actions 2026", "EU AI Act timeline"]`
 
-**3-tier token budget for documents** — After building all prompt sections except imported documents:
-1. Estimate total tokens with full `extracted_text` for all docs
-2. If within context limit → **Tier 1**: include full text
-3. If over → try with `summary` instead → **Tier 2**: include summaries with fallback notice
-4. If still over → **Tier 3**: exclude documents, include exclusion notice with count and word estimate
+### Edge Function: `supabase/functions/chat/index.ts`
 
-Use 1 token ≈ 4 chars estimation. Context limit: 200k tokens for Claude minus 4k output reserve.
+1. **Accept `web_search_enabled: boolean`** in request body (default false)
 
-**Build IMPORTED DOCUMENTS section** — Replace the hardcoded `None` (line ~581) with the tiered content.
+2. **Add `buildWebSearchTool()`** — tool definition with `query` parameter
 
-**Store tier in `flow_meta`** — Add `imported_documents_mode` (`"full_text"` | `"summaries"` | `"excluded"` | `"none"`), `imported_documents_count`, and `imported_documents_total_chars` to the `flowMeta` object.
+3. **Add `searchWeb(query)`** — calls `GET https://api.search.brave.com/res/v1/web/search?q={query}&count=5` with `X-Subscription-Token` header. Returns `{ title, url, snippet }[]` for the LLM context (transient only)
 
-#### 2. UI: `src/components/FlowReportView.tsx`
+4. **Tool array logic**: Build tools array based on `hasDocuments` and `webSearchEnabled`:
+   - Both → include both tools
+   - Documents only → document tool only (existing behavior)
+   - Web search only → web search tool only (new: enters two-pass flow)
+   - Neither → no tools, direct streaming (existing behavior)
 
-Add a small info notice near the token usage section when `flow_meta.imported_documents_mode` is `"summaries"` or `"excluded"`:
-- **Summaries**: "Imported documents were included as summaries due to context length limits."
-- **Excluded**: "Imported documents ({count}) were excluded from this analysis due to context length limits."
+5. **Tool dispatch**: In existing tool-use loop, add `web_search` case alongside `read_imported_document`. Format results for LLM consumption. Accumulate query strings in `webSearchesPerformed: string[]`.
+
+6. **Phase event**: Send `{"phase":"searching_web"}` when web search tool call detected
+
+7. **System prompt**: Append web search instructions based on toggle state + document availability
+
+8. **Persistence**: Store `web_searches_performed` (query strings only) on assistant message row. No titles/URLs/snippets persisted.
+
+### Edge Function: `supabase/functions/context-prompt/index.ts`
+
+Same additions in Call #2:
+- Accept `web_search_enabled` in request body
+- Include `web_search` tool alongside `read_imported_document` when enabled
+- Handle in existing tool-use loop, send `"searching_web"` phase event
+- Store `web_searches_performed` (query strings) on Ask messages / in done event for Propose
+
+### Edge Function: `supabase/functions/analysis/index.ts`
+
+- Add `web_searches_performed` to the chat messages query select
+- In `buildChatHistoryString`, append `[Web searches performed: "query1", "query2"]` when present (queries only, no results)
+
+### UI: `src/hooks/useChatMessages.ts`
+
+- Accept `webSearchEnabled` parameter in `sendMessage`, pass to Edge Function body
+
+### UI: `src/components/ChatPanel.tsx`
+
+- Add `webSearchEnabled` state toggle (globe icon) in the input area, next to the send button
+- Handle `phase === "searching_web"` in loading indicator: show "Searching the web..."
+- No persistent "Sources" display since we don't store URLs/titles (results visible transiently during streaming only)
+
+### UI: `src/components/TextSelectionWindow.tsx`
+
+- Handle `"searching_web"` phase in loading stages: show "Searching the web..."
+
+---
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/analysis/index.ts` | Fetch docs, enrich chat history with `documents_referenced`, 3-tier fallback, populate IMPORTED DOCUMENTS section, store mode in flow_meta |
-| `src/components/FlowReportView.tsx` | Show info notice for summaries/excluded tiers |
+| Migration SQL | Add `web_searches_performed` JSONB column |
+| `supabase/functions/chat/index.ts` | Web search tool, Brave API wrapper, tool dispatch, phase event, persist query strings |
+| `supabase/functions/context-prompt/index.ts` | Same web search additions in Call #2 |
+| `supabase/functions/analysis/index.ts` | Include `web_searches_performed` in chat history formatting |
+| `src/hooks/useChatMessages.ts` | Pass `web_search_enabled` to Edge Function |
+| `src/components/ChatPanel.tsx` | Globe toggle, "searching_web" phase |
+| `src/components/TextSelectionWindow.tsx` | Handle "searching_web" loading phase |
 
-No database migration needed.
+### What's NOT Changed
+- Behavior when toggle is off (zero overhead)
+- FLOW prompt template
+- Editor actions
+- Sanity checks (separate feature)
+
+### ToS Compliance Summary
+- **Persisted**: Query strings only (user-owned Search Query Data per Section 9(b))
+- **Transient only**: Titles, URLs, snippets shown during streaming session but never written to database
+- **FLOW**: Uses only `[Web searches performed: "query"]` — no search results
 
