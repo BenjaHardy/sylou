@@ -408,7 +408,7 @@ Deno.serve(async (req) => {
     // --- Verify project ownership (RLS) + get settings ---
     const { data: project, error: projectErr } = await supabase
       .from("projects")
-      .select("id, language, tutor_mode")
+      .select("id, language, tutor_mode, name")
       .eq("id", projectId)
       .single();
 
