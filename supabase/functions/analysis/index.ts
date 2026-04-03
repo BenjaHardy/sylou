@@ -211,6 +211,7 @@ function buildChatHistoryString(
     flow_flag: string | null;
     thread_name: string;
     documents_referenced?: string[] | null;
+    web_searches_performed?: string[] | null;
   }>,
   docNameMap: Record<string, string>
 ): string {
@@ -225,6 +226,10 @@ function buildChatHistoryString(
       if (m.documents_referenced && Array.isArray(m.documents_referenced) && m.documents_referenced.length > 0) {
         const names = m.documents_referenced.map((id: string) => docNameMap[id] || id).map(n => `"${n}"`).join(", ");
         line += ` [Documents referenced: ${names}]`;
+      }
+      if (m.web_searches_performed && Array.isArray(m.web_searches_performed) && m.web_searches_performed.length > 0) {
+        const queries = m.web_searches_performed.map((q: string) => `"${q}"`).join(", ");
+        line += ` [Web searches performed: ${queries}]`;
       }
       if (m.flow_flag === "not_assessed") {
         line = `[NOT ASSESSED] ${line}`;
