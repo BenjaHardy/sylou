@@ -483,7 +483,12 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
               <Bot className="h-3.5 w-3.5" />
             </div>
             <div className="bg-muted rounded-xl px-3.5 py-2.5">
-              {phase === "reading_documents" ? (
+              {phase === "searching_web" ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span>Searching the web…</span>
+                </div>
+              ) : phase === "reading_documents" ? (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3 w-3 animate-spin" />
                   <span>Reading imported documents…</span>
