@@ -114,12 +114,13 @@ export function TextSelectionWindow({
   const [inputText, setInputText] = useState("");
   const [editableText, setEditableText] = useState("");
   const [currentActionId, setCurrentActionId] = useState<string | null>(null);
-  const [loadingStage, setLoadingStage] = useState<"reviewing" | "reading_documents" | "preparing">("reviewing");
+  const [loadingStage, setLoadingStage] = useState<"reviewing" | "reading_documents" | "searching_web" | "preparing">("reviewing");
   // For propose confirm flow
   const [pendingSummaryUpdate, setPendingSummaryUpdate] = useState<string | null>(null);
   const [pendingInstruction, setPendingInstruction] = useState<string>("");
   const [pendingSourceBreakdown, setPendingSourceBreakdown] = useState<string | null>(null);
   const [pendingDocumentsReferenced, setPendingDocumentsReferenced] = useState<string[] | null>(null);
+  const [pendingWebSearchesPerformed, setPendingWebSearchesPerformed] = useState<string[] | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const actions = tutorMode ? TUTOR_ACTIONS : NORMAL_ACTIONS;
@@ -333,6 +334,8 @@ export function TextSelectionWindow({
                 setLoadingStage("preparing");
               } else if (p === "reading_documents") {
                 setLoadingStage("reading_documents");
+              } else if (p === "searching_web") {
+                setLoadingStage("searching_web");
               }
             },
             onToken: (text) => {
@@ -372,6 +375,7 @@ export function TextSelectionWindow({
                 setPendingInstruction(userInstruction);
                 setPendingSourceBreakdown(selected_text_source ?? null);
                 setPendingDocumentsReferenced((evt.documents_referenced as string[]) ?? null);
+                setPendingWebSearchesPerformed((evt.web_searches_performed as string[]) ?? null);
                 provenanceTracker?.registerAiResultText(aiResponse);
                 setPhase("result");
               }
@@ -405,6 +409,7 @@ export function TextSelectionWindow({
             setPendingInstruction(userInstruction);
             setPendingSourceBreakdown(selected_text_source ?? null);
             setPendingDocumentsReferenced(data.documents_referenced ?? null);
+            setPendingWebSearchesPerformed(data.web_searches_performed ?? null);
             provenanceTracker?.registerAiResultText(data.ai_response);
             setPhase("result");
           }
@@ -479,6 +484,7 @@ export function TextSelectionWindow({
             ai_response: proposedText,
             ...(pendingSourceBreakdown ? { selected_text_source: pendingSourceBreakdown } : {}),
             ...(pendingDocumentsReferenced && pendingDocumentsReferenced.length > 0 ? { documents_referenced: pendingDocumentsReferenced } : {}),
+            ...(pendingWebSearchesPerformed && pendingWebSearchesPerformed.length > 0 ? { web_searches_performed: pendingWebSearchesPerformed } : {}),
           },
         });
         if (error) {
@@ -521,6 +527,7 @@ export function TextSelectionWindow({
             ai_response: editableText,
             ...(pendingSourceBreakdown ? { selected_text_source: pendingSourceBreakdown } : {}),
             ...(pendingDocumentsReferenced && pendingDocumentsReferenced.length > 0 ? { documents_referenced: pendingDocumentsReferenced } : {}),
+            ...(pendingWebSearchesPerformed && pendingWebSearchesPerformed.length > 0 ? { web_searches_performed: pendingWebSearchesPerformed } : {}),
           },
         });
         if (error) {
@@ -640,6 +647,8 @@ export function TextSelectionWindow({
               ? "Reviewing your writing…"
               : loadingStage === "reading_documents"
               ? "Reading imported documents…"
+              : loadingStage === "searching_web"
+              ? "Searching the web…"
               : "Preparing response…"}
           </div>
         )}

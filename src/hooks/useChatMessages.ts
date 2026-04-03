@@ -44,7 +44,7 @@ export function useChatMessages(threadId: string | null) {
   }, [fetchMessages]);
 
   const sendMessage = useCallback(
-    async (content: string, conciseMode: boolean) => {
+    async (content: string, conciseMode: boolean, webSearchEnabled?: boolean) => {
       if (!threadId || !content.trim()) return;
       setSending(true);
 
@@ -91,6 +91,7 @@ export function useChatMessages(threadId: string | null) {
             message: content.trim(),
             concise_mode: conciseMode,
             stream: true,
+            ...(webSearchEnabled ? { web_search_enabled: true } : {}),
           }),
         });
 

@@ -110,6 +110,7 @@ export type Database = {
           source_type: string | null
           thread_id: string
           tutor_mode: boolean | null
+          web_searches_performed: Json | null
         }
         Insert: {
           concise_mode?: boolean | null
@@ -123,6 +124,7 @@ export type Database = {
           source_type?: string | null
           thread_id: string
           tutor_mode?: boolean | null
+          web_searches_performed?: Json | null
         }
         Update: {
           concise_mode?: boolean | null
@@ -136,6 +138,7 @@ export type Database = {
           source_type?: string | null
           thread_id?: string
           tutor_mode?: boolean | null
+          web_searches_performed?: Json | null
         }
         Relationships: [
           {
