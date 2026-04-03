@@ -197,6 +197,7 @@ export type Database = {
           metrics_snapshot: Json | null
           model_used: string
           project_id: string
+          project_name: string | null
           provenance_snapshot: Json | null
           share_enabled: boolean | null
           share_token: string | null
@@ -220,6 +221,7 @@ export type Database = {
           metrics_snapshot?: Json | null
           model_used: string
           project_id: string
+          project_name?: string | null
           provenance_snapshot?: Json | null
           share_enabled?: boolean | null
           share_token?: string | null
@@ -243,6 +245,7 @@ export type Database = {
           metrics_snapshot?: Json | null
           model_used?: string
           project_id?: string
+          project_name?: string | null
           provenance_snapshot?: Json | null
           share_enabled?: boolean | null
           share_token?: string | null
