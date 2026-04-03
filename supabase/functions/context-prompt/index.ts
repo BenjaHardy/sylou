@@ -97,6 +97,83 @@ function buildDocumentTool() {
   };
 }
 
+/**
+ * Build the tool definition for web search.
+ */
+function buildWebSearchTool() {
+  return {
+    type: "function",
+    function: {
+      name: "web_search",
+      description:
+        "Search the web for current information. Use this when the user's question requires information not available in your training data or the project's imported documents. Returns the top results with titles, URLs, and text snippets.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "The search query",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  };
+}
+
+/**
+ * Search the web using Brave Search API. Returns transient results (not persisted).
+ */
+async function searchWeb(query: string): Promise<{ title: string; url: string; snippet: string }[]> {
+  const apiKey = Deno.env.get("BRAVE_SEARCH_API_KEY");
+  if (!apiKey) {
+    console.error("[web_search] BRAVE_SEARCH_API_KEY not configured");
+    return [];
+  }
+
+  try {
+    const res = await fetch(
+      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
+      {
+        headers: {
+          "Accept": "application/json",
+          "Accept-Encoding": "gzip",
+          "X-Subscription-Token": apiKey,
+        },
+      }
+    );
+
+    if (!res.ok) {
+      console.error("[web_search] Brave API error:", res.status, await res.text());
+      return [];
+    }
+
+    const data = await res.json();
+    const results = (data.web?.results ?? []).slice(0, 5);
+    return results.map((r: { title?: string; url?: string; description?: string }) => ({
+      title: r.title ?? "",
+      url: r.url ?? "",
+      snippet: r.description ?? "",
+    }));
+  } catch (err) {
+    console.error("[web_search] error:", err);
+    return [];
+  }
+}
+
+/**
+ * Format web search results for LLM consumption (transient, not persisted).
+ */
+function formatWebSearchResults(query: string, results: { title: string; url: string; snippet: string }[]): string {
+  if (results.length === 0) {
+    return `Web search results for: "${query}"\n\nNo results found.`;
+  }
+  const formatted = results.map((r, i) =>
+    `${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.snippet}`
+  ).join("\n\n");
+  return `Web search results for: "${query}"\n\n${formatted}`;
+}
+
 async function callMistral(
   apiKey: string,
   messages: { role: string; content: string }[],
@@ -284,6 +361,7 @@ Deno.serve(async (req) => {
     const { project_id, thread_id, action_type, selected_text, instruction, source_module } = body;
     const selectedTextSource: string | undefined = body.selected_text_source;
     const streamRequested: boolean = body.stream === true;
+    const webSearchEnabled: boolean = body.web_search_enabled ?? false;
 
     // ── CONFIRM endpoint ────────────────────────────────────────────────
     if (body.confirm !== undefined) {
@@ -316,8 +394,9 @@ Deno.serve(async (req) => {
           aiResponseContent = body.ai_response;
         }
 
-        // Parse documents_referenced from body (only present on confirm)
+        // Parse documents_referenced and web_searches_performed from body (only present on confirm)
         const documentsReferenced: string[] | undefined = body.documents_referenced;
+        const webSearchesPerformed: string[] | undefined = body.web_searches_performed;
 
         // Log to chat_messages and collect inserted rows
         const insertedMessages = [];
@@ -356,6 +435,10 @@ Deno.serve(async (req) => {
         // Only attach documents_referenced on accepted proposals
         if (documentsReferenced && documentsReferenced.length > 0) {
           responseMsgRow.documents_referenced = documentsReferenced;
+        }
+        // Only attach web_searches_performed on accepted proposals
+        if (webSearchesPerformed && webSearchesPerformed.length > 0) {
+          responseMsgRow.web_searches_performed = webSearchesPerformed;
         }
 
         const { data: responseMsg } = await supabase.from("chat_messages").insert(responseMsgRow).select().single();
@@ -573,6 +656,15 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       systemPrompt += docIndex;
     }
 
+    // Append web search instructions to system prompt
+    if (webSearchEnabled) {
+      if (hasDocuments) {
+        systemPrompt += `\n\n# WEB SEARCH\n\nYou have access to web search. Prefer the project's imported documents when they contain relevant information. Use web search for current events, recent data, or information not available in the imported documents.`;
+      } else {
+        systemPrompt += `\n\n# WEB SEARCH\n\nYou have access to web search for finding current information, recent data, or facts beyond your training knowledge.`;
+      }
+    }
+
     const responseMessages = buildResponsePrompt(
       systemPrompt,
       updatedSummary,
@@ -588,12 +680,19 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
     let totalInputChars = summaryResult.inputChars;
     let totalOutputChars = summaryResult.outputChars;
     const documentsReferenced: string[] = [];
+    const webSearchesPerformed: string[] = [];
+
+    // --- Build tools array ---
+    const hasTools = hasDocuments || webSearchEnabled;
+    const tools: Record<string, unknown>[] = [];
+    if (hasDocuments) tools.push(buildDocumentTool());
+    if (webSearchEnabled) tools.push(buildWebSearchTool());
 
     // =========================================================
     // STREAMING PATH — LLM Call #2 with optional tool-use
     // =========================================================
     if (streamRequested) {
-      console.log("[stream:context-prompt] entering streaming path, action_type:", action_type, "hasDocuments:", hasDocuments);
+      console.log("[stream:context-prompt] entering streaming path, action_type:", action_type, "hasTools:", hasTools);
 
       const encoder = new TextEncoder();
 
@@ -698,6 +797,9 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
           if (documentsReferenced.length > 0) {
             askResponseRow.documents_referenced = documentsReferenced;
           }
+          if (webSearchesPerformed.length > 0) {
+            askResponseRow.web_searches_performed = webSearchesPerformed;
+          }
 
           const { data: responseMsg } = await supabase.from("chat_messages").insert(askResponseRow).select().single();
           if (responseMsg) insertedMessages.push(responseMsg);
@@ -721,16 +823,16 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
         return { actionRow, budgetRemaining, insertedMessages };
       }
 
-      // ── TWO-PASS FLOW when documents exist ──
-      if (hasDocuments) {
-        console.log("[stream:context-prompt] documents exist, two-pass flow");
+      // ── TWO-PASS FLOW when tools exist ──
+      if (hasTools) {
+        console.log("[stream:context-prompt] tools available, two-pass flow");
 
         // Call #2a: non-streamed with tools
         const call2aBody = {
           model: "mistral-large-latest",
           messages: responseMessages,
           max_tokens: 2000,
-          tools: [buildDocumentTool()],
+          tools,
           tool_choice: "auto",
         };
 
@@ -784,6 +886,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
                 budget_remaining: budgetRemaining,
                 inserted_messages: insertedMessages,
                 ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
+                ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
               }));
             } catch (err) {
               console.error("[stream:context-prompt] error in no-tool path:", err);
@@ -829,6 +932,20 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
               tool_call_id: tc.id,
               content: toolResult,
             });
+          } else if (tc.name === "web_search") {
+            const query = tc.arguments.query as string;
+            console.log("[stream:context-prompt] web search:", query);
+            webSearchesPerformed.push(query);
+
+            const results = await searchWeb(query);
+            const toolResult = formatWebSearchResults(query, results);
+            totalInputChars += toolResult.length;
+
+            toolMessages.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: toolResult,
+            });
           }
         }
 
@@ -861,7 +978,12 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
         const transform = new TransformStream({
           start(controller) {
             try {
-              controller.enqueue(sseEvent({ phase: "reading_documents" }));
+              if (documentsReferenced.length > 0) {
+                controller.enqueue(sseEvent({ phase: "reading_documents" }));
+              }
+              if (webSearchesPerformed.length > 0) {
+                controller.enqueue(sseEvent({ phase: "searching_web" }));
+              }
             } catch { /* */ }
           },
           transform(chunk, controller) {
@@ -907,6 +1029,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
                     budget_remaining: budgetRemaining,
                     inserted_messages: insertedMessages,
                     ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
+                    ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
                   }));
                 } catch { clientDisconnected = true; }
               }
@@ -925,8 +1048,8 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
         return createSSEResponse(outputStream);
       }
 
-      // ── NO DOCUMENTS — original streaming Call #2 ──
-      console.log("[stream:context-prompt] no documents, standard streaming");
+      // ── NO TOOLS — original streaming Call #2 ──
+      console.log("[stream:context-prompt] no tools, standard streaming");
 
       const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
         method: "POST",
@@ -1042,7 +1165,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
     // NON-STREAMING PATH — with optional two-pass document flow
     // =========================================================
 
-    if (hasDocuments) {
+    if (hasTools) {
       // Call #2a: non-streamed with tools
       const call2aRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
         method: "POST",
@@ -1054,7 +1177,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
           model: "mistral-large-latest",
           messages: responseMessages,
           max_tokens: 2000,
-          tools: [buildDocumentTool()],
+          tools,
           tool_choice: "auto",
         }),
       });
@@ -1095,6 +1218,19 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
             const toolResult = docData?.extracted_text
               ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
               : `Document not found or text not yet extracted.`;
+            totalInputChars += toolResult.length;
+
+            toolMessages.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: toolResult,
+            });
+          } else if (tc.name === "web_search") {
+            const query = tc.arguments.query as string;
+            webSearchesPerformed.push(query);
+
+            const results = await searchWeb(query);
+            const toolResult = formatWebSearchResults(query, results);
             totalInputChars += toolResult.length;
 
             toolMessages.push({
@@ -1169,6 +1305,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
           thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: "mistral-large-latest",
         };
         if (documentsReferenced.length > 0) askResponseRow.documents_referenced = documentsReferenced;
+        if (webSearchesPerformed.length > 0) askResponseRow.web_searches_performed = webSearchesPerformed;
 
         const { data: responseMsg } = await supabase.from("chat_messages").insert(askResponseRow).select().single();
         if (responseMsg) insertedMessages.push(responseMsg);
@@ -1192,10 +1329,11 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
         budget_remaining: budgetRemaining,
         inserted_messages: insertedMessages,
         ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
+        ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
       });
     }
 
-    // ── NO DOCUMENTS — original non-streaming path ──
+    // ── NO TOOLS — original non-streaming path ──
     const responseResult = await callMistral(mistralKey, responseMessages, 2000);
     const aiResponse = responseResult.text.trim();
 

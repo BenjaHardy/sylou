@@ -15,8 +15,6 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
 
 /**
  * Extract the text delta from a streaming chunk, model-agnostic.
- * - Mistral / OpenAI-compatible: choices[0].delta.content
- * - Anthropic (future): delta.text on content_block_delta events
  */
 function extractDeltaText(
   parsed: Record<string, unknown>,
@@ -37,7 +35,6 @@ function extractDeltaText(
 
 /**
  * Extract tool calls from a non-streaming LLM response.
- * Handles Mistral/OpenAI-compatible format.
  */
 function extractToolCalls(
   response: Record<string, unknown>
@@ -87,6 +84,83 @@ function buildDocumentTool() {
   };
 }
 
+/**
+ * Build the tool definition for web search.
+ */
+function buildWebSearchTool() {
+  return {
+    type: "function",
+    function: {
+      name: "web_search",
+      description:
+        "Search the web for current information. Use this when the user's question requires information not available in your training data or the project's imported documents. Returns the top results with titles, URLs, and text snippets.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "The search query",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  };
+}
+
+/**
+ * Search the web using Brave Search API. Returns transient results (not persisted).
+ */
+async function searchWeb(query: string): Promise<{ title: string; url: string; snippet: string }[]> {
+  const apiKey = Deno.env.get("BRAVE_SEARCH_API_KEY");
+  if (!apiKey) {
+    console.error("[web_search] BRAVE_SEARCH_API_KEY not configured");
+    return [];
+  }
+
+  try {
+    const res = await fetch(
+      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
+      {
+        headers: {
+          "Accept": "application/json",
+          "Accept-Encoding": "gzip",
+          "X-Subscription-Token": apiKey,
+        },
+      }
+    );
+
+    if (!res.ok) {
+      console.error("[web_search] Brave API error:", res.status, await res.text());
+      return [];
+    }
+
+    const data = await res.json();
+    const results = (data.web?.results ?? []).slice(0, 5);
+    return results.map((r: { title?: string; url?: string; description?: string }) => ({
+      title: r.title ?? "",
+      url: r.url ?? "",
+      snippet: r.description ?? "",
+    }));
+  } catch (err) {
+    console.error("[web_search] error:", err);
+    return [];
+  }
+}
+
+/**
+ * Format web search results for LLM consumption (transient, not persisted).
+ */
+function formatWebSearchResults(query: string, results: { title: string; url: string; snippet: string }[]): string {
+  if (results.length === 0) {
+    return `Web search results for: "${query}"\n\nNo results found.`;
+  }
+  const formatted = results.map((r, i) =>
+    `${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.snippet}`
+  ).join("\n\n");
+  return `Web search results for: "${query}"\n\n${formatted}`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -134,6 +208,7 @@ Deno.serve(async (req) => {
     const message: string = body.message;
     const conciseMode: boolean = body.concise_mode ?? false;
     const streamRequested: boolean = body.stream === true;
+    const webSearchEnabled: boolean = body.web_search_enabled ?? false;
 
     if (!threadId || !message) {
       return jsonResponse({ error: "thread_id and message are required" }, 400);
@@ -249,6 +324,15 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       systemPrompt += docIndex;
     }
 
+    // Append web search instructions to system prompt
+    if (webSearchEnabled) {
+      if (hasDocuments) {
+        systemPrompt += `\n\n# WEB SEARCH\n\nYou have access to web search. Prefer the project's imported documents when they contain relevant information. Use web search for current events, recent data, or information not available in the imported documents.`;
+      } else {
+        systemPrompt += `\n\n# WEB SEARCH\n\nYou have access to web search for finding current information, recent data, or facts beyond your training knowledge.`;
+      }
+    }
+
     // --- Fetch last 50 messages ---
     const { data: history } = await supabase
       .from("chat_messages")
@@ -277,12 +361,19 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
     let totalInputChars = 0;
     let totalOutputChars = 0;
     const documentsReferenced: string[] = [];
+    const webSearchesPerformed: string[] = [];
+
+    // --- Build tools array ---
+    const hasTools = hasDocuments || webSearchEnabled;
+    const tools: Record<string, unknown>[] = [];
+    if (hasDocuments) tools.push(buildDocumentTool());
+    if (webSearchEnabled) tools.push(buildWebSearchTool());
 
     // =========================================================
     // STREAMING PATH — with tool-use support
     // =========================================================
     if (streamRequested) {
-      console.log("[stream] entering streaming path for thread", threadId);
+      console.log("[stream] entering streaming path for thread", threadId, "hasTools:", hasTools);
 
       const encoder = new TextEncoder();
 
@@ -304,16 +395,16 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
         return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
       }
 
-      // ---- TWO-PASS FLOW when documents exist ----
-      if (hasDocuments) {
-        console.log("[stream] documents exist, using two-pass flow");
+      // ---- TWO-PASS FLOW when tools exist ----
+      if (hasTools) {
+        console.log("[stream] tools available, using two-pass flow");
 
         // LLM Call #1: non-streaming with tools
         const call1Body: Record<string, unknown> = {
           model: "mistral-large-latest",
           messages: llmMessages,
           max_tokens: 2000,
-          tools: [buildDocumentTool()],
+          tools,
           tool_choice: "auto",
         };
 
@@ -336,7 +427,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
         }
 
         const call1Data = await call1Res.json();
-        const toolCalls = extractToolCalls(call1Data);
+        let toolCalls = extractToolCalls(call1Data);
 
         // Track tokens from Call #1
         totalInputChars += llmMessages.reduce((s, m) => s + m.content.length, 0);
@@ -370,7 +461,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
                 flow_flag: "normal",
                 concise_mode: conciseMode,
               };
-              const assistantMsgRow = {
+              const assistantMsgRow: Record<string, unknown> = {
                 thread_id: threadId,
                 role: "assistant",
                 content: responseText,
@@ -436,7 +527,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
           return createSSEResponse(readable);
         }
 
-        // ---- Tool use detected — resolve tools, then stream Call #2 ----
+        // ---- Tool use detected — resolve tools iteratively, then stream final ----
         console.log("[stream] tool use detected:", toolCalls.length, "calls");
 
         // Build the conversation with tool results
@@ -445,30 +536,155 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
           call1Data.choices[0].message, // assistant message with tool_calls
         ];
 
-        // Resolve tool calls (up to 5)
-        for (const tc of toolCalls.slice(0, 5)) {
-          if (tc.name === "read_imported_document") {
-            const docId = tc.arguments.document_id as string;
-            console.log("[stream] reading document:", docId);
-            documentsReferenced.push(docId);
+        // Resolve tool calls iteratively (up to 5 iterations)
+        let iteration = 0;
+        const MAX_ITERATIONS = 5;
 
-            const { data: docData } = await adminSupabase
-              .from("imported_documents")
-              .select("extracted_text, file_name")
-              .eq("id", docId)
-              .single();
+        while (toolCalls.length > 0 && iteration < MAX_ITERATIONS) {
+          iteration++;
+          console.log(`[stream] tool iteration ${iteration}, ${toolCalls.length} calls`);
 
-            const toolResult = docData?.extracted_text
-              ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
-              : `Document not found or text not yet extracted.`;
+          for (const tc of toolCalls.slice(0, 5)) {
+            if (tc.name === "read_imported_document") {
+              const docId = tc.arguments.document_id as string;
+              console.log("[stream] reading document:", docId);
+              documentsReferenced.push(docId);
 
-            totalInputChars += toolResult.length;
+              const { data: docData } = await adminSupabase
+                .from("imported_documents")
+                .select("extracted_text, file_name")
+                .eq("id", docId)
+                .single();
 
-            toolMessages.push({
-              role: "tool",
-              tool_call_id: tc.id,
-              content: toolResult,
+              const toolResult = docData?.extracted_text
+                ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
+                : `Document not found or text not yet extracted.`;
+
+              totalInputChars += toolResult.length;
+
+              toolMessages.push({
+                role: "tool",
+                tool_call_id: tc.id,
+                content: toolResult,
+              });
+            } else if (tc.name === "web_search") {
+              const query = tc.arguments.query as string;
+              console.log("[stream] web search:", query);
+              webSearchesPerformed.push(query);
+
+              const results = await searchWeb(query);
+              const toolResult = formatWebSearchResults(query, results);
+              totalInputChars += toolResult.length;
+
+              toolMessages.push({
+                role: "tool",
+                tool_call_id: tc.id,
+                content: toolResult,
+              });
+            }
+          }
+
+          // Check if the LLM wants to make more tool calls
+          if (iteration < MAX_ITERATIONS) {
+            const nextRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${mistralKey}`,
+              },
+              body: JSON.stringify({
+                model: "mistral-large-latest",
+                messages: toolMessages,
+                max_tokens: 2000,
+                tools,
+                tool_choice: "auto",
+              }),
             });
+
+            if (!nextRes.ok) break;
+
+            const nextData = await nextRes.json();
+            const nextContent = nextData.choices?.[0]?.message?.content ?? "";
+            totalOutputChars += nextContent.length;
+            toolCalls = extractToolCalls(nextData);
+
+            if (toolCalls.length > 0) {
+              toolMessages.push(nextData.choices[0].message);
+            } else {
+              // No more tool calls — if there's text content, use it directly
+              if (nextContent) {
+                // Stream this as the final response
+                const responseText = nextContent;
+                const { readable, writable } = new TransformStream();
+                const writer = writable.getWriter();
+
+                (async () => {
+                  try {
+                    // Send phase events
+                    if (documentsReferenced.length > 0) {
+                      await writer.write(sseEvent({ phase: "reading_documents" }));
+                    }
+                    if (webSearchesPerformed.length > 0) {
+                      await writer.write(sseEvent({ phase: "searching_web" }));
+                    }
+
+                    const chunkSize = 20;
+                    for (let i = 0; i < responseText.length; i += chunkSize) {
+                      await writer.write(sseEvent({ token: responseText.slice(i, i + chunkSize) }));
+                    }
+
+                    const userMsgRow = {
+                      thread_id: threadId,
+                      role: "user",
+                      content: message.trim(),
+                      source_type: "chat",
+                      flow_flag: "normal",
+                      concise_mode: conciseMode,
+                    };
+                    const assistantMsgRow: Record<string, unknown> = {
+                      thread_id: threadId,
+                      role: "assistant",
+                      content: responseText,
+                      source_type: "chat",
+                      flow_flag: "normal",
+                      concise_mode: conciseMode,
+                      model_used: "mistral-large-latest",
+                    };
+                    if (documentsReferenced.length > 0) assistantMsgRow.documents_referenced = documentsReferenced;
+                    if (webSearchesPerformed.length > 0) assistantMsgRow.web_searches_performed = webSearchesPerformed;
+
+                    const { data: insertedUser } = await adminSupabase.from("chat_messages").insert(userMsgRow).select().single();
+                    const { data: insertedAssistant } = await adminSupabase.from("chat_messages").insert(assistantMsgRow).select().single();
+
+                    const estimatedTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
+                    const newTotal = profile.tokens_used_this_period + estimatedTokens;
+                    await adminSupabase.from("profiles").update({ tokens_used_this_period: newTotal }).eq("id", user.id);
+
+                    const promptColumn = tutorMode ? "chat_prompt_count_tutor" : "chat_prompt_count_normal";
+                    const { data: cs } = await adminSupabase.from("project_stats").select(promptColumn).eq("project_id", thread.project_id).single();
+                    if (cs) {
+                      const cnt = (cs as Record<string, number>)[promptColumn] || 0;
+                      await adminSupabase.from("project_stats").update({ [promptColumn]: cnt + 1 }).eq("project_id", thread.project_id);
+                    }
+
+                    await writer.write(sseEvent({
+                      done: true,
+                      user_message: insertedUser,
+                      assistant_message: insertedAssistant,
+                      budget_remaining: profile.monthly_token_budget - newTotal,
+                    }));
+                  } catch (err) {
+                    console.error("[stream] error in multi-tool path:", err);
+                    try { await writer.write(sseEvent({ done: true, error: "Messages may not have been saved." })); } catch { /* */ }
+                  } finally {
+                    await writer.close();
+                  }
+                })();
+
+                return createSSEResponse(readable);
+              }
+              break;
+            }
           }
         }
 
@@ -505,9 +721,14 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
         const transform = new TransformStream({
           start(controller) {
-            // Send phase event before streaming begins
+            // Send phase events before streaming begins
             try {
-              controller.enqueue(sseEvent({ phase: "reading_documents" }));
+              if (documentsReferenced.length > 0) {
+                controller.enqueue(sseEvent({ phase: "reading_documents" }));
+              }
+              if (webSearchesPerformed.length > 0) {
+                controller.enqueue(sseEvent({ phase: "searching_web" }));
+              }
             } catch { /* */ }
           },
           transform(chunk, controller) {
@@ -585,6 +806,9 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
               if (documentsReferenced.length > 0) {
                 assistantMsgRow.documents_referenced = documentsReferenced;
               }
+              if (webSearchesPerformed.length > 0) {
+                assistantMsgRow.web_searches_performed = webSearchesPerformed;
+              }
 
               const { data: insertedUser } = await adminSupabase
                 .from("chat_messages")
@@ -636,8 +860,8 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
         return createSSEResponse(outputStream);
       }
 
-      // ---- NO DOCUMENTS — original streaming path ----
-      console.log("[stream] no documents, standard streaming path");
+      // ---- NO TOOLS — original streaming path ----
+      console.log("[stream] no tools, standard streaming path");
 
       const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
         method: "POST",
@@ -681,7 +905,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
             if (!trimmed || !trimmed.startsWith("data:")) continue;
             const payload = trimmed.slice(5).trim();
             if (payload === "[DONE]") {
-              // Increment prompt count immediately at [DONE] — more reliable than flush()
               if (!promptCounted) {
                 promptCounted = true;
                 const promptColumn = tutorMode
