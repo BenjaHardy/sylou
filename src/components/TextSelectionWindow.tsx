@@ -107,6 +107,7 @@ export function TextSelectionWindow({
   selectionTo,
   appendMessages,
   setMessages,
+  webSearchEnabled,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("actions");
   const [activeAction, setActiveAction] = useState<ActionId | null>(null);
