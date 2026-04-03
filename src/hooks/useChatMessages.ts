@@ -91,6 +91,7 @@ export function useChatMessages(threadId: string | null) {
             message: content.trim(),
             concise_mode: conciseMode,
             stream: true,
+            ...(webSearchEnabled ? { web_search_enabled: true } : {}),
           }),
         });
 
