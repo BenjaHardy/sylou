@@ -448,7 +448,7 @@ When citing information from web search results, always include the source URL i
         let toolCalls = extractToolCalls(call1Data);
 
         // Track tokens from Call #1
-        totalInputChars += llmMessages.reduce((s, m) => s + m.content.length, 0);
+        totalInputChars += llmMessages.reduce((s, m) => s + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length), 0);
         const call1Content = cleanLLMContent(call1Data.choices?.[0]?.message?.content ?? "");
         totalOutputChars += call1Content.length;
 
