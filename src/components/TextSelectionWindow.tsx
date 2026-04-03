@@ -409,6 +409,7 @@ export function TextSelectionWindow({
             setPendingInstruction(userInstruction);
             setPendingSourceBreakdown(selected_text_source ?? null);
             setPendingDocumentsReferenced(data.documents_referenced ?? null);
+            setPendingWebSearchesPerformed(data.web_searches_performed ?? null);
             provenanceTracker?.registerAiResultText(data.ai_response);
             setPhase("result");
           }
