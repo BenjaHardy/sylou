@@ -1,0 +1,1 @@
+ALTER TABLE public.chat_messages ADD COLUMN web_searches_performed JSONB DEFAULT NULL;
