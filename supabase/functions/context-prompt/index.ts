@@ -872,182 +872,178 @@ When citing information from web search results, always include the source URL i
           console.log("[stream:context-prompt] no tool use, emitting Call #2a directly");
           const responseText = call2aContent || "No response generated.";
 
-          const { readable, writable } = new TransformStream();
-          const writer = writable.getWriter();
+          const readable = new ReadableStream({
+            async start(controller) {
+              try {
+                controller.enqueue(sseEvent({ phase: "responding" }));
 
-          (async () => {
-            try {
-              await writer.write(sseEvent({ phase: "responding" }));
+                const chunkSize = 20;
+                for (let i = 0; i < responseText.length; i += chunkSize) {
+                  controller.enqueue(sseEvent({ token: responseText.slice(i, i + chunkSize) }));
+                }
 
-              const chunkSize = 20;
-              for (let i = 0; i < responseText.length; i += chunkSize) {
-                await writer.write(sseEvent({ token: responseText.slice(i, i + chunkSize) }));
+                const { actionRow, budgetRemaining, insertedMessages } = await persistResults(responseText, 0, 0);
+
+                controller.enqueue(sseEvent({
+                  done: true,
+                  ai_response: responseText,
+                  summary_update: summaryUpdate,
+                  action_id: actionRow?.id ?? null,
+                  budget_remaining: budgetRemaining,
+                  inserted_messages: insertedMessages,
+                  ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
+                  ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
+                }));
+              } catch (err) {
+                console.error("[stream:context-prompt] error in no-tool path:", err);
+                try { controller.enqueue(sseEvent({ done: true, error: "Action may not have been saved." })); } catch { /* */ }
+              } finally {
+                controller.close();
               }
-
-              const { actionRow, budgetRemaining, insertedMessages } = await persistResults(responseText, 0, 0);
-
-              await writer.write(sseEvent({
-                done: true,
-                ai_response: responseText,
-                summary_update: summaryUpdate,
-                action_id: actionRow?.id ?? null,
-                budget_remaining: budgetRemaining,
-                inserted_messages: insertedMessages,
-                ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
-                ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
-              }));
-            } catch (err) {
-              console.error("[stream:context-prompt] error in no-tool path:", err);
-              try { await writer.write(sseEvent({ done: true, error: "Action may not have been saved." })); } catch { /* */ }
-            } finally {
-              await writer.close();
-            }
-          })();
+            },
+          });
 
           return createSSEResponse(readable);
         }
 
-        // ── Tool use detected — STREAM-FIRST approach ──
+        // ── Tool use detected — ReadableStream approach ──
         console.log("[stream:context-prompt] tool use detected:", toolCalls.length, "calls — stream-first");
 
-        const { readable, writable } = new TransformStream();
-        const writer = writable.getWriter();
-
-        (async () => {
-          try {
-            const toolMessages: Array<Record<string, unknown>> = [
-              ...responseMessages,
-              call2aData.choices[0].message,
-            ];
-
-            for (const tc of toolCalls.slice(0, 5)) {
-              if (tc.name === "read_imported_document") {
-                const docId = tc.arguments.document_id as string;
-                console.log("[stream:context-prompt] reading document:", docId);
-                documentsReferenced.push(docId);
-
-                // Emit phase event BEFORE the actual tool call
-                try { await writer.write(sseEvent({ phase: "reading_documents" })); } catch { /* */ }
-
-                const { data: docData } = await adminClient
-                  .from("imported_documents")
-                  .select("extracted_text, file_name")
-                  .eq("id", docId)
-                  .single();
-
-                const toolResult = docData?.extracted_text
-                  ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
-                  : `Document not found or text not yet extracted.`;
-
-                totalInputChars += toolResult.length;
-
-                toolMessages.push({
-                  role: "tool",
-                  tool_call_id: tc.id,
-                  content: toolResult,
-                });
-              } else if (tc.name === "web_search") {
-                const query = tc.arguments.query as string;
-                console.log("[stream:context-prompt] web search:", query);
-                webSearchesPerformed.push(query);
-
-                // Emit phase event BEFORE the actual tool call
-                try { await writer.write(sseEvent({ phase: "searching_web" })); } catch { /* */ }
-
-                const results = await searchWeb(query);
-                const toolResult = formatWebSearchResults(query, results);
-                totalInputChars += toolResult.length;
-
-                toolMessages.push({
-                  role: "tool",
-                  tool_call_id: tc.id,
-                  content: toolResult,
-                });
-              }
-            }
-
-            // Call #2b: streaming with tool results
-            const call2bRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${mistralKey}`,
-              },
-              body: JSON.stringify({
-                model: "mistral-large-latest",
-                messages: toolMessages,
-                max_tokens: 2000,
-                stream: true,
-              }),
-            });
-
-            if (!call2bRes.ok) {
-              const errText = await call2bRes.text();
-              console.error("[stream:context-prompt] Call #2b error:", call2bRes.status, errText);
-              try { await writer.write(sseEvent({ done: true, error: "AI service temporarily unavailable." })); } catch { /* */ }
-              await writer.close();
-              return;
-            }
-
-            // Read Call #2b stream manually and forward tokens
-            let fullResponse = "";
-            const decoder = new TextDecoder();
-            let sseBuffer = "";
-            const reader = call2bRes.body!.getReader();
-
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-
-              sseBuffer += decoder.decode(value, { stream: true });
-              const lines = sseBuffer.split("\n");
-              sseBuffer = lines.pop() ?? "";
-
-              for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || !trimmed.startsWith("data:")) continue;
-                const payload = trimmed.slice(5).trim();
-                if (payload === "[DONE]") continue;
-
-                try {
-                  const parsed = JSON.parse(payload);
-                  const delta = extractDeltaText(parsed, "mistral");
-                  if (delta) {
-                    fullResponse += delta;
-                    try { await writer.write(sseEvent({ token: delta })); } catch { /* client gone */ }
-                  }
-                } catch { /* skip malformed */ }
-              }
-            }
-
-            // Clean and persist
-            fullResponse = cleanLLMContent(fullResponse);
-            const aiResponse = fullResponse.trim() || "No response generated.";
-            const { actionRow, budgetRemaining, insertedMessages } = await persistResults(aiResponse, 0, aiResponse.length);
-
+        const readable = new ReadableStream({
+          async start(controller) {
             try {
-              await writer.write(sseEvent({
-                done: true,
-                ai_response: aiResponse,
-                summary_update: summaryUpdate,
-                action_id: actionRow?.id ?? null,
-                budget_remaining: budgetRemaining,
-                inserted_messages: insertedMessages,
-                ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
-                ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
-              }));
-            } catch { /* client gone */ }
-          } catch (err) {
-            console.error("[stream:context-prompt] error in tool-use path:", err);
-            try { await writer.write(sseEvent({ done: true, error: "AI service temporarily unavailable." })); } catch { /* */ }
-          } finally {
-            try { await writer.close(); } catch { /* */ }
-          }
-        })();
+              const toolMessages: Array<Record<string, unknown>> = [
+                ...responseMessages,
+                call2aData.choices[0].message,
+              ];
+
+              for (const tc of toolCalls.slice(0, 5)) {
+                if (tc.name === "read_imported_document") {
+                  const docId = tc.arguments.document_id as string;
+                  console.log("[stream:context-prompt] reading document:", docId);
+                  documentsReferenced.push(docId);
+
+                  try { controller.enqueue(sseEvent({ phase: "reading_documents" })); } catch { /* */ }
+
+                  const { data: docData } = await adminClient
+                    .from("imported_documents")
+                    .select("extracted_text, file_name")
+                    .eq("id", docId)
+                    .single();
+
+                  const toolResult = docData?.extracted_text
+                    ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
+                    : `Document not found or text not yet extracted.`;
+
+                  totalInputChars += toolResult.length;
+
+                  toolMessages.push({
+                    role: "tool",
+                    tool_call_id: tc.id,
+                    content: toolResult,
+                  });
+                } else if (tc.name === "web_search") {
+                  const query = tc.arguments.query as string;
+                  console.log("[stream:context-prompt] web search:", query);
+                  webSearchesPerformed.push(query);
+
+                  try { controller.enqueue(sseEvent({ phase: "searching_web" })); } catch { /* */ }
+
+                  const results = await searchWeb(query);
+                  const toolResult = formatWebSearchResults(query, results);
+                  totalInputChars += toolResult.length;
+
+                  toolMessages.push({
+                    role: "tool",
+                    tool_call_id: tc.id,
+                    content: toolResult,
+                  });
+                }
+              }
+
+              // Call #2b: streaming with tool results
+              console.log("[stream:context-prompt] starting Call #2b streaming");
+              const call2bRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${mistralKey}`,
+                },
+                body: JSON.stringify({
+                  model: "mistral-large-latest",
+                  messages: toolMessages,
+                  max_tokens: 2000,
+                  stream: true,
+                }),
+              });
+
+              if (!call2bRes.ok) {
+                const errText = await call2bRes.text();
+                console.error("[stream:context-prompt] Call #2b error:", call2bRes.status, errText);
+                try { controller.enqueue(sseEvent({ done: true, error: "AI service temporarily unavailable." })); } catch { /* */ }
+                controller.close();
+                return;
+              }
+
+              // Read Call #2b stream manually and forward tokens
+              let fullResponse = "";
+              const decoder = new TextDecoder();
+              let sseBuffer = "";
+              const reader = call2bRes.body!.getReader();
+
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                sseBuffer += decoder.decode(value, { stream: true });
+                const lines = sseBuffer.split("\n");
+                sseBuffer = lines.pop() ?? "";
+
+                for (const line of lines) {
+                  const trimmed = line.trim();
+                  if (!trimmed || !trimmed.startsWith("data:")) continue;
+                  const payload = trimmed.slice(5).trim();
+                  if (payload === "[DONE]") continue;
+
+                  try {
+                    const parsed = JSON.parse(payload);
+                    const delta = extractDeltaText(parsed, "mistral");
+                    if (delta) {
+                      fullResponse += delta;
+                      try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
+                    }
+                  } catch { /* skip malformed */ }
+                }
+              }
+
+              // Clean and persist
+              fullResponse = cleanLLMContent(fullResponse);
+              const aiResponse = fullResponse.trim() || "No response generated.";
+              const { actionRow, budgetRemaining, insertedMessages } = await persistResults(aiResponse, 0, aiResponse.length);
+
+              try {
+                controller.enqueue(sseEvent({
+                  done: true,
+                  ai_response: aiResponse,
+                  summary_update: summaryUpdate,
+                  action_id: actionRow?.id ?? null,
+                  budget_remaining: budgetRemaining,
+                  inserted_messages: insertedMessages,
+                  ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
+                  ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
+                }));
+              } catch { /* client gone */ }
+            } catch (err) {
+              console.error("[stream:context-prompt] error in tool-use path:", err);
+              try { controller.enqueue(sseEvent({ done: true, error: "AI service temporarily unavailable." })); } catch { /* */ }
+            } finally {
+              controller.close();
+            }
+          },
+        });
 
         return createSSEResponse(readable);
       }
-
       // ── NO TOOLS — original streaming Call #2 ──
       console.log("[stream:context-prompt] no tools, standard streaming");
 
