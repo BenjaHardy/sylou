@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import SharedReport from "./pages/SharedReport";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route path="/report/:token" element={<SharedReport />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

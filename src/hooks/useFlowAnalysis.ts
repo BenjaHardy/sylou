@@ -67,6 +67,11 @@ export interface FlowReport {
   user_feedback_pre_at: string | null;
   user_feedback_post: FlowUserAssessment | FlowFeedback | null;
   user_feedback_post_at: string | null;
+  share_token?: string | null;
+  share_enabled?: boolean | null;
+  certificate_id?: string | null;
+  share_visibility?: string | null;
+  project_name?: string | null;
 }
 
 export interface BudgetError {
