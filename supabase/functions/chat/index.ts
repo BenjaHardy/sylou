@@ -1102,7 +1102,7 @@ When citing information from web search results, always include the source URL i
 
     // --- Estimate tokens & update budget ---
     const inputChars = llmMessages.reduce(
-      (sum, m) => sum + m.content.length,
+      (sum, m) => sum + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length),
       0
     );
     const outputChars = assistantText.length;
