@@ -28,6 +28,8 @@ interface Props {
   onActiveThreadChange?: (threadId: string | null) => void;
   onUploadDocument?: (file: File) => void;
   documentUploading?: boolean;
+  webSearchEnabled?: boolean;
+  onWebSearchEnabledChange?: (value: boolean) => void;
 }
 
 const BOOKMARK_BAR_COLORS: Record<string, string> = {
