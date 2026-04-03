@@ -50,13 +50,12 @@ Deno.serve(async (req) => {
     const userId = claimsData.claims.sub as string;
 
     const body = await req.json();
-    const { report_id } = body;
+    const { report_id, action } = body;
 
     if (!report_id || typeof report_id !== "string") {
       return jsonResponse({ error: "report_id is required" }, 400);
     }
 
-    // Use service role for database operations to avoid RLS complexities
     const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
 
     // Verify ownership: report -> project -> user
@@ -80,61 +79,13 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Not authorized to share this report" }, 403);
     }
 
-    if (req.method === "POST") {
-      // Generate share token and certificate ID
-      const shareToken = crypto.randomUUID();
-
-      // Generate unique certificate ID with retry
-      let certificateId = "";
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const candidate = generateCertificateId();
-        const { data: existing } = await adminSupabase
-          .from("flow_reports")
-          .select("id")
-          .eq("certificate_id", candidate)
-          .maybeSingle();
-
-        if (!existing) {
-          certificateId = candidate;
-          break;
-        }
-      }
-
-      if (!certificateId) {
-        return jsonResponse({ error: "Failed to generate unique certificate ID" }, 500);
-      }
-
-      // Always overwrite project_name with current name
-      const { error: updateErr } = await adminSupabase
-        .from("flow_reports")
-        .update({
-          share_token: shareToken,
-          certificate_id: certificateId,
-          share_enabled: true,
-          share_visibility: "public",
-          project_name: project.name,
-        })
-        .eq("id", report_id);
-
-      if (updateErr) {
-        console.error("Error enabling sharing:", updateErr);
-        return jsonResponse({ error: "Failed to enable sharing" }, 500);
-      }
-
-      return jsonResponse({
-        share_token: shareToken,
-        certificate_id: certificateId,
-        project_name: project.name,
-      });
-    }
-
-    if (req.method === "PATCH") {
+    // Action: "toggle" — update share_enabled only
+    if (action === "toggle") {
       const { share_enabled } = body;
       if (typeof share_enabled !== "boolean") {
         return jsonResponse({ error: "share_enabled must be a boolean" }, 400);
       }
 
-      // Also refresh project_name when re-enabling
       const updateData: Record<string, unknown> = { share_enabled };
       if (share_enabled) {
         updateData.project_name = project.name;
@@ -153,7 +104,49 @@ Deno.serve(async (req) => {
       return jsonResponse({ share_enabled });
     }
 
-    return jsonResponse({ error: "Method not allowed" }, 405);
+    // Default action: generate share token and certificate
+    const shareToken = crypto.randomUUID();
+
+    let certificateId = "";
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const candidate = generateCertificateId();
+      const { data: existing } = await adminSupabase
+        .from("flow_reports")
+        .select("id")
+        .eq("certificate_id", candidate)
+        .maybeSingle();
+
+      if (!existing) {
+        certificateId = candidate;
+        break;
+      }
+    }
+
+    if (!certificateId) {
+      return jsonResponse({ error: "Failed to generate unique certificate ID" }, 500);
+    }
+
+    const { error: updateErr } = await adminSupabase
+      .from("flow_reports")
+      .update({
+        share_token: shareToken,
+        certificate_id: certificateId,
+        share_enabled: true,
+        share_visibility: "public",
+        project_name: project.name,
+      })
+      .eq("id", report_id);
+
+    if (updateErr) {
+      console.error("Error enabling sharing:", updateErr);
+      return jsonResponse({ error: "Failed to enable sharing" }, 500);
+    }
+
+    return jsonResponse({
+      share_token: shareToken,
+      certificate_id: certificateId,
+      project_name: project.name,
+    });
   } catch (err) {
     console.error("share-report error:", err);
     return jsonResponse({ error: "Internal server error" }, 500);
