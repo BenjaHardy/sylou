@@ -26,6 +26,8 @@ interface Props {
   onConciseModeChange: (value: boolean) => void;
   onSetMessages?: (setter: (updater: (prev: ChatMessage[]) => ChatMessage[]) => void) => void;
   onActiveThreadChange?: (threadId: string | null) => void;
+  onUploadDocument?: (file: File) => void;
+  documentUploading?: boolean;
 }
 
 const BOOKMARK_BAR_COLORS: Record<string, string> = {
