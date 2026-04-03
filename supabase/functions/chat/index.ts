@@ -343,12 +343,13 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
         : "";
       systemPrompt += `\n\n# WEB SEARCH
 
-You have access to a web_search tool, but using it is OPTIONAL. Only use it when the user's message genuinely requires current information, recent data, or facts you don't have in your training data${docsContext}.
+You have access to a web_search tool. Use it according to these rules:
 
-Do NOT use web search for:
-- Simple conversational replies, greetings, or acknowledgments
-- Topics you can answer confidently from your training knowledge
-- Follow-up questions about information you already provided
+Always search when the user asks about: current events, recent news and developments, anything time-sensitive (prices, scores, weather, standings, elections), specific claims or facts you're not fully confident about, people's current roles or status, or any question where being up-to-date matters.
+
+Never search for: simple conversational messages (greetings, thanks, acknowledgments), questions about well-established facts, concepts, or definitions, requests for creative writing or brainstorming, follow-up questions where the answer is already in the conversation history, or opinions and advice based on general knowledge.
+
+When in doubt, prefer searching - an unnecessary search is better than an outdated answer.
 
 When citing information from web search results, always include the source URL inline in your response text (e.g. "According to [Source Title](URL), ..."). This ensures the user can verify and revisit the sources later.`;
     }
