@@ -38,6 +38,7 @@ interface Props {
   /** For Ask streaming: set streaming message into chat */
   appendMessages?: (msgs: ChatMessage[]) => void;
   setMessages?: (updater: (prev: ChatMessage[]) => ChatMessage[]) => void;
+  webSearchEnabled?: boolean;
 }
 
 const NORMAL_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
