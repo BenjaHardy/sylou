@@ -840,7 +840,7 @@ When citing information from web search results, always include the source URL i
 
         return createSSEResponse(readable);
       }
-      // ---- NO TOOLS — original streaming path ----
+      // ---- NO TOOLS — streaming path using ReadableStream ----
       console.log("[stream] no tools, standard streaming path");
 
       const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
@@ -866,76 +866,74 @@ When citing information from web search results, always include the source URL i
         );
       }
 
-      console.log("[stream] LLM response received, piping");
+      console.log("[stream] LLM response received, streaming via ReadableStream");
 
-      let fullResponse = "";
-      let clientDisconnected = false;
-      let promptCounted = false;
-      const decoder = new TextDecoder();
-      let sseBuffer = "";
-
-      const transform = new TransformStream({
-        transform(chunk, controller) {
-          sseBuffer += decoder.decode(chunk, { stream: true });
-          const lines = sseBuffer.split("\n");
-          sseBuffer = lines.pop() ?? "";
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data:")) continue;
-            const payload = trimmed.slice(5).trim();
-            if (payload === "[DONE]") {
-              if (!promptCounted) {
-                promptCounted = true;
-                const promptColumn = tutorMode
-                  ? "chat_prompt_count_tutor"
-                  : "chat_prompt_count_normal";
-                adminSupabase
-                  .from("project_stats")
-                  .select(promptColumn)
-                  .eq("project_id", thread.project_id)
-                  .single()
-                  .then(({ data: cs }) => {
-                    if (cs) {
-                      const cnt = (cs as Record<string, number>)[promptColumn] || 0;
-                      adminSupabase
-                        .from("project_stats")
-                        .update({ [promptColumn]: cnt + 1 })
-                        .eq("project_id", thread.project_id)
-                        .then(() =>
-                          console.log("[stream] prompt count incremented for", thread.project_id)
-                        );
-                    }
-                  });
-              }
-              continue;
-            }
-
-            try {
-              const parsed = JSON.parse(payload);
-              const delta = extractDeltaText(parsed, "mistral");
-              if (delta) {
-                fullResponse += delta;
-                if (!clientDisconnected) {
-                  try {
-                    controller.enqueue(
-                      encoder.encode(`data: ${JSON.stringify({ token: delta })}\n\n`)
-                    );
-                  } catch {
-                    clientDisconnected = true;
-                  }
-                }
-              }
-            } catch {
-              // skip malformed chunk
-            }
-          }
-        },
-
-        async flush(controller) {
-          console.log("[stream] flush() started");
+      const readable = new ReadableStream({
+        async start(controller) {
+          let fullResponse = "";
+          let promptCounted = false;
+          const decoder = new TextDecoder();
+          let sseBuffer = "";
 
           try {
+            const reader = llmRes.body!.getReader();
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              sseBuffer += decoder.decode(value, { stream: true });
+              const lines = sseBuffer.split("\n");
+              sseBuffer = lines.pop() ?? "";
+
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith("data:")) continue;
+                const payload = trimmed.slice(5).trim();
+                if (payload === "[DONE]") {
+                  if (!promptCounted) {
+                    promptCounted = true;
+                    const promptColumn = tutorMode
+                      ? "chat_prompt_count_tutor"
+                      : "chat_prompt_count_normal";
+                    adminSupabase
+                      .from("project_stats")
+                      .select(promptColumn)
+                      .eq("project_id", thread.project_id)
+                      .single()
+                      .then(({ data: cs }) => {
+                        if (cs) {
+                          const cnt = (cs as Record<string, number>)[promptColumn] || 0;
+                          adminSupabase
+                            .from("project_stats")
+                            .update({ [promptColumn]: cnt + 1 })
+                            .eq("project_id", thread.project_id)
+                            .then(() =>
+                              console.log("[stream] prompt count incremented for", thread.project_id)
+                            );
+                        }
+                      });
+                  }
+                  continue;
+                }
+
+                try {
+                  const parsed = JSON.parse(payload);
+                  const delta = extractDeltaText(parsed, "mistral");
+                  if (delta) {
+                    fullResponse += delta;
+                    try {
+                      controller.enqueue(sseEvent({ token: delta }));
+                    } catch { /* client gone */ }
+                  }
+                } catch {
+                  // skip malformed chunk
+                }
+              }
+            }
+
+            // Persist
+            console.log("[stream] flush() started");
             fullResponse = cleanLLMContent(fullResponse);
 
             const userMsg = {
@@ -968,7 +966,6 @@ When citing information from web search results, always include the source URL i
               .select()
               .single();
 
-            // Token budget
             const inputChars = llmMessages.reduce(
               (sum, m) => sum + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length),
               0
@@ -982,56 +979,36 @@ When citing information from web search results, always include the source URL i
               .update({ tokens_used_this_period: newTotal })
               .eq("id", user.id);
 
-            if (!clientDisconnected) {
-              try {
-                controller.enqueue(
-                  encoder.encode(
-                    `data: ${JSON.stringify({
-                      done: true,
-                      user_message: insertedUser,
-                      assistant_message: insertedAssistant,
-                      budget_remaining: profile.monthly_token_budget - newTotal,
-                    })}\n\n`
-                  )
-                );
-              } catch {
-                clientDisconnected = true;
-              }
-            }
+            try {
+              controller.enqueue(
+                sseEvent({
+                  done: true,
+                  user_message: insertedUser,
+                  assistant_message: insertedAssistant,
+                  budget_remaining: profile.monthly_token_budget - newTotal,
+                })
+              );
+            } catch { /* client gone */ }
 
             console.log("[stream] flush() completed — persistence done");
           } catch (persistErr) {
             console.error("[stream] persistence error:", persistErr);
-            if (!clientDisconnected) {
-              try {
-                controller.enqueue(
-                  encoder.encode(
-                    `data: ${JSON.stringify({
-                      done: true,
-                      error: "Messages may not have been saved.",
-                    })}\n\n`
-                  )
-                );
-              } catch {
-                // client gone
-              }
-            }
+            try {
+              controller.enqueue(
+                sseEvent({
+                  done: true,
+                  error: "Messages may not have been saved.",
+                })
+              );
+            } catch { /* client gone */ }
             console.log("[stream] flush() completed — with error");
+          } finally {
+            controller.close();
           }
         },
       });
 
-      const outputStream = llmRes.body!.pipeThrough(transform);
-
-      return new Response(outputStream, {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          "X-Accel-Buffering": "no",
-          Connection: "keep-alive",
-        },
-      });
+      return createSSEResponse(readable);
     }
 
     // =========================================================

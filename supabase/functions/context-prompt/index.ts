@@ -1044,7 +1044,7 @@ When citing information from web search results, always include the source URL i
 
         return createSSEResponse(readable);
       }
-      // ── NO TOOLS — original streaming Call #2 ──
+      // ── NO TOOLS — streaming Call #2 using ReadableStream ──
       console.log("[stream:context-prompt] no tools, standard streaming");
 
       const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
@@ -1070,92 +1070,76 @@ When citing information from web search results, always include the source URL i
         );
       }
 
-      let fullResponse = "";
-      let clientDisconnected = false;
-      const decoder = new TextDecoder();
-      let sseBuffer = "";
-
-      const transform = new TransformStream({
-        start(controller) {
-          if (!clientDisconnected) {
-            try {
-              controller.enqueue(sseEvent({ phase: "responding" }));
-            } catch {
-              clientDisconnected = true;
-            }
-          }
-        },
-
-        transform(chunk, controller) {
-          sseBuffer += decoder.decode(chunk, { stream: true });
-          const lines = sseBuffer.split("\n");
-          sseBuffer = lines.pop() ?? "";
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data:")) continue;
-            const payload = trimmed.slice(5).trim();
-            if (payload === "[DONE]") continue;
-
-            try {
-              const parsed = JSON.parse(payload);
-              const delta = extractDeltaText(parsed, "mistral");
-              if (delta) {
-                fullResponse += delta;
-                if (!clientDisconnected) {
-                  try {
-                    controller.enqueue(sseEvent({ token: delta }));
-                  } catch {
-                    clientDisconnected = true;
-                  }
-                }
-              }
-            } catch {
-              // skip malformed chunk
-            }
-          }
-        },
-
-        async flush(controller) {
-          console.log("[stream:context-prompt] LLM stream complete, persisting");
+      const readable = new ReadableStream({
+        async start(controller) {
+          let fullResponse = "";
+          const decoder = new TextDecoder();
+          let sseBuffer = "";
 
           try {
+            controller.enqueue(sseEvent({ phase: "responding" }));
+
+            const reader = llmRes.body!.getReader();
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              sseBuffer += decoder.decode(value, { stream: true });
+              const lines = sseBuffer.split("\n");
+              sseBuffer = lines.pop() ?? "";
+
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith("data:")) continue;
+                const payload = trimmed.slice(5).trim();
+                if (payload === "[DONE]") continue;
+
+                try {
+                  const parsed = JSON.parse(payload);
+                  const delta = extractDeltaText(parsed, "mistral");
+                  if (delta) {
+                    fullResponse += delta;
+                    try {
+                      controller.enqueue(sseEvent({ token: delta }));
+                    } catch { /* client gone */ }
+                  }
+                } catch {
+                  // skip malformed chunk
+                }
+              }
+            }
+
+            console.log("[stream:context-prompt] LLM stream complete, persisting");
             fullResponse = cleanLLMContent(fullResponse);
             const aiResponse = fullResponse.trim() || "No response generated.";
             const extraInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
             const { actionRow, budgetRemaining, insertedMessages } = await persistResults(aiResponse, extraInputChars, aiResponse.length);
 
-            if (!clientDisconnected) {
-              try {
-                controller.enqueue(sseEvent({
-                  done: true,
-                  ai_response: aiResponse,
-                  summary_update: summaryUpdate,
-                  action_id: actionRow?.id ?? null,
-                  budget_remaining: budgetRemaining,
-                  inserted_messages: insertedMessages,
-                }));
-              } catch {
-                clientDisconnected = true;
-              }
-            }
+            try {
+              controller.enqueue(sseEvent({
+                done: true,
+                ai_response: aiResponse,
+                summary_update: summaryUpdate,
+                action_id: actionRow?.id ?? null,
+                budget_remaining: budgetRemaining,
+                inserted_messages: insertedMessages,
+              }));
+            } catch { /* client gone */ }
 
             console.log("[stream:context-prompt] persistence complete");
           } catch (persistErr) {
             console.error("[stream:context-prompt] persistence error:", persistErr);
-            if (!clientDisconnected) {
-              try {
-                controller.enqueue(sseEvent({ done: true, error: "Action may not have been saved." }));
-              } catch {
-                // client gone
-              }
-            }
+            try {
+              controller.enqueue(sseEvent({ done: true, error: "Action may not have been saved." }));
+            } catch { /* client gone */ }
+          } finally {
+            controller.close();
           }
         },
       });
 
-      const outputStream = llmRes.body!.pipeThrough(transform);
-      return createSSEResponse(outputStream);
+      return createSSEResponse(readable);
     }
 
     // =========================================================
