@@ -29,6 +29,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route path="/report/:token" element={<SharedReport />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
