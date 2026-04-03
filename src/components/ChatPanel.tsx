@@ -226,6 +226,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   const [showBookmarkList, setShowBookmarkList] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const docFileInputRef = useRef<HTMLInputElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const pendingScrollTarget = useRef<string | null>(null);
 
