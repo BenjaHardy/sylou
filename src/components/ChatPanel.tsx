@@ -344,7 +344,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
 
   const handleSend = () => {
     if (!input.trim() || sending) return;
-    sendMessage(input, conciseMode);
+    sendMessage(input, conciseMode, webSearchEnabled);
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   };
