@@ -27,6 +27,22 @@ function estimateTokens(text: string): number {
 }
 
 /**
+ * Clean LLM content that may be wrapped in Mistral's structured JSON format.
+ */
+function cleanLLMContent(content: string): string {
+  if (!content) return content;
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("[")) return content;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(b => b?.type === "text")) {
+      return parsed.map(b => b.text ?? b.content ?? "").join("");
+    }
+  } catch { /* not JSON */ }
+  return content;
+}
+
+/**
  * Extract the text delta from a streaming chunk, model-agnostic.
  */
 function extractDeltaText(
@@ -73,9 +89,6 @@ function extractToolCalls(
   }));
 }
 
-/**
- * Build the tool definition for document retrieval.
- */
 function buildDocumentTool() {
   return {
     type: "function",
@@ -97,9 +110,6 @@ function buildDocumentTool() {
   };
 }
 
-/**
- * Build the tool definition for web search.
- */
 function buildWebSearchTool() {
   return {
     type: "function",
@@ -121,9 +131,6 @@ function buildWebSearchTool() {
   };
 }
 
-/**
- * Search the web using Brave Search API. Returns transient results (not persisted).
- */
 async function searchWeb(query: string): Promise<{ title: string; url: string; snippet: string }[]> {
   const apiKey = Deno.env.get("BRAVE_SEARCH_API_KEY");
   if (!apiKey) {
@@ -161,9 +168,6 @@ async function searchWeb(query: string): Promise<{ title: string; url: string; s
   }
 }
 
-/**
- * Format web search results for LLM consumption (transient, not persisted).
- */
 function formatWebSearchResults(query: string, results: { title: string; url: string; snippet: string }[]): string {
   if (results.length === 0) {
     return `Web search results for: "${query}"\n\nNo results found.`;
@@ -199,7 +203,8 @@ async function callMistral(
   }
 
   const data = await res.json();
-  const text = data.choices?.[0]?.message?.content ?? "";
+  const rawText = data.choices?.[0]?.message?.content ?? "";
+  const text = cleanLLMContent(rawText);
   const inputChars = messages.reduce((s, m) => s + m.content.length, 0);
   return { text, inputChars, outputChars: text.length };
 }
@@ -378,7 +383,6 @@ Deno.serve(async (req) => {
       }
 
       if (confirm && thread_id) {
-        // Fetch the stored AI response from the action row (server-side, trusted)
         let aiResponseContent = "";
         if (action_id) {
           const { data: actionRow, error: fetchErr } = await adminClient
@@ -389,16 +393,13 @@ Deno.serve(async (req) => {
           if (fetchErr) console.error("ai_editor_actions fetch failed:", JSON.stringify(fetchErr));
           aiResponseContent = actionRow?.ai_response_full ?? "";
         }
-        // Fallback: use client-provided ai_response if DB lookup returned nothing
         if (!aiResponseContent && body.ai_response) {
           aiResponseContent = body.ai_response;
         }
 
-        // Parse documents_referenced and web_searches_performed from body (only present on confirm)
         const documentsReferenced: string[] | undefined = body.documents_referenced;
         const webSearchesPerformed: string[] | undefined = body.web_searches_performed;
 
-        // Log to chat_messages and collect inserted rows
         const insertedMessages = [];
 
         const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
@@ -432,11 +433,9 @@ Deno.serve(async (req) => {
           model_used: "mistral-large-latest",
         };
 
-        // Only attach documents_referenced on accepted proposals
         if (documentsReferenced && documentsReferenced.length > 0) {
           responseMsgRow.documents_referenced = documentsReferenced;
         }
-        // Only attach web_searches_performed on accepted proposals
         if (webSearchesPerformed && webSearchesPerformed.length > 0) {
           responseMsgRow.web_searches_performed = webSearchesPerformed;
         }
@@ -444,7 +443,6 @@ Deno.serve(async (req) => {
         const { data: responseMsg } = await supabase.from("chat_messages").insert(responseMsgRow).select().single();
         if (responseMsg) insertedMessages.push(responseMsg);
 
-        // Commit summary
         if (summary_update && summary_update !== "No update needed.") {
           const { data: existingLog } = await supabase
             .from("writing_summary_log")
@@ -658,11 +656,19 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
     // Append web search instructions to system prompt
     if (webSearchEnabled) {
-      if (hasDocuments) {
-        systemPrompt += `\n\n# WEB SEARCH\n\nYou have access to web search. Prefer the project's imported documents when they contain relevant information. Use web search for current events, recent data, or information not available in the imported documents.`;
-      } else {
-        systemPrompt += `\n\n# WEB SEARCH\n\nYou have access to web search for finding current information, recent data, or facts beyond your training knowledge.`;
-      }
+      const docsContext = hasDocuments
+        ? " or in the imported documents"
+        : "";
+      systemPrompt += `\n\n# WEB SEARCH
+
+You have access to a web_search tool, but using it is OPTIONAL. Only use it when the user's request genuinely requires current information, recent data, or facts you don't have in your training data${docsContext}.
+
+Do NOT use web search for:
+- Simple conversational replies, greetings, or acknowledgments
+- Topics you can answer confidently from your training knowledge
+- Follow-up questions about information you already provided
+
+When citing information from web search results, always include the source URL inline in your response text (e.g. "According to [Source Title](URL), ..."). This ensures the user can verify and revisit the sources later.`;
     }
 
     const responseMessages = buildResponsePrompt(
@@ -722,7 +728,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
         const finalOutputChars = totalOutputChars + extraOutputChars;
         const totalTokens = Math.ceil((finalInputChars + finalOutputChars) / 4);
 
-        // Log to ai_editor_actions
         const { data: actionRow } = await adminClient
           .from("ai_editor_actions")
           .insert({
@@ -741,7 +746,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
           .select("id")
           .single();
 
-        // Log token usage
         await supabase.from("token_usage").insert({
           user_id: user.id,
           project_id,
@@ -751,7 +755,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
           output_tokens: Math.ceil(finalOutputChars / 4),
         });
 
-        // Atomic budget update
         await supabase.rpc("increment_tokens_used", {
           user_uuid: user.id,
           amount: totalTokens,
@@ -759,7 +762,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
         const budgetRemaining = profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
 
-        // For Ask: persist chat messages and commit summary
         const insertedMessages: unknown[] = [];
 
         if (action_type === "ask") {
@@ -804,7 +806,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
           const { data: responseMsg } = await supabase.from("chat_messages").insert(askResponseRow).select().single();
           if (responseMsg) insertedMessages.push(responseMsg);
 
-          // Update writing_summary_log
           if (summaryUpdate !== "No update needed.") {
             if (summaryRow) {
               await supabase
@@ -853,7 +854,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
         const call2aData = await call2aRes.json();
         const toolCalls = extractToolCalls(call2aData);
-        const call2aContent = call2aData.choices?.[0]?.message?.content ?? "";
+        const call2aContent = cleanLLMContent(call2aData.choices?.[0]?.message?.content ?? "");
         const call2aInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
         totalInputChars += call2aInputChars;
         totalOutputChars += call2aContent.length;
@@ -868,7 +869,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
           (async () => {
             try {
-              // Send responding phase
               await writer.write(sseEvent({ phase: "responding" }));
 
               const chunkSize = 20;
@@ -890,9 +890,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
               }));
             } catch (err) {
               console.error("[stream:context-prompt] error in no-tool path:", err);
-              try {
-                await writer.write(sseEvent({ done: true, error: "Action may not have been saved." }));
-              } catch { /* client gone */ }
+              try { await writer.write(sseEvent({ done: true, error: "Action may not have been saved." })); } catch { /* */ }
             } finally {
               await writer.close();
             }
@@ -901,151 +899,145 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
           return createSSEResponse(readable);
         }
 
-        // ── Tool use detected — resolve, then stream Call #2b ──
-        console.log("[stream:context-prompt] tool use detected:", toolCalls.length, "calls");
+        // ── Tool use detected — STREAM-FIRST approach ──
+        console.log("[stream:context-prompt] tool use detected:", toolCalls.length, "calls — stream-first");
 
-        const toolMessages: Array<Record<string, unknown>> = [
-          ...responseMessages,
-          call2aData.choices[0].message,
-        ];
+        const { readable, writable } = new TransformStream();
+        const writer = writable.getWriter();
 
-        for (const tc of toolCalls.slice(0, 5)) {
-          if (tc.name === "read_imported_document") {
-            const docId = tc.arguments.document_id as string;
-            console.log("[stream:context-prompt] reading document:", docId);
-            documentsReferenced.push(docId);
+        (async () => {
+          try {
+            const toolMessages: Array<Record<string, unknown>> = [
+              ...responseMessages,
+              call2aData.choices[0].message,
+            ];
 
-            const { data: docData } = await adminClient
-              .from("imported_documents")
-              .select("extracted_text, file_name")
-              .eq("id", docId)
-              .single();
+            for (const tc of toolCalls.slice(0, 5)) {
+              if (tc.name === "read_imported_document") {
+                const docId = tc.arguments.document_id as string;
+                console.log("[stream:context-prompt] reading document:", docId);
+                documentsReferenced.push(docId);
 
-            const toolResult = docData?.extracted_text
-              ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
-              : `Document not found or text not yet extracted.`;
+                // Emit phase event BEFORE the actual tool call
+                try { await writer.write(sseEvent({ phase: "reading_documents" })); } catch { /* */ }
 
-            totalInputChars += toolResult.length;
+                const { data: docData } = await adminClient
+                  .from("imported_documents")
+                  .select("extracted_text, file_name")
+                  .eq("id", docId)
+                  .single();
 
-            toolMessages.push({
-              role: "tool",
-              tool_call_id: tc.id,
-              content: toolResult,
-            });
-          } else if (tc.name === "web_search") {
-            const query = tc.arguments.query as string;
-            console.log("[stream:context-prompt] web search:", query);
-            webSearchesPerformed.push(query);
+                const toolResult = docData?.extracted_text
+                  ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
+                  : `Document not found or text not yet extracted.`;
 
-            const results = await searchWeb(query);
-            const toolResult = formatWebSearchResults(query, results);
-            totalInputChars += toolResult.length;
+                totalInputChars += toolResult.length;
 
-            toolMessages.push({
-              role: "tool",
-              tool_call_id: tc.id,
-              content: toolResult,
-            });
-          }
-        }
+                toolMessages.push({
+                  role: "tool",
+                  tool_call_id: tc.id,
+                  content: toolResult,
+                });
+              } else if (tc.name === "web_search") {
+                const query = tc.arguments.query as string;
+                console.log("[stream:context-prompt] web search:", query);
+                webSearchesPerformed.push(query);
 
-        // Call #2b: streaming with tool results
-        const call2bRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${mistralKey}`,
-          },
-          body: JSON.stringify({
-            model: "mistral-large-latest",
-            messages: toolMessages,
-            max_tokens: 2000,
-            stream: true,
-          }),
-        });
+                // Emit phase event BEFORE the actual tool call
+                try { await writer.write(sseEvent({ phase: "searching_web" })); } catch { /* */ }
 
-        if (!call2bRes.ok) {
-          const errText = await call2bRes.text();
-          console.error("[stream:context-prompt] Call #2b error:", call2bRes.status, errText);
-          return jsonResponse({ error: "AI service temporarily unavailable. Please try again." }, 502);
-        }
+                const results = await searchWeb(query);
+                const toolResult = formatWebSearchResults(query, results);
+                totalInputChars += toolResult.length;
 
-        let fullResponse = "";
-        let clientDisconnected = false;
-        const decoder = new TextDecoder();
-        let sseBuffer = "";
-
-        const transform = new TransformStream({
-          start(controller) {
-            try {
-              if (documentsReferenced.length > 0) {
-                controller.enqueue(sseEvent({ phase: "reading_documents" }));
+                toolMessages.push({
+                  role: "tool",
+                  tool_call_id: tc.id,
+                  content: toolResult,
+                });
               }
-              if (webSearchesPerformed.length > 0) {
-                controller.enqueue(sseEvent({ phase: "searching_web" }));
-              }
-            } catch { /* */ }
-          },
-          transform(chunk, controller) {
-            sseBuffer += decoder.decode(chunk, { stream: true });
-            const lines = sseBuffer.split("\n");
-            sseBuffer = lines.pop() ?? "";
+            }
 
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed || !trimmed.startsWith("data:")) continue;
-              const payload = trimmed.slice(5).trim();
-              if (payload === "[DONE]") continue;
+            // Call #2b: streaming with tool results
+            const call2bRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${mistralKey}`,
+              },
+              body: JSON.stringify({
+                model: "mistral-large-latest",
+                messages: toolMessages,
+                max_tokens: 2000,
+                stream: true,
+              }),
+            });
 
-              try {
-                const parsed = JSON.parse(payload);
-                const delta = extractDeltaText(parsed, "mistral");
-                if (delta) {
-                  fullResponse += delta;
-                  if (!clientDisconnected) {
-                    try {
-                      controller.enqueue(sseEvent({ token: delta }));
-                    } catch {
-                      clientDisconnected = true;
-                    }
+            if (!call2bRes.ok) {
+              const errText = await call2bRes.text();
+              console.error("[stream:context-prompt] Call #2b error:", call2bRes.status, errText);
+              try { await writer.write(sseEvent({ done: true, error: "AI service temporarily unavailable." })); } catch { /* */ }
+              await writer.close();
+              return;
+            }
+
+            // Read Call #2b stream manually and forward tokens
+            let fullResponse = "";
+            const decoder = new TextDecoder();
+            let sseBuffer = "";
+            const reader = call2bRes.body!.getReader();
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              sseBuffer += decoder.decode(value, { stream: true });
+              const lines = sseBuffer.split("\n");
+              sseBuffer = lines.pop() ?? "";
+
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith("data:")) continue;
+                const payload = trimmed.slice(5).trim();
+                if (payload === "[DONE]") continue;
+
+                try {
+                  const parsed = JSON.parse(payload);
+                  const delta = extractDeltaText(parsed, "mistral");
+                  if (delta) {
+                    fullResponse += delta;
+                    try { await writer.write(sseEvent({ token: delta })); } catch { /* client gone */ }
                   }
-                }
-              } catch { /* skip malformed */ }
+                } catch { /* skip malformed */ }
+              }
             }
-          },
-          async flush(controller) {
-            console.log("[stream:context-prompt] Call #2b flush, persisting");
+
+            // Clean and persist
+            fullResponse = cleanLLMContent(fullResponse);
+            const aiResponse = fullResponse.trim() || "No response generated.";
+            const { actionRow, budgetRemaining, insertedMessages } = await persistResults(aiResponse, 0, aiResponse.length);
+
             try {
-              const aiResponse = fullResponse.trim() || "No response generated.";
-              const { actionRow, budgetRemaining, insertedMessages } = await persistResults(aiResponse, 0, aiResponse.length);
+              await writer.write(sseEvent({
+                done: true,
+                ai_response: aiResponse,
+                summary_update: summaryUpdate,
+                action_id: actionRow?.id ?? null,
+                budget_remaining: budgetRemaining,
+                inserted_messages: insertedMessages,
+                ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
+                ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
+              }));
+            } catch { /* client gone */ }
+          } catch (err) {
+            console.error("[stream:context-prompt] error in tool-use path:", err);
+            try { await writer.write(sseEvent({ done: true, error: "AI service temporarily unavailable." })); } catch { /* */ }
+          } finally {
+            try { await writer.close(); } catch { /* */ }
+          }
+        })();
 
-              if (!clientDisconnected) {
-                try {
-                  controller.enqueue(sseEvent({
-                    done: true,
-                    ai_response: aiResponse,
-                    summary_update: summaryUpdate,
-                    action_id: actionRow?.id ?? null,
-                    budget_remaining: budgetRemaining,
-                    inserted_messages: insertedMessages,
-                    ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
-                    ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
-                  }));
-                } catch { clientDisconnected = true; }
-              }
-            } catch (persistErr) {
-              console.error("[stream:context-prompt] persistence error:", persistErr);
-              if (!clientDisconnected) {
-                try {
-                  controller.enqueue(sseEvent({ done: true, error: "Action may not have been saved." }));
-                } catch { /* */ }
-              }
-            }
-          },
-        });
-
-        const outputStream = call2bRes.body!.pipeThrough(transform);
-        return createSSEResponse(outputStream);
+        return createSSEResponse(readable);
       }
 
       // ── NO TOOLS — original streaming Call #2 ──
@@ -1124,6 +1116,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
           console.log("[stream:context-prompt] LLM stream complete, persisting");
 
           try {
+            fullResponse = cleanLLMContent(fullResponse);
             const aiResponse = fullResponse.trim() || "No response generated.";
             const extraInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
             const { actionRow, budgetRemaining, insertedMessages } = await persistResults(aiResponse, extraInputChars, aiResponse.length);
@@ -1166,7 +1159,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
     // =========================================================
 
     if (hasTools) {
-      // Call #2a: non-streamed with tools
       const call2aRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -1190,7 +1182,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
       const call2aData = await call2aRes.json();
       const toolCalls = extractToolCalls(call2aData);
-      const call2aContent = call2aData.choices?.[0]?.message?.content ?? "";
+      const call2aContent = cleanLLMContent(call2aData.choices?.[0]?.message?.content ?? "");
       totalInputChars += responseMessages.reduce((s, m) => s + m.content.length, 0);
       totalOutputChars += call2aContent.length;
 
@@ -1199,7 +1191,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       if (toolCalls.length === 0) {
         aiResponse = call2aContent || "No response generated.";
       } else {
-        // Resolve tool calls
         const toolMessages: Array<Record<string, unknown>> = [
           ...responseMessages,
           call2aData.choices[0].message,
@@ -1241,14 +1232,12 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
           }
         }
 
-        // Call #2b: non-streamed final response
         const call2bResult = await callMistral(mistralKey, toolMessages as { role: string; content: string }[], 2000);
         totalInputChars += call2bResult.inputChars;
         totalOutputChars += call2bResult.outputChars;
         aiResponse = call2bResult.text.trim() || "No response generated.";
       }
 
-      // Persist
       const totalTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
 
       const { data: actionRow, error: actionErr } = await adminClient
