@@ -636,59 +636,8 @@ When citing information from web search results, always include the source URL i
                   if (currentToolCalls.length > 0) {
                     toolMessages.push(nextData.choices[0].message);
                   } else {
-                    // No more tool calls — if there's text content, emit it
-                    if (nextContent) {
-                      const responseText = nextContent;
-                      const chunkSize = 20;
-                      for (let i = 0; i < responseText.length; i += chunkSize) {
-                        try { controller.enqueue(sseEvent({ token: responseText.slice(i, i + chunkSize) })); } catch { /* */ }
-                      }
-
-                      const userMsgRow = {
-                        thread_id: threadId,
-                        role: "user",
-                        content: message.trim(),
-                        source_type: "chat",
-                        flow_flag: "normal",
-                        concise_mode: conciseMode,
-                      };
-                      const assistantMsgRow: Record<string, unknown> = {
-                        thread_id: threadId,
-                        role: "assistant",
-                        content: responseText,
-                        source_type: "chat",
-                        flow_flag: "normal",
-                        concise_mode: conciseMode,
-                        model_used: "mistral-large-latest",
-                      };
-                      if (documentsReferenced.length > 0) assistantMsgRow.documents_referenced = documentsReferenced;
-                      if (webSearchesPerformed.length > 0) assistantMsgRow.web_searches_performed = webSearchesPerformed;
-
-                      const { data: insertedUser } = await adminSupabase.from("chat_messages").insert(userMsgRow).select().single();
-                      const { data: insertedAssistant } = await adminSupabase.from("chat_messages").insert(assistantMsgRow).select().single();
-
-                      const estimatedTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
-                      const newTotal = profile.tokens_used_this_period + estimatedTokens;
-                      await adminSupabase.from("profiles").update({ tokens_used_this_period: newTotal }).eq("id", user.id);
-
-                      const promptColumn = tutorMode ? "chat_prompt_count_tutor" : "chat_prompt_count_normal";
-                      const { data: cs } = await adminSupabase.from("project_stats").select(promptColumn).eq("project_id", thread.project_id).single();
-                      if (cs) {
-                        const cnt = (cs as Record<string, number>)[promptColumn] || 0;
-                        await adminSupabase.from("project_stats").update({ [promptColumn]: cnt + 1 }).eq("project_id", thread.project_id);
-                      }
-
-                      try {
-                        controller.enqueue(sseEvent({
-                          done: true,
-                          user_message: insertedUser,
-                          assistant_message: insertedAssistant,
-                          budget_remaining: profile.monthly_token_budget - newTotal,
-                        }));
-                      } catch { /* */ }
-                      controller.close();
-                      return; // done
-                    }
+                    // No more tool calls — discard any text from intermediate call
+                    // and fall through to a proper streaming Call #2
                     break;
                   }
                 }

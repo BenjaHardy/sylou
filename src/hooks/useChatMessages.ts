@@ -107,34 +107,38 @@ export function useChatMessages(threadId: string | null) {
 
         // ---- SSE streaming path ----
         if (contentType.includes("text/event-stream") && res.body) {
-          // Add a streaming placeholder for the assistant
           const streamingId = "streaming-assistant";
-          const streamingMsg: ChatMessage = {
-            id: streamingId,
-            thread_id: threadId,
-            role: "assistant",
-            content: "",
-            created_at: new Date().toISOString(),
-            source_type: "chat",
-            flow_flag: null,
-            concise_mode: conciseMode,
-            tutor_mode: null,
-            model_used: null,
-          };
-          setMessages((prev) => [...prev, streamingMsg]);
-
+          let placeholderInserted = false;
           let receivedDone = false;
 
           await consumeSSEStream(res.body, {
             onToken: (text) => {
               setPhase(null); // Clear phase once tokens start arriving
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === streamingId
-                    ? { ...m, content: m.content + text }
-                    : m
-                )
-              );
+              if (!placeholderInserted) {
+                // Insert placeholder on first token — not before
+                placeholderInserted = true;
+                const streamingMsg: ChatMessage = {
+                  id: streamingId,
+                  thread_id: threadId,
+                  role: "assistant",
+                  content: text,
+                  created_at: new Date().toISOString(),
+                  source_type: "chat",
+                  flow_flag: null,
+                  concise_mode: conciseMode,
+                  tutor_mode: null,
+                  model_used: null,
+                };
+                setMessages((prev) => [...prev, streamingMsg]);
+              } else {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === streamingId
+                      ? { ...m, content: m.content + text }
+                      : m
+                  )
+                );
+              }
             },
             onPhase: (p) => {
               setPhase(p);
@@ -142,6 +146,28 @@ export function useChatMessages(threadId: string | null) {
             onDone: (evt) => {
               receivedDone = true;
               setPhase(null);
+              if (evt.error) {
+                // Server-side error — show inline error bubble, keep user message
+                setMessages((prev) => {
+                  const without = prev.filter((m) => m.id !== streamingId);
+                  return [
+                    ...without,
+                    {
+                      id: "error-assistant",
+                      thread_id: threadId,
+                      role: "assistant",
+                      content: "Sorry, something went wrong. Please try again.",
+                      created_at: new Date().toISOString(),
+                      source_type: "chat",
+                      flow_flag: null,
+                      concise_mode: null,
+                      tutor_mode: null,
+                      model_used: null,
+                    } as ChatMessage,
+                  ];
+                });
+                return;
+              }
               setMessages((prev) => {
                 const without = prev.filter(
                   (m) => m.id !== optimisticId && m.id !== streamingId
@@ -163,13 +189,27 @@ export function useChatMessages(threadId: string | null) {
             },
           });
 
-          // If we never got a done event, clean up
+          // If we never got a done event, show error instead of silently removing
           if (!receivedDone) {
-            setMessages((prev) =>
-              prev.filter(
-                (m) => m.id !== optimisticId && m.id !== streamingId
-              )
-            );
+            setMessages((prev) => {
+              const without = prev.filter((m) => m.id !== streamingId);
+              // Keep the optimistic user message visible
+              return [
+                ...without,
+                {
+                  id: "error-assistant",
+                  thread_id: threadId,
+                  role: "assistant",
+                  content: "Sorry, something went wrong. Please try again.",
+                  created_at: new Date().toISOString(),
+                  source_type: "chat",
+                  flow_flag: null,
+                  concise_mode: null,
+                  tutor_mode: null,
+                  model_used: null,
+                } as ChatMessage,
+              ];
+            });
           }
         } else {
           // ---- JSON fallback (non-streaming response) ----
@@ -197,7 +237,22 @@ export function useChatMessages(threadId: string | null) {
         }
       } catch (err) {
         console.error("Failed to send message:", err);
-        setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+        // Keep user message visible, show error bubble
+        setMessages((prev) => [
+          ...prev.filter((m) => m.id !== "streaming-assistant"),
+          {
+            id: "error-assistant",
+            thread_id: threadId!,
+            role: "assistant",
+            content: "Sorry, something went wrong. Please try again.",
+            created_at: new Date().toISOString(),
+            source_type: "chat",
+            flow_flag: null,
+            concise_mode: null,
+            tutor_mode: null,
+            model_used: null,
+          } as ChatMessage,
+        ]);
       } finally {
         setSending(false);
       }
