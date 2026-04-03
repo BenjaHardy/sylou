@@ -484,6 +484,7 @@ export function TextSelectionWindow({
             ai_response: proposedText,
             ...(pendingSourceBreakdown ? { selected_text_source: pendingSourceBreakdown } : {}),
             ...(pendingDocumentsReferenced && pendingDocumentsReferenced.length > 0 ? { documents_referenced: pendingDocumentsReferenced } : {}),
+            ...(pendingWebSearchesPerformed && pendingWebSearchesPerformed.length > 0 ? { web_searches_performed: pendingWebSearchesPerformed } : {}),
           },
         });
         if (error) {
