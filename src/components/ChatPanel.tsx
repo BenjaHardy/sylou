@@ -219,6 +219,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   const { messages, loading, sending, phase, sendMessage, budgetRemaining, refreshMessages, appendMessages, setMessages } = useChatMessages(activeThreadId);
   const { bookmarks, createBookmark, updateBookmark, deleteBookmark, getBookmarkForMessage } = useBookmarks(projectId);
   const [input, setInput] = useState("");
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [tipDismissed, setTipDismissed] = useState(false);
   const [showBookmarkList, setShowBookmarkList] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
