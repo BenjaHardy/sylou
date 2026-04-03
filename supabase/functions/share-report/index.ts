@@ -1,0 +1,161 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+function jsonResponse(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function generateCertificateId(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let result = "FLOW-";
+  for (let i = 0; i < 8; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return result;
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    // --- Auth ---
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return jsonResponse({ error: "Unauthorized" }, 401);
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims(token);
+    if (claimsErr || !claimsData?.claims) {
+      return jsonResponse({ error: "Unauthorized" }, 401);
+    }
+    const userId = claimsData.claims.sub as string;
+
+    const body = await req.json();
+    const { report_id } = body;
+
+    if (!report_id || typeof report_id !== "string") {
+      return jsonResponse({ error: "report_id is required" }, 400);
+    }
+
+    // Use service role for database operations to avoid RLS complexities
+    const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
+
+    // Verify ownership: report -> project -> user
+    const { data: report, error: reportErr } = await adminSupabase
+      .from("flow_reports")
+      .select("id, project_id, share_token, certificate_id, share_enabled")
+      .eq("id", report_id)
+      .single();
+
+    if (reportErr || !report) {
+      return jsonResponse({ error: "Report not found" }, 404);
+    }
+
+    const { data: project, error: projectErr } = await adminSupabase
+      .from("projects")
+      .select("id, user_id, name")
+      .eq("id", report.project_id)
+      .single();
+
+    if (projectErr || !project || project.user_id !== userId) {
+      return jsonResponse({ error: "Not authorized to share this report" }, 403);
+    }
+
+    if (req.method === "POST") {
+      // Generate share token and certificate ID
+      const shareToken = crypto.randomUUID();
+
+      // Generate unique certificate ID with retry
+      let certificateId = "";
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const candidate = generateCertificateId();
+        const { data: existing } = await adminSupabase
+          .from("flow_reports")
+          .select("id")
+          .eq("certificate_id", candidate)
+          .maybeSingle();
+
+        if (!existing) {
+          certificateId = candidate;
+          break;
+        }
+      }
+
+      if (!certificateId) {
+        return jsonResponse({ error: "Failed to generate unique certificate ID" }, 500);
+      }
+
+      // Always overwrite project_name with current name
+      const { error: updateErr } = await adminSupabase
+        .from("flow_reports")
+        .update({
+          share_token: shareToken,
+          certificate_id: certificateId,
+          share_enabled: true,
+          share_visibility: "public",
+          project_name: project.name,
+        })
+        .eq("id", report_id);
+
+      if (updateErr) {
+        console.error("Error enabling sharing:", updateErr);
+        return jsonResponse({ error: "Failed to enable sharing" }, 500);
+      }
+
+      return jsonResponse({
+        share_token: shareToken,
+        certificate_id: certificateId,
+        project_name: project.name,
+      });
+    }
+
+    if (req.method === "PATCH") {
+      const { share_enabled } = body;
+      if (typeof share_enabled !== "boolean") {
+        return jsonResponse({ error: "share_enabled must be a boolean" }, 400);
+      }
+
+      // Also refresh project_name when re-enabling
+      const updateData: Record<string, unknown> = { share_enabled };
+      if (share_enabled) {
+        updateData.project_name = project.name;
+      }
+
+      const { error: updateErr } = await adminSupabase
+        .from("flow_reports")
+        .update(updateData)
+        .eq("id", report_id);
+
+      if (updateErr) {
+        console.error("Error toggling sharing:", updateErr);
+        return jsonResponse({ error: "Failed to update sharing status" }, 500);
+      }
+
+      return jsonResponse({ share_enabled });
+    }
+
+    return jsonResponse({ error: "Method not allowed" }, 405);
+  } catch (err) {
+    console.error("share-report error:", err);
+    return jsonResponse({ error: "Internal server error" }, 500);
+  }
+});
