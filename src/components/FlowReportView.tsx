@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FlowFeedbackSection } from "@/components/FlowFeedbackSection";
 import { FlowUserAssessmentSection } from "@/components/FlowUserAssessmentSection";
@@ -95,6 +96,7 @@ export function FlowReportView({
   const [certificateId, setCertificateId] = useState<string | null>(report?.certificate_id ?? null);
   const [shareEnabled, setShareEnabled] = useState<boolean>(report?.share_enabled ?? false);
   const [copied, setCopied] = useState(false);
+  const [shareIncludeFeedback, setShareIncludeFeedback] = useState<boolean>(report?.share_include_feedback ?? false);
 
   // Sync sharing state when report changes
   useEffect(() => {
@@ -102,8 +104,9 @@ export function FlowReportView({
       setShareToken(report.share_token ?? null);
       setCertificateId(report.certificate_id ?? null);
       setShareEnabled(report.share_enabled ?? false);
+      setShareIncludeFeedback(report.share_include_feedback ?? false);
     }
-  }, [report?.id, report?.share_token, report?.share_enabled, report?.certificate_id]);
+  }, [report?.id, report?.share_token, report?.share_enabled, report?.certificate_id, report?.share_include_feedback]);
 
   useEffect(() => {
     if (!showHighlighted) return;
@@ -345,6 +348,29 @@ export function FlowReportView({
                         <span className="font-medium text-foreground">FLOW Certificate #{certificateId}</span>
                       </div>
                     )}
+
+                    {/* Include feedback checkbox */}
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="share-include-feedback"
+                        checked={shareIncludeFeedback}
+                        onCheckedChange={async (checked) => {
+                          const val = checked === true;
+                          setShareIncludeFeedback(val);
+                          try {
+                            await supabase.functions.invoke("share-report", {
+                              body: { report_id: report.id, action: "toggle", share_include_feedback: val },
+                            });
+                          } catch (err) {
+                            console.error("Failed to update feedback visibility:", err);
+                            setShareIncludeFeedback(!val);
+                          }
+                        }}
+                      />
+                      <label htmlFor="share-include-feedback" className="text-xs text-muted-foreground cursor-pointer">
+                        Include my self-assessment in shared report
+                      </label>
+                    </div>
 
                     {/* URL + Copy */}
                     <div className="flex items-center gap-2">
