@@ -6,10 +6,17 @@ import { ScoreCard } from "@/components/flow-report/ScoreCard";
 import { FlowInfoSection } from "@/components/flow-report/FlowInfoSection";
 import { TokenUsageSection } from "@/components/flow-report/TokenUsageSection";
 import { ProjectActivitySection } from "@/components/flow-report/ProjectActivitySection";
-import { PILLAR_KEYS } from "@/components/flow-report/shared-utils";
+import {
+  PILLAR_KEYS,
+  PILLAR_LABELS,
+  getScoreLabel,
+  getScoreColor,
+  extractUserAssessment,
+  extractFeedbackScores,
+} from "@/components/flow-report/shared-utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Activity, Loader2, ShieldAlert, ExternalLink, Award } from "lucide-react";
-import type { FlowReport } from "@/hooks/useFlowAnalysis";
+import type { FlowReport, FlowFeedback } from "@/hooks/useFlowAnalysis";
 
 export default function SharedReport() {
   const { token } = useParams<{ token: string }>();
@@ -28,7 +35,7 @@ export default function SharedReport() {
 
       const { data, error } = await supabase
         .from("flow_reports")
-        .select("id, project_id, project_name, certificate_id, share_token, share_enabled, share_visibility, model_used, created_at, ai_find, ai_lead, ai_organize, ai_write, ai_summary, flow_meta, metrics_snapshot")
+        .select("id, project_id, project_name, certificate_id, share_token, share_enabled, share_visibility, share_include_feedback, model_used, created_at, ai_find, ai_lead, ai_organize, ai_write, ai_summary, flow_meta, metrics_snapshot, user_feedback_pre, user_feedback_post")
         .eq("share_token", token)
         .eq("share_enabled", true)
         .eq("share_visibility", "public")
@@ -83,6 +90,26 @@ export default function SharedReport() {
   }
 
   const certificateId = (report as any).certificate_id;
+  const showFeedback = !!(report as any).share_include_feedback;
+  const preFeedbackScores: FlowFeedback | null = showFeedback ? (report.user_feedback_pre ?? null) : null;
+  const postAssessment = showFeedback ? extractUserAssessment(report.user_feedback_post) : null;
+  const postFeedbackScores = showFeedback ? extractFeedbackScores(report.user_feedback_post) : null;
+
+  // Use post-analysis feedback on radar if available, otherwise pre
+  let radarUserFeedback: FlowFeedback | null = null;
+  let radarUserLabel = "";
+  let radarUserColor = "";
+  if (showFeedback) {
+    if (postFeedbackScores) {
+      radarUserFeedback = postFeedbackScores;
+      radarUserLabel = "User Assessment";
+      radarUserColor = "hsl(32, 95%, 55%)";
+    } else if (preFeedbackScores) {
+      radarUserFeedback = preFeedbackScores;
+      radarUserLabel = "User Assessment";
+      radarUserColor = "hsl(142, 71%, 45%)";
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -109,9 +136,9 @@ export default function SharedReport() {
 
           <FlowRadarChart
             report={report}
-            userFeedback={null}
-            userLabel=""
-            userColor=""
+            userFeedback={radarUserFeedback}
+            userLabel={radarUserLabel}
+            userColor={radarUserColor}
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -131,6 +158,56 @@ export default function SharedReport() {
               <p className="text-sm text-foreground leading-relaxed">{report.ai_summary}</p>
             </div>
           </div>
+
+          {/* User Self-Assessment (read-only) */}
+          {showFeedback && preFeedbackScores && (
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Pre-Analysis Self-Assessment</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {PILLAR_KEYS.map((key) => (
+                  <div key={key} className="border border-border rounded-lg p-3 text-center space-y-1">
+                    <p className="text-[10px] font-medium text-muted-foreground uppercase">{PILLAR_LABELS[key].full.split("—")[0].trim()}</p>
+                    <p className="text-lg font-bold text-foreground">{preFeedbackScores[key]?.toFixed(1) ?? "—"}</p>
+                    <p className="text-[10px] text-muted-foreground">{getScoreLabel(preFeedbackScores[key] ?? null)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {showFeedback && postAssessment && (
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Post-Analysis Self-Assessment</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {PILLAR_KEYS.map((key) => (
+                  <div key={key} className="border border-border rounded-lg p-3 text-center space-y-1">
+                    <p className="text-[10px] font-medium text-muted-foreground uppercase">{PILLAR_LABELS[key].full.split("—")[0].trim()}</p>
+                    <p className="text-lg font-bold text-foreground">{postAssessment.scores[key]?.toFixed(1) ?? "—"}</p>
+                    <p className="text-[10px] text-muted-foreground">{getScoreLabel(postAssessment.scores[key] ?? null)}</p>
+                  </div>
+                ))}
+              </div>
+              {/* Comments */}
+              {Object.entries(postAssessment.comments).some(([, v]) => v.trim()) && (
+                <div className="space-y-2 mt-2">
+                  {PILLAR_KEYS.map((key) =>
+                    postAssessment.comments[key]?.trim() ? (
+                      <div key={key} className="bg-muted/30 rounded-md p-3">
+                        <p className="text-[10px] font-medium text-muted-foreground uppercase mb-1">{PILLAR_LABELS[key].full.split("—")[0].trim()}</p>
+                        <p className="text-xs text-foreground">{postAssessment.comments[key]}</p>
+                      </div>
+                    ) : null
+                  )}
+                  {postAssessment.comments.overall?.trim() && (
+                    <div className="bg-muted/30 rounded-md p-3">
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase mb-1">Overall</p>
+                      <p className="text-xs text-foreground">{postAssessment.comments.overall}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Token Usage */}
           {report.flow_meta && <TokenUsageSection meta={report.flow_meta} />}
