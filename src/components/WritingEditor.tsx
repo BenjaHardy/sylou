@@ -22,7 +22,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { exportWritingAsDocx } from "@/lib/export-docx";
 import { exportProjectAsJson } from "@/lib/export-json";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
-import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 
 interface Props {
   projectId: string;
