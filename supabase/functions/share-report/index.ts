@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (reportErr || !report) {
-      return jsonResponse({ error: "Report not found" }, 404);
+      return jsonResponse({ error: "Forbidden" }, 403);
     }
 
     const { data: project, error: projectErr } = await adminSupabase
@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (projectErr || !project || project.user_id !== userId) {
-      return jsonResponse({ error: "Not authorized to share this report" }, 403);
+      return jsonResponse({ error: "Forbidden" }, 403);
     }
 
     // Action: "toggle" — update share_enabled only
