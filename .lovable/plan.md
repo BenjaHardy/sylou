@@ -1,56 +1,88 @@
 
 
-## Plan: Add User Feedback to Shared Report with Opt-in Control
+## Plan: Add Export Functionality (PDF, DOCX, JSON)
 
 ### Summary
 
-Add a `share_include_feedback` boolean column to `flow_reports`, a checkbox in the sharing controls, and render read-only pre/post feedback on the shared report page when the flag is true.
-
-### Database Migration
-
-```sql
-ALTER TABLE public.flow_reports
-  ADD COLUMN IF NOT EXISTS share_include_feedback boolean NOT NULL DEFAULT false;
-```
+Add an export dropdown to the editor toolbar with three options: "Export Writing as PDF", "Export Writing as DOCX", and "Export Project as JSON". PDF uses `window.print()`. DOCX uses `html-to-docx` with `editor.getHTML()`. JSON aggregates full project data. Tier enforcement is stubbed (PDF for all, DOCX/JSON gated for free tier).
 
 ### Changes
 
-#### 1. Edge function: `supabase/functions/share-report/index.ts`
+#### 1. Install dependencies
 
-- Accept `share_include_feedback` (boolean) in the toggle action body
-- Update it alongside `share_enabled` when toggling
-- On initial share (POST), default `share_include_feedback` to `false`
+- `html-to-docx` (converts HTML string to DOCX buffer)
+- `file-saver` + `@types/file-saver` (trigger downloads)
 
-#### 2. Sharing controls: `src/components/FlowReportView.tsx`
+#### 2. `src/components/EditorToolbar.tsx`
 
-- Add local state `shareIncludeFeedback` synced from `report.share_include_feedback`
-- When `shareToken && shareEnabled`, render a checkbox: "Include my self-assessment in shared report" (default off)
-- On checkbox change, call `share-report` toggle with `{ report_id, action: "toggle", share_include_feedback: newValue }`
+- Add `FileDown` icon from Lucide after the Find & Replace toggle
+- Wrap it in a `DropdownMenu` with three items:
+  - "Export Writing as PDF" (always enabled)
+  - "Export Writing as DOCX" (lock icon for free tier)
+  - "Export Project as JSON" (lock icon for free tier)
+- New props: `onExportPDF`, `onExportDOCX`, `onExportJSON`, `subscriptionTier?: string`
 
-#### 3. Shared report page: `src/pages/SharedReport.tsx`
+#### 3. `src/components/WritingEditor.tsx`
 
-- Add `user_feedback_pre, user_feedback_post, share_include_feedback` to the explicit `.select()` list
-- When `share_include_feedback` is true and feedback data exists, render read-only displays:
-  - **Pre-analysis feedback**: A simple read-only card showing the 4 pillar scores (reuse the layout from `FlowFeedbackSection`'s submitted view, but inline it to avoid importing the interactive component)
-  - **Post-analysis feedback**: A read-only card showing scores + comments (reuse the layout from `FlowUserAssessmentSection`'s read-only view, minus the Edit button)
-- When `share_include_feedback` is false, render nothing for feedback
+- Query `profiles.subscription_tier` for current user (via existing auth context)
+- Implement three handlers:
+  - **PDF**: Call `window.print()` — CSS handles the rest
+  - **DOCX**: Call `editor.getHTML()`, pass to `html-to-docx`, save blob via `file-saver`
+  - **JSON**: Call `exportProjectAsJson(projectId)`, save blob
+- Pass handlers + tier to `EditorToolbar`
 
-#### 4. Type update: `src/hooks/useFlowAnalysis.ts`
+#### 4. New file: `src/lib/export-docx.ts`
 
-- Add `share_include_feedback?: boolean` to `FlowReport` interface
+```typescript
+import htmlToDocx from "html-to-docx";
+import { saveAs } from "file-saver";
 
-### Technical Details
+export async function exportWritingAsDocx(html: string, projectName: string) {
+  const blob = await htmlToDocx(html, null, {
+    table: { row: { cantSplit: true } },
+    footer: true,
+    pageNumber: true,
+  });
+  saveAs(blob as Blob, `${projectName}.docx`);
+}
+```
 
-- The read-only feedback rendering in `SharedReport.tsx` will be inline JSX (not importing `FlowFeedbackSection` or `FlowUserAssessmentSection`) to avoid pulling in interactive editing logic and to keep the public page fully read-only
-- The `extractUserAssessment` and `extractFeedbackScores` helpers from `shared-utils.ts` will be used to safely parse the JSONB feedback data
+#### 5. New file: `src/lib/export-json.ts`
+
+- `exportProjectAsJson(projectId: string): Promise<void>`
+- Fetches from Supabase in parallel:
+  - `projects` (name, template, language, tutor_mode, created_at)
+  - `writing_content` (content)
+  - `chat_threads` + `chat_messages` (full history)
+  - `chat_bookmarks` (all fields)
+  - `post_its` (all fields)
+  - `flow_reports` — explicit select excluding: `share_token`, `provenance_snapshot`
+  - `project_stats` (all fields)
+  - `imported_documents` (metadata only: id, file_name, file_size_bytes, uploaded_at, summary — no extracted_text, no file_path)
+- Wraps in `{ exported_at, version: "1.0", project: { ... } }`
+- Saves as `{projectName}_export.json` via Blob URL download
+
+#### 6. `src/index.css` — Print styles
+
+Add `@media print` block at the end:
+- Hide everything except the TipTap editor content area (sidebar, toolbar, status bar, chat panel, AI buttons, dialogs)
+- Set editor content to fill the page with standard margins
+- Remove background colors, borders
+
+#### 7. Tier enforcement
+
+- PDF: always allowed
+- DOCX/JSON: if `subscription_tier === 'free'`, show toast "Upgrade to Starter or above to export as DOCX/JSON" and return early
+- Actual upgrade flow deferred to later
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| Migration | Add `share_include_feedback` column |
-| `supabase/functions/share-report/index.ts` | Handle `share_include_feedback` in toggle |
-| `src/components/FlowReportView.tsx` | Add checkbox in sharing controls |
-| `src/pages/SharedReport.tsx` | Fetch and render read-only feedback |
-| `src/hooks/useFlowAnalysis.ts` | Add `share_include_feedback` to interface |
+| `package.json` | Add `html-to-docx`, `file-saver`, `@types/file-saver` |
+| `src/components/EditorToolbar.tsx` | Add export dropdown menu with three labeled items |
+| `src/components/WritingEditor.tsx` | Export handlers, tier query, pass props |
+| `src/lib/export-docx.ts` | New — HTML to DOCX via html-to-docx |
+| `src/lib/export-json.ts` | New — full project data aggregation and download |
+| `src/index.css` | Print media styles |
 
