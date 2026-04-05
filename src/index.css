@@ -149,6 +149,10 @@
     color: black !important;
   }
 
+  [data-radix-popper-content-wrapper] {
+    display: none !important;
+  }
+
   /* Editor content fills the page */
   .tiptap {
     min-height: auto !important;
