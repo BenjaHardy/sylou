@@ -141,3 +141,46 @@
 .tiptap pre code { background: none; padding: 0; }
 .tiptap a { color: hsl(var(--primary)); text-decoration: underline; }
 .tiptap hr { border-color: hsl(var(--border)); margin: 1em 0; }
+
+/* Print styles for PDF export */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Hide everything except the editor content */
+  [data-sidebar],
+  [data-panel-group],
+  .border-b.border-border.bg-\\[hsl\\(var\\(--ethos-surface\\)\\)\\],
+  .shrink-0,
+  [role="dialog"],
+  [data-radix-popper-content-wrapper],
+  .fixed,
+  .absolute {
+    display: none !important;
+  }
+
+  /* Show only the editor wrapper */
+  .tiptap {
+    min-height: auto !important;
+    padding: 0 !important;
+  }
+
+  .prose {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Hide toolbar and status bar */
+  .border-b.border-border,
+  .border-t.border-border {
+    display: none !important;
+  }
+
+  /* Let the editor content area fill the page */
+  .flex.flex-col.h-full.min-h-0 > .flex-1 {
+    overflow: visible !important;
+  }
+}
