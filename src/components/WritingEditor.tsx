@@ -16,6 +16,11 @@ import { EditorToolbar } from "@/components/EditorToolbar";
 import { AISelectionButton } from "@/components/AISelectionButton";
 import { TextSelectionWindow } from "@/components/TextSelectionWindow";
 import { Loader2, Activity } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { exportWritingAsDocx } from "@/lib/export-docx";
+import { exportProjectAsJson } from "@/lib/export-json";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 
 interface Props {
@@ -37,6 +42,7 @@ interface Props {
 }
 
 export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, onFlushProvenance, conciseMode, onEditorContent, chatSetMessages, webSearchEnabled }: Props & { onEditorContent?: (html: string) => void }) {
+  const { user } = useAuth();
   const { content, loading, saveState, updateContent, isDirty, manualSave, flushSave: flushWritingContent } = useWritingContent(projectId);
   const { getTracker, initWithContentLength, scheduleSave, flushSave: flushProvenance, provenanceLoaded } = useProvenanceTracker(projectId);
   const [initialSet, setInitialSet] = useState(false);
@@ -259,7 +265,12 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <EditorToolbar editor={editor} />
+      {/* Subscription tier query for export gating */}
+      <ExportEnabledToolbar
+        editor={editor}
+        userId={user?.id}
+        projectId={projectId}
+      />
       <div ref={editorWrapperRef} className="flex-1 overflow-y-auto bg-background relative">
         <EditorContent editor={editor} className="h-full" />
 
@@ -336,5 +347,84 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
         </div>
       </div>
     </div>
+  );
+}
+
+function ExportEnabledToolbar({
+  editor,
+  userId,
+  projectId,
+}: {
+  editor: any;
+  userId?: string;
+  projectId: string;
+}) {
+  const [tier, setTier] = useState("free");
+  const [projectName, setProjectName] = useState("document");
+
+  useEffect(() => {
+    if (!userId) return;
+    supabase
+      .from("profiles")
+      .select("subscription_tier")
+      .eq("id", userId)
+      .single()
+      .then(({ data }) => {
+        if (data?.subscription_tier) setTier(data.subscription_tier);
+      });
+  }, [userId]);
+
+  useEffect(() => {
+    supabase
+      .from("projects")
+      .select("name")
+      .eq("id", projectId)
+      .single()
+      .then(({ data }) => {
+        if (data?.name) setProjectName(data.name);
+      });
+  }, [projectId]);
+
+  const handleExportPDF = useCallback(() => {
+    window.print();
+  }, []);
+
+  const handleExportDOCX = useCallback(async () => {
+    if (tier === "free") {
+      toast.error("Upgrade to Starter or above to export as DOCX");
+      return;
+    }
+    try {
+      const html = editor.getHTML();
+      await exportWritingAsDocx(html, projectName);
+      toast.success("DOCX exported successfully");
+    } catch (e) {
+      console.error("DOCX export failed:", e);
+      toast.error("Failed to export DOCX");
+    }
+  }, [editor, tier, projectName]);
+
+  const handleExportJSON = useCallback(async () => {
+    if (tier === "free") {
+      toast.error("Upgrade to Starter or above to export project as JSON");
+      return;
+    }
+    try {
+      await exportProjectAsJson(projectId);
+      toast.success("Project JSON exported successfully");
+    } catch (e) {
+      console.error("JSON export failed:", e);
+      toast.error("Failed to export project JSON");
+    }
+  }, [tier, projectId]);
+
+  return (
+    <EditorToolbar
+      editor={editor}
+      onExportPDF={handleExportPDF}
+      onExportDOCX={handleExportDOCX}
+      onExportJSON={handleExportJSON}
+      subscriptionTier={tier}
+    />
   );
 }
