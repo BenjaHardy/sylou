@@ -79,16 +79,25 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Forbidden" }, 403);
     }
 
-    // Action: "toggle" — update share_enabled only
+    // Action: "toggle" — update share_enabled and/or share_include_feedback
     if (action === "toggle") {
-      const { share_enabled } = body;
-      if (typeof share_enabled !== "boolean") {
-        return jsonResponse({ error: "share_enabled must be a boolean" }, 400);
+      const { share_enabled, share_include_feedback } = body;
+
+      const updateData: Record<string, unknown> = {};
+
+      if (typeof share_enabled === "boolean") {
+        updateData.share_enabled = share_enabled;
+        if (share_enabled) {
+          updateData.project_name = project.name;
+        }
       }
 
-      const updateData: Record<string, unknown> = { share_enabled };
-      if (share_enabled) {
-        updateData.project_name = project.name;
+      if (typeof share_include_feedback === "boolean") {
+        updateData.share_include_feedback = share_include_feedback;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return jsonResponse({ error: "No valid fields to update" }, 400);
       }
 
       const { error: updateErr } = await adminSupabase
@@ -101,7 +110,7 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: "Failed to update sharing status" }, 500);
       }
 
-      return jsonResponse({ share_enabled });
+      return jsonResponse({ ...updateData });
     }
 
     // Default action: generate share token and certificate

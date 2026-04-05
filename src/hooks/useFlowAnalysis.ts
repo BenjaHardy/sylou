@@ -72,6 +72,7 @@ export interface FlowReport {
   certificate_id?: string | null;
   share_visibility?: string | null;
   project_name?: string | null;
+  share_include_feedback?: boolean;
 }
 
 export interface BudgetError {
