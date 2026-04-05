@@ -7,16 +7,27 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Bold, Italic, Underline, Strikethrough,
   Heading1, Heading2, Heading3,
   List, ListOrdered, Quote, Code2, Link2, Minus,
   Undo2, Redo2,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Search, X, ChevronDown, Palette,
+  FileDown, Lock,
 } from "lucide-react";
 
 interface Props {
   editor: Editor;
+  onExportPDF?: () => void;
+  onExportDOCX?: () => void;
+  onExportJSON?: () => void;
+  subscriptionTier?: string;
 }
 
 const FONT_SIZES = ["10", "12", "14", "16", "18", "20", "24", "28", "32"];
@@ -159,7 +170,8 @@ function FontColorPicker({ editor }: { editor: Editor }) {
   );
 }
 
-export function EditorToolbar({ editor }: Props) {
+export function EditorToolbar({ editor, onExportPDF, onExportDOCX, onExportJSON, subscriptionTier = "free" }: Props) {
+  const isFree = subscriptionTier === "free";
   const [findOpen, setFindOpen] = useState(false);
   const [findText, setFindText] = useState("");
   const [replaceText, setReplaceText] = useState("");
@@ -346,6 +358,33 @@ export function EditorToolbar({ editor }: Props) {
         >
           <Search size={iconSize} />
         </Toggle>
+
+        <Separator orientation="vertical" className="mx-1 h-6" />
+
+        {/* Export */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              title="Export"
+              className="h-8 w-8 flex items-center justify-center rounded-md hover:bg-accent transition-colors"
+            >
+              <FileDown size={iconSize} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onExportPDF}>
+              Export Writing as PDF
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onExportDOCX} className="flex items-center gap-2">
+              Export Writing as DOCX
+              {isFree && <Lock size={12} className="text-muted-foreground" />}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onExportJSON} className="flex items-center gap-2">
+              Export Project as JSON
+              {isFree && <Lock size={12} className="text-muted-foreground" />}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {findOpen && (
