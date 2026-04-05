@@ -152,12 +152,8 @@
   /* Hide everything except the editor content */
   [data-sidebar],
   [data-panel-group],
-  .border-b.border-border.bg-\\[hsl\\(var\\(--ethos-surface\\)\\)\\],
-  .shrink-0,
   [role="dialog"],
-  [data-radix-popper-content-wrapper],
-  .fixed,
-  .absolute {
+  [data-radix-popper-content-wrapper] {
     display: none !important;
   }
 
