@@ -88,13 +88,20 @@ function nodeToDocx(node: ChildNode): Paragraph[] {
     case "p":
       return [new Paragraph({ children: getInlineRuns(el) })];
     case "blockquote": {
-      const inner = parseNodes(el.childNodes);
-      return inner.map(p => new Paragraph({
-        indent: { left: 720 },
-        children: p.root.filter((r): r is TextRun => r instanceof TextRun).length
-          ? (p as any).root
-          : getInlineRuns(el),
-      }));
+      const bqParagraphs: Paragraph[] = [];
+      el.querySelectorAll("p").forEach((p) => {
+        bqParagraphs.push(new Paragraph({
+          indent: { left: 720 },
+          children: getInlineRuns(p),
+        }));
+      });
+      if (bqParagraphs.length === 0) {
+        bqParagraphs.push(new Paragraph({
+          indent: { left: 720 },
+          children: getInlineRuns(el),
+        }));
+      }
+      return bqParagraphs;
     }
     case "ul":
       return Array.from(el.children).flatMap((li) =>
