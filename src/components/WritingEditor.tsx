@@ -349,3 +349,82 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     </div>
   );
 }
+
+function ExportEnabledToolbar({
+  editor,
+  userId,
+  projectId,
+}: {
+  editor: any;
+  userId?: string;
+  projectId: string;
+}) {
+  const [tier, setTier] = useState("free");
+  const [projectName, setProjectName] = useState("document");
+
+  useEffect(() => {
+    if (!userId) return;
+    supabase
+      .from("profiles")
+      .select("subscription_tier")
+      .eq("id", userId)
+      .single()
+      .then(({ data }) => {
+        if (data?.subscription_tier) setTier(data.subscription_tier);
+      });
+  }, [userId]);
+
+  useEffect(() => {
+    supabase
+      .from("projects")
+      .select("name")
+      .eq("id", projectId)
+      .single()
+      .then(({ data }) => {
+        if (data?.name) setProjectName(data.name);
+      });
+  }, [projectId]);
+
+  const handleExportPDF = useCallback(() => {
+    window.print();
+  }, []);
+
+  const handleExportDOCX = useCallback(async () => {
+    if (tier === "free") {
+      toast.error("Upgrade to Starter or above to export as DOCX");
+      return;
+    }
+    try {
+      const html = editor.getHTML();
+      await exportWritingAsDocx(html, projectName);
+      toast.success("DOCX exported successfully");
+    } catch (e) {
+      console.error("DOCX export failed:", e);
+      toast.error("Failed to export DOCX");
+    }
+  }, [editor, tier, projectName]);
+
+  const handleExportJSON = useCallback(async () => {
+    if (tier === "free") {
+      toast.error("Upgrade to Starter or above to export project as JSON");
+      return;
+    }
+    try {
+      await exportProjectAsJson(projectId);
+      toast.success("Project JSON exported successfully");
+    } catch (e) {
+      console.error("JSON export failed:", e);
+      toast.error("Failed to export project JSON");
+    }
+  }, [tier, projectId]);
+
+  return (
+    <EditorToolbar
+      editor={editor}
+      onExportPDF={handleExportPDF}
+      onExportDOCX={handleExportDOCX}
+      onExportJSON={handleExportJSON}
+      subscriptionTier={tier}
+    />
+  );
+}
