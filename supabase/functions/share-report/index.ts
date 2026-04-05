@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (reportErr || !report) {
-      return jsonResponse({ error: "Report not found" }, 404);
+      return jsonResponse({ error: "Forbidden" }, 403);
     }
 
     const { data: project, error: projectErr } = await adminSupabase

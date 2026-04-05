@@ -28,7 +28,7 @@ export default function SharedReport() {
 
       const { data, error } = await supabase
         .from("flow_reports")
-        .select("*")
+        .select("id, project_id, project_name, certificate_id, share_token, share_enabled, share_visibility, model_used, created_at, ai_find, ai_lead, ai_organize, ai_write, ai_summary, flow_meta, metrics_snapshot")
         .eq("share_token", token)
         .eq("share_enabled", true)
         .eq("share_visibility", "public")
