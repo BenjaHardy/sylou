@@ -16,6 +16,12 @@ import { EditorToolbar } from "@/components/EditorToolbar";
 import { AISelectionButton } from "@/components/AISelectionButton";
 import { TextSelectionWindow } from "@/components/TextSelectionWindow";
 import { Loader2, Activity } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { exportWritingAsDocx } from "@/lib/export-docx";
+import { exportProjectAsJson } from "@/lib/export-json";
+import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 
 interface Props {
@@ -37,6 +43,7 @@ interface Props {
 }
 
 export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, onFlushProvenance, conciseMode, onEditorContent, chatSetMessages, webSearchEnabled }: Props & { onEditorContent?: (html: string) => void }) {
+  const { user } = useAuth();
   const { content, loading, saveState, updateContent, isDirty, manualSave, flushSave: flushWritingContent } = useWritingContent(projectId);
   const { getTracker, initWithContentLength, scheduleSave, flushSave: flushProvenance, provenanceLoaded } = useProvenanceTracker(projectId);
   const [initialSet, setInitialSet] = useState(false);
@@ -259,7 +266,12 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <EditorToolbar editor={editor} />
+      {/* Subscription tier query for export gating */}
+      <ExportEnabledToolbar
+        editor={editor}
+        userId={user?.id}
+        projectId={projectId}
+      />
       <div ref={editorWrapperRef} className="flex-1 overflow-y-auto bg-background relative">
         <EditorContent editor={editor} className="h-full" />
 
