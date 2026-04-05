@@ -405,7 +405,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
                   />
                 </div>
               )}
-              <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
+              <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))] print:hidden">
                 <ProjectActivityBar projectId={project.id} />
               </div>
             </div>
