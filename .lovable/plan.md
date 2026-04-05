@@ -1,104 +1,56 @@
 
 
-## Plan: FLOW Report Sharing and Certification
+## Plan: Add User Feedback to Shared Report with Opt-in Control
 
 ### Summary
 
-Add share/unshare via a server-side edge function, a public read-only report page at `/report/:token`, certificate ID generation, QR code, and an "Ethos — FLOW Analysed" footer. Extract reusable report sub-components into `src/components/flow-report/`.
+Add a `share_include_feedback` boolean column to `flow_reports`, a checkbox in the sharing controls, and render read-only pre/post feedback on the shared report page when the flag is true.
 
 ### Database Migration
 
 ```sql
 ALTER TABLE public.flow_reports
-  ADD COLUMN IF NOT EXISTS project_name text;
-
-ALTER TABLE public.flow_reports
-  ADD CONSTRAINT flow_reports_certificate_id_unique UNIQUE (certificate_id);
+  ADD COLUMN IF NOT EXISTS share_include_feedback boolean NOT NULL DEFAULT false;
 ```
-
-No new RLS policies needed — the existing "Public can view shared flow_reports" policy already handles anon SELECT where `share_enabled = true AND share_visibility = 'public'`.
 
 ### Changes
 
-#### 1. New edge function: `supabase/functions/share-report/index.ts`
+#### 1. Edge function: `supabase/functions/share-report/index.ts`
 
-- **POST** `{ report_id }`: Validates JWT via `getClaims()` — unauthenticated requests get 401. Confirms user owns the report via project ownership. Generates `share_token` (UUID v4) and `certificate_id` (`FLOW-` + 8 uppercase alphanumeric chars) with retry-on-conflict (up to 3 attempts) for uniqueness. Always fetches and overwrites `project_name` from `projects` table at share time (so the shared report reflects the current project name, even if renamed). Sets `share_enabled: true`, `share_visibility: 'public'`. Returns `{ share_token, certificate_id, project_name }`.
+- Accept `share_include_feedback` (boolean) in the toggle action body
+- Update it alongside `share_enabled` when toggling
+- On initial share (POST), default `share_include_feedback` to `false`
 
-- **PATCH** `{ report_id, share_enabled }`: Validates JWT, confirms ownership. Toggles `share_enabled` without changing token or certificate_id. Returns updated status.
+#### 2. Sharing controls: `src/components/FlowReportView.tsx`
 
-Both POST and PATCH return 401 for missing/invalid JWT. CORS headers on all responses including errors.
+- Add local state `shareIncludeFeedback` synced from `report.share_include_feedback`
+- When `shareToken && shareEnabled`, render a checkbox: "Include my self-assessment in shared report" (default off)
+- On checkbox change, call `share-report` toggle with `{ report_id, action: "toggle", share_include_feedback: newValue }`
 
-Register in `supabase/config.toml`:
-```toml
-[functions.share-report]
-verify_jwt = false
-```
+#### 3. Shared report page: `src/pages/SharedReport.tsx`
 
-#### 2. Extract shared report components into `src/components/flow-report/`
+- Add `user_feedback_pre, user_feedback_post, share_include_feedback` to the explicit `.select()` list
+- When `share_include_feedback` is true and feedback data exists, render read-only displays:
+  - **Pre-analysis feedback**: A simple read-only card showing the 4 pillar scores (reuse the layout from `FlowFeedbackSection`'s submitted view, but inline it to avoid importing the interactive component)
+  - **Post-analysis feedback**: A read-only card showing scores + comments (reuse the layout from `FlowUserAssessmentSection`'s read-only view, minus the Edit button)
+- When `share_include_feedback` is false, render nothing for feedback
 
-Move from `FlowReportView.tsx` into separate files:
+#### 4. Type update: `src/hooks/useFlowAnalysis.ts`
 
-| New file | Contains |
-|----------|----------|
-| `FlowRadarChart.tsx` | `FlowRadarChart`, `CustomRadarTooltip` |
-| `ScoreCard.tsx` | `ScoreCard` |
-| `FlowInfoSection.tsx` | `FlowInfoSection` |
-| `FlowReportFooter.tsx` | `FlowReportFooter` |
-| `TokenUsageSection.tsx` | `TokenUsageSection` |
-| `ProjectActivitySection.tsx` | `ProjectActivitySection` |
-| `shared-utils.ts` | `getScoreLabel`, `getScoreColor`, `PILLAR_ICONS`, `PILLAR_LABELS`, `PILLAR_TOOLTIPS`, `PILLAR_KEYS`, `extractUserAssessment`, `extractFeedbackScores` |
+- Add `share_include_feedback?: boolean` to `FlowReport` interface
 
-`FlowReportView.tsx` imports from these — no functional changes.
+### Technical Details
 
-#### 3. New page: `src/pages/SharedReport.tsx`
-
-- Public route at `/report/:token` (no auth)
-- Fetches `flow_reports` by `share_token` using Supabase anon client
-- Shows "Report not available" if not found, `share_enabled = false`, or `share_visibility != 'public'`
-- Renders read-only using extracted components: FlowInfoSection, FlowRadarChart (AI scores only, no user overlay), ScoreCards, Overall Summary, TokenUsageSection, ProjectActivitySection
-- **Excluded**: No feedback forms, no "View Highlighted Text", no editing, no back button
-- **Certificate header**: "FLOW Certificate #[certificate_id]" displayed prominently
-- **Ethos footer**: "This report was generated by Ethos — FLOW Analysed" with certificate ID, linking to thisisethos.eu
-- Metadata footer: project name, date, model used
-
-#### 4. Update `src/App.tsx`
-
-Add outside `ProtectedRoute`, before catch-all:
-```tsx
-<Route path="/report/:token" element={<SharedReport />} />
-```
-
-#### 5. Add sharing controls to `FlowReportView.tsx`
-
-In the header bar (next to "FLOW Report" label):
-- **Share Report** button — calls `share-report` POST via `supabase.functions.invoke()`
-- Once shared: shareable URL with copy-to-clipboard, QR code (via `qrcode.react` QRCodeSVG), certificate ID display, toggle to disable/re-enable sharing (calls PATCH)
-- Re-enabling restores the same URL (token/certificate preserved)
-
-#### 6. Update `src/hooks/useFlowAnalysis.ts`
-
-Add to `FlowReport` interface: `share_token`, `share_enabled`, `certificate_id`, `share_visibility`, `project_name` (all optional).
-
-#### 7. Update `supabase/functions/analysis/index.ts`
-
-When inserting a new flow_report, fetch `project_name` from `projects` table and store it. This is belt-and-suspenders with the share function (which always overwrites with latest name at share time).
+- The read-only feedback rendering in `SharedReport.tsx` will be inline JSX (not importing `FlowFeedbackSection` or `FlowUserAssessmentSection`) to avoid pulling in interactive editing logic and to keep the public page fully read-only
+- The `extractUserAssessment` and `extractFeedbackScores` helpers from `shared-utils.ts` will be used to safely parse the JSONB feedback data
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/share-report/index.ts` | New — server-side share/unshare with JWT validation |
-| `supabase/config.toml` | Register share-report |
-| `src/components/flow-report/` (7 files) | New — extracted sub-components |
-| `src/components/FlowReportView.tsx` | Import from flow-report/, add sharing UI |
-| `src/pages/SharedReport.tsx` | New — public report page |
-| `src/App.tsx` | Add `/report/:token` route |
-| `src/hooks/useFlowAnalysis.ts` | Extend FlowReport interface |
-| `supabase/functions/analysis/index.ts` | Populate project_name on insert |
-| Migration | Add `project_name` column, `certificate_id` unique constraint |
-
-### What's NOT Changed
-- Existing RLS policies
-- Chat, editor, web search functionality
-- FLOW prompt template
+| Migration | Add `share_include_feedback` column |
+| `supabase/functions/share-report/index.ts` | Handle `share_include_feedback` in toggle |
+| `src/components/FlowReportView.tsx` | Add checkbox in sharing controls |
+| `src/pages/SharedReport.tsx` | Fetch and render read-only feedback |
+| `src/hooks/useFlowAnalysis.ts` | Add `share_include_feedback` to interface |
 
