@@ -1,36 +1,56 @@
 
 
-## Plan: Update Color Palette from Warm Beige to Blue-Gray
+## Plan: Add User Feedback to Shared Report with Opt-in Control
 
 ### Summary
 
-Replace the warm beige/parchment tones with a cohesive blue-gray palette anchored on `#99B6D6`, updating all related CSS custom properties in `src/index.css`. No component files need changes — they all reference the CSS variables via `hsl(var(--...))` or Tailwind tokens.
+Add a `share_include_feedback` boolean column to `flow_reports`, a checkbox in the sharing controls, and render read-only pre/post feedback on the shared report page when the flag is true.
 
-### Color Mapping
+### Database Migration
 
-| Token | Current HSL | Current Hex | New HSL | New Hex |
-|-------|-------------|-------------|---------|---------|
-| `--background` | `0 20% 98%` | #FBF9F8 | `0 0% 98%` | #FAFAFA |
-| `--sidebar-background` | `34 12% 92%` | #EDE9E4 | `210 42% 72%` | #99B6D6 |
-| `--sidebar-accent` | `27 14% 87%` | #E2DDD6 | `210 38% 63%` | #839FBF |
-| `--ethos-surface` | `34 12% 92%` | #EDE9E4 | `210 42% 72%` | #99B6D6 |
-| `--ethos-navy` | `27 18% 92%` | #EEE9E2 | `210 42% 72%` | #99B6D6 |
-| `--ethos-navy-light` | `27 14% 87%` | #E2DDD6 | `210 38% 63%` | #839FBF |
+```sql
+ALTER TABLE public.flow_reports
+  ADD COLUMN IF NOT EXISTS share_include_feedback boolean NOT NULL DEFAULT false;
+```
 
-### What Changes
+### Changes
 
-**Single file**: `src/index.css` — update 6 CSS custom property values in the `:root` block.
+#### 1. Edge function: `supabase/functions/share-report/index.ts`
 
-### What's NOT Changed
+- Accept `share_include_feedback` (boolean) in the toggle action body
+- Update it alongside `share_enabled` when toggling
+- On initial share (POST), default `share_include_feedback` to `false`
 
-- No component files — all 12+ files referencing these tokens use CSS variables, so they update automatically
-- Dark mode values (unchanged)
-- Primary blue, foreground, card, muted, destructive, border, ring tokens
-- Tailwind config (reads from CSS variables)
+#### 2. Sharing controls: `src/components/FlowReportView.tsx`
 
-### Contrast Check
+- Add local state `shareIncludeFeedback` synced from `report.share_include_feedback`
+- When `shareToken && shareEnabled`, render a checkbox: "Include my self-assessment in shared report" (default off)
+- On checkbox change, call `share-report` toggle with `{ report_id, action: "toggle", share_include_feedback: newValue }`
 
-- Foreground `#1D1E2E` on new `#99B6D6` background: ~4.1:1 contrast ratio (meets AA for large text; sidebar text is typically nav items with adequate size)
-- Foreground on `#FAFAFA` background: ~15:1 (excellent)
-- Sidebar accent foreground on `#839FBF`: ~3.5:1 (adequate for interactive hover states)
+#### 3. Shared report page: `src/pages/SharedReport.tsx`
+
+- Add `user_feedback_pre, user_feedback_post, share_include_feedback` to the explicit `.select()` list
+- When `share_include_feedback` is true and feedback data exists, render read-only displays:
+  - **Pre-analysis feedback**: A simple read-only card showing the 4 pillar scores (reuse the layout from `FlowFeedbackSection`'s submitted view, but inline it to avoid importing the interactive component)
+  - **Post-analysis feedback**: A read-only card showing scores + comments (reuse the layout from `FlowUserAssessmentSection`'s read-only view, minus the Edit button)
+- When `share_include_feedback` is false, render nothing for feedback
+
+#### 4. Type update: `src/hooks/useFlowAnalysis.ts`
+
+- Add `share_include_feedback?: boolean` to `FlowReport` interface
+
+### Technical Details
+
+- The read-only feedback rendering in `SharedReport.tsx` will be inline JSX (not importing `FlowFeedbackSection` or `FlowUserAssessmentSection`) to avoid pulling in interactive editing logic and to keep the public page fully read-only
+- The `extractUserAssessment` and `extractFeedbackScores` helpers from `shared-utils.ts` will be used to safely parse the JSONB feedback data
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| Migration | Add `share_include_feedback` column |
+| `supabase/functions/share-report/index.ts` | Handle `share_include_feedback` in toggle |
+| `src/components/FlowReportView.tsx` | Add checkbox in sharing controls |
+| `src/pages/SharedReport.tsx` | Fetch and render read-only feedback |
+| `src/hooks/useFlowAnalysis.ts` | Add `share_include_feedback` to interface |
 
