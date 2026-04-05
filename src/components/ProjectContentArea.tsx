@@ -297,7 +297,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
         className="flex-1 flex flex-col bg-background h-full min-h-0 [&_[data-panel]]:transition-all [&_[data-panel]]:duration-150 [&_[data-panel]]:ease-ethos-ease"
         style={{ display: showingFlowReport || showingPostIts || showingDocuments ? 'none' : undefined }}
       >
-        <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
+        <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0 bg-[hsl(var(--ethos-surface))] print:hidden">
           <span className="text-sm font-medium text-foreground truncate max-w-[200px]">{project.name}</span>
           <div className="flex items-center gap-2">
             {flowError && (
@@ -410,7 +410,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
               </div>
             </div>
           </ResizablePanel>
-          <ResizableHandle withHandle />
+          <ResizableHandle withHandle className="print:hidden" />
           <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20}>
             <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} conciseMode={conciseMode} onConciseModeChange={setConciseMode} onSetMessages={(setter) => { chatSetMessagesRef.current = setter; }} onActiveThreadChange={setActiveThreadId} onUploadDocument={uploadDocument} documentUploading={docsUploading} webSearchEnabled={webSearchEnabled} onWebSearchEnabledChange={setWebSearchEnabled} />
           </ResizablePanel>
