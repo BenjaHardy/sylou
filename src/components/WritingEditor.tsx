@@ -304,7 +304,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           />
         )}
       </div>
-      <div className="border-t border-border flex items-center justify-between px-4 py-1.5 text-xs text-muted-foreground shrink-0 bg-[hsl(var(--ethos-surface))]">
+      <div className="border-t border-border flex items-center justify-between px-4 py-1.5 text-xs text-muted-foreground shrink-0 bg-[hsl(var(--ethos-surface))] print:hidden">
         <span>
           {words} {words === 1 ? "word" : "words"} · {chars}{" "}
           {chars === 1 ? "character" : "characters"}

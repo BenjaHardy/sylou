@@ -149,15 +149,7 @@
     color: black !important;
   }
 
-  /* Hide everything except the editor content */
-  [data-sidebar],
-  [data-panel-group],
-  [role="dialog"],
-  [data-radix-popper-content-wrapper] {
-    display: none !important;
-  }
-
-  /* Show only the editor wrapper */
+  /* Editor content fills the page */
   .tiptap {
     min-height: auto !important;
     padding: 0 !important;
@@ -169,13 +161,7 @@
     margin: 0 !important;
   }
 
-  /* Hide toolbar and status bar */
-  .border-b.border-border,
-  .border-t.border-border {
-    display: none !important;
-  }
-
-  /* Let the editor content area fill the page */
+  /* Let the editor content area fill and overflow naturally */
   .flex.flex-col.h-full.min-h-0 > .flex-1 {
     overflow: visible !important;
   }

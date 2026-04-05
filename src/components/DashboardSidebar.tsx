@@ -75,7 +75,7 @@ export function DashboardSidebar({ selectedProjectId, onSelectProject, onNewProj
   return (
     <>
       <aside
-        className={`h-screen bg-ethos-navy flex flex-col border-r border-sidebar-border shrink-0 transition-all duration-150 ease-ethos-ease ${
+        className={`h-screen bg-ethos-navy flex flex-col border-r border-sidebar-border shrink-0 transition-all duration-150 ease-ethos-ease print:hidden ${
           collapsed ? "w-16" : "w-[280px]"
         }`}
       >

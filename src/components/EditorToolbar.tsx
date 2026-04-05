@@ -217,7 +217,7 @@ export function EditorToolbar({ editor, onExportPDF, onExportDOCX, onExportJSON,
   };
 
   return (
-    <div className="border-b border-border bg-[hsl(var(--ethos-surface))] shrink-0">
+    <div className="border-b border-border bg-[hsl(var(--ethos-surface))] shrink-0 print:hidden">
       <div className="flex flex-wrap items-center gap-0.5 px-2 py-1">
         {/* Text formatting */}
         <ToolbarToggle pressed={editor.isActive("bold")} onPressedChange={() => editor.chain().focus().toggleBold().run()} title="Bold">
@@ -366,7 +366,7 @@ export function EditorToolbar({ editor, onExportPDF, onExportDOCX, onExportJSON,
           <DropdownMenuTrigger asChild>
             <button
               title="Export"
-              className="h-8 w-8 flex items-center justify-center rounded-md hover:bg-accent transition-colors"
+              className="h-8 w-8 flex items-center justify-center rounded-md text-primary hover:bg-primary/10 transition-colors"
             >
               <FileDown size={iconSize} />
             </button>
