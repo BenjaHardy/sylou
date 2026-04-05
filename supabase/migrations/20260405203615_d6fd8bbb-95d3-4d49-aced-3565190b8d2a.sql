@@ -1,0 +1,1 @@
+ALTER TABLE public.flow_reports ADD COLUMN IF NOT EXISTS share_include_feedback boolean NOT NULL DEFAULT false;
