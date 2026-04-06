@@ -21,8 +21,8 @@ import { useFlowAnalysis } from "@/hooks/useFlowAnalysis";
 import { useCreativeData } from "@/hooks/useCreativeData";
 import { WorldBuildingNotes } from "@/components/creative-tools/WorldBuildingNotes";
 import type { WorldBuildingData } from "@/components/creative-tools/WorldBuildingNotes";
-import { CharactersPlaceholder } from "@/components/creative-tools/CharactersPlaceholder";
-import { TimelinePlaceholder } from "@/components/creative-tools/TimelinePlaceholder";
+import { CharactersDiagram, type CharactersData } from "@/components/creative-tools/CharactersDiagram";
+import { TimelineView, type TimelineData } from "@/components/creative-tools/TimelineView";
 import type { Project } from "@/hooks/useProjects";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
@@ -91,6 +91,8 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
 
   const isCreativeProject = project?.template === "creative";
   const worldbuilding = useCreativeData<WorldBuildingData>(project?.id ?? null, "worldbuilding");
+  const characters = useCreativeData<CharactersData>(project?.id ?? null, "characters");
+  const timeline = useCreativeData<TimelineData>(project?.id ?? null, "timeline");
 
   const {
     preCheck,
@@ -122,7 +124,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
     }
     const flush = async () => {
       await flushProvenanceRef.current?.();
-      await worldbuilding.flush();
+      await Promise.all([worldbuilding.flush(), characters.flush(), timeline.flush()]);
     };
     onFlushRef?.(flush);
     return () => onFlushRef?.(null);
@@ -142,6 +144,16 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
 
   const isMac = useMemo(() => typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform), []);
   const postItsShortcutLabel = isMac ? "⌘⇧N" : "Ctrl+Shift+N";
+
+  const handleCharacterDeleted = useCallback((charId: string) => {
+    const events = timeline.data.events;
+    if (!events?.length) return;
+    const cleaned = events.map((e) => ({
+      ...e,
+      character_ids: e.character_ids.filter((id) => id !== charId),
+    }));
+    timeline.save({ events: cleaned });
+  }, [timeline.data, timeline.save]);
 
   if (!project) return <WelcomeScreen />;
 
@@ -468,14 +480,26 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
         {/* Characters tab */}
         {isCreativeProject && (
           <div style={{ display: activeCreativeTab === "characters" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
-            <CharactersPlaceholder />
+            <CharactersDiagram
+              data={characters.data}
+              save={characters.save}
+              loading={characters.loading}
+              worldCategories={worldbuilding.data.categories ?? []}
+              onCharacterDeleted={handleCharacterDeleted}
+            />
           </div>
         )}
 
         {/* Timeline tab */}
         {isCreativeProject && (
           <div style={{ display: activeCreativeTab === "timeline" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
-            <TimelinePlaceholder />
+            <TimelineView
+              data={timeline.data}
+              save={timeline.save}
+              loading={timeline.loading}
+              worldCategories={worldbuilding.data.categories ?? []}
+              characters={characters.data.characters ?? []}
+            />
           </div>
         )}
 
