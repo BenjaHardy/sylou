@@ -31,12 +31,14 @@ class HighlightedTextErrorBoundary extends Component<
 
 import { supabase } from "@/integrations/supabase/client";
 import { FlowHighlightedText } from "@/components/FlowHighlightedText";
+import { FlowReplayOverlay, type ReplayEvent } from "@/components/FlowReplayOverlay";
 import { QRCodeSVG } from "qrcode.react";
 import { FlowPledgeBadge } from "@/components/flow-report/FlowPledgeBadge";
 import {
   ArrowLeft,
   Activity,
   Eye,
+  Play,
   Loader2,
   Info,
   Share2,
