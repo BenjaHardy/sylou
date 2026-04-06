@@ -32,6 +32,7 @@ class HighlightedTextErrorBoundary extends Component<
 import { supabase } from "@/integrations/supabase/client";
 import { FlowHighlightedText } from "@/components/FlowHighlightedText";
 import { QRCodeSVG } from "qrcode.react";
+import { FlowPledgeBadge } from "@/components/flow-report/FlowPledgeBadge";
 import {
   ArrowLeft,
   Activity,
@@ -386,10 +387,26 @@ export function FlowReportView({
                       </Button>
                     </div>
 
-                    {/* QR Code */}
-                    <div className="flex justify-center pt-2">
-                      <div className="bg-white p-3 rounded-lg">
-                        <QRCodeSVG value={shareUrl} size={120} />
+                    {/* QR Code + Pledge Badge */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                      <div className="flex flex-col items-center gap-2">
+                        <span className="text-xs text-muted-foreground">QR Code</span>
+                        <div className="bg-white p-3 rounded-lg">
+                          <QRCodeSVG value={shareUrl} size={120} />
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-center gap-2">
+                        <span className="text-xs text-muted-foreground">FLOW Pledge Badge</span>
+                        <FlowPledgeBadge
+                          aiScores={{
+                            find: report.ai_find?.score ?? null,
+                            lead: report.ai_lead?.score ?? null,
+                            organize: report.ai_organize?.score ?? null,
+                            write: report.ai_write?.score ?? null,
+                          }}
+                          certificateId={certificateId || ""}
+                          shareUrl={shareUrl}
+                        />
                       </div>
                     </div>
                   </div>
