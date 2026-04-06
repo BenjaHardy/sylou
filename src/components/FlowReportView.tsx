@@ -114,6 +114,7 @@ export function FlowReportView({
       setCertificateId(report.certificate_id ?? null);
       setShareEnabled(report.share_enabled ?? false);
       setShareIncludeFeedback(report.share_include_feedback ?? false);
+      setShareIncludeReplay((report as any).share_include_replay ?? false);
     }
   }, [report?.id, report?.share_token, report?.share_enabled, report?.certificate_id, report?.share_include_feedback]);
 
