@@ -97,7 +97,7 @@ export function useFlowAnalysis(projectId: string | null) {
     if (!projectId) return;
     const { data } = await supabase
       .from("flow_reports")
-      .select("*")
+      .select("id, project_id, ai_summary, ai_find, ai_lead, ai_organize, ai_write, flow_meta, metrics_snapshot, provenance_snapshot, model_used, created_at, user_feedback_pre, user_feedback_pre_at, user_feedback_post, user_feedback_post_at, share_token, share_enabled, certificate_id, share_visibility, project_name, share_include_feedback, share_include_replay, ai_editor_summary")
       .eq("project_id", projectId)
       .order("created_at", { ascending: false })
       .limit(1)
