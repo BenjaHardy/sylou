@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 import { X, Play, Pause, ChevronLeft, ChevronRight } from "lucide-react";
 import DOMPurify from "dompurify";
 
