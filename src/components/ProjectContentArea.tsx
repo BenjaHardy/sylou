@@ -480,14 +480,26 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
         {/* Characters tab */}
         {isCreativeProject && (
           <div style={{ display: activeCreativeTab === "characters" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
-            <CharactersPlaceholder />
+            <CharactersDiagram
+              data={characters.data}
+              save={characters.save}
+              loading={characters.loading}
+              worldCategories={worldbuilding.data.categories ?? []}
+              onCharacterDeleted={handleCharacterDeleted}
+            />
           </div>
         )}
 
         {/* Timeline tab */}
         {isCreativeProject && (
           <div style={{ display: activeCreativeTab === "timeline" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
-            <TimelinePlaceholder />
+            <TimelineView
+              data={timeline.data}
+              save={timeline.save}
+              loading={timeline.loading}
+              worldCategories={worldbuilding.data.categories ?? []}
+              characters={characters.data.characters ?? []}
+            />
           </div>
         )}
 
