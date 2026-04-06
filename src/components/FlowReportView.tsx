@@ -312,6 +312,13 @@ export function FlowReportView({
         </HighlightedTextErrorBoundary>
       )}
 
+      {/* Replay Overlay */}
+      {showReplay && replaySnapshot && (
+        <div className="absolute inset-0 z-10 bg-background">
+          <FlowReplayOverlay events={replaySnapshot} onClose={() => setShowReplay(false)} />
+        </div>
+      )}
+
       {/* Content */}
       <ScrollArea ref={scrollAreaRef} className="flex-1">
         <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
