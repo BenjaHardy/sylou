@@ -91,6 +91,8 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
 
   const isCreativeProject = project?.template === "creative";
   const worldbuilding = useCreativeData<WorldBuildingData>(project?.id ?? null, "worldbuilding");
+  const characters = useCreativeData<CharactersData>(project?.id ?? null, "characters");
+  const timeline = useCreativeData<TimelineData>(project?.id ?? null, "timeline");
 
   const {
     preCheck,
@@ -122,7 +124,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
     }
     const flush = async () => {
       await flushProvenanceRef.current?.();
-      await worldbuilding.flush();
+      await Promise.all([worldbuilding.flush(), characters.flush(), timeline.flush()]);
     };
     onFlushRef?.(flush);
     return () => onFlushRef?.(null);
