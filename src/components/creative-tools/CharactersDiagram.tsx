@@ -88,6 +88,8 @@ function DraggableCard({
     disabled,
   });
 
+  const borderColor = getCategoryColor(worldCategories, character.category_id);
+
   const style: React.CSSProperties = {
     position: "absolute",
     left: character.position.x,
@@ -99,8 +101,6 @@ function DraggableCard({
     width: 180,
     borderColor,
   };
-
-  const borderColor = getCategoryColor(worldCategories, character.category_id);
 
   return (
     <div
