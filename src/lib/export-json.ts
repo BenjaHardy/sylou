@@ -10,6 +10,7 @@ export async function exportProjectAsJson(projectId: string) {
     flowRes,
     statsRes,
     docsRes,
+    creativeRes,
   ] = await Promise.all([
     supabase
       .from("projects")
