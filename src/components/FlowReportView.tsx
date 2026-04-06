@@ -100,6 +100,12 @@ export function FlowReportView({
   const [shareEnabled, setShareEnabled] = useState<boolean>(report?.share_enabled ?? false);
   const [copied, setCopied] = useState(false);
   const [shareIncludeFeedback, setShareIncludeFeedback] = useState<boolean>(report?.share_include_feedback ?? false);
+  const [shareIncludeReplay, setShareIncludeReplay] = useState<boolean>((report as any)?.share_include_replay ?? false);
+
+  // Replay state
+  const [showReplay, setShowReplay] = useState(false);
+  const [replaySnapshot, setReplaySnapshot] = useState<ReplayEvent[] | null>(null);
+  const [loadingReplay, setLoadingReplay] = useState(false);
 
   // Sync sharing state when report changes
   useEffect(() => {
