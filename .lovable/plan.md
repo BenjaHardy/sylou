@@ -1,93 +1,139 @@
 
 
-## Revised Plan: Creative Writing Tools — Foundation + World-Building Notes
+## Plan: Characters Diagram + Timeline View
 
 ### Summary
 
-Same as previous plan with one key architectural correction: `useCreativeData('worldbuilding')` is called **once** in `ProjectContentArea`, and `data`, `save`, `loading` are passed down as props to `WorldBuildingNotes`. The `flush` function from that same instance joins the flush chain. `WorldBuildingNotes` never calls the hook itself.
+Replace Characters and Timeline placeholders with full implementations. Characters gets a draggable canvas with relationship lines and a relationship types manager. Timeline gets a vertical sortable event list. Both reference World-Building categories for color-coding. Cross-tool cleanup on character deletion removes references from timeline events.
 
-### Database Migration
+### Dependencies
 
-```sql
-CREATE TABLE public.project_creative_data (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  tool_type TEXT NOT NULL CHECK (tool_type IN ('worldbuilding', 'characters', 'timeline')),
-  data JSONB NOT NULL DEFAULT '{}'::jsonb,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(project_id, tool_type)
-);
-ALTER TABLE public.project_creative_data ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users access own creative data" ON project_creative_data
-  FOR ALL USING (project_id IN (SELECT id FROM projects WHERE user_id = auth.uid()))
-  WITH CHECK (project_id IN (SELECT id FROM projects WHERE user_id = auth.uid()));
-```
+Install `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`.
 
-### New Hook: `src/hooks/useCreativeData.ts`
-
-- `useCreativeData(projectId, toolType)` returns `{ data, loading, save(newData), flush() }`
-- Debounced save (2s), ref-based pattern matching `useWritingContent`
-- `flush()` clears timer and saves immediately
-- Uses `upsert` with `(project_id, tool_type)` unique constraint
-
-### Hook Ownership in `ProjectContentArea.tsx`
-
-```tsx
-// Called ONCE at ProjectContentArea level
-const worldbuilding = useCreativeData(project?.id ?? null, 'worldbuilding');
-
-// Flush chain (lines 114-118) — add worldbuilding flush:
-const flush = async () => {
-  await flushProvenanceRef.current?.();
-  await worldbuilding.flush();
-};
-
-// Pass down as props:
-<WorldBuildingNotes
-  data={worldbuilding.data}
-  save={worldbuilding.save}
-  loading={worldbuilding.loading}
-/>
-```
-
-- Tab bar (Writing / World-Building / Characters / Timeline) visible only for `project.template === 'creative'`
-- CSS-hide pattern: all tab contents stay mounted, toggled via `style={{ display }}`
-- State: `activeCreativeTab` defaults to `'writing'`
-
-### `WorldBuildingNotes.tsx` Props
+### Data Shapes
 
 ```typescript
-interface WorldBuildingNotesProps {
-  data: WorldBuildingData;
-  save: (data: WorldBuildingData) => void;
-  loading: boolean;
+// Characters
+interface CharactersData {
+  characters: Character[];
+  relationshipTypes: RelationshipType[];
+  relationships: Relationship[];
+}
+interface Character {
+  id: string; name: string; description: string;
+  traits: string[]; category_id: string | null;
+  position: { x: number; y: number };
+}
+interface RelationshipType { id: string; label: string; color: string; }
+interface Relationship {
+  id: string; from_id: string; to_id: string;
+  type_id: string; notes: string;
+}
+
+// Timeline
+interface TimelineData { events: TimelineEvent[]; }
+interface TimelineEvent {
+  id: string; title: string; description: string;
+  date: string; order: number;
+  character_ids: string[]; category_id: string | null;
 }
 ```
 
-- **No hook call inside** — receives everything via props
-- Two-panel layout: sidebar (categories with color + note count) and main panel (notes for selected category)
-- Category CRUD: add/rename/recolor/delete with confirmation
-- Note CRUD: subcategory dropdown, title, minimal TipTap editor (bold/italic/lists/headings), delete with confirmation
-- All mutations call `save(updatedData)` via props
-- Default categories seeded on first load: Setting, History, Culture, Rules/Systems, Other
+### Interaction Model (addressing the three-conflict issue)
 
-### Placeholder Components
+**Normal mode**: Cards are draggable via `@dnd-kit` `PointerSensor` with `activationConstraint: { distance: 8 }` — a stationary click opens the edit modal, a deliberate move starts a drag. SVG relationship lines update live during drag by reading the active drag item's `transform` from `useDndMonitor` and applying it to the dragged character's line endpoints.
 
-- `CharactersPlaceholder.tsx` / `TimelinePlaceholder.tsx` — "Coming soon" centered message
+**"Add Relationship" mode**: Toggled via a toolbar button. When active:
+- A visible banner at top: "Click two characters to create a relationship. Press Escape or Cancel to exit."
+- Drag is disabled (PointerSensor removed from `sensors` array)
+- Click on a card selects it (first click = source highlighted, second click = target → opens type picker dialog → creates relationship → exits mode)
+- Escape key or Cancel button exits mode, clears selection
 
-### Export Integration: `src/lib/export-json.ts`
+### Live SVG Lines During Drag
 
-Add fetch for `project_creative_data` to existing `Promise.all`, include under `creative_data` key.
+- Lines rendered from committed `character.position` values
+- `useDndMonitor` provides `onDragMove` with the active item ID and `delta`
+- Store `activeDragId` and `activeDragDelta` in state
+- When rendering lines, if an endpoint character matches `activeDragId`, add `activeDragDelta` to its position
+- On `onDragEnd`, commit new position to data, clear active drag state
+
+### Cross-Tool Cleanup on Character Deletion
+
+When a character is deleted in `CharactersDiagram`:
+- Remove all relationships involving that character
+- Call a `onCharacterDeleted(characterId)` callback passed from `ProjectContentArea`
+- `ProjectContentArea` handles removing the character ID from all timeline events' `character_ids` arrays and calls `timeline.save()`
+
+### Hook Integration in `ProjectContentArea.tsx`
+
+```tsx
+const characters = useCreativeData<CharactersData>(project?.id ?? null, "characters");
+const timeline = useCreativeData<TimelineData>(project?.id ?? null, "timeline");
+```
+
+Add `characters.flush()` and `timeline.flush()` to the flush chain. Pass `data`, `save`, `loading` as props plus `worldCategories` from worldbuilding data.
+
+**Character deletion handler** at ProjectContentArea level:
+```tsx
+const handleCharacterDeleted = useCallback((charId: string) => {
+  const events = timeline.data.events;
+  if (!events?.length) return;
+  const cleaned = events.map(e => ({
+    ...e,
+    character_ids: e.character_ids.filter(id => id !== charId),
+  }));
+  timeline.save({ events: cleaned });
+}, [timeline.data, timeline.save]);
+```
+
+### New Files
+
+**`src/lib/creative-tools-utils.ts`** — `getCategoryColor(categories, categoryId)` and `getCategoryLabel(categories, categoryId)` helpers.
+
+**`src/components/creative-tools/CharactersDiagram.tsx`**
+
+Props: `data`, `save`, `loading`, `worldCategories`, `onCharacterDeleted`
+
+- Top toolbar: "Add Character" button, "Add Relationship" toggle, "Relationship Types" button, category filter dropdown
+- Canvas: absolutely positioned character cards, SVG overlay for relationship lines
+- Card: colored border from world-building category, name, truncated description, trait chips
+- Edit modal (Dialog): name, description, traits tag input, category dropdown, delete button
+- Default seed on empty data: 5 default relationship types (Family/red, Friend/green, Enemy/orange, Ally/blue, Mentor/purple), empty characters array
+- Relationship line click → popover to view/edit notes/delete
+- Multiple relationships between same pair offset by 8px
+
+**`src/components/creative-tools/RelationshipTypesModal.tsx`**
+
+Dialog to CRUD relationship types with color picker. Deleting a type removes all relationships of that type.
+
+**`src/components/creative-tools/TimelineView.tsx`**
+
+Props: `data`, `save`, `loading`, `worldCategories`, `characters` (from characters data for name chips)
+
+- Top toolbar: "Add Event" button, category filter
+- Vertical timeline with central line, event cards sorted by `order`
+- `@dnd-kit/sortable` for reordering, recomputes `order` on drag end
+- Event card: date, title, description (truncated), category color border, character name chips
+- Edit modal: title, date, description, multi-select characters, category dropdown, delete
+- Empty state message when no events
+
+### Changes to `ProjectContentArea.tsx`
+
+- Import `CharactersDiagram`, `TimelineView`, remove placeholder imports
+- Add `useCreativeData` for characters and timeline
+- Add flushes to flush chain (parallel with worldbuilding flush)
+- Wire `handleCharacterDeleted` callback
+- Pass props including `worldCategories` and cross-tool data
+- Replace placeholder divs with real components
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| Migration | New `project_creative_data` table + RLS |
-| `src/hooks/useCreativeData.ts` | New — generic fetch/save/flush hook |
-| `src/components/creative-tools/WorldBuildingNotes.tsx` | New — receives data/save/loading as props |
-| `src/components/creative-tools/CharactersPlaceholder.tsx` | New — placeholder |
-| `src/components/creative-tools/TimelinePlaceholder.tsx` | New — placeholder |
-| `src/components/ProjectContentArea.tsx` | Call hook once, tab bar, CSS-hide, flush chain, pass props |
-| `src/lib/export-json.ts` | Fetch + include `project_creative_data` |
+| `package.json` | Add `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities` |
+| `src/lib/creative-tools-utils.ts` | New — category color/label helpers |
+| `src/components/creative-tools/CharactersDiagram.tsx` | New — full characters tool |
+| `src/components/creative-tools/RelationshipTypesModal.tsx` | New — relationship types CRUD dialog |
+| `src/components/creative-tools/TimelineView.tsx` | New — full timeline tool |
+| `src/components/ProjectContentArea.tsx` | Replace placeholders, add hooks, flush chain, cross-tool cleanup, pass props |
 
