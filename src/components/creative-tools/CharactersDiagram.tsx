@@ -97,6 +97,7 @@ function DraggableCard({
     opacity: isDragging ? 0.8 : 1,
     cursor: disabled ? "pointer" : "grab",
     width: 180,
+    borderColor,
   };
 
   const borderColor = getCategoryColor(worldCategories, character.category_id);
@@ -112,10 +113,9 @@ function DraggableCard({
           onClick();
         }
       }}
-      className={`rounded-lg border-2 bg-card p-3 shadow-sm select-none transition-shadow hover:shadow-md ${
+    className={`rounded-lg border-2 bg-card p-3 shadow-sm select-none transition-shadow hover:shadow-md ${
         selected ? "ring-2 ring-primary ring-offset-2" : ""
       }`}
-      style={{ ...style, borderColor }}
     >
       <p className="text-sm font-medium text-foreground truncate">{character.name || "Unnamed"}</p>
       {character.description && (
