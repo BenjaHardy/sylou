@@ -197,6 +197,30 @@ export function FlowReportView({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleLoadReplay = useCallback(async () => {
+    if (!report) return;
+    if (replaySnapshot) {
+      setShowReplay(true);
+      return;
+    }
+    setLoadingReplay(true);
+    try {
+      const { data } = await supabase
+        .from("flow_reports")
+        .select("replay_snapshot")
+        .eq("id", report.id)
+        .single();
+      if (data?.replay_snapshot) {
+        setReplaySnapshot(data.replay_snapshot as unknown as ReplayEvent[]);
+        setShowReplay(true);
+      }
+    } catch (err) {
+      console.error("Failed to load replay:", err);
+    } finally {
+      setLoadingReplay(false);
+    }
+  }, [report, replaySnapshot]);
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-background">
