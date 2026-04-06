@@ -372,59 +372,112 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
           </div>
         </div>
 
-        <ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0">
-          <ResizablePanel ref={editorPanelRef} defaultSize={DEFAULT_EDITOR_SIZE} minSize={0}>
-            <div className="flex flex-col h-full min-h-0">
-              <WritingEditor
-                projectId={project.id}
-                tutorMode={project.tutor_mode}
-                threadId={activeThreadId}
-                onWritingActivity={markWriting}
-                onFlowClick={handleFlowClick}
-                onReanalyzeClick={handleReanalyzeClick}
-                flowLoading={flowLoading}
-                hasFlowReport={!!flowReport}
-                onAskComplete={(msgs) => setPendingChatMessages((prev) => [...prev, ...msgs])}
-                onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
-                onProvenanceTracker={setProvenanceTracker}
-                onFlushProvenance={(fn) => { flushProvenanceRef.current = fn; }}
-                conciseMode={conciseMode}
-                onEditorContent={setEditorHtml}
-                chatSetMessages={chatSetMessagesRef.current ?? undefined}
-                webSearchEnabled={webSearchEnabled}
-              />
-              {showLiveProvenance && provenanceTracker && (
-                <div className="border-t border-border h-[40%] min-h-[200px] overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-1 bg-[hsl(var(--ethos-surface))] border-b border-border">
-                    <span className="text-xs font-medium text-muted-foreground">Live Provenance View</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 gap-1 text-xs"
-                      onClick={() => setProvenanceKey((k) => k + 1)}
-                    >
-                      <RefreshCw className="h-3 w-3" />
-                      Refresh
-                    </Button>
+        {/* Creative tabs — only for creative template projects */}
+        {isCreativeProject && (
+          <div className="h-9 border-b border-border flex items-center gap-1 px-4 shrink-0 bg-[hsl(var(--ethos-surface))] print:hidden">
+            {([
+              { key: "writing" as const, label: "Writing", icon: PenTool },
+              { key: "worldbuilding" as const, label: "World-Building", icon: Globe },
+              { key: "characters" as const, label: "Characters", icon: Users },
+              { key: "timeline" as const, label: "Timeline", icon: Clock },
+            ]).map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md transition-colors ${
+                  activeCreativeTab === key
+                    ? "bg-accent text-accent-foreground font-medium"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                }`}
+                onClick={() => setActiveCreativeTab(key)}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Writing tab content — hidden via CSS when creative tab is not writing */}
+        <div style={{ display: isCreativeProject && activeCreativeTab !== "writing" ? "none" : undefined }} className="flex-1 flex flex-col min-h-0">
+          <ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0">
+            <ResizablePanel ref={editorPanelRef} defaultSize={DEFAULT_EDITOR_SIZE} minSize={0}>
+              <div className="flex flex-col h-full min-h-0">
+                <WritingEditor
+                  projectId={project.id}
+                  tutorMode={project.tutor_mode}
+                  threadId={activeThreadId}
+                  onWritingActivity={markWriting}
+                  onFlowClick={handleFlowClick}
+                  onReanalyzeClick={handleReanalyzeClick}
+                  flowLoading={flowLoading}
+                  hasFlowReport={!!flowReport}
+                  onAskComplete={(msgs) => setPendingChatMessages((prev) => [...prev, ...msgs])}
+                  onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
+                  onProvenanceTracker={setProvenanceTracker}
+                  onFlushProvenance={(fn) => { flushProvenanceRef.current = fn; }}
+                  conciseMode={conciseMode}
+                  onEditorContent={setEditorHtml}
+                  chatSetMessages={chatSetMessagesRef.current ?? undefined}
+                  webSearchEnabled={webSearchEnabled}
+                />
+                {showLiveProvenance && provenanceTracker && (
+                  <div className="border-t border-border h-[40%] min-h-[200px] overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-1 bg-[hsl(var(--ethos-surface))] border-b border-border">
+                      <span className="text-xs font-medium text-muted-foreground">Live Provenance View</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 gap-1 text-xs"
+                        onClick={() => setProvenanceKey((k) => k + 1)}
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Refresh
+                      </Button>
+                    </div>
+                    <FlowHighlightedText
+                      key={provenanceKey}
+                      segments={provenanceTracker.getSegments()}
+                      writingContent={editorHtml}
+                      onClose={() => setShowLiveProvenance(false)}
+                    />
                   </div>
-                  <FlowHighlightedText
-                    key={provenanceKey}
-                    segments={provenanceTracker.getSegments()}
-                    writingContent={editorHtml}
-                    onClose={() => setShowLiveProvenance(false)}
-                  />
+                )}
+                <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))] print:hidden">
+                  <ProjectActivityBar projectId={project.id} />
                 </div>
-              )}
-              <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))] print:hidden">
-                <ProjectActivityBar projectId={project.id} />
               </div>
-            </div>
-          </ResizablePanel>
-          <ResizableHandle withHandle className="print:hidden" />
-          <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20} className="print:hidden">
-            <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} conciseMode={conciseMode} onConciseModeChange={setConciseMode} onSetMessages={(setter) => { chatSetMessagesRef.current = setter; }} onActiveThreadChange={setActiveThreadId} onUploadDocument={uploadDocument} documentUploading={docsUploading} webSearchEnabled={webSearchEnabled} onWebSearchEnabledChange={setWebSearchEnabled} />
-          </ResizablePanel>
-        </ResizablePanelGroup>
+            </ResizablePanel>
+            <ResizableHandle withHandle className="print:hidden" />
+            <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20} className="print:hidden">
+              <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} conciseMode={conciseMode} onConciseModeChange={setConciseMode} onSetMessages={(setter) => { chatSetMessagesRef.current = setter; }} onActiveThreadChange={setActiveThreadId} onUploadDocument={uploadDocument} documentUploading={docsUploading} webSearchEnabled={webSearchEnabled} onWebSearchEnabledChange={setWebSearchEnabled} />
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </div>
+
+        {/* World-Building tab — stays mounted, hidden via CSS */}
+        {isCreativeProject && (
+          <div style={{ display: activeCreativeTab === "worldbuilding" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
+            <WorldBuildingNotes
+              data={worldbuilding.data}
+              save={worldbuilding.save}
+              loading={worldbuilding.loading}
+            />
+          </div>
+        )}
+
+        {/* Characters tab */}
+        {isCreativeProject && (
+          <div style={{ display: activeCreativeTab === "characters" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
+            <CharactersPlaceholder />
+          </div>
+        )}
+
+        {/* Timeline tab */}
+        {isCreativeProject && (
+          <div style={{ display: activeCreativeTab === "timeline" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
+            <TimelinePlaceholder />
+          </div>
+        )}
 
         <FlowConfirmDialog open={showConfirm} onConfirm={handleConfirmAnalysis} onCancel={() => setShowConfirm(false)} />
         <FlowReanalyzeDialog open={showReanalyze} onConfirm={handleConfirmReanalyze} onCancel={() => setShowReanalyze(false)} />
