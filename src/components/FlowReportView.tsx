@@ -413,7 +413,29 @@ export function FlowReportView({
                       </label>
                     </div>
 
-                    {/* URL + Copy */}
+                    {/* Include replay checkbox */}
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="share-include-replay"
+                        checked={shareIncludeReplay}
+                        onCheckedChange={async (checked) => {
+                          const val = checked === true;
+                          setShareIncludeReplay(val);
+                          try {
+                            await supabase.functions.invoke("share-report", {
+                              body: { report_id: report.id, action: "toggle", share_include_replay: val },
+                            });
+                          } catch (err) {
+                            console.error("Failed to update replay visibility:", err);
+                            setShareIncludeReplay(!val);
+                          }
+                        }}
+                      />
+                      <label htmlFor="share-include-replay" className="text-xs text-muted-foreground cursor-pointer">
+                        Include project replay in shared report
+                      </label>
+                    </div>
+
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
