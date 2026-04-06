@@ -428,7 +428,7 @@ Deno.serve(async (req) => {
     }
 
     // --- Fetch all project data in parallel ---
-    const [writingRes, threadsRes, provenanceRes, editorActionsRes, statsRes, importedDocsRes] =
+    const [writingRes, threadsRes, provenanceRes, editorActionsRes, statsRes, importedDocsRes, versionsRes] =
       await Promise.all([
         supabase
           .from("writing_content")
@@ -458,6 +458,11 @@ Deno.serve(async (req) => {
           .from("imported_documents")
           .select("id, file_name, extracted_text, summary, file_size_bytes")
           .eq("project_id", projectId),
+        supabase
+          .from("writing_versions")
+          .select("content, saved_at")
+          .eq("project_id", projectId)
+          .order("saved_at", { ascending: true }),
       ]);
 
     const writingContent = writingRes.data?.content ?? "";
