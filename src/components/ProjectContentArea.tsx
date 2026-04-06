@@ -145,6 +145,16 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const isMac = useMemo(() => typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform), []);
   const postItsShortcutLabel = isMac ? "⌘⇧N" : "Ctrl+Shift+N";
 
+  const handleCharacterDeleted = useCallback((charId: string) => {
+    const events = timeline.data.events;
+    if (!events?.length) return;
+    const cleaned = events.map((e) => ({
+      ...e,
+      character_ids: e.character_ids.filter((id) => id !== charId),
+    }));
+    timeline.save({ events: cleaned });
+  }, [timeline.data, timeline.save]);
+
   if (!project) return <WelcomeScreen />;
 
   const handleToggleChat = () => {
