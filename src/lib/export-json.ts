@@ -83,6 +83,7 @@ export async function exportProjectAsJson(projectId: string) {
       flow_reports: flowRes.data ?? [],
       stats: statsRes.data ?? null,
       imported_documents: docsRes.data ?? [],
+      creative_data: creativeRes.data ?? [],
     },
   };
 
