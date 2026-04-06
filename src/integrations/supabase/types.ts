@@ -396,6 +396,38 @@ export type Database = {
         }
         Relationships: []
       }
+      project_creative_data: {
+        Row: {
+          data: Json
+          id: string
+          project_id: string
+          tool_type: string
+          updated_at: string
+        }
+        Insert: {
+          data?: Json
+          id?: string
+          project_id: string
+          tool_type: string
+          updated_at?: string
+        }
+        Update: {
+          data?: Json
+          id?: string
+          project_id?: string
+          tool_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_creative_data_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_stats: {
         Row: {
           chat_prompt_count_normal: number
