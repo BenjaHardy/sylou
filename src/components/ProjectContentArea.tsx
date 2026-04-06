@@ -122,6 +122,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
     }
     const flush = async () => {
       await flushProvenanceRef.current?.();
+      await worldbuilding.flush();
     };
     onFlushRef?.(flush);
     return () => onFlushRef?.(null);
