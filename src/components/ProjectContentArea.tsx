@@ -87,6 +87,10 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const { postIts, loading: postItsLoading, createPostIt, updatePostIt, updatePosition, deletePostIt } = usePostIts(project?.id ?? null);
   const { documents, loading: docsLoading, uploading: docsUploading, uploadDocument, deleteDocument } = useImportedDocuments(project?.id ?? null);
+  const [activeCreativeTab, setActiveCreativeTab] = useState<"writing" | "worldbuilding" | "characters" | "timeline">("writing");
+
+  const isCreativeProject = project?.template === "creative";
+  const worldbuilding = useCreativeData<WorldBuildingData>(project?.id ?? null, "worldbuilding");
 
   const {
     preCheck,
