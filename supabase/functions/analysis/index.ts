@@ -791,6 +791,53 @@ ${writePillarNotice}`;
       imported_documents_total_chars: importedDocsTotalChars,
     };
 
+    // --- Build replay snapshot ---
+    const replayEvents: Array<{ timestamp: string; type: string; content: Record<string, unknown> }> = [];
+
+    // Writing versions
+    for (const v of (versionsRes.data ?? []) as Array<{ content: string; saved_at: string }>) {
+      replayEvents.push({
+        timestamp: v.saved_at,
+        type: "writing_version",
+        content: { html: v.content },
+      });
+    }
+
+    // Chat messages (already fetched)
+    for (const m of chatMessages) {
+      replayEvents.push({
+        timestamp: m.created_at,
+        type: "chat_message",
+        content: {
+          role: m.role,
+          content: m.content.length > 500 ? m.content.slice(0, 500) + "…" : m.content,
+          thread_name: m.thread_name,
+          source_type: m.source_type,
+        },
+      });
+    }
+
+    // AI editor actions
+    for (const a of (editorActionsRes.data ?? []) as Array<{
+      action_type: string; outcome: string; created_at: string;
+      selected_text_preview?: string | null; ai_response_preview?: string | null;
+      [k: string]: unknown;
+    }>) {
+      replayEvents.push({
+        timestamp: a.created_at,
+        type: "ai_editor_action",
+        content: {
+          action_type: a.action_type,
+          outcome: a.outcome,
+          selected_text_preview: a.selected_text_preview ?? null,
+          ai_response_preview: a.ai_response_preview ?? null,
+        },
+      });
+    }
+
+    // Sort chronologically
+    replayEvents.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
     // --- Store FLOW report ---
     const { data: report, error: reportErr } = await supabase
       .from("flow_reports")
@@ -806,6 +853,7 @@ ${writePillarNotice}`;
         provenance_snapshot: segmentMap,
         model_used: "claude-sonnet-4-6",
         project_name: project.name ?? null,
+        replay_snapshot: replayEvents,
       } as any)
       .select()
       .single();
