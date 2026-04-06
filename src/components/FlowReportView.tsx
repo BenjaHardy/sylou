@@ -525,9 +525,9 @@ export function FlowReportView({
                 </div>
               </div>
 
-              {/* View Highlighted Text */}
-              {report.provenance_snapshot && report.provenance_snapshot.length > 0 && (
-                <div className="flex justify-center">
+              {/* View Highlighted Text + Replay */}
+              <div className="flex justify-center gap-2">
+                {report.provenance_snapshot && report.provenance_snapshot.length > 0 && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -537,8 +537,22 @@ export function FlowReportView({
                     <Eye className="h-3.5 w-3.5" />
                     View Highlighted Text
                   </Button>
-                </div>
-              )}
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs"
+                  onClick={handleLoadReplay}
+                  disabled={loadingReplay}
+                >
+                  {loadingReplay ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Play className="h-3.5 w-3.5" />
+                  )}
+                  Replay
+                </Button>
+              </div>
 
               {/* Pre-feedback display */}
               {report.user_feedback_pre && (
