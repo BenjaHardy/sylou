@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { FlowRadarChart } from "@/components/flow-report/FlowRadarChart";
@@ -6,6 +6,7 @@ import { ScoreCard } from "@/components/flow-report/ScoreCard";
 import { FlowInfoSection } from "@/components/flow-report/FlowInfoSection";
 import { TokenUsageSection } from "@/components/flow-report/TokenUsageSection";
 import { ProjectActivitySection } from "@/components/flow-report/ProjectActivitySection";
+import { FlowReplayOverlay, type ReplayEvent } from "@/components/FlowReplayOverlay";
 import {
   PILLAR_KEYS,
   PILLAR_LABELS,
@@ -15,7 +16,8 @@ import {
   extractFeedbackScores,
 } from "@/components/flow-report/shared-utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Activity, Loader2, ShieldAlert, ExternalLink, Award } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Activity, Loader2, ShieldAlert, ExternalLink, Award, Play } from "lucide-react";
 import type { FlowReport, FlowFeedback } from "@/hooks/useFlowAnalysis";
 
 export default function SharedReport() {
@@ -24,6 +26,12 @@ export default function SharedReport() {
   const [projectName, setProjectName] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+
+  // Replay state
+  const [showReplay, setShowReplay] = useState(false);
+  const [replaySnapshot, setReplaySnapshot] = useState<ReplayEvent[] | null>(null);
+  const [loadingReplay, setLoadingReplay] = useState(false);
+  const [replayAvailable, setReplayAvailable] = useState(false);
 
   useEffect(() => {
     async function fetchReport() {
@@ -35,7 +43,7 @@ export default function SharedReport() {
 
       const { data, error } = await supabase
         .from("flow_reports")
-        .select("id, project_id, project_name, certificate_id, share_token, share_enabled, share_visibility, share_include_feedback, model_used, created_at, ai_find, ai_lead, ai_organize, ai_write, ai_summary, flow_meta, metrics_snapshot, user_feedback_pre, user_feedback_post")
+        .select("id, project_id, project_name, certificate_id, share_token, share_enabled, share_visibility, share_include_feedback, share_include_replay, model_used, created_at, ai_find, ai_lead, ai_organize, ai_write, ai_summary, flow_meta, metrics_snapshot, user_feedback_pre, user_feedback_post")
         .eq("share_token", token)
         .eq("share_enabled", true)
         .eq("share_visibility", "public")
@@ -49,11 +57,38 @@ export default function SharedReport() {
 
       setReport(data as unknown as FlowReport);
       setProjectName((data as any).project_name ?? "Untitled Project");
+      setReplayAvailable(!!(data as any).share_include_replay);
       setLoading(false);
     }
 
     fetchReport();
   }, [token]);
+
+  const handleLoadReplay = useCallback(async () => {
+    if (!report || !token) return;
+    if (replaySnapshot) {
+      setShowReplay(true);
+      return;
+    }
+    setLoadingReplay(true);
+    try {
+      const { data } = await supabase
+        .from("flow_reports")
+        .select("replay_snapshot")
+        .eq("share_token", token)
+        .eq("share_enabled", true)
+        .eq("share_include_replay", true)
+        .maybeSingle();
+      if (data?.replay_snapshot) {
+        setReplaySnapshot(data.replay_snapshot as unknown as ReplayEvent[]);
+        setShowReplay(true);
+      }
+    } catch (err) {
+      console.error("Failed to load replay:", err);
+    } finally {
+      setLoadingReplay(false);
+    }
+  }, [report, token, replaySnapshot]);
 
   if (loading) {
     return (
@@ -95,7 +130,6 @@ export default function SharedReport() {
   const postAssessment = showFeedback ? extractUserAssessment(report.user_feedback_post) : null;
   const postFeedbackScores = showFeedback ? extractFeedbackScores(report.user_feedback_post) : null;
 
-  // Use post-analysis feedback on radar if available, otherwise pre
   let radarUserFeedback: FlowFeedback | null = null;
   let radarUserLabel = "";
   let radarUserColor = "";
@@ -112,7 +146,14 @@ export default function SharedReport() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background relative">
+      {/* Replay Overlay */}
+      {showReplay && replaySnapshot && (
+        <div className="absolute inset-0 z-10 bg-background">
+          <FlowReplayOverlay events={replaySnapshot} onClose={() => setShowReplay(false)} sanitize />
+        </div>
+      )}
+
       {/* Header */}
       <div className="h-14 border-b border-border flex items-center justify-between px-6 bg-[hsl(var(--ethos-surface))]">
         <div className="flex items-center gap-2 text-sm font-medium text-primary">
@@ -159,6 +200,26 @@ export default function SharedReport() {
             </div>
           </div>
 
+          {/* Replay button */}
+          {replayAvailable && (
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs"
+                onClick={handleLoadReplay}
+                disabled={loadingReplay}
+              >
+                {loadingReplay ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Play className="h-3.5 w-3.5" />
+                )}
+                Replay
+              </Button>
+            </div>
+          )}
+
           {/* User Self-Assessment (read-only) */}
           {showFeedback && preFeedbackScores && (
             <div className="space-y-3">
@@ -187,7 +248,6 @@ export default function SharedReport() {
                   </div>
                 ))}
               </div>
-              {/* Comments */}
               {Object.entries(postAssessment.comments).some(([, v]) => v.trim()) && (
                 <div className="space-y-2 mt-2">
                   {PILLAR_KEYS.map((key) =>

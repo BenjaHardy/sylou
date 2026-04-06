@@ -199,8 +199,10 @@ export type Database = {
           project_id: string
           project_name: string | null
           provenance_snapshot: Json | null
+          replay_snapshot: Json | null
           share_enabled: boolean | null
           share_include_feedback: boolean
+          share_include_replay: boolean
           share_token: string | null
           share_visibility: string | null
           user_feedback_post: Json | null
@@ -224,8 +226,10 @@ export type Database = {
           project_id: string
           project_name?: string | null
           provenance_snapshot?: Json | null
+          replay_snapshot?: Json | null
           share_enabled?: boolean | null
           share_include_feedback?: boolean
+          share_include_replay?: boolean
           share_token?: string | null
           share_visibility?: string | null
           user_feedback_post?: Json | null
@@ -249,8 +253,10 @@ export type Database = {
           project_id?: string
           project_name?: string | null
           provenance_snapshot?: Json | null
+          replay_snapshot?: Json | null
           share_enabled?: boolean | null
           share_include_feedback?: boolean
+          share_include_replay?: boolean
           share_token?: string | null
           share_visibility?: string | null
           user_feedback_post?: Json | null

@@ -31,12 +31,14 @@ class HighlightedTextErrorBoundary extends Component<
 
 import { supabase } from "@/integrations/supabase/client";
 import { FlowHighlightedText } from "@/components/FlowHighlightedText";
+import { FlowReplayOverlay, type ReplayEvent } from "@/components/FlowReplayOverlay";
 import { QRCodeSVG } from "qrcode.react";
 import { FlowPledgeBadge } from "@/components/flow-report/FlowPledgeBadge";
 import {
   ArrowLeft,
   Activity,
   Eye,
+  Play,
   Loader2,
   Info,
   Share2,
@@ -98,6 +100,12 @@ export function FlowReportView({
   const [shareEnabled, setShareEnabled] = useState<boolean>(report?.share_enabled ?? false);
   const [copied, setCopied] = useState(false);
   const [shareIncludeFeedback, setShareIncludeFeedback] = useState<boolean>(report?.share_include_feedback ?? false);
+  const [shareIncludeReplay, setShareIncludeReplay] = useState<boolean>((report as any)?.share_include_replay ?? false);
+
+  // Replay state
+  const [showReplay, setShowReplay] = useState(false);
+  const [replaySnapshot, setReplaySnapshot] = useState<ReplayEvent[] | null>(null);
+  const [loadingReplay, setLoadingReplay] = useState(false);
 
   // Sync sharing state when report changes
   useEffect(() => {
@@ -106,6 +114,7 @@ export function FlowReportView({
       setCertificateId(report.certificate_id ?? null);
       setShareEnabled(report.share_enabled ?? false);
       setShareIncludeFeedback(report.share_include_feedback ?? false);
+      setShareIncludeReplay((report as any).share_include_replay ?? false);
     }
   }, [report?.id, report?.share_token, report?.share_enabled, report?.certificate_id, report?.share_include_feedback]);
 
@@ -187,6 +196,30 @@ export function FlowReportView({
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const handleLoadReplay = useCallback(async () => {
+    if (!report) return;
+    if (replaySnapshot) {
+      setShowReplay(true);
+      return;
+    }
+    setLoadingReplay(true);
+    try {
+      const { data } = await supabase
+        .from("flow_reports")
+        .select("replay_snapshot")
+        .eq("id", report.id)
+        .single();
+      if (data?.replay_snapshot) {
+        setReplaySnapshot(data.replay_snapshot as unknown as ReplayEvent[]);
+        setShowReplay(true);
+      }
+    } catch (err) {
+      console.error("Failed to load replay:", err);
+    } finally {
+      setLoadingReplay(false);
+    }
+  }, [report, replaySnapshot]);
 
   if (loading) {
     return (
@@ -277,6 +310,13 @@ export function FlowReportView({
             />
           </div>
         </HighlightedTextErrorBoundary>
+      )}
+
+      {/* Replay Overlay */}
+      {showReplay && replaySnapshot && (
+        <div className="absolute inset-0 z-10 bg-background">
+          <FlowReplayOverlay events={replaySnapshot} onClose={() => setShowReplay(false)} />
+        </div>
       )}
 
       {/* Content */}
@@ -373,7 +413,29 @@ export function FlowReportView({
                       </label>
                     </div>
 
-                    {/* URL + Copy */}
+                    {/* Include replay checkbox */}
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="share-include-replay"
+                        checked={shareIncludeReplay}
+                        onCheckedChange={async (checked) => {
+                          const val = checked === true;
+                          setShareIncludeReplay(val);
+                          try {
+                            await supabase.functions.invoke("share-report", {
+                              body: { report_id: report.id, action: "toggle", share_include_replay: val },
+                            });
+                          } catch (err) {
+                            console.error("Failed to update replay visibility:", err);
+                            setShareIncludeReplay(!val);
+                          }
+                        }}
+                      />
+                      <label htmlFor="share-include-replay" className="text-xs text-muted-foreground cursor-pointer">
+                        Include project replay in shared report
+                      </label>
+                    </div>
+
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
@@ -463,9 +525,9 @@ export function FlowReportView({
                 </div>
               </div>
 
-              {/* View Highlighted Text */}
-              {report.provenance_snapshot && report.provenance_snapshot.length > 0 && (
-                <div className="flex justify-center">
+              {/* View Highlighted Text + Replay */}
+              <div className="flex justify-center gap-2">
+                {report.provenance_snapshot && report.provenance_snapshot.length > 0 && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -475,8 +537,22 @@ export function FlowReportView({
                     <Eye className="h-3.5 w-3.5" />
                     View Highlighted Text
                   </Button>
-                </div>
-              )}
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs"
+                  onClick={handleLoadReplay}
+                  disabled={loadingReplay}
+                >
+                  {loadingReplay ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Play className="h-3.5 w-3.5" />
+                  )}
+                  Replay
+                </Button>
+              </div>
 
               {/* Pre-feedback display */}
               {report.user_feedback_pre && (
