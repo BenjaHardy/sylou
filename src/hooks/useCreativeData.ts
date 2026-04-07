@@ -93,6 +93,7 @@ export function useCreativeData<T = Record<string, unknown>>(
   const save = useCallback(
     (newData: T) => {
       setData(newData);
+      dataRef.current = newData;
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       debounceTimer.current = setTimeout(() => saveNow(newData), 2000);
     },
