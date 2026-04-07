@@ -49,10 +49,9 @@ const PRESET_COLORS = [
 ];
 
 const DEFAULT_CATEGORIES: WorldBuildingCategory[] = [
-  { id: crypto.randomUUID(), name: "Setting", color: "#3b82f6", notes: [] },
-  { id: crypto.randomUUID(), name: "History", color: "#8b5cf6", notes: [] },
-  { id: crypto.randomUUID(), name: "Culture", color: "#ec4899", notes: [] },
-  { id: crypto.randomUUID(), name: "Rules/Systems", color: "#f97316", notes: [] },
+  { id: crypto.randomUUID(), name: "Country", color: "#3b82f6", notes: [] },
+  { id: crypto.randomUUID(), name: "Class", color: "#8b5cf6", notes: [] },
+  { id: crypto.randomUUID(), name: "Family", color: "#ec4899", notes: [] },
   { id: crypto.randomUUID(), name: "Other", color: "#64748b", notes: [] },
 ];
 
