@@ -831,7 +831,7 @@ ${writePillarNotice}`;
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 8192,
-        system: FLOW_PROMPT_TEMPLATE,
+        system: systemPromptTemplate,
         messages: [{ role: "user", content: userPrompt }],
         tools: [SUBMIT_FLOW_TOOL],
         tool_choice: { type: "tool", name: "submit_flow_analysis" },
