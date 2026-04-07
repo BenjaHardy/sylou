@@ -472,7 +472,7 @@ function formatCreativeDataForAnalysis(
     const lines = ["--- Character Diagram ---"];
     for (const c of chars) {
       let line = `- ${c.name}`;
-      if (c.description) line += `: ${c.description}`;
+      if (c.description) line += `: ${stripHtmlDeno(c.description)}`;
       if (c.traits?.length) line += ` [Traits: ${c.traits.join(", ")}]`;
       lines.push(line);
     }
@@ -483,7 +483,7 @@ function formatCreativeDataForAnalysis(
         const toName = nameMap.get(r.to_id) ?? "?";
         const typeLabel = relTypes.find(t => t.id === r.type_id)?.label ?? "?";
         let line = `  ${fromName} → ${toName} (${typeLabel})`;
-        if (r.notes) line += ` — ${r.notes}`;
+        if (r.notes) line += ` — ${stripHtmlDeno(r.notes)}`;
         lines.push(line);
       }
     }
@@ -500,7 +500,7 @@ function formatCreativeDataForAnalysis(
     const lines = ["--- Timeline ---"];
     for (const e of sorted) {
       let line = `- ${e.date ? `[${e.date}] ` : ""}${e.title}`;
-      if (e.description) line += `: ${e.description}`;
+      if (e.description) line += `: ${stripHtmlDeno(e.description)}`;
       if (e.character_ids?.length) {
         const names = e.character_ids.map(id => nameMap.get(id) ?? "?").join(", ");
         line += ` [Characters: ${names}]`;

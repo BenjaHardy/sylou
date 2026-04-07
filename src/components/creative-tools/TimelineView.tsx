@@ -22,7 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Clock, Trash2, GripVertical } from "lucide-react";
-import { getCategoryColor, getCategoryLabel, type WorldBuildingCategory } from "@/lib/creative-tools-utils";
+import { getCategoryColor, getCategoryLabel, stripHtml, type WorldBuildingCategory } from "@/lib/creative-tools-utils";
 import type { Character } from "./CharactersDiagram";
 import { CreativeAITextField } from "@/components/CreativeAITextField";
 
@@ -130,7 +130,7 @@ function SortableEventCard({
           </div>
         </div>
         {event.description && (
-          <p className="text-xs text-muted-foreground line-clamp-1">{event.description}</p>
+          <p className="text-xs text-muted-foreground line-clamp-1">{stripHtml(event.description)}</p>
         )}
       </div>
     </div>

@@ -20,7 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { Plus, Link2, Settings, X, Trash2, Users } from "lucide-react";
 import { RelationshipTypesModal, type RelationshipType } from "./RelationshipTypesModal";
-import { getCategoryColor, getCategoryLabel, type WorldBuildingCategory } from "@/lib/creative-tools-utils";
+import { getCategoryColor, getCategoryLabel, stripHtml, type WorldBuildingCategory } from "@/lib/creative-tools-utils";
 import { CreativeAITextField } from "@/components/CreativeAITextField";
 
 export interface Character {
@@ -121,7 +121,7 @@ function DraggableCard({
     >
       <p className="text-sm font-medium text-foreground truncate">{character.name || "Unnamed"}</p>
       {character.description && (
-        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{character.description}</p>
+        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{stripHtml(character.description)}</p>
       )}
       {character.traits.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
