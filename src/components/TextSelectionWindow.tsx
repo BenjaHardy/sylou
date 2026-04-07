@@ -114,6 +114,7 @@ export function TextSelectionWindow({
   appendMessages,
   setMessages,
   webSearchEnabled,
+  sourceModule = "editor",
 }: Props) {
   const [phase, setPhase] = useState<Phase>("actions");
   const [activeAction, setActiveAction] = useState<ActionId | null>(null);
