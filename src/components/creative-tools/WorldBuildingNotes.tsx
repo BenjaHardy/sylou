@@ -9,6 +9,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Plus, Trash2, Palette, Pencil, Check, X, GripVertical } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Loader2 } from "lucide-react";
+import { CreativeAITextField } from "@/components/CreativeAITextField";
 
 // --- Types ---
 
@@ -458,10 +459,12 @@ function NoteEditor({
       )}
 
       <ScrollArea className="flex-1">
-        <EditorContent
-          editor={editor}
-          className="prose prose-sm dark:prose-invert max-w-none [&_.tiptap]:outline-none [&_.tiptap]:min-h-[200px]"
-        />
+        <CreativeAITextField sourceModule="worldbuilding">
+          <EditorContent
+            editor={editor}
+            className="prose prose-sm dark:prose-invert max-w-none [&_.tiptap]:outline-none [&_.tiptap]:min-h-[200px]"
+          />
+        </CreativeAITextField>
       </ScrollArea>
     </div>
   );
