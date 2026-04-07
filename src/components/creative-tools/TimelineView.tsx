@@ -24,7 +24,6 @@ import { Plus, Clock, Trash2, GripVertical } from "lucide-react";
 import { getCategoryColor, getCategoryLabel, type WorldBuildingCategory } from "@/lib/creative-tools-utils";
 import type { Character } from "./CharactersDiagram";
 import { CreativeAITextField } from "@/components/CreativeAITextField";
-import type { Character } from "./CharactersDiagram";
 
 export interface TimelineEvent {
   id: string;
