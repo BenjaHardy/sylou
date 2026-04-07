@@ -612,11 +612,11 @@ export function CharactersDiagram({ data: rawData, save, loading, worldCategorie
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Description</label>
                 <CreativeAITextField sourceModule="character_chart">
-                  <Textarea
+                  <MiniTipTapEditor
                     value={editChar.description}
-                    onChange={(e) => setEditChar({ ...editChar, description: e.target.value })}
-                    className="mt-1"
-                    rows={3}
+                    onChange={(html) => setEditChar({ ...editChar, description: html })}
+                    className="min-h-[80px]"
+                    placeholder="Describe this character…"
                   />
                 </CreativeAITextField>
               </div>

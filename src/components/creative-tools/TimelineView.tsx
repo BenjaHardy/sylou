@@ -311,11 +311,11 @@ export function TimelineView({ data: rawData, save, loading, worldCategories, ch
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Description</label>
                 <CreativeAITextField sourceModule="timeline">
-                  <Textarea
+                  <MiniTipTapEditor
                     value={editEvent.description}
-                    onChange={(e) => setEditEvent({ ...editEvent, description: e.target.value })}
-                    className="mt-1"
-                    rows={3}
+                    onChange={(html) => setEditEvent({ ...editEvent, description: html })}
+                    className="min-h-[80px]"
+                    placeholder="Describe this event…"
                   />
                 </CreativeAITextField>
               </div>
