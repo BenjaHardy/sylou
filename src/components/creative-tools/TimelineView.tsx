@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Clock, Trash2, GripVertical } from "lucide-react";
 import { getCategoryColor, getCategoryLabel, type WorldBuildingCategory } from "@/lib/creative-tools-utils";
 import type { Character } from "./CharactersDiagram";
+import { CreativeAITextField } from "@/components/CreativeAITextField";
 
 export interface TimelineEvent {
   id: string;
@@ -309,12 +310,14 @@ export function TimelineView({ data: rawData, save, loading, worldCategories, ch
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Description</label>
-                <Textarea
-                  value={editEvent.description}
-                  onChange={(e) => setEditEvent({ ...editEvent, description: e.target.value })}
-                  className="mt-1"
-                  rows={3}
-                />
+                <CreativeAITextField sourceModule="timeline">
+                  <Textarea
+                    value={editEvent.description}
+                    onChange={(e) => setEditEvent({ ...editEvent, description: e.target.value })}
+                    className="mt-1"
+                    rows={3}
+                  />
+                </CreativeAITextField>
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Category</label>

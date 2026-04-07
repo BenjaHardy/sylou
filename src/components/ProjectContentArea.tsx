@@ -23,6 +23,7 @@ import { WorldBuildingNotes } from "@/components/creative-tools/WorldBuildingNot
 import type { WorldBuildingData } from "@/components/creative-tools/WorldBuildingNotes";
 import { CharactersDiagram, type CharactersData } from "@/components/creative-tools/CharactersDiagram";
 import { TimelineView, type TimelineData } from "@/components/creative-tools/TimelineView";
+import { CreativeAIContextProvider } from "@/contexts/CreativeAIContext";
 import type { Project } from "@/hooks/useProjects";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
@@ -466,41 +467,49 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
           </ResizablePanelGroup>
         </div>
 
-        {/* World-Building tab — stays mounted, hidden via CSS */}
+        {/* Creative tool tabs wrapped in AI context provider */}
         {isCreativeProject && (
-          <div style={{ display: activeCreativeTab === "worldbuilding" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
-            <WorldBuildingNotes
-              data={worldbuilding.data}
-              save={worldbuilding.save}
-              loading={worldbuilding.loading}
-            />
-          </div>
-        )}
+          <CreativeAIContextProvider
+            projectId={project.id}
+            threadId={activeThreadId}
+            tutorMode={project.tutor_mode}
+            conciseMode={conciseMode}
+            webSearchEnabled={webSearchEnabled}
+            chatSetMessages={chatSetMessagesRef.current ?? undefined}
+            onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
+            onAskComplete={(msgs) => setPendingChatMessages((prev) => [...prev, ...msgs])}
+          >
+            {/* World-Building tab — stays mounted, hidden via CSS */}
+            <div style={{ display: activeCreativeTab === "worldbuilding" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
+              <WorldBuildingNotes
+                data={worldbuilding.data}
+                save={worldbuilding.save}
+                loading={worldbuilding.loading}
+              />
+            </div>
 
-        {/* Characters tab */}
-        {isCreativeProject && (
-          <div style={{ display: activeCreativeTab === "characters" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
-            <CharactersDiagram
-              data={characters.data}
-              save={characters.save}
-              loading={characters.loading}
-              worldCategories={worldbuilding.data.categories ?? []}
-              onCharacterDeleted={handleCharacterDeleted}
-            />
-          </div>
-        )}
+            {/* Characters tab */}
+            <div style={{ display: activeCreativeTab === "characters" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
+              <CharactersDiagram
+                data={characters.data}
+                save={characters.save}
+                loading={characters.loading}
+                worldCategories={worldbuilding.data.categories ?? []}
+                onCharacterDeleted={handleCharacterDeleted}
+              />
+            </div>
 
-        {/* Timeline tab */}
-        {isCreativeProject && (
-          <div style={{ display: activeCreativeTab === "timeline" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
-            <TimelineView
-              data={timeline.data}
-              save={timeline.save}
-              loading={timeline.loading}
-              worldCategories={worldbuilding.data.categories ?? []}
-              characters={characters.data.characters ?? []}
-            />
-          </div>
+            {/* Timeline tab */}
+            <div style={{ display: activeCreativeTab === "timeline" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
+              <TimelineView
+                data={timeline.data}
+                save={timeline.save}
+                loading={timeline.loading}
+                worldCategories={worldbuilding.data.categories ?? []}
+                characters={characters.data.characters ?? []}
+              />
+            </div>
+          </CreativeAIContextProvider>
         )}
 
         <FlowConfirmDialog open={showConfirm} onConfirm={handleConfirmAnalysis} onCancel={() => setShowConfirm(false)} />

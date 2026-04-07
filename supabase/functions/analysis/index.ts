@@ -68,6 +68,55 @@ Half-point scores (e.g. 2.5, 3.5) are permitted and encouraged when the evidence
 Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.`;
 
 // ---------------------------------------------------------------------------
+// Creative FLOW Prompt — for creative template projects
+// ---------------------------------------------------------------------------
+const CREATIVE_FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a creative writing project. Your task is to assess how a human user collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework).
+
+# INSTRUCTIONS
+
+1. Read the complete project data below carefully.
+2. For each of the four pillars, identify the key patterns across the ENTIRE project. Your assessment must reflect the overall project, not isolated moments.
+3. For each pillar, cite 2-4 key evidence items that are REPRESENTATIVE of the overall pattern you observed. Evidence must span the breadth of the work (beginning, middle, and end for larger projects) to prevent clustering or cherry-picking. Each evidence item should be a brief quote or concrete reference to a specific moment in the chat history or writing.
+4. For each pillar, write your REASONING before assigning a score. Explain how the evidence supports your assessment, consider alternative interpretations, and justify your score choice. This reasoning will be available to the user on request, so be thorough and fair.
+5. Assign a score for each pillar using the rubric below. Use half-point increments (0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0) to reflect nuance. If there is insufficient evidence to assess a pillar, assign null instead of a numeric score.
+6. Write a brief narrative for each pillar explaining the assessment in language accessible to the user.
+7. Write an overall summary of the human-AI collaboration. Where applicable, highlight (i) significant user contributions and (ii) areas where the human-AI collaboration provided significant added value in a way that empowered the user and their work; if none, specify there are none.
+
+# FLOW PILLAR DEFINITIONS
+
+- F – Find (Research & Critical Thinking)
+Identify how the user researched relevant topics - in particular with regards to the world-building aspects of the creative writing and all items grounded in factual matters (if any) -, whether he questioned the AI's outputs, compared alternatives, or challenged suggestions — versus relying on the AI without investigation.
+
+- L – Lead (Ideas & Opinions)
+Determine who is the true source of the ideas, opinions and perspectives in the writing content, covering notably all key story elements expressed in the creative writing tools (world-building notes, character diagram, timeline): the user (original thinking, own viewpoint) or the AI (suggestions heavily reused, ideas taken verbatim, reliance on AI-driven content).
+
+- O – Organize (Structure & Argumentation)
+Assess how the ideas, opinions and perspectives – including all key story elements expressed in the creative writing tools - are structured, narrated and developed in the writing content. Determine whether the user or the AI primarily shaped the overall structure of the creative writing, the narration, the pace of the story, and the character viewpoints adopted.
+
+- W – Write (Writing & Text Production)
+Analyze the respective contributions in the writing content to tone, style, clarity, correctness, sentence structure, transitions, dialogs, and final drafting. Identify whether the AI generated large portions of the prose, whether the user refined or rewrote the content, or whether the user wrote the content by himself. Pay attention to the provenance annotations ([t], [cc], [ce], [ai] tags) in the writing content to inform your Write pillar assessment.
+
+# === SCORING CALIBRATION ===
+
+To ensure consistent scoring, use the following reference points. These apply globally across all four pillars:
+
+| Score | Label | Description |
+|-------|-------|-------------|
+| 5.0 | Only Human | The user produced this aspect of the work entirely independently. The AI was not involved, or the user explicitly disregarded AI contributions for this pillar. |
+| 4.0 | Largely Human | The user originated the core content for this pillar (e.g. key ideas, overall structure, or prose). The AI provided minor support such as factual checks, light suggestions, or small refinements, but the user's contribution clearly dominates. |
+| 3.0 | More Human | The user drove the direction and made the key decisions, but the AI made notable contributions that shaped the outcome. For example, the AI suggested a framework that the user substantially adapted, or the AI drafted a passage that the user significantly rewrote. |
+| 2.0 | More AI | The AI produced the bulk of the material for this pillar, but the user made meaningful modifications, selections, or editorial decisions. The user engaged with the AI output rather than accepting it passively. |
+| 1.0 | Largely AI | The AI generated nearly all of the content for this pillar. The user's contribution was limited to minor edits, superficial changes, or simple acceptance of AI output. |
+| 0.0 | No human contribution detected | No evidence of human contribution for this pillar. The AI produced all relevant content and the user did not engage with, modify, or build upon it. |
+| null | Insufficient evidence | There is not enough data to assess this pillar. This applies when the writing or chat history is too sparse to evaluate a particular pillar, or when the pillar is not applicable to the work produced. Use this instead of defaulting to 0. |
+
+Half-point scores (e.g. 2.5, 3.5) are permitted and encouraged when the evidence falls between two reference points.
+
+# RESPONSE FORMAT
+
+Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.`;
+
+// ---------------------------------------------------------------------------
 // Tool schema
 // ---------------------------------------------------------------------------
 const pillarSchema = {
@@ -369,6 +418,102 @@ function computeSimilarityPct(
 }
 
 // ---------------------------------------------------------------------------
+// Creative data formatting for FLOW analysis
+// ---------------------------------------------------------------------------
+
+function stripHtmlDeno(html: string): string {
+  if (!html) return "";
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return (doc.body.textContent ?? "").replace(/\s+/g, " ").trim();
+  } catch {
+    return html.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+  }
+}
+
+function formatCreativeDataForAnalysis(
+  creativeRows: Array<{ tool_type: string; data: Record<string, unknown> }>
+): string {
+  if (!creativeRows || creativeRows.length === 0) return "(No creative tools data)";
+
+  const sections: string[] = [];
+
+  // World-building
+  const wbRow = creativeRows.find(r => r.tool_type === "worldbuilding");
+  const cats = (wbRow?.data as any)?.categories as Array<{
+    name: string; notes: Array<{ title: string; subcategory: string; content: string }>;
+  }> ?? [];
+  if (cats.length > 0) {
+    const lines = ["--- World-Building Notes ---"];
+    for (const cat of cats) {
+      for (const note of (cat.notes ?? [])) {
+        const text = stripHtmlDeno(note.content);
+        if (text) lines.push(`[${cat.name} / ${note.subcategory}] ${note.title}: ${text}`);
+      }
+    }
+    if (lines.length > 1) sections.push(lines.join("\n"));
+  }
+
+  // Characters
+  const charsRow = creativeRows.find(r => r.tool_type === "characters");
+  const chars = (charsRow?.data as any)?.characters as Array<{
+    id: string; name: string; description: string; traits: string[];
+  }> ?? [];
+  const rels = (charsRow?.data as any)?.relationships as Array<{
+    from_id: string; to_id: string; type_id: string; notes: string;
+  }> ?? [];
+  const relTypes = (charsRow?.data as any)?.relationshipTypes as Array<{
+    id: string; label: string;
+  }> ?? [];
+
+  const nameMap = new Map(chars.map(c => [c.id, c.name]));
+
+  if (chars.length > 0) {
+    const lines = ["--- Character Diagram ---"];
+    for (const c of chars) {
+      let line = `- ${c.name}`;
+      if (c.description) line += `: ${c.description}`;
+      if (c.traits?.length) line += ` [Traits: ${c.traits.join(", ")}]`;
+      lines.push(line);
+    }
+    if (rels.length > 0) {
+      lines.push("Relationships:");
+      for (const r of rels) {
+        const fromName = nameMap.get(r.from_id) ?? "?";
+        const toName = nameMap.get(r.to_id) ?? "?";
+        const typeLabel = relTypes.find(t => t.id === r.type_id)?.label ?? "?";
+        let line = `  ${fromName} → ${toName} (${typeLabel})`;
+        if (r.notes) line += ` — ${r.notes}`;
+        lines.push(line);
+      }
+    }
+    sections.push(lines.join("\n"));
+  }
+
+  // Timeline
+  const tlRow = creativeRows.find(r => r.tool_type === "timeline");
+  const events = (tlRow?.data as any)?.events as Array<{
+    title: string; date: string; description: string; order: number; character_ids: string[];
+  }> ?? [];
+  if (events.length > 0) {
+    const sorted = [...events].sort((a, b) => a.order - b.order);
+    const lines = ["--- Timeline ---"];
+    for (const e of sorted) {
+      let line = `- ${e.date ? `[${e.date}] ` : ""}${e.title}`;
+      if (e.description) line += `: ${e.description}`;
+      if (e.character_ids?.length) {
+        const names = e.character_ids.map(id => nameMap.get(id) ?? "?").join(", ");
+        line += ` [Characters: ${names}]`;
+      }
+      lines.push(line);
+    }
+    sections.push(lines.join("\n"));
+  }
+
+  return sections.length > 0 ? sections.join("\n\n") : "(No creative tools data)";
+}
+
+// ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
 
@@ -408,7 +553,7 @@ Deno.serve(async (req) => {
     // --- Verify project ownership (RLS) + get settings ---
     const { data: project, error: projectErr } = await supabase
       .from("projects")
-      .select("id, language, tutor_mode, name")
+      .select("id, language, tutor_mode, name, template")
       .eq("id", projectId)
       .single();
 
@@ -427,43 +572,25 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Profile not found" }, 404);
     }
 
+    const isCreativeProject = project.template === "creative";
+
     // --- Fetch all project data in parallel ---
-    const [writingRes, threadsRes, provenanceRes, editorActionsRes, statsRes, importedDocsRes, versionsRes] =
-      await Promise.all([
-        supabase
-          .from("writing_content")
-          .select("content")
-          .eq("project_id", projectId)
-          .single(),
-        supabase
-          .from("chat_threads")
-          .select("id, name")
-          .eq("project_id", projectId),
-        supabase
-          .from("provenance_events")
-          .select("segment_map")
-          .eq("project_id", projectId)
-          .single(),
-        supabase
-          .from("ai_editor_actions")
-          .select("action_type, outcome, char_count_original, char_count_result, selected_text_preview, ai_response_preview, instruction_text, created_at")
-          .eq("project_id", projectId)
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("project_stats")
-          .select("*")
-          .eq("project_id", projectId)
-          .single(),
-        supabase
-          .from("imported_documents")
-          .select("id, file_name, extracted_text, summary, file_size_bytes")
-          .eq("project_id", projectId),
-        supabase
-          .from("writing_versions")
-          .select("content, saved_at")
-          .eq("project_id", projectId)
-          .order("saved_at", { ascending: true }),
-      ]);
+    const fetchPromises = [
+        supabase.from("writing_content").select("content").eq("project_id", projectId).single(),
+        supabase.from("chat_threads").select("id, name").eq("project_id", projectId),
+        supabase.from("provenance_events").select("segment_map").eq("project_id", projectId).single(),
+        supabase.from("ai_editor_actions").select("action_type, outcome, char_count_original, char_count_result, selected_text_preview, ai_response_preview, instruction_text, created_at").eq("project_id", projectId).order("created_at", { ascending: false }),
+        supabase.from("project_stats").select("*").eq("project_id", projectId).single(),
+        supabase.from("imported_documents").select("id, file_name, extracted_text, summary, file_size_bytes").eq("project_id", projectId),
+        supabase.from("writing_versions").select("content, saved_at").eq("project_id", projectId).order("saved_at", { ascending: true }),
+    ] as const;
+
+    const creativeDataPromise = isCreativeProject
+      ? supabase.from("project_creative_data").select("tool_type, data").eq("project_id", projectId)
+      : Promise.resolve({ data: null });
+
+    const [[writingRes, threadsRes, provenanceRes, editorActionsRes, statsRes, importedDocsRes, versionsRes], creativeDataRes] =
+      await Promise.all([Promise.all(fetchPromises), creativeDataPromise]);
 
     const writingContent = writingRes.data?.content ?? "";
     if (!writingContent || writingContent.trim().length === 0) {
@@ -637,8 +764,20 @@ Character-count breakdown by provenance type:
       importedDocsSection = "None";
     }
 
+    // --- Build creative tools section (if applicable) ---
+    let creativeToolsSection = "";
+    if (isCreativeProject && creativeDataRes.data && creativeDataRes.data.length > 0) {
+      creativeToolsSection = `\n\n# === CREATIVE TOOLS CONTENT ===\n\nThe following content comes from the creative tools accessible by the user to help develop key story elements: world-building notes, character diagram, timeline. This content is critical for assessing the L – Lead pillar (directly) and O – Organize pillar (indirectly).\n\n${formatCreativeDataForAnalysis(creativeDataRes.data as any)}`;
+    }
+
     // --- Build full prompt ---
-    const userPrompt = `${basePromptParts.join("\n\n")}
+    const systemPromptTemplate = isCreativeProject ? CREATIVE_FLOW_PROMPT_TEMPLATE : FLOW_PROMPT_TEMPLATE;
+
+    const chatHistoryNote = isCreativeProject
+      ? `# CHAT HISTORY\n\nThe following chat messages are from all project threads, merged in chronological order. Each message is prefixed with a timestamp and thread label.\n\nSome messages originate from the text selection window, a feature that allows the user to select text in their editor or in the creative tools and either ask the AI a question about it (Ask – available for both the editor and the creative tools) or request the AI to propose a rewritten version (Propose – available solely for the editor). These messages are flagged with their source type below.\n\nWriting summaries are marked "[NOT ASSESSED]" — they provide context for the subsequent discussion but should not be scored as either party's contribution, because they are AI-generated condensations of the writing and creative tools data at that point in time that may include contributions from any party. Consider the whole chat log and other contents to properly identify the respective contributions of each party, noting that new ideas or contributions appearing for the first time in a writing summary and not found in earlier chat messages would normally be user contributions unless copied from external sources.\n\n${chatHistoryStr}`
+      : basePromptParts[2]; // original chat history section
+
+    const userPrompt = `${basePromptParts[0]}\n\n${basePromptParts[1]}${creativeToolsSection}\n\n${chatHistoryNote}
 
 # === IMPORTED DOCUMENTS ===
 
@@ -654,7 +793,7 @@ ${editorStatsStr}
 ${writePillarNotice}`;
 
     // --- Budget check (after prompt is fully built) ---
-    const fullPromptText = FLOW_PROMPT_TEMPLATE + userPrompt;
+    const fullPromptText = systemPromptTemplate + userPrompt;
     const charEst = Math.ceil(fullPromptText.length / 4) * 1.1;
     const wordEst = fullPromptText.split(/\s+/).length * 1.3;
     const estimated = Math.ceil(Math.max(charEst, wordEst));
@@ -692,7 +831,7 @@ ${writePillarNotice}`;
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 8192,
-        system: FLOW_PROMPT_TEMPLATE,
+        system: systemPromptTemplate,
         messages: [{ role: "user", content: userPrompt }],
         tools: [SUBMIT_FLOW_TOOL],
         tool_choice: { type: "tool", name: "submit_flow_analysis" },
@@ -779,7 +918,7 @@ ${writePillarNotice}`;
     const budgetRatio = profile.tokens_used_this_period / profile.monthly_token_budget;
     const tokenStatus = budgetRatio >= 1.0 ? "over" : budgetRatio >= 0.8 ? "near" : "ok";
 
-    const flowMeta = {
+    const flowMeta: Record<string, unknown> = {
       estimated_input_tokens: inputTokens,
       context_limit_tokens: contextLimitTokens,
       token_status: tokenStatus,
@@ -789,6 +928,7 @@ ${writePillarNotice}`;
       imported_documents_mode: importedDocsMode,
       imported_documents_count: importedDocs.length,
       imported_documents_total_chars: importedDocsTotalChars,
+      ...(isCreativeProject ? { template: "creative" } : {}),
     };
 
     // --- Build replay snapshot ---

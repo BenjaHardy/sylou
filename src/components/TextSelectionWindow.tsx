@@ -39,6 +39,8 @@ interface Props {
   appendMessages?: (msgs: ChatMessage[]) => void;
   setMessages?: (updater: (prev: ChatMessage[]) => ChatMessage[]) => void;
   webSearchEnabled?: boolean;
+  /** Source module: 'editor' (default), 'worldbuilding', 'character_chart', 'timeline' */
+  sourceModule?: string;
 }
 
 const NORMAL_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
@@ -57,6 +59,10 @@ const TUTOR_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
   { id: "translate", label: "Translate", row: 1 },
   { id: "ask", label: "Ask", row: 1 },
   { id: "sanity-check", label: "Sanity Check", row: 1 },
+];
+
+const CREATIVE_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
+  { id: "ask", label: "Ask", row: 1 },
 ];
 
 const PREDEFINED: ActionId[] = ["fix-grammar", "translate", "rewrite", "simplify", "expand"];
@@ -108,6 +114,7 @@ export function TextSelectionWindow({
   appendMessages,
   setMessages,
   webSearchEnabled,
+  sourceModule = "editor",
 }: Props) {
   const [phase, setPhase] = useState<Phase>("actions");
   const [activeAction, setActiveAction] = useState<ActionId | null>(null);
@@ -125,7 +132,8 @@ export function TextSelectionWindow({
   const [pendingWebSearchesPerformed, setPendingWebSearchesPerformed] = useState<string[] | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const actions = tutorMode ? TUTOR_ACTIONS : NORMAL_ACTIONS;
+  const isCreativeModule = sourceModule !== "editor";
+  const actions = isCreativeModule ? CREATIVE_ACTIONS : tutorMode ? TUTOR_ACTIONS : NORMAL_ACTIONS;
 
   // Position the panel
   const editorRect = editorElement.getBoundingClientRect();
@@ -164,11 +172,12 @@ export function TextSelectionWindow({
   }, [onClose]);
 
   const getSourceBreakdown = useCallback(() => {
+    if (isCreativeModule) return undefined;
     if (provenanceTracker && selectionFrom != null && selectionTo != null && selectionFrom < selectionTo) {
       return provenanceTracker.getSourceBreakdown(selectionFrom, selectionTo);
     }
     return undefined;
-  }, [provenanceTracker, selectionFrom, selectionTo]);
+  }, [provenanceTracker, selectionFrom, selectionTo, isCreativeModule]);
 
   // ── Streaming editor-action (predefined actions) ──
   const callEditorActionStreaming = useCallback(
@@ -289,7 +298,7 @@ export function TextSelectionWindow({
             action_type: actionType,
             selected_text: selectedText,
             instruction: userInstruction,
-            source_module: "editor",
+            source_module: sourceModule,
             concise_mode: conciseMode ?? false,
             stream: true,
             ...(selected_text_source ? { selected_text_source } : {}),
