@@ -68,6 +68,55 @@ Half-point scores (e.g. 2.5, 3.5) are permitted and encouraged when the evidence
 Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.`;
 
 // ---------------------------------------------------------------------------
+// Creative FLOW Prompt — for creative template projects
+// ---------------------------------------------------------------------------
+const CREATIVE_FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a creative writing project. Your task is to assess how a human user collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework).
+
+# INSTRUCTIONS
+
+1. Read the complete project data below carefully.
+2. For each of the four pillars, identify the key patterns across the ENTIRE project. Your assessment must reflect the overall project, not isolated moments.
+3. For each pillar, cite 2-4 key evidence items that are REPRESENTATIVE of the overall pattern you observed. Evidence must span the breadth of the work (beginning, middle, and end for larger projects) to prevent clustering or cherry-picking. Each evidence item should be a brief quote or concrete reference to a specific moment in the chat history or writing.
+4. For each pillar, write your REASONING before assigning a score. Explain how the evidence supports your assessment, consider alternative interpretations, and justify your score choice. This reasoning will be available to the user on request, so be thorough and fair.
+5. Assign a score for each pillar using the rubric below. Use half-point increments (0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0) to reflect nuance. If there is insufficient evidence to assess a pillar, assign null instead of a numeric score.
+6. Write a brief narrative for each pillar explaining the assessment in language accessible to the user.
+7. Write an overall summary of the human-AI collaboration. Where applicable, highlight (i) significant user contributions and (ii) areas where the human-AI collaboration provided significant added value in a way that empowered the user and their work; if none, specify there are none.
+
+# FLOW PILLAR DEFINITIONS
+
+- F – Find (Research & Critical Thinking)
+Identify how the user researched relevant topics - in particular with regards to the world-building aspects of the creative writing and all items grounded in factual matters (if any) -, whether he questioned the AI's outputs, compared alternatives, or challenged suggestions — versus relying on the AI without investigation.
+
+- L – Lead (Ideas & Opinions)
+Determine who is the true source of the ideas, opinions and perspectives in the writing content, covering notably all key story elements expressed in the creative writing tools (world-building notes, character diagram, timeline): the user (original thinking, own viewpoint) or the AI (suggestions heavily reused, ideas taken verbatim, reliance on AI-driven content).
+
+- O – Organize (Structure & Argumentation)
+Assess how the ideas, opinions and perspectives – including all key story elements expressed in the creative writing tools - are structured, narrated and developed in the writing content. Determine whether the user or the AI primarily shaped the overall structure of the creative writing, the narration, the pace of the story, and the character viewpoints adopted.
+
+- W – Write (Writing & Text Production)
+Analyze the respective contributions in the writing content to tone, style, clarity, correctness, sentence structure, transitions, dialogs, and final drafting. Identify whether the AI generated large portions of the prose, whether the user refined or rewrote the content, or whether the user wrote the content by himself. Pay attention to the provenance annotations ([t], [cc], [ce], [ai] tags) in the writing content to inform your Write pillar assessment.
+
+# === SCORING CALIBRATION ===
+
+To ensure consistent scoring, use the following reference points. These apply globally across all four pillars:
+
+| Score | Label | Description |
+|-------|-------|-------------|
+| 5.0 | Only Human | The user produced this aspect of the work entirely independently. The AI was not involved, or the user explicitly disregarded AI contributions for this pillar. |
+| 4.0 | Largely Human | The user originated the core content for this pillar (e.g. key ideas, overall structure, or prose). The AI provided minor support such as factual checks, light suggestions, or small refinements, but the user's contribution clearly dominates. |
+| 3.0 | More Human | The user drove the direction and made the key decisions, but the AI made notable contributions that shaped the outcome. For example, the AI suggested a framework that the user substantially adapted, or the AI drafted a passage that the user significantly rewrote. |
+| 2.0 | More AI | The AI produced the bulk of the material for this pillar, but the user made meaningful modifications, selections, or editorial decisions. The user engaged with the AI output rather than accepting it passively. |
+| 1.0 | Largely AI | The AI generated nearly all of the content for this pillar. The user's contribution was limited to minor edits, superficial changes, or simple acceptance of AI output. |
+| 0.0 | No human contribution detected | No evidence of human contribution for this pillar. The AI produced all relevant content and the user did not engage with, modify, or build upon it. |
+| null | Insufficient evidence | There is not enough data to assess this pillar. This applies when the writing or chat history is too sparse to evaluate a particular pillar, or when the pillar is not applicable to the work produced. Use this instead of defaulting to 0. |
+
+Half-point scores (e.g. 2.5, 3.5) are permitted and encouraged when the evidence falls between two reference points.
+
+# RESPONSE FORMAT
+
+Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.`;
+
+// ---------------------------------------------------------------------------
 // Tool schema
 // ---------------------------------------------------------------------------
 const pillarSchema = {
