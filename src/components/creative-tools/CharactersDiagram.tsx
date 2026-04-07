@@ -661,7 +661,7 @@ export function CharactersDiagram({ data: rawData, save, loading, worldCategorie
                 </div>
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Add trait…"
+                    placeholder="Add trait and press Enter"
                     value={traitInput}
                     onChange={(e) => setTraitInput(e.target.value)}
                     onKeyDown={(e) => {
