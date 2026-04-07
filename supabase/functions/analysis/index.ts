@@ -572,43 +572,25 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Profile not found" }, 404);
     }
 
+    const isCreativeProject = project.template === "creative";
+
     // --- Fetch all project data in parallel ---
-    const [writingRes, threadsRes, provenanceRes, editorActionsRes, statsRes, importedDocsRes, versionsRes] =
-      await Promise.all([
-        supabase
-          .from("writing_content")
-          .select("content")
-          .eq("project_id", projectId)
-          .single(),
-        supabase
-          .from("chat_threads")
-          .select("id, name")
-          .eq("project_id", projectId),
-        supabase
-          .from("provenance_events")
-          .select("segment_map")
-          .eq("project_id", projectId)
-          .single(),
-        supabase
-          .from("ai_editor_actions")
-          .select("action_type, outcome, char_count_original, char_count_result, selected_text_preview, ai_response_preview, instruction_text, created_at")
-          .eq("project_id", projectId)
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("project_stats")
-          .select("*")
-          .eq("project_id", projectId)
-          .single(),
-        supabase
-          .from("imported_documents")
-          .select("id, file_name, extracted_text, summary, file_size_bytes")
-          .eq("project_id", projectId),
-        supabase
-          .from("writing_versions")
-          .select("content, saved_at")
-          .eq("project_id", projectId)
-          .order("saved_at", { ascending: true }),
-      ]);
+    const fetchPromises = [
+        supabase.from("writing_content").select("content").eq("project_id", projectId).single(),
+        supabase.from("chat_threads").select("id, name").eq("project_id", projectId),
+        supabase.from("provenance_events").select("segment_map").eq("project_id", projectId).single(),
+        supabase.from("ai_editor_actions").select("action_type, outcome, char_count_original, char_count_result, selected_text_preview, ai_response_preview, instruction_text, created_at").eq("project_id", projectId).order("created_at", { ascending: false }),
+        supabase.from("project_stats").select("*").eq("project_id", projectId).single(),
+        supabase.from("imported_documents").select("id, file_name, extracted_text, summary, file_size_bytes").eq("project_id", projectId),
+        supabase.from("writing_versions").select("content, saved_at").eq("project_id", projectId).order("saved_at", { ascending: true }),
+    ] as const;
+
+    const creativeDataPromise = isCreativeProject
+      ? supabase.from("project_creative_data").select("tool_type, data").eq("project_id", projectId)
+      : Promise.resolve({ data: null });
+
+    const [[writingRes, threadsRes, provenanceRes, editorActionsRes, statsRes, importedDocsRes, versionsRes], creativeDataRes] =
+      await Promise.all([Promise.all(fetchPromises), creativeDataPromise]);
 
     const writingContent = writingRes.data?.content ?? "";
     if (!writingContent || writingContent.trim().length === 0) {
