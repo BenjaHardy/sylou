@@ -20,7 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { Plus, Link2, Settings, X, Trash2, Users } from "lucide-react";
 import { RelationshipTypesModal, type RelationshipType } from "./RelationshipTypesModal";
-import { getCategoryColor, getCategoryLabel, type WorldBuildingCategory } from "@/lib/creative-tools-utils";
+import { getCategoryColor, getCategoryLabel, stripHtml, type WorldBuildingCategory } from "@/lib/creative-tools-utils";
 import { CreativeAITextField } from "@/components/CreativeAITextField";
 
 export interface Character {
