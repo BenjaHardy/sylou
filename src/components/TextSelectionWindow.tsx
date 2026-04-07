@@ -39,6 +39,8 @@ interface Props {
   appendMessages?: (msgs: ChatMessage[]) => void;
   setMessages?: (updater: (prev: ChatMessage[]) => ChatMessage[]) => void;
   webSearchEnabled?: boolean;
+  /** Source module: 'editor' (default), 'worldbuilding', 'character_chart', 'timeline' */
+  sourceModule?: string;
 }
 
 const NORMAL_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
