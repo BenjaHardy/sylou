@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { MiniTipTapEditor } from "@/components/creative-tools/MiniTipTapEditor";
 import {
   DndContext,
   closestCenter,
