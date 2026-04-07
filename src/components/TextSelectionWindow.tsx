@@ -172,11 +172,12 @@ export function TextSelectionWindow({
   }, [onClose]);
 
   const getSourceBreakdown = useCallback(() => {
+    if (isCreativeModule) return undefined;
     if (provenanceTracker && selectionFrom != null && selectionTo != null && selectionFrom < selectionTo) {
       return provenanceTracker.getSourceBreakdown(selectionFrom, selectionTo);
     }
     return undefined;
-  }, [provenanceTracker, selectionFrom, selectionTo]);
+  }, [provenanceTracker, selectionFrom, selectionTo, isCreativeModule]);
 
   // ── Streaming editor-action (predefined actions) ──
   const callEditorActionStreaming = useCallback(
@@ -297,7 +298,7 @@ export function TextSelectionWindow({
             action_type: actionType,
             selected_text: selectedText,
             instruction: userInstruction,
-            source_module: "editor",
+            source_module: sourceModule,
             concise_mode: conciseMode ?? false,
             stream: true,
             ...(selected_text_source ? { selected_text_source } : {}),
