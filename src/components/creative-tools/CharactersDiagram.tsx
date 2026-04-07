@@ -280,11 +280,14 @@ export function CharactersDiagram({ data: rawData, save, loading, worldCategorie
     return () => window.removeEventListener("keydown", handler);
   }, [relMode]);
 
+  const latestDataRef = useRef(data);
+  latestDataRef.current = data;
+
   const updateData = useCallback(
     (updater: (d: CharactersData) => CharactersData) => {
-      save(updater(data));
+      save(updater(latestDataRef.current));
     },
-    [data, save]
+    [save]
   );
 
   const handleAddCharacter = () => {
