@@ -627,7 +627,19 @@ Deno.serve(async (req) => {
 
     const writingContent = writingRow?.content ?? "";
 
-    // --- 2. Fetch existing summary ---
+    // --- 2a. Fetch creative data for creative template projects ---
+    let creativeDataSection = "";
+    if (project.template === "creative") {
+      const { data: creativeRows } = await supabase
+        .from("project_creative_data")
+        .select("tool_type, data")
+        .eq("project_id", project_id);
+      if (creativeRows && creativeRows.length > 0) {
+        creativeDataSection = formatCreativeDataForSummary(creativeRows as any);
+      }
+    }
+
+    // --- 2b. Fetch existing summary ---
     const { data: summaryRow } = await supabase
       .from("writing_summary_log")
       .select("id, summary_text")
@@ -663,6 +675,7 @@ Deno.serve(async (req) => {
       instruction,
       source_module,
       projectLanguage,
+      creativeDataSection,
     );
 
     const summaryResult = await callMistral(mistralKey, summaryMessages, 1000);
