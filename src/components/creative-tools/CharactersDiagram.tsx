@@ -121,7 +121,7 @@ function DraggableCard({
     >
       <p className="text-sm font-medium text-foreground truncate">{character.name || "Unnamed"}</p>
       {character.description && (
-        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{character.description}</p>
+        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{stripHtml(character.description)}</p>
       )}
       {character.traits.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">

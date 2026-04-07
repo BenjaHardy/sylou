@@ -130,7 +130,7 @@ function SortableEventCard({
           </div>
         </div>
         {event.description && (
-          <p className="text-xs text-muted-foreground line-clamp-1">{event.description}</p>
+          <p className="text-xs text-muted-foreground line-clamp-1">{stripHtml(event.description)}</p>
         )}
       </div>
     </div>

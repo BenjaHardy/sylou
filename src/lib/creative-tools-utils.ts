@@ -14,6 +14,12 @@ export function getCategoryColor(
   return cat?.color ?? "#94a3b8";
 }
 
+export function stripHtml(html: string): string {
+  if (!html) return "";
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return doc.body.textContent || "";
+}
+
 export function getCategoryLabel(
   categories: WorldBuildingCategory[] | undefined,
   categoryId: string | null
