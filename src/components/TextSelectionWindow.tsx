@@ -61,6 +61,10 @@ const TUTOR_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
   { id: "sanity-check", label: "Sanity Check", row: 1 },
 ];
 
+const CREATIVE_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
+  { id: "ask", label: "Ask", row: 1 },
+];
+
 const PREDEFINED: ActionId[] = ["fix-grammar", "translate", "rewrite", "simplify", "expand"];
 
 /** Map UI action id to edge function action_type */
