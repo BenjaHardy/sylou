@@ -503,7 +503,7 @@ Deno.serve(async (req) => {
     // --- Verify project ownership & get language ---
     const { data: project, error: projectErr } = await supabase
       .from("projects")
-      .select("id, tutor_mode, language")
+      .select("id, tutor_mode, language, template")
       .eq("id", project_id)
       .single();
 
