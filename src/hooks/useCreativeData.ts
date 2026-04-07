@@ -26,11 +26,10 @@ export function useCreativeData<T = Record<string, unknown>>(
     if (!projectId) {
       setData({} as T);
       lastSavedJson.current = "{}";
-      setLoading(false);
+      setLoadedProjectId(null);
       return;
     }
     currentProjectId.current = projectId;
-    setLoading(true);
 
     const load = async () => {
       const { data: row, error } = await supabase
@@ -44,14 +43,14 @@ export function useCreativeData<T = Record<string, unknown>>(
 
       if (error) {
         console.error(`Failed to load creative data (${toolType}):`, error);
-        setLoading(false);
+        setLoadedProjectId(projectId);
         return;
       }
 
       const parsed = (row?.data ?? {}) as T;
       setData(parsed);
       lastSavedJson.current = JSON.stringify(parsed);
-      setLoading(false);
+      setLoadedProjectId(projectId);
     };
     load();
 
