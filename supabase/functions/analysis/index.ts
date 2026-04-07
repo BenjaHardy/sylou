@@ -918,7 +918,7 @@ ${writePillarNotice}`;
     const budgetRatio = profile.tokens_used_this_period / profile.monthly_token_budget;
     const tokenStatus = budgetRatio >= 1.0 ? "over" : budgetRatio >= 0.8 ? "near" : "ok";
 
-    const flowMeta = {
+    const flowMeta: Record<string, unknown> = {
       estimated_input_tokens: inputTokens,
       context_limit_tokens: contextLimitTokens,
       token_status: tokenStatus,
@@ -928,6 +928,7 @@ ${writePillarNotice}`;
       imported_documents_mode: importedDocsMode,
       imported_documents_count: importedDocs.length,
       imported_documents_total_chars: importedDocsTotalChars,
+      ...(isCreativeProject ? { template: "creative" } : {}),
     };
 
     // --- Build replay snapshot ---
