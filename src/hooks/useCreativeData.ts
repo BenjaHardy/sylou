@@ -6,7 +6,7 @@ export function useCreativeData<T = Record<string, unknown>>(
   toolType: string
 ) {
   const [data, setData] = useState<T>({} as T);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dataRef = useRef<T>(data);
