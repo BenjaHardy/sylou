@@ -89,29 +89,34 @@ function SortableEventCard({
       {/* Timeline dot and line */}
       <div className="flex flex-col items-center shrink-0">
         <div
-          className="w-3 h-3 rounded-full border-2 mt-3.5"
+          className="w-3 h-3 rounded-full border-2 mt-2"
           style={{ borderColor, backgroundColor: `${borderColor}33` }}
         />
-        <div className="w-0.5 flex-1 bg-border min-h-[20px]" />
+        <div className="w-0.5 flex-1 bg-border min-h-[8px]" />
       </div>
 
       {/* Card */}
       <div
-        className="flex-1 border rounded-lg p-3 mb-3 bg-card cursor-pointer hover:shadow-sm transition-shadow"
+        className="flex-1 border rounded-lg px-3 py-1.5 mb-1.5 bg-card cursor-pointer hover:shadow-sm transition-shadow"
         style={{ borderLeftColor: borderColor, borderLeftWidth: 3 }}
         onClick={onClick}
       >
-        {event.date && (
-          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-            {event.date}
-          </p>
-        )}
-        <p className="text-sm font-medium text-foreground">{event.title || "Untitled event"}</p>
-        {event.description && (
-          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{event.description}</p>
-        )}
-        {event.character_ids.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {event.date && (
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider shrink-0">
+                {event.date}
+              </span>
+            )}
+            {event.date && <span className="text-muted-foreground text-[10px]">·</span>}
+            <span className="text-sm font-medium text-foreground truncate">{event.title || "Untitled event"}</span>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {event.category_id && (
+              <span className="text-[10px] font-medium" style={{ color: borderColor }}>
+                {getCategoryLabel(worldCategories, event.category_id)}
+              </span>
+            )}
             {event.character_ids.map((cid) => {
               const char = characters.find((c) => c.id === cid);
               return (
@@ -121,11 +126,9 @@ function SortableEventCard({
               );
             })}
           </div>
-        )}
-        {event.category_id && (
-          <p className="text-[10px] mt-1.5" style={{ color: borderColor }}>
-            {getCategoryLabel(worldCategories, event.category_id)}
-          </p>
+        </div>
+        {event.description && (
+          <p className="text-xs text-muted-foreground line-clamp-1">{event.description}</p>
         )}
       </div>
     </div>
