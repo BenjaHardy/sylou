@@ -1,50 +1,29 @@
 
 
-## Fix: Character Traits Not Persisting & Shared Across Characters
+## Plan: Compact Timeline Event Cards
 
-### Root Causes
+### Change
 
-**Persistence:** `useCreativeData.save()` calls `setData(newData)` but `dataRef` is only updated in a `useEffect` (post-render). When `flush()` fires (e.g., on project switch or page unload), it reads `dataRef.current` which is stale — saving old data and cancelling the debounce timer that held the correct data.
+Consolidate each event card into a single-line layout with date, title, category, and character badges all on one row. Description becomes a subtle truncated line below only if present.
 
-**Shared traits:** `updateData` in `CharactersDiagram` captures `data` in its closure. While `data` is in the `useCallback` deps, if two saves happen in close succession (e.g., closing a dialog auto-saves, then another state update triggers), the second call can use stale `data` that doesn't reflect the first save's changes.
+### `SortableEventCard` — new layout (lines 78–132)
 
-### Fix 1: `src/hooks/useCreativeData.ts`
+Replace the current multi-line card body with:
 
-Add `dataRef.current = newData` synchronously inside the `save` function, right after `setData(newData)`. This ensures `flush()` always has the latest data.
-
-```typescript
-const save = useCallback(
-  (newData: T) => {
-    setData(newData);
-    dataRef.current = newData;          // ← ADD: sync ref immediately
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => saveNow(newData), 2000);
-  },
-  [saveNow]
-);
+```
+┌─[dot]─ [date] · [title]                    [category badge] [char badges] ─┐
+│        [description — single line, truncated]                               │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Fix 2: `src/components/creative-tools/CharactersDiagram.tsx`
-
-Replace the `useCallback`-based `updateData` with a ref-based pattern. Store `data` in a ref (updated synchronously every render) and read from the ref inside `updateData`. This makes `updateData` stable (only depends on `save`) while always reading the latest data.
-
-```typescript
-// Add ref for latest data (replaces useCallback closure capture)
-const latestDataRef = useRef(data);
-latestDataRef.current = data;
-
-const updateData = useCallback(
-  (updater: (d: CharactersData) => CharactersData) => {
-    save(updater(latestDataRef.current));
-  },
-  [save]
-);
-```
+- **Top row**: date (inline, muted, small), separator dot, title (semibold), then right-aligned category label + character badges — all in one `flex` row
+- **Bottom row** (optional): description as a single `line-clamp-1` line, only rendered if non-empty
+- Reduce padding from `p-3` to `px-3 py-1.5`, reduce `mb-3` to `mb-1.5`
+- Timeline dot size stays the same, reduce min-height of connector line
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/hooks/useCreativeData.ts` | Add `dataRef.current = newData` in `save` |
-| `src/components/creative-tools/CharactersDiagram.tsx` | Ref-based `updateData` pattern |
+| `src/components/creative-tools/TimelineView.tsx` | Refactor `SortableEventCard` render to compact single-row layout |
 
