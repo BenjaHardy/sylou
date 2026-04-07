@@ -23,6 +23,7 @@ import { WorldBuildingNotes } from "@/components/creative-tools/WorldBuildingNot
 import type { WorldBuildingData } from "@/components/creative-tools/WorldBuildingNotes";
 import { CharactersDiagram, type CharactersData } from "@/components/creative-tools/CharactersDiagram";
 import { TimelineView, type TimelineData } from "@/components/creative-tools/TimelineView";
+import { CreativeAIContextProvider } from "@/contexts/CreativeAIContext";
 import type { Project } from "@/hooks/useProjects";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
