@@ -6,7 +6,11 @@ export function useCreativeData<T = Record<string, unknown>>(
   toolType: string
 ) {
   const [data, setData] = useState<T>({} as T);
-  const [loading, setLoading] = useState(true);
+  const [loadedProjectId, setLoadedProjectId] = useState<string | null>(null);
+
+  // Derive loading synchronously — true immediately when projectId changes,
+  // preventing seeding effects from firing during the transitional render
+  const loading = projectId !== null && loadedProjectId !== projectId;
 
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dataRef = useRef<T>(data);
