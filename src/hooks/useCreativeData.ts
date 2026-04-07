@@ -22,6 +22,7 @@ export function useCreativeData<T = Record<string, unknown>>(
     if (!projectId) {
       setData({} as T);
       lastSavedJson.current = "{}";
+      setLoading(false);
       return;
     }
     currentProjectId.current = projectId;
