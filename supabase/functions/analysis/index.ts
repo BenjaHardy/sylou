@@ -764,8 +764,20 @@ Character-count breakdown by provenance type:
       importedDocsSection = "None";
     }
 
+    // --- Build creative tools section (if applicable) ---
+    let creativeToolsSection = "";
+    if (isCreativeProject && creativeDataRes.data && creativeDataRes.data.length > 0) {
+      creativeToolsSection = `\n\n# === CREATIVE TOOLS CONTENT ===\n\nThe following content comes from the creative tools accessible by the user to help develop key story elements: world-building notes, character diagram, timeline. This content is critical for assessing the L – Lead pillar (directly) and O – Organize pillar (indirectly).\n\n${formatCreativeDataForAnalysis(creativeDataRes.data as any)}`;
+    }
+
     // --- Build full prompt ---
-    const userPrompt = `${basePromptParts.join("\n\n")}
+    const systemPromptTemplate = isCreativeProject ? CREATIVE_FLOW_PROMPT_TEMPLATE : FLOW_PROMPT_TEMPLATE;
+
+    const chatHistoryNote = isCreativeProject
+      ? `# CHAT HISTORY\n\nThe following chat messages are from all project threads, merged in chronological order. Each message is prefixed with a timestamp and thread label.\n\nSome messages originate from the text selection window, a feature that allows the user to select text in their editor or in the creative tools and either ask the AI a question about it (Ask – available for both the editor and the creative tools) or request the AI to propose a rewritten version (Propose – available solely for the editor). These messages are flagged with their source type below.\n\nWriting summaries are marked "[NOT ASSESSED]" — they provide context for the subsequent discussion but should not be scored as either party's contribution, because they are AI-generated condensations of the writing and creative tools data at that point in time that may include contributions from any party. Consider the whole chat log and other contents to properly identify the respective contributions of each party, noting that new ideas or contributions appearing for the first time in a writing summary and not found in earlier chat messages would normally be user contributions unless copied from external sources.\n\n${chatHistoryStr}`
+      : basePromptParts[2]; // original chat history section
+
+    const userPrompt = `${basePromptParts[0]}\n\n${basePromptParts[1]}${creativeToolsSection}\n\n${chatHistoryNote}
 
 # === IMPORTED DOCUMENTS ===
 
@@ -781,7 +793,7 @@ ${editorStatsStr}
 ${writePillarNotice}`;
 
     // --- Budget check (after prompt is fully built) ---
-    const fullPromptText = FLOW_PROMPT_TEMPLATE + userPrompt;
+    const fullPromptText = systemPromptTemplate + userPrompt;
     const charEst = Math.ceil(fullPromptText.length / 4) * 1.1;
     const wordEst = fullPromptText.split(/\s+/).length * 1.3;
     const estimated = Math.ceil(Math.max(charEst, wordEst));
