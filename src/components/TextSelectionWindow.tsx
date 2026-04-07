@@ -132,7 +132,8 @@ export function TextSelectionWindow({
   const [pendingWebSearchesPerformed, setPendingWebSearchesPerformed] = useState<string[] | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const actions = tutorMode ? TUTOR_ACTIONS : NORMAL_ACTIONS;
+  const isCreativeModule = sourceModule !== "editor";
+  const actions = isCreativeModule ? CREATIVE_ACTIONS : tutorMode ? TUTOR_ACTIONS : NORMAL_ACTIONS;
 
   // Position the panel
   const editorRect = editorElement.getBoundingClientRect();
