@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Link2, Settings, X, Trash2, Users } from "lucide-react";
 import { RelationshipTypesModal, type RelationshipType } from "./RelationshipTypesModal";
 import { getCategoryColor, getCategoryLabel, type WorldBuildingCategory } from "@/lib/creative-tools-utils";
+import { CreativeAITextField } from "@/components/CreativeAITextField";
 
 export interface Character {
   id: string;
@@ -610,12 +611,14 @@ export function CharactersDiagram({ data: rawData, save, loading, worldCategorie
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Description</label>
-                <Textarea
-                  value={editChar.description}
-                  onChange={(e) => setEditChar({ ...editChar, description: e.target.value })}
-                  className="mt-1"
-                  rows={3}
-                />
+                <CreativeAITextField sourceModule="character_chart">
+                  <Textarea
+                    value={editChar.description}
+                    onChange={(e) => setEditChar({ ...editChar, description: e.target.value })}
+                    className="mt-1"
+                    rows={3}
+                  />
+                </CreativeAITextField>
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Category</label>
