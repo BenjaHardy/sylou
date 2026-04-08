@@ -1,42 +1,29 @@
 
 
-## Plan: Fix HTML Rendering in Cards + FLOW Prompt Stripping
+## Plan: FLOW Pillar Card Color Gradient — Blank to Silver Lake Blue
 
-### Why
+### Concept
 
-MiniTipTapEditor now saves HTML for character descriptions, relationship notes, and event descriptions. Two downstream consumers still treat these as plain text.
+Replace the current red→orange→yellow→green spectrum with a single-hue progression from neutral/blank (score 0) to "Silver Lake Blue" (score 5). Silver Lake Blue is approximately `#5D89A8` / HSL(203, 30%, 51%).
 
-### Changes
+### Change: `src/components/flow-report/shared-utils.ts`
 
-**1. Character cards & event cards — strip HTML for display**
+Replace `getScoreColor` with a function that returns **inline style** (via a new approach) or uses Tailwind arbitrary values to produce a progressive blue tint:
 
-For compact card displays, strip to plain text (not `dangerouslySetInnerHTML`) since these are truncated single-line previews.
-
-Add a small `stripHtml` utility (reuse or add to `creative-tools-utils.ts`):
-```ts
-export function stripHtml(html: string): string {
-  if (!html) return "";
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  return doc.body.textContent || "";
-}
-```
-
-- **`CharactersDiagram.tsx` line 124**: Change `{character.description}` to `{stripHtml(character.description)}`
-- **`TimelineView.tsx` line 133**: Change `{event.description}` to `{stripHtml(event.description)}`
-
-**2. FLOW analysis prompt — apply `stripHtmlDeno` to character/timeline fields**
-
-In `supabase/functions/analysis/index.ts`:
-- Line 475: `c.description` → `stripHtmlDeno(c.description)`
-- Line 486: `r.notes` → `stripHtmlDeno(r.notes)`
-- Line 503: `e.description` → `stripHtmlDeno(e.description)`
+| Score | Appearance | Tailwind classes |
+|-------|-----------|-----------------|
+| null | Muted (unchanged) | `bg-muted text-muted-foreground` |
+| 0–1 | Very faint blue-gray | `bg-[#5D89A8]/5 text-[#5D89A8]/40 border-[#5D89A8]/10` |
+| 1–2 | Light blue tint | `bg-[#5D89A8]/10 text-[#5D89A8]/60 border-[#5D89A8]/20` |
+| 2–3 | Medium blue | `bg-[#5D89A8]/15 text-[#5D89A8]/70 border-[#5D89A8]/30` |
+| 3–4 | Stronger blue | `bg-[#5D89A8]/20 text-[#5D89A8]/80 border-[#5D89A8]/35` |
+| 4–5 | Full Silver Lake Blue | `bg-[#5D89A8]/25 text-[#5D89A8] border-[#5D89A8]/40` |
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/lib/creative-tools-utils.ts` | Add `stripHtml` helper |
-| `src/components/creative-tools/CharactersDiagram.tsx` | Strip HTML on card description display |
-| `src/components/creative-tools/TimelineView.tsx` | Strip HTML on event card description display |
-| `supabase/functions/analysis/index.ts` | Apply `stripHtmlDeno` to character descriptions, relationship notes, event descriptions |
+| `src/components/flow-report/shared-utils.ts` | Replace `getScoreColor` thresholds with blank→silver-lake-blue gradient |
+
+No changes needed in `ScoreCard.tsx` or `SharedReport.tsx` — they already consume `getScoreColor` and apply the returned classes.
 
