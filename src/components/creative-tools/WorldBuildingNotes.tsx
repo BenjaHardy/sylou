@@ -10,6 +10,7 @@ import { Plus, Trash2, Palette, Pencil, Check, X, GripVertical } from "lucide-re
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Loader2 } from "lucide-react";
 import { CreativeAITextField } from "@/components/CreativeAITextField";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 
 // --- Types ---
 
