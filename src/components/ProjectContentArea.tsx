@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import ethosLogo from "@/assets/ethos-logo.png";
 import type { ChatMessage } from "@/hooks/useChatMessages";
 import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Loader2, Eye, RefreshCw, StickyNote, FileText, Globe, Users, Clock, PenTool } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
