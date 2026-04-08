@@ -19,6 +19,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Activity, Loader2, ShieldAlert, ExternalLink, Award, Play } from "lucide-react";
 import type { FlowReport, FlowFeedback } from "@/hooks/useFlowAnalysis";
+import FlowWorkProfile from "@/components/FlowWorkProfile";
+import { getFlowProfile } from "@/lib/flow-work-profiles";
 
 export default function SharedReport() {
   const { token } = useParams<{ token: string }>();
@@ -32,6 +34,7 @@ export default function SharedReport() {
   const [replaySnapshot, setReplaySnapshot] = useState<ReplayEvent[] | null>(null);
   const [loadingReplay, setLoadingReplay] = useState(false);
   const [replayAvailable, setReplayAvailable] = useState(false);
+  const [activeTab, setActiveTab] = useState<"report" | "profile">("report");
 
   useEffect(() => {
     async function fetchReport() {
@@ -124,6 +127,15 @@ export default function SharedReport() {
     );
   }
 
+
+  const flowScores = {
+    find: (report.ai_find as any)?.score ?? null,
+    lead: (report.ai_lead as any)?.score ?? null,
+    organize: (report.ai_organize as any)?.score ?? null,
+    write: (report.ai_write as any)?.score ?? null,
+  };
+  const flowProfile = getFlowProfile(flowScores);
+
   const certificateId = (report as any).certificate_id;
   const showFeedback = !!(report as any).share_include_feedback;
   const preFeedbackScores: FlowFeedback | null = showFeedback ? (report.user_feedback_pre ?? null) : null;
@@ -173,6 +185,39 @@ export default function SharedReport() {
 
       <ScrollArea className="h-[calc(100vh-3.5rem)]">
         <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
+          {/* Tab Switcher */}
+          <div className="flex items-center justify-center gap-1">
+            <Button
+              variant={activeTab === "report" ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs px-3"
+              onClick={() => setActiveTab("report")}
+            >
+              FLOW Report
+            </Button>
+            <Button
+              variant={activeTab === "profile" ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs px-3"
+              onClick={() => setActiveTab("profile")}
+            >
+              FLOW Profile
+            </Button>
+          </div>
+
+          {/* FLOW Profile Tab */}
+          {activeTab === "profile" && flowProfile && (
+            <div key="profile" className="animate-card-flip space-y-4">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground text-center">
+                Collaboration Profile
+              </h3>
+              <FlowWorkProfile profile={flowProfile} scores={flowScores} />
+            </div>
+          )}
+
+          {/* FLOW Report Tab */}
+          {activeTab === "report" && (
+            <>
           <FlowInfoSection />
 
           <FlowRadarChart
@@ -314,6 +359,8 @@ export default function SharedReport() {
               FLOW is a proprietary analytical framework by Ethos.
             </p>
           </div>
+            </>
+          )}
         </div>
       </ScrollArea>
     </div>

@@ -61,6 +61,8 @@ import { FlowReportFooter } from "@/components/flow-report/FlowReportFooter";
 import { TokenUsageSection } from "@/components/flow-report/TokenUsageSection";
 import { ProjectActivitySection } from "@/components/flow-report/ProjectActivitySection";
 import { extractUserAssessment, extractFeedbackScores } from "@/components/flow-report/shared-utils";
+import FlowWorkProfile from "@/components/FlowWorkProfile";
+import { getFlowProfile } from "@/lib/flow-work-profiles";
 
 import type {
   FlowReport,
@@ -89,6 +91,7 @@ export function FlowReportView({
 }: Props) {
   const [preFeedbackViewed, setPreFeedbackViewed] = useState(false);
   const [feedbackToggle, setFeedbackToggle] = useState<"pre" | "post">("post");
+  const [activeTab, setActiveTab] = useState<"report" | "profile">("report");
   const [showHighlighted, setShowHighlighted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -251,6 +254,14 @@ export function FlowReportView({
     );
   }
 
+  const flowScores = {
+    find: (report.ai_find as any)?.score ?? null,
+    lead: (report.ai_lead as any)?.score ?? null,
+    organize: (report.ai_organize as any)?.score ?? null,
+    write: (report.ai_write as any)?.score ?? null,
+  };
+  const flowProfile = getFlowProfile(flowScores);
+
   const existingAssessment = extractUserAssessment(report.user_feedback_post);
   const preFeedbackScores = report.user_feedback_pre ?? null;
   const postFeedbackScores = extractFeedbackScores(report.user_feedback_post);
@@ -322,6 +333,39 @@ export function FlowReportView({
       {/* Content */}
       <ScrollArea ref={scrollAreaRef} className="flex-1">
         <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
+          {/* Tab Switcher */}
+          <div className="flex items-center justify-center gap-1">
+            <Button
+              variant={activeTab === "report" ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs px-3"
+              onClick={() => setActiveTab("report")}
+            >
+              FLOW Report
+            </Button>
+            <Button
+              variant={activeTab === "profile" ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs px-3"
+              onClick={() => setActiveTab("profile")}
+            >
+              FLOW Profile
+            </Button>
+          </div>
+
+          {/* FLOW Profile Tab */}
+          {activeTab === "profile" && flowProfile && (
+            <div key="profile" className="animate-card-flip space-y-4">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground text-center">
+                Your Collaboration Profile
+              </h3>
+              <FlowWorkProfile profile={flowProfile} scores={flowScores} />
+            </div>
+          )}
+
+          {/* FLOW Report Tab */}
+          {activeTab === "report" && (
+            <>
           {/* Pre-feedback */}
           {showPreFeedback && (
             <div className="space-y-3">
@@ -600,6 +644,8 @@ export function FlowReportView({
 
               {/* Report Footer */}
               <FlowReportFooter />
+            </>
+          )}
             </>
           )}
         </div>
