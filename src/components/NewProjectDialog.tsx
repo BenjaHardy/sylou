@@ -31,10 +31,10 @@ const LANGUAGES = [
 ];
 
 const TEMPLATES = [
-  { value: "general", label: "General", desc: "A blank canvas for any type of writing." },
-  { value: "academic", label: "Academic", desc: "Structured for essays, papers, and research." },
-  { value: "creative", label: "Creative", desc: "Optimised for fiction, poetry, and storytelling." },
-  { value: "professional", label: "Professional", desc: "Tailored for reports, emails, and business docs." },
+  { value: "general", label: "General", desc: "A blank canvas for any type of writing.", proOnly: false },
+  { value: "academic", label: "Academic", desc: "Structured for essays, papers, and research.", proOnly: true },
+  { value: "creative", label: "Creative", desc: "Optimised for fiction, poetry, and storytelling.", proOnly: true },
+  { value: "professional", label: "Professional", desc: "Tailored for reports, emails, and business docs.", proOnly: true },
 ];
 
 interface Props {
