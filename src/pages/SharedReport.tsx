@@ -34,6 +34,7 @@ export default function SharedReport() {
   const [replaySnapshot, setReplaySnapshot] = useState<ReplayEvent[] | null>(null);
   const [loadingReplay, setLoadingReplay] = useState(false);
   const [replayAvailable, setReplayAvailable] = useState(false);
+  const [activeTab, setActiveTab] = useState<"report" | "profile">("report");
 
   useEffect(() => {
     async function fetchReport() {
