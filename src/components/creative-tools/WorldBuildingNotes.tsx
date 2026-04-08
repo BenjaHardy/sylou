@@ -10,6 +10,7 @@ import { Plus, Trash2, Palette, Pencil, Check, X, GripVertical } from "lucide-re
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Loader2 } from "lucide-react";
 import { CreativeAITextField } from "@/components/CreativeAITextField";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 
 // --- Types ---
 
@@ -179,165 +180,181 @@ export function WorldBuildingNotes({ data, save, loading }: Props) {
   }
 
   return (
-    <div className="flex-1 flex h-full min-h-0">
-      {/* Sidebar — Categories */}
-      <div className="w-[220px] border-r border-border flex flex-col bg-[hsl(var(--ethos-surface))]">
-        <div className="px-3 py-2 border-b border-border flex items-center justify-between">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Categories</span>
-          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={addCategory}>
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-        <ScrollArea className="flex-1">
-          <div className="py-1">
-            {categories.map((cat) => (
-              <div
-                key={cat.id}
-                className={`group flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-accent/50 transition-colors ${
-                  selectedCategoryId === cat.id ? "bg-accent" : ""
-                }`}
-                onClick={() => {
-                  setSelectedCategoryId(cat.id);
-                  setSelectedNoteId(null);
-                }}
-              >
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      className="h-3 w-3 rounded-full shrink-0 border border-border hover:ring-2 hover:ring-ring transition-all"
-                      style={{ backgroundColor: cat.color }}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-2" align="start">
-                    <div className="grid grid-cols-5 gap-1">
-                      {PRESET_COLORS.map((c) => (
-                        <button
-                          key={c}
-                          className={`h-6 w-6 rounded-full border-2 transition-all ${
-                            cat.color === c ? "border-foreground scale-110" : "border-transparent"
-                          }`}
-                          style={{ backgroundColor: c }}
-                          onClick={() => recolorCategory(cat.id, c)}
-                        />
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-
-                {editingCategoryId === cat.id ? (
-                  <form
-                    className="flex items-center gap-1 flex-1 min-w-0"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      renameCategory(cat.id, editingCategoryName);
-                    }}
-                  >
-                    <Input
-                      value={editingCategoryName}
-                      onChange={(e) => setEditingCategoryName(e.target.value)}
-                      className="h-5 text-xs px-1"
-                      autoFocus
-                      onBlur={() => renameCategory(cat.id, editingCategoryName)}
-                    />
-                  </form>
-                ) : (
-                  <span className="text-xs text-foreground truncate flex-1">{cat.name}</span>
-                )}
-
-                <span className="text-[10px] text-muted-foreground">{cat.notes.length}</span>
-
-                <div className="hidden group-hover:flex items-center gap-0.5">
-                  <button
-                    className="h-4 w-4 text-muted-foreground hover:text-foreground"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingCategoryId(cat.id);
-                      setEditingCategoryName(cat.name);
-                    }}
-                  >
-                    <Pencil className="h-3 w-3" />
-                  </button>
-                  <button
-                    className="h-4 w-4 text-muted-foreground hover:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteTarget({ type: "category", id: cat.id });
-                    }}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
-      </div>
-
-      {/* Main — Notes */}
-      <div className="flex-1 flex flex-col min-h-0">
-        {selectedCategory ? (
-          <>
-            <div className="px-4 py-2 border-b border-border flex items-center justify-between">
-              <span className="text-sm font-medium text-foreground">{selectedCategory.name}</span>
-              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={addNote}>
+    <div className="flex-1 flex flex-col h-full min-h-0">
+      <ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0">
+        {/* Sidebar — Categories */}
+        <ResizablePanel defaultSize={15} minSize={10}>
+          <div className="flex flex-col h-full bg-[hsl(var(--ethos-surface))]">
+            <div className="px-3 py-2 border-b border-border flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Categories</span>
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={addCategory}>
                 <Plus className="h-3.5 w-3.5" />
-                Add Note
               </Button>
             </div>
-            <div className="flex-1 flex min-h-0">
-              {/* Note list */}
-              <ScrollArea className="w-[200px] border-r border-border">
-                <div className="py-1">
-                  {selectedCategory.notes.map((note) => (
-                    <div
-                      key={note.id}
-                      className={`px-3 py-2 cursor-pointer hover:bg-accent/50 transition-colors group ${
-                        selectedNoteId === note.id ? "bg-accent" : ""
-                      }`}
-                      onClick={() => setSelectedNoteId(note.id)}
-                    >
-                      <div className="flex items-start justify-between gap-1">
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-foreground truncate">{note.title}</p>
-                          <p className="text-[10px] text-muted-foreground">{note.subcategory}</p>
-                        </div>
+            <ScrollArea className="flex-1">
+              <div className="py-1">
+                {categories.map((cat) => (
+                  <div
+                    key={cat.id}
+                    className={`group flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-accent/50 transition-colors ${
+                      selectedCategoryId === cat.id ? "bg-accent" : ""
+                    }`}
+                    onClick={() => {
+                      setSelectedCategoryId(cat.id);
+                      setSelectedNoteId(null);
+                    }}
+                  >
+                    <Popover>
+                      <PopoverTrigger asChild>
                         <button
-                          className="hidden group-hover:block h-4 w-4 text-muted-foreground hover:text-destructive shrink-0 mt-0.5"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteTarget({ type: "note", id: note.id });
-                          }}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  {selectedCategory.notes.length === 0 && (
-                    <p className="text-xs text-muted-foreground text-center py-4">No notes yet</p>
-                  )}
-                </div>
-              </ScrollArea>
+                          className="h-3 w-3 rounded-full shrink-0 border border-border hover:ring-2 hover:ring-ring transition-all"
+                          style={{ backgroundColor: cat.color }}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-2" align="start">
+                        <div className="grid grid-cols-5 gap-1">
+                          {PRESET_COLORS.map((c) => (
+                            <button
+                              key={c}
+                              className={`h-6 w-6 rounded-full border-2 transition-all ${
+                                cat.color === c ? "border-foreground scale-110" : "border-transparent"
+                              }`}
+                              style={{ backgroundColor: c }}
+                              onClick={() => recolorCategory(cat.id, c)}
+                            />
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
 
-              {/* Note editor */}
-              <div className="flex-1 flex flex-col min-h-0">
-                {selectedNote ? (
-                  <NoteEditor note={selectedNote} onUpdate={updateNote} />
-                ) : (
-                  <div className="flex-1 flex items-center justify-center">
-                    <p className="text-xs text-muted-foreground">Select or create a note</p>
+                    {editingCategoryId === cat.id ? (
+                      <form
+                        className="flex items-center gap-1 flex-1 min-w-0"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          renameCategory(cat.id, editingCategoryName);
+                        }}
+                      >
+                        <Input
+                          value={editingCategoryName}
+                          onChange={(e) => setEditingCategoryName(e.target.value)}
+                          className="h-5 text-xs px-1"
+                          autoFocus
+                          onBlur={() => renameCategory(cat.id, editingCategoryName)}
+                        />
+                      </form>
+                    ) : (
+                      <span className="text-xs text-foreground truncate flex-1">{cat.name}</span>
+                    )}
+
+                    <span className="text-[10px] text-muted-foreground">{cat.notes.length}</span>
+
+                    <div className="hidden group-hover:flex items-center gap-0.5">
+                      <button
+                        className="h-4 w-4 text-muted-foreground hover:text-foreground"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingCategoryId(cat.id);
+                          setEditingCategoryName(cat.name);
+                        }}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                      <button
+                        className="h-4 w-4 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget({ type: "category", id: cat.id });
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-sm text-muted-foreground">Select or create a category</p>
+            </ScrollArea>
           </div>
-        )}
-      </div>
+        </ResizablePanel>
+
+        <ResizableHandle />
+
+        {/* Main — Notes */}
+        <ResizablePanel defaultSize={85} minSize={40}>
+          <div className="flex-1 flex flex-col h-full min-h-0">
+            {selectedCategory ? (
+              <>
+                <div className="px-4 py-2 border-b border-border flex items-center justify-between">
+                  <span className="text-sm font-medium text-foreground">{selectedCategory.name}</span>
+                  <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={addNote}>
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Note
+                  </Button>
+                </div>
+                <div className="flex-1 flex min-h-0">
+                  <ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0">
+                    {/* Note list */}
+                    <ResizablePanel defaultSize={25} minSize={15}>
+                      <ScrollArea className="h-full border-r border-border">
+                        <div className="py-1">
+                          {selectedCategory.notes.map((note) => (
+                            <div
+                              key={note.id}
+                              className={`px-3 py-2 cursor-pointer hover:bg-accent/50 transition-colors group ${
+                                selectedNoteId === note.id ? "bg-accent" : ""
+                              }`}
+                              onClick={() => setSelectedNoteId(note.id)}
+                            >
+                              <div className="flex items-start justify-between gap-1">
+                                <div className="min-w-0">
+                                  <p className="text-xs font-medium text-foreground truncate">{note.title}</p>
+                                  <p className="text-[10px] text-muted-foreground">{note.subcategory}</p>
+                                </div>
+                                <button
+                                  className="hidden group-hover:block h-4 w-4 text-muted-foreground hover:text-destructive shrink-0 mt-0.5"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteTarget({ type: "note", id: note.id });
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {selectedCategory.notes.length === 0 && (
+                            <p className="text-xs text-muted-foreground text-center py-4">No notes yet</p>
+                          )}
+                        </div>
+                      </ScrollArea>
+                    </ResizablePanel>
+
+                    <ResizableHandle />
+
+                    {/* Note editor */}
+                    <ResizablePanel defaultSize={75} minSize={30}>
+                      <div className="flex-1 flex flex-col h-full min-h-0">
+                        {selectedNote ? (
+                          <NoteEditor note={selectedNote} onUpdate={updateNote} />
+                        ) : (
+                          <div className="flex-1 flex items-center justify-center">
+                            <p className="text-xs text-muted-foreground">Select or create a note</p>
+                          </div>
+                        )}
+                      </div>
+                    </ResizablePanel>
+                  </ResizablePanelGroup>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-sm text-muted-foreground">Select or create a category</p>
+              </div>
+            )}
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
 
       {/* Delete confirmation */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>

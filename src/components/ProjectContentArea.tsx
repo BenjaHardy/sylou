@@ -441,10 +441,10 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
           </div>
         )}
 
-        {/* Writing tab content — hidden via CSS when creative tab is not writing */}
-        <div style={{ display: isCreativeProject && activeCreativeTab !== "writing" ? "none" : undefined }} className="flex-1 flex flex-col min-h-0">
-          <ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0">
-            <ResizablePanel ref={editorPanelRef} defaultSize={DEFAULT_EDITOR_SIZE} minSize={0}>
+        <ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0">
+          <ResizablePanel ref={editorPanelRef} defaultSize={DEFAULT_EDITOR_SIZE} minSize={0}>
+            {/* Writing tab content — hidden via CSS when creative tab is not writing */}
+            <div style={{ display: isCreativeProject && activeCreativeTab !== "writing" ? "none" : undefined }} className="flex flex-col h-full min-h-0">
               <div className="flex flex-col h-full min-h-0">
                 <WritingEditor
                   projectId={project.id}
@@ -490,58 +490,58 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
                   <ProjectActivityBar projectId={project.id} />
                 </div>
               </div>
-            </ResizablePanel>
-            <ResizableHandle withHandle className="print:hidden" />
-            <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20} className="print:hidden">
-              <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} conciseMode={conciseMode} onConciseModeChange={setConciseMode} onSetMessages={(setter) => { chatSetMessagesRef.current = setter; }} onActiveThreadChange={setActiveThreadId} onUploadDocument={uploadDocument} documentUploading={docsUploading} webSearchEnabled={webSearchEnabled} onWebSearchEnabledChange={setWebSearchEnabled} />
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </div>
-
-        {/* Creative tool tabs wrapped in AI context provider */}
-        {isCreativeProject && (
-          <CreativeAIContextProvider
-            projectId={project.id}
-            threadId={activeThreadId}
-            tutorMode={project.tutor_mode}
-            conciseMode={conciseMode}
-            webSearchEnabled={webSearchEnabled}
-            chatSetMessages={chatSetMessagesRef.current ?? undefined}
-            onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
-            onAskComplete={(msgs) => setPendingChatMessages((prev) => [...prev, ...msgs])}
-          >
-            {/* World-Building tab — stays mounted, hidden via CSS */}
-            <div style={{ display: activeCreativeTab === "worldbuilding" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
-              <WorldBuildingNotes
-                data={worldbuilding.data}
-                save={worldbuilding.save}
-                loading={worldbuilding.loading}
-              />
             </div>
 
-            {/* Characters tab */}
-            <div style={{ display: activeCreativeTab === "characters" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
-              <CharactersDiagram
-                data={characters.data}
-                save={characters.save}
-                loading={characters.loading}
-                worldCategories={worldbuilding.data.categories ?? []}
-                onCharacterDeleted={handleCharacterDeleted}
-              />
-            </div>
+            {/* Creative tool tabs wrapped in AI context provider */}
+            {isCreativeProject && (
+              <CreativeAIContextProvider
+                projectId={project.id}
+                threadId={activeThreadId}
+                tutorMode={project.tutor_mode}
+                conciseMode={conciseMode}
+                webSearchEnabled={webSearchEnabled}
+                chatSetMessages={chatSetMessagesRef.current ?? undefined}
+                onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
+                onAskComplete={(msgs) => setPendingChatMessages((prev) => [...prev, ...msgs])}
+              >
+                {/* World-Building tab — stays mounted, hidden via CSS */}
+                <div style={{ display: activeCreativeTab === "worldbuilding" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
+                  <WorldBuildingNotes
+                    data={worldbuilding.data}
+                    save={worldbuilding.save}
+                    loading={worldbuilding.loading}
+                  />
+                </div>
 
-            {/* Timeline tab */}
-            <div style={{ display: activeCreativeTab === "timeline" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
-              <TimelineView
-                data={timeline.data}
-                save={timeline.save}
-                loading={timeline.loading}
-                worldCategories={worldbuilding.data.categories ?? []}
-                characters={characters.data.characters ?? []}
-              />
-            </div>
-          </CreativeAIContextProvider>
-        )}
+                {/* Characters tab */}
+                <div style={{ display: activeCreativeTab === "characters" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
+                  <CharactersDiagram
+                    data={characters.data}
+                    save={characters.save}
+                    loading={characters.loading}
+                    worldCategories={worldbuilding.data.categories ?? []}
+                    onCharacterDeleted={handleCharacterDeleted}
+                  />
+                </div>
+
+                {/* Timeline tab */}
+                <div style={{ display: activeCreativeTab === "timeline" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
+                  <TimelineView
+                    data={timeline.data}
+                    save={timeline.save}
+                    loading={timeline.loading}
+                    worldCategories={worldbuilding.data.categories ?? []}
+                    characters={characters.data.characters ?? []}
+                  />
+                </div>
+              </CreativeAIContextProvider>
+            )}
+          </ResizablePanel>
+          <ResizableHandle withHandle className="print:hidden" />
+          <ResizablePanel ref={chatPanelRef} defaultSize={DEFAULT_CHAT_SIZE} minSize={20} className="print:hidden">
+            <ChatPanel projectId={project.id} chatExpanded={chatExpanded} onToggleChat={handleToggleChat} refreshTrigger={chatRefreshTrigger} injectMessages={pendingChatMessages} onMessagesInjected={() => setPendingChatMessages([])} provenanceTracker={provenanceTracker ?? undefined} conciseMode={conciseMode} onConciseModeChange={setConciseMode} onSetMessages={(setter) => { chatSetMessagesRef.current = setter; }} onActiveThreadChange={setActiveThreadId} onUploadDocument={uploadDocument} documentUploading={docsUploading} webSearchEnabled={webSearchEnabled} onWebSearchEnabledChange={setWebSearchEnabled} />
+          </ResizablePanel>
+        </ResizablePanelGroup>
 
         <FlowConfirmDialog open={showConfirm} onConfirm={handleConfirmAnalysis} onCancel={() => setShowConfirm(false)} />
         <FlowReanalyzeDialog open={showReanalyze} onConfirm={handleConfirmReanalyze} onCancel={() => setShowReanalyze(false)} />
