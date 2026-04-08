@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import ethosLogo from "@/assets/ethos-logo.png";
 import type { ChatMessage } from "@/hooks/useChatMessages";
 import { FolderOpen, Lightbulb, ChevronLeft, ChevronRight, Loader2, Eye, RefreshCw, StickyNote, FileText, Globe, Users, Clock, PenTool } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
@@ -36,23 +37,51 @@ interface Props {
 
 function WelcomeScreen() {
   return (
-    <div className="flex-1 flex items-center justify-center bg-background">
-      <div className="text-center space-y-6 max-w-md px-4">
-        <FolderOpen className="h-12 w-12 text-muted-foreground mx-auto" />
-        <div className="space-y-2">
-          <h1 className="text-xl font-semibold text-foreground">Welcome to Ethos</h1>
-          <p className="text-sm text-muted-foreground">Select a project from the sidebar or create a new one to get started.</p>
-        </div>
-        <div className="text-left space-y-3 bg-muted/50 rounded-md p-4">
+    <div className="flex-1 flex items-center justify-center bg-background overflow-y-auto">
+      <div className="text-center space-y-5 max-w-lg px-4 py-8">
+        <img src={ethosLogo} alt="ETHOS" className="h-14 mx-auto" />
+        <p className="text-sm text-muted-foreground">Select a project from the sidebar or create a new one to get started.</p>
+
+        {/* Quick-start tips */}
+        <div className="text-left space-y-2 bg-muted/50 rounded-md p-4">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
             <Lightbulb className="h-3.5 w-3.5" />
             Quick-start tips
           </p>
-          <ul className="text-sm text-muted-foreground space-y-2">
+          <ul className="text-sm text-muted-foreground space-y-1">
             <li>• Click <span className="font-medium text-foreground">+ New Project</span> to create your first project</li>
             <li>• Enable <span className="font-medium text-foreground">Tutor Mode</span> for guided learning</li>
             <li>• Choose the template that fits your type of work</li>
+            <li>• <span className="font-medium text-foreground">Creative</span> template includes dedicated creative writing tools</li>
             <li>• Use the AI chat panel to brainstorm and refine ideas</li>
+            <li>• Use post-its for notes or anything you like</li>
+          </ul>
+        </div>
+
+        {/* Chat tips */}
+        <div className="text-left space-y-2 bg-muted/50 rounded-md p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <Lightbulb className="h-3.5 w-3.5" />
+            Chat tips
+          </p>
+          <ul className="text-sm text-muted-foreground space-y-1">
+            <li>• You can have multiple threads per project</li>
+            <li>• <span className="font-medium text-foreground">Concise mode</span> for straight-to-the-point AI feedback</li>
+            <li>• Use bookmarks to easily find chat messages</li>
+            <li>• Select text in the editor and use <span className="font-medium text-foreground">Ask</span> or <span className="font-medium text-foreground">Propose</span> for AI feedback that is aware of your project and context</li>
+            <li>• At the bottom of the chat area, you can upload documents for discussion or enable/disable AI web search</li>
+          </ul>
+        </div>
+
+        {/* FLOW tips */}
+        <div className="text-left space-y-2 bg-muted/50 rounded-md p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <Lightbulb className="h-3.5 w-3.5" />
+            FLOW tips
+          </p>
+          <ul className="text-sm text-muted-foreground space-y-1">
+            <li>• Analyse with <span className="font-medium text-foreground">FLOW</span> when your project is complete for AI-use transparency</li>
+            <li>• Generate <span className="font-medium text-foreground">Share Link</span> for a shareable FLOW report</li>
           </ul>
         </div>
       </div>
