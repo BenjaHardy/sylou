@@ -139,6 +139,16 @@
   font-size: 0.9em;
 }
 .tiptap pre code { background: none; padding: 0; }
+
+/* Card flip animation for FLOW Profile tab */
+@keyframes card-flip-in {
+  from { transform: rotateY(90deg); opacity: 0; }
+  to { transform: rotateY(0deg); opacity: 1; }
+}
+.animate-card-flip {
+  animation: card-flip-in 0.5s ease-out;
+  perspective: 1000px;
+}
 .tiptap a { color: hsl(var(--primary)); text-decoration: underline; }
 .tiptap hr { border-color: hsl(var(--border)); margin: 1em 0; }
 
