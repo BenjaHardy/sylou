@@ -22,11 +22,11 @@ export function getScoreLabel(score: number | null): string {
 
 export function getScoreColor(score: number | null): string {
   if (score == null) return "bg-muted text-muted-foreground";
-  if (score >= 4.0) return "bg-green-500/15 text-green-600 border-green-500/30";
-  if (score >= 3.0) return "bg-emerald-500/15 text-emerald-600 border-emerald-500/30";
-  if (score >= 2.0) return "bg-yellow-500/15 text-yellow-600 border-yellow-500/30";
-  if (score >= 1.0) return "bg-orange-500/15 text-orange-600 border-orange-500/30";
-  return "bg-destructive/15 text-destructive border-destructive/30";
+  if (score >= 4.0) return "bg-[#5D89A8]/25 text-[#5D89A8] border-[#5D89A8]/40";
+  if (score >= 3.0) return "bg-[#5D89A8]/20 text-[#5D89A8]/80 border-[#5D89A8]/35";
+  if (score >= 2.0) return "bg-[#5D89A8]/15 text-[#5D89A8]/70 border-[#5D89A8]/30";
+  if (score >= 1.0) return "bg-[#5D89A8]/10 text-[#5D89A8]/60 border-[#5D89A8]/20";
+  return "bg-[#5D89A8]/5 text-[#5D89A8]/40 border-[#5D89A8]/10";
 }
 
 export const PILLAR_ICONS = {
