@@ -22,6 +22,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { HelpCircle } from "lucide-react";
 import { useCreateProject, useProjects, useProfile } from "@/hooks/useProjects";
 import { toast } from "@/hooks/use-toast";
@@ -31,10 +32,10 @@ const LANGUAGES = [
 ];
 
 const TEMPLATES = [
-  { value: "general", label: "General", desc: "A blank canvas for any type of writing." },
-  { value: "academic", label: "Academic", desc: "Structured for essays, papers, and research." },
-  { value: "creative", label: "Creative", desc: "Optimised for fiction, poetry, and storytelling." },
-  { value: "professional", label: "Professional", desc: "Tailored for reports, emails, and business docs." },
+  { value: "general", label: "General", desc: "A blank canvas for any type of writing.", proOnly: false },
+  { value: "academic", label: "Academic", desc: "Structured for essays, papers, and research.", proOnly: true },
+  { value: "creative", label: "Creative", desc: "Optimised for fiction, poetry, and storytelling.", proOnly: true },
+  { value: "professional", label: "Professional", desc: "Tailored for reports, emails, and business docs.", proOnly: true },
 ];
 
 interface Props {
@@ -54,6 +55,7 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
   const { data: profile } = useProfile();
 
   const isFree = profile?.subscription_tier === "free";
+  const isProOrAbove = !["free", "starter"].includes(profile?.subscription_tier ?? "free");
   const atLimit = isFree && (projects?.length ?? 0) >= 1;
 
   const reset = () => {
@@ -142,29 +144,40 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
             <div className="space-y-2">
               <Label>Template</Label>
               <div className="grid gap-2">
-                {TEMPLATES.map((t) => (
-                  <label
-                    key={t.value}
-                    className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer transition-colors ${
-                      template === t.value
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:bg-muted/50"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="template"
-                      value={t.value}
-                      checked={template === t.value}
-                      onChange={() => setTemplate(t.value)}
-                      className="mt-0.5 accent-primary"
-                    />
-                    <div>
-                      <span className="text-sm font-medium text-foreground">{t.label}</span>
-                      <p className="text-xs text-muted-foreground">{t.desc}</p>
-                    </div>
-                  </label>
-                ))}
+                {TEMPLATES.map((t) => {
+                  const locked = t.proOnly && !isProOrAbove;
+                  return (
+                    <label
+                      key={t.value}
+                      className={`flex items-start gap-3 p-3 rounded-md border transition-colors ${
+                        locked
+                          ? "opacity-50 cursor-not-allowed border-border"
+                          : template === t.value
+                            ? "border-primary bg-primary/5 cursor-pointer"
+                            : "border-border hover:bg-muted/50 cursor-pointer"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="template"
+                        value={t.value}
+                        checked={template === t.value}
+                        onChange={() => !locked && setTemplate(t.value)}
+                        disabled={locked}
+                        className="mt-0.5 accent-primary"
+                      />
+                      <div>
+                        <span className="text-sm font-medium text-foreground">
+                          {t.label}
+                          {locked && (
+                            <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0">Pro</Badge>
+                          )}
+                        </span>
+                        <p className="text-xs text-muted-foreground">{t.desc}</p>
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
             </div>
 

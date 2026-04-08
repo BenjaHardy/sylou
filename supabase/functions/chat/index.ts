@@ -248,7 +248,7 @@ Deno.serve(async (req) => {
     // --- Get project settings ---
     const { data: project } = await supabase
       .from("projects")
-      .select("tutor_mode")
+      .select("tutor_mode, template")
       .eq("id", thread.project_id)
       .single();
 
@@ -319,6 +319,17 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
     let systemPrompt = tutorMode
       ? TUTOR_MODE_SYSTEM_PROMPT
       : CLASSIC_MODE_SYSTEM_PROMPT;
+
+    // --- Append template-specific context ---
+    const TEMPLATE_PROMPTS: Record<string, string> = {
+      academic: "This is an academic writing project. The user may be working on essays, papers, or research work. Importance of using reputable or reliable information and sources.",
+      creative: "This is a creative writing project. The user may be working on fiction, poetry, or narrative work.",
+      professional: "This is a professional writing project. The user may be working on business documents, reports, or communications. Focus on clarity, precision, and professional tone.",
+    };
+    const templateAddition = TEMPLATE_PROMPTS[project?.template ?? ""];
+    if (templateAddition) {
+      systemPrompt += `\n\n# PROJECT TEMPLATE\n\n${templateAddition}`;
+    }
 
     if (conciseMode) {
       systemPrompt += "\n\n" + CONCISE_MODE_MODIFIER;
