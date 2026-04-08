@@ -127,7 +127,6 @@ export default function SharedReport() {
     );
   }
 
-  const [activeTab, setActiveTab] = useState<"report" | "profile">("report");
 
   const flowScores = {
     find: (report.ai_find as any)?.score ?? null,
