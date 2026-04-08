@@ -27,8 +27,8 @@ export function FlowInfoSection() {
           <div>
             <p className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-1">Purpose</p>
             <p>
-              FLOW promotes transparency in AI-assisted writing. AI assistance is not inherently good or bad, though
-              transparency is useful. Ethos makes the collaboration process visible, measurable, and verifiable.
+              FLOW promotes transparency in AI-assisted writing. AI assistance is not inherently good or bad, but
+              transparency is critical in several instances. Ethos makes the collaboration process visible, measurable, and verifiable.
             </p>
           </div>
           <div>
