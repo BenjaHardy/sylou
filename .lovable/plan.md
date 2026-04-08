@@ -1,30 +1,44 @@
 
 
-## Plan: FLOW Work Profile System
+## Plan: FlowWorkProfile Visual Component
 
-### New File: `src/lib/flow-work-profiles.ts`
+### New File: `src/components/FlowWorkProfile.tsx`
 
-Define `FlowProfile` type and `FLOW_PROFILES` constant array with all 16 profiles exactly as specified. Export two functions:
+A standalone card component that presents the user's FLOW Work Profile as a personality-type reveal.
 
-- `getFlowProfile(scores)` — maps pillar scores to a profile by building a 4-char code (letter if ≥3.0, "-" if <3.0 or null), then looks up from a pre-built `Map<string, FlowProfile>` for O(1) access.
-- `getProfileCode(scores)` — returns just the 4-char code string.
+### Layout (top to bottom)
 
-The map is built once at module load from the `FLOW_PROFILES` array, keyed by `code`.
+**1. Header** — 4-char code in monospace (`font-mono text-3xl tracking-widest`). Each character rendered individually: letters that met threshold (≥3) get `text-[#5D89A8] font-bold`, dashes get `text-muted-foreground/40`. Profile name below in `text-2xl font-bold`. Tagline in `text-muted-foreground italic`.
 
-### New File: `src/lib/__tests__/flow-work-profiles.test.ts`
+**2. Description** — The 2-3 sentence paragraph in `text-sm leading-relaxed`.
 
-Six test cases:
-- (4.0, 3.5, 3.0, 4.5) → "The Architect"
-- (4.0, 4.0, 1.0, 1.0) → "The Visionary"
-- (1.0, 1.0, 1.0, 1.0) → "The Conductor"
-- (null, 3.5, null, 4.0) → "The Voice"
-- (3.0, 3.0, 3.0, 3.0) → "The Architect" (boundary)
-- (2.5, 2.5, 2.5, 2.5) → "The Conductor" (just below)
+**3. Pillar Breakdown** — A row of 4 equal-width mini-cards (grid-cols-4 on desktop, grid-cols-2 on mobile). Each shows:
+- Pillar letter (F/L/O/W) in a small circle
+- Score value or "N/A"
+- Label: "You led" (score ≥ 3, colored), "AI assisted" (score < 3, muted), or "N/A" (null, gray)
+- Visual: filled circle for ≥3, outline circle for <3, dashed for null
+
+Uses `#5D89A8` (Silver Lake Blue) for "You led" indicators, consistent with the existing FLOW report color scheme.
+
+**4. Contextual Note** — Small muted text: "This profile reflects your collaboration style on this project."
+
+### Props
+
+```ts
+interface FlowWorkProfileProps {
+  profile: FlowProfile;
+  scores: { find: number | null; lead: number | null; organize: number | null; write: number | null };
+  language?: string; // default "English", unused for now
+}
+```
+
+### Wrapper
+
+Uses the existing `Card` component from `@/components/ui/card` for the outer container, keeping consistency with the design system.
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/lib/flow-work-profiles.ts` | New — type, 16 profiles, `getFlowProfile`, `getProfileCode` |
-| `src/lib/__tests__/flow-work-profiles.test.ts` | New — 6 unit tests |
+| `src/components/FlowWorkProfile.tsx` | New — standalone visual profile card component |
 
