@@ -39,7 +39,9 @@ function WelcomeScreen() {
   return (
     <div className="flex-1 flex items-center justify-center bg-background overflow-y-auto">
       <div className="text-center space-y-5 max-w-lg px-4 py-8">
-        <img src={ethosLogo} alt="ETHOS" className="h-14 mx-auto" />
+        <h1 className="flex items-center justify-center gap-2 text-2xl font-light text-foreground">
+          Welcome to <img src={ethosLogo} alt="ETHOS" className="h-7 inline-block" />
+        </h1>
         <p className="text-sm text-muted-foreground">Select a project from the sidebar or create a new one to get started.</p>
 
         {/* Quick-start tips */}
