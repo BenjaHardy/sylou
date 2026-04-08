@@ -442,7 +442,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
         )}
 
         <ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0">
-          <ResizablePanel ref={editorPanelRef} defaultSize={DEFAULT_EDITOR_SIZE} minSize={0}>
+          <ResizablePanel ref={editorPanelRef} defaultSize={DEFAULT_EDITOR_SIZE} minSize={0} className="flex flex-col h-full min-h-0">
             {/* Writing tab content — hidden via CSS when creative tab is not writing */}
             <div style={{ display: isCreativeProject && activeCreativeTab !== "writing" ? "none" : undefined }} className="flex flex-col h-full min-h-0">
               <div className="flex flex-col h-full min-h-0">
