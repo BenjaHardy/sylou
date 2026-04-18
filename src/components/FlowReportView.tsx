@@ -328,7 +328,7 @@ export function FlowReportView({
         </HighlightedTextErrorBoundary>
       )}
 
-      {/* Replay Overlay */}
+      {/* Replay Overlay (legacy fullscreen — still used when triggered from Replay tab if needed) */}
       {showReplay && replaySnapshot && (
         <div className="absolute inset-0 z-10 bg-background">
           <FlowReplayOverlay events={replaySnapshot} onClose={() => setShowReplay(false)} />
@@ -356,15 +356,51 @@ export function FlowReportView({
             >
               FLOW Profile
             </Button>
+            <Button
+              variant={activeTab === "replay" ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs px-3 gap-1"
+              onClick={() => {
+                setActiveTab("replay");
+                if (!replaySnapshot) handleLoadReplay();
+              }}
+              title={!report.replay_snapshot && !replaySnapshot ? "No replay available" : undefined}
+            >
+              <Play className="h-3 w-3" />
+              Replay
+            </Button>
           </div>
 
           {/* FLOW Profile Tab */}
-          {activeTab === "profile" && flowProfile && (
-            <div key="profile" className="animate-card-flip space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground text-center">
-                Your Collaboration Profile
-              </h3>
-              <FlowWorkProfile profile={flowProfile} scores={flowScores} />
+          {activeTab === "profile" && (
+            <div key="profile" className="animate-card-flip">
+              <ProfileTabContent
+                aiScores={flowScores}
+                preFeedbackScores={preFeedbackScores}
+                postAssessment={existingAssessment}
+              />
+            </div>
+          )}
+
+          {/* Replay Tab */}
+          {activeTab === "replay" && (
+            <div key="replay" className="animate-card-flip">
+              {loadingReplay ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : replaySnapshot ? (
+                <div className="border border-border rounded-lg overflow-hidden h-[70vh]">
+                  <FlowReplayOverlay events={replaySnapshot} onClose={() => setActiveTab("report")} />
+                </div>
+              ) : (
+                <div className="text-center py-16 space-y-3">
+                  <p className="text-sm text-muted-foreground">No replay data available for this report.</p>
+                  <Button variant="outline" size="sm" onClick={handleLoadReplay}>
+                    Try again
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
