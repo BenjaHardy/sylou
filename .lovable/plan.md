@@ -1,76 +1,73 @@
 
 
-## Plan: Integrate FlowWorkProfile as a Tab in FLOW Report
+## Plan: FLOW Report Restructure (Tabs, Sharing, Profile Sub-Tabs)
 
-### Approach
+### Database Changes
 
-Add two tabs ("FLOW Report" and "FLOW Profile") to both `FlowReportView.tsx` and `SharedReport.tsx`. The existing report content goes into the first tab (default). The second tab shows the `FlowWorkProfile` component with a card-flip CSS animation on switch.
+Add two new columns to `flow_reports`:
+- `share_include_report BOOLEAN DEFAULT TRUE`
+- `share_include_profile BOOLEAN DEFAULT TRUE`
 
-### Card Flip Effect
+Both default to `true` so existing shares keep working. UI enforces "at least one selected".
 
-Add a CSS perspective container with `rotateY` transition. When switching tabs, the current content flips out (0 to 90deg) and the new content flips in (90deg to 0). This is done with a simple state toggle and CSS transition classes — no animation library needed. The keyframes will be added inline via Tailwind arbitrary values or a small CSS addition in `index.css`.
+### 1. FLOW Report Tab Changes (`FlowReportView.tsx`)
 
-### Changes
+**Top-level tabs** (3 buttons): `FLOW Report` | `FLOW Profile` | `Replay`
+- Add `"replay"` to the `activeTab` union type
+- Replay tab shows the `FlowReplayOverlay` content inline. Lazy-loads snapshot on first click via existing `handleLoadReplay`.
+- Remove the standalone "Replay" button currently next to "View Highlighted Text".
+- Disable Replay tab button (muted + tooltip) if no replay snapshot exists.
 
-**1. `src/components/FlowReportView.tsx`**
+**Share Report section** — replace existing checkboxes with:
+- "Sections to include" group: `[ ] FLOW Report` `[ ] FLOW Profile` (UI prevents unchecking the last one)
+- `[ ] Include my self-assessment in shared report` — applies to whichever of Report/Profile is selected
+- `[ ] Include project replay in shared report` — kept as-is, independent of Report/Profile selection
+- Each checkbox calls `share-report` toggle action.
 
-- Import `FlowWorkProfile` and `getFlowProfile`
-- Add state: `const [activeTab, setActiveTab] = useState<"report" | "profile">("report")`
-- Compute profile from report scores (only when report exists)
-- Add tab switcher buttons below the header bar (inside the scroll area, above content)
-- Wrap existing report content in a conditional `{activeTab === "report" && ...}`
-- Add profile tab content: section heading "Your Collaboration Profile" + `<FlowWorkProfile>` wrapped in flip animation classes
-- The flip animation: a wrapper div with `perspective-1000` and inner div with `transition-transform duration-500` that toggles `rotateY(180deg)` — or simpler: a fade+scale transition using existing `animate-scale-in`
+### 2. FLOW Profile Tab Changes (`FlowReportView.tsx`)
 
-**2. `src/pages/SharedReport.tsx`**
+Top to bottom:
 
-- Same pattern: import, compute profile, add tab buttons, conditional rendering
-- Profile tab includes the same `FlowWorkProfile` component
-- Tab buttons styled consistently with the shared report's existing design
+1. **"About this FLOW Profile" section** — reuse `FlowInfoSection` with optional `title` prop (default `"About this FLOW Report"`), pass `"About this FLOW Profile"`. Body text identical.
 
-**3. `src/index.css`** (minimal addition)
+2. **Sub-tabs for profile assessment source** — only render if self-assessment exists:
+   - `AI assessment` (default, always shown)
+   - `Self-assessment - pre-analysis feedback` (if `user_feedback_pre` exists)
+   - `Self-assessment - post-analysis feedback` (if `user_feedback_post` exists)
+   - Compute three profiles via `getFlowProfile()` from each score set.
+   - Heading reads "Your Collaboration Profile (AI assessment)" etc.
+   - Card-flip animation re-triggered on sub-tab change via `key` prop.
 
-Add a `@keyframes card-flip-in` animation:
-```css
-@keyframes card-flip-in {
-  from { transform: rotateY(90deg); opacity: 0; }
-  to { transform: rotateY(0deg); opacity: 1; }
-}
-.animate-card-flip { animation: card-flip-in 0.5s ease-out; }
-```
+3. **Self-assessment scores display** below the profile card — only if available. Uses the same compact 4-column grid pattern from `SharedReport.tsx` (pre + post grids + comments).
 
-The flip effect triggers by using a React `key` prop tied to `activeTab`, so each tab mount plays the animation.
+### 3. Shared Report Changes (`SharedReport.tsx`)
 
-### Tab UI
+- Read `share_include_report`, `share_include_profile`, `share_include_replay` flags.
+- **Tab switcher** is conditional on which sections are included:
+  - Both Report+Profile shared → both tabs shown
+  - Only one shared → that tab is the default and only one
+  - **Replay tab** appears as long as `share_include_replay` is true, regardless of whether Report or Profile (or both) are shared. So a profile-only share with replay enabled shows: `FLOW Profile` | `Replay`.
+- Default active tab: Report if shared, else Profile, else Replay.
+- Profile tab mirrors internal: "About this FLOW Profile" + sub-tabs + self-assessment (gated by `share_include_feedback`).
+- "Beta" badge removed from Replay overlay header.
+- Standalone Replay button at bottom of report removed.
 
-Two small buttons below the header, styled like the existing pre/post toggle:
-```tsx
-<div className="flex items-center justify-center gap-1">
-  <Button variant={activeTab === "report" ? "default" : "outline"} size="sm" onClick={() => setActiveTab("report")}>
-    FLOW Report
-  </Button>
-  <Button variant={activeTab === "profile" ? "default" : "outline"} size="sm" onClick={() => setActiveTab("profile")}>
-    FLOW Profile
-  </Button>
-</div>
-```
+### 4. Edge Function (`share-report/index.ts`)
 
-### Profile Computation
+Extend `toggle` action to accept `share_include_report` and `share_include_profile` boolean fields and write them to `flow_reports`.
 
-```tsx
-const profile = report ? getFlowProfile({
-  find: report.ai_find?.score ?? null,
-  lead: report.ai_lead?.score ?? null,
-  organize: report.ai_organize?.score ?? null,
-  write: report.ai_write?.score ?? null,
-}) : null;
-```
+### 5. Replay Overlay (`FlowReplayOverlay.tsx`)
+
+Remove the `<Badge>Beta</Badge>` block.
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/index.css` | Add `card-flip-in` keyframe animation |
-| `src/components/FlowReportView.tsx` | Add tab state, tab switcher, conditional rendering, FlowWorkProfile in profile tab |
-| `src/pages/SharedReport.tsx` | Same tab integration for shared/public reports |
+| New migration SQL | Add `share_include_report`, `share_include_profile` (default true) |
+| `src/components/FlowReportView.tsx` | 3 top-level tabs, restructured Profile tab with About + sub-tabs + self-assessment, updated share controls |
+| `src/components/flow-report/FlowInfoSection.tsx` | Accept optional `title` prop |
+| `src/pages/SharedReport.tsx` | Conditional tabs (Replay independent of Report/Profile selection), restructured Profile tab |
+| `src/components/FlowReplayOverlay.tsx` | Remove "Beta" badge |
+| `supabase/functions/share-report/index.ts` | Accept new toggle fields |
 
