@@ -364,7 +364,7 @@ export function FlowReportView({
                 setActiveTab("replay");
                 if (!replaySnapshot) handleLoadReplay();
               }}
-              title={!report.replay_snapshot && !replaySnapshot ? "No replay available" : undefined}
+              title={undefined}
             >
               <Play className="h-3 w-3" />
               Replay
@@ -474,6 +474,56 @@ export function FlowReportView({
                         <span className="font-medium text-foreground">FLOW Certificate #{certificateId}</span>
                       </div>
                     )}
+
+                    {/* Sections to include (at least one required) */}
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sections to include</p>
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="share-include-report"
+                          checked={shareIncludeReport}
+                          onCheckedChange={async (checked) => {
+                            const val = checked === true;
+                            // Prevent unchecking the last selected section
+                            if (!val && !shareIncludeProfile) return;
+                            setShareIncludeReport(val);
+                            try {
+                              await supabase.functions.invoke("share-report", {
+                                body: { report_id: report.id, action: "toggle", share_include_report: val },
+                              });
+                            } catch (err) {
+                              console.error("Failed to update report visibility:", err);
+                              setShareIncludeReport(!val);
+                            }
+                          }}
+                        />
+                        <label htmlFor="share-include-report" className="text-xs text-muted-foreground cursor-pointer">
+                          FLOW Report
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="share-include-profile"
+                          checked={shareIncludeProfile}
+                          onCheckedChange={async (checked) => {
+                            const val = checked === true;
+                            if (!val && !shareIncludeReport) return;
+                            setShareIncludeProfile(val);
+                            try {
+                              await supabase.functions.invoke("share-report", {
+                                body: { report_id: report.id, action: "toggle", share_include_profile: val },
+                              });
+                            } catch (err) {
+                              console.error("Failed to update profile visibility:", err);
+                              setShareIncludeProfile(!val);
+                            }
+                          }}
+                        />
+                        <label htmlFor="share-include-profile" className="text-xs text-muted-foreground cursor-pointer">
+                          FLOW Profile
+                        </label>
+                      </div>
+                    </div>
 
                     {/* Include feedback checkbox */}
                     <div className="flex items-center gap-2">
@@ -610,9 +660,9 @@ export function FlowReportView({
                 </div>
               </div>
 
-              {/* View Highlighted Text + Replay */}
-              <div className="flex justify-center gap-2">
-                {report.provenance_snapshot && report.provenance_snapshot.length > 0 && (
+              {/* View Highlighted Text */}
+              {report.provenance_snapshot && report.provenance_snapshot.length > 0 && (
+                <div className="flex justify-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -622,22 +672,8 @@ export function FlowReportView({
                     <Eye className="h-3.5 w-3.5" />
                     View Highlighted Text
                   </Button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 text-xs"
-                  onClick={handleLoadReplay}
-                  disabled={loadingReplay}
-                >
-                  {loadingReplay ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Play className="h-3.5 w-3.5" />
-                  )}
-                  Replay
-                </Button>
-              </div>
+                </div>
+              )}
 
               {/* Pre-feedback display */}
               {report.user_feedback_pre && (
