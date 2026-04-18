@@ -53,6 +53,27 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "file_path, project_id, and document_id are required" }, 400);
     }
 
+    // --- Ownership validation ---
+    // 1. Verify file_path belongs to caller (must start with their user id)
+    if (!file_path.startsWith(`${user.id}/`)) {
+      return jsonResponse({ error: "Forbidden: file path does not belong to caller" }, 403);
+    }
+
+    // 2. Verify document_id belongs to caller via user-scoped client (RLS)
+    const { data: ownedDoc, error: ownerErr } = await supabase
+      .from("imported_documents")
+      .select("id, project_id")
+      .eq("id", document_id)
+      .maybeSingle();
+
+    if (ownerErr || !ownedDoc) {
+      return jsonResponse({ error: "Forbidden: document not found or not owned" }, 403);
+    }
+
+    if (ownedDoc.project_id !== project_id) {
+      return jsonResponse({ error: "Forbidden: project_id mismatch" }, 403);
+    }
+
     // --- Download file from storage using service role ---
     const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
 
