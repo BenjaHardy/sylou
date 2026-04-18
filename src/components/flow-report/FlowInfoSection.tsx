@@ -5,12 +5,16 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
-export function FlowInfoSection() {
+interface FlowInfoSectionProps {
+  title?: string;
+}
+
+export function FlowInfoSection({ title = "About this FLOW Report" }: FlowInfoSectionProps = {}) {
   return (
     <Collapsible>
       <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group">
         <Info className="h-3.5 w-3.5" />
-        <span className="underline underline-offset-2">About this FLOW Report</span>
+        <span className="underline underline-offset-2">{title}</span>
         <ChevronDown className="h-3 w-3 transition-transform group-data-[state=open]:rotate-180" />
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-3">

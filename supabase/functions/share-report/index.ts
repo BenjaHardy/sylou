@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
 
     // Action: "toggle" — update share_enabled and/or share_include_feedback
     if (action === "toggle") {
-      const { share_enabled, share_include_feedback, share_include_replay } = body;
+      const { share_enabled, share_include_feedback, share_include_replay, share_include_report, share_include_profile } = body;
 
       const updateData: Record<string, unknown> = {};
 
@@ -98,6 +98,14 @@ Deno.serve(async (req) => {
 
       if (typeof share_include_replay === "boolean") {
         updateData.share_include_replay = share_include_replay;
+      }
+
+      if (typeof share_include_report === "boolean") {
+        updateData.share_include_report = share_include_report;
+      }
+
+      if (typeof share_include_profile === "boolean") {
+        updateData.share_include_profile = share_include_profile;
       }
 
       if (Object.keys(updateData).length === 0) {

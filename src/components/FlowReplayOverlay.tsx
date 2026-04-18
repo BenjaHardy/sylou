@@ -123,10 +123,6 @@ export function FlowReplayOverlay({ events, onClose, sanitize = false }: FlowRep
           Close
         </Button>
 
-        <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 border-amber-500/50 text-amber-600 dark:text-amber-400 bg-amber-500/10">
-          Beta
-        </Badge>
-
         <div className="flex items-center gap-1 ml-auto">
           <Button variant="ghost" size="sm" onClick={goPrev} disabled={currentIndex === 0}>
             <ChevronLeft className="h-4 w-4" />
