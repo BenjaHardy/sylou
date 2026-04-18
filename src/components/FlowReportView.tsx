@@ -207,10 +207,7 @@ export function FlowReportView({
 
   const handleLoadReplay = useCallback(async () => {
     if (!report) return;
-    if (replaySnapshot) {
-      setShowReplay(true);
-      return;
-    }
+    if (replaySnapshot) return;
     setLoadingReplay(true);
     try {
       const { data } = await supabase
@@ -220,7 +217,6 @@ export function FlowReportView({
         .single();
       if (data?.replay_snapshot) {
         setReplaySnapshot(data.replay_snapshot as unknown as ReplayEvent[]);
-        setShowReplay(true);
       }
     } catch (err) {
       console.error("Failed to load replay:", err);
