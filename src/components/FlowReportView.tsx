@@ -62,6 +62,7 @@ import { TokenUsageSection } from "@/components/flow-report/TokenUsageSection";
 import { ProjectActivitySection } from "@/components/flow-report/ProjectActivitySection";
 import { extractUserAssessment, extractFeedbackScores } from "@/components/flow-report/shared-utils";
 import FlowWorkProfile from "@/components/FlowWorkProfile";
+import { ProfileTabContent } from "@/components/flow-report/ProfileTabContent";
 import { getFlowProfile } from "@/lib/flow-work-profiles";
 
 import type {
@@ -91,7 +92,7 @@ export function FlowReportView({
 }: Props) {
   const [preFeedbackViewed, setPreFeedbackViewed] = useState(false);
   const [feedbackToggle, setFeedbackToggle] = useState<"pre" | "post">("post");
-  const [activeTab, setActiveTab] = useState<"report" | "profile">("report");
+  const [activeTab, setActiveTab] = useState<"report" | "profile" | "replay">("report");
   const [showHighlighted, setShowHighlighted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -104,6 +105,8 @@ export function FlowReportView({
   const [copied, setCopied] = useState(false);
   const [shareIncludeFeedback, setShareIncludeFeedback] = useState<boolean>(report?.share_include_feedback ?? false);
   const [shareIncludeReplay, setShareIncludeReplay] = useState<boolean>((report as any)?.share_include_replay ?? false);
+  const [shareIncludeReport, setShareIncludeReport] = useState<boolean>((report as any)?.share_include_report ?? true);
+  const [shareIncludeProfile, setShareIncludeProfile] = useState<boolean>((report as any)?.share_include_profile ?? true);
 
   // Replay state
   const [showReplay, setShowReplay] = useState(false);
@@ -118,6 +121,8 @@ export function FlowReportView({
       setShareEnabled(report.share_enabled ?? false);
       setShareIncludeFeedback(report.share_include_feedback ?? false);
       setShareIncludeReplay((report as any).share_include_replay ?? false);
+      setShareIncludeReport((report as any).share_include_report ?? true);
+      setShareIncludeProfile((report as any).share_include_profile ?? true);
     }
   }, [report?.id, report?.share_token, report?.share_enabled, report?.certificate_id, report?.share_include_feedback]);
 
