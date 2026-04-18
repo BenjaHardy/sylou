@@ -202,7 +202,9 @@ export type Database = {
           replay_snapshot: Json | null
           share_enabled: boolean | null
           share_include_feedback: boolean
+          share_include_profile: boolean
           share_include_replay: boolean
+          share_include_report: boolean
           share_token: string | null
           share_visibility: string | null
           user_feedback_post: Json | null
@@ -229,7 +231,9 @@ export type Database = {
           replay_snapshot?: Json | null
           share_enabled?: boolean | null
           share_include_feedback?: boolean
+          share_include_profile?: boolean
           share_include_replay?: boolean
+          share_include_report?: boolean
           share_token?: string | null
           share_visibility?: string | null
           user_feedback_post?: Json | null
@@ -256,7 +260,9 @@ export type Database = {
           replay_snapshot?: Json | null
           share_enabled?: boolean | null
           share_include_feedback?: boolean
+          share_include_profile?: boolean
           share_include_replay?: boolean
+          share_include_report?: boolean
           share_token?: string | null
           share_visibility?: string | null
           user_feedback_post?: Json | null
