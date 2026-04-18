@@ -62,6 +62,7 @@ import { TokenUsageSection } from "@/components/flow-report/TokenUsageSection";
 import { ProjectActivitySection } from "@/components/flow-report/ProjectActivitySection";
 import { extractUserAssessment, extractFeedbackScores } from "@/components/flow-report/shared-utils";
 import FlowWorkProfile from "@/components/FlowWorkProfile";
+import { ProfileTabContent } from "@/components/flow-report/ProfileTabContent";
 import { getFlowProfile } from "@/lib/flow-work-profiles";
 
 import type {
@@ -91,7 +92,7 @@ export function FlowReportView({
 }: Props) {
   const [preFeedbackViewed, setPreFeedbackViewed] = useState(false);
   const [feedbackToggle, setFeedbackToggle] = useState<"pre" | "post">("post");
-  const [activeTab, setActiveTab] = useState<"report" | "profile">("report");
+  const [activeTab, setActiveTab] = useState<"report" | "profile" | "replay">("report");
   const [showHighlighted, setShowHighlighted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -104,6 +105,8 @@ export function FlowReportView({
   const [copied, setCopied] = useState(false);
   const [shareIncludeFeedback, setShareIncludeFeedback] = useState<boolean>(report?.share_include_feedback ?? false);
   const [shareIncludeReplay, setShareIncludeReplay] = useState<boolean>((report as any)?.share_include_replay ?? false);
+  const [shareIncludeReport, setShareIncludeReport] = useState<boolean>((report as any)?.share_include_report ?? true);
+  const [shareIncludeProfile, setShareIncludeProfile] = useState<boolean>((report as any)?.share_include_profile ?? true);
 
   // Replay state
   const [showReplay, setShowReplay] = useState(false);
@@ -118,6 +121,8 @@ export function FlowReportView({
       setShareEnabled(report.share_enabled ?? false);
       setShareIncludeFeedback(report.share_include_feedback ?? false);
       setShareIncludeReplay((report as any).share_include_replay ?? false);
+      setShareIncludeReport((report as any).share_include_report ?? true);
+      setShareIncludeProfile((report as any).share_include_profile ?? true);
     }
   }, [report?.id, report?.share_token, report?.share_enabled, report?.certificate_id, report?.share_include_feedback]);
 
@@ -202,10 +207,7 @@ export function FlowReportView({
 
   const handleLoadReplay = useCallback(async () => {
     if (!report) return;
-    if (replaySnapshot) {
-      setShowReplay(true);
-      return;
-    }
+    if (replaySnapshot) return;
     setLoadingReplay(true);
     try {
       const { data } = await supabase
@@ -215,7 +217,6 @@ export function FlowReportView({
         .single();
       if (data?.replay_snapshot) {
         setReplaySnapshot(data.replay_snapshot as unknown as ReplayEvent[]);
-        setShowReplay(true);
       }
     } catch (err) {
       console.error("Failed to load replay:", err);
@@ -323,12 +324,7 @@ export function FlowReportView({
         </HighlightedTextErrorBoundary>
       )}
 
-      {/* Replay Overlay */}
-      {showReplay && replaySnapshot && (
-        <div className="absolute inset-0 z-10 bg-background">
-          <FlowReplayOverlay events={replaySnapshot} onClose={() => setShowReplay(false)} />
-        </div>
-      )}
+      {/* (Replay rendered inline inside Replay tab below) */}
 
       {/* Content */}
       <ScrollArea ref={scrollAreaRef} className="flex-1">
@@ -351,15 +347,51 @@ export function FlowReportView({
             >
               FLOW Profile
             </Button>
+            <Button
+              variant={activeTab === "replay" ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs px-3 gap-1"
+              onClick={() => {
+                setActiveTab("replay");
+                if (!replaySnapshot) handleLoadReplay();
+              }}
+              title={undefined}
+            >
+              <Play className="h-3 w-3" />
+              Replay
+            </Button>
           </div>
 
           {/* FLOW Profile Tab */}
-          {activeTab === "profile" && flowProfile && (
-            <div key="profile" className="animate-card-flip space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground text-center">
-                Your Collaboration Profile
-              </h3>
-              <FlowWorkProfile profile={flowProfile} scores={flowScores} />
+          {activeTab === "profile" && (
+            <div key="profile" className="animate-card-flip">
+              <ProfileTabContent
+                aiScores={flowScores}
+                preFeedbackScores={preFeedbackScores}
+                postAssessment={existingAssessment}
+              />
+            </div>
+          )}
+
+          {/* Replay Tab */}
+          {activeTab === "replay" && (
+            <div key="replay" className="animate-card-flip">
+              {loadingReplay ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : replaySnapshot ? (
+                <div className="border border-border rounded-lg overflow-hidden h-[70vh]">
+                  <FlowReplayOverlay events={replaySnapshot} onClose={() => setActiveTab("report")} />
+                </div>
+              ) : (
+                <div className="text-center py-16 space-y-3">
+                  <p className="text-sm text-muted-foreground">No replay data available for this report.</p>
+                  <Button variant="outline" size="sm" onClick={handleLoadReplay}>
+                    Try again
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
@@ -433,6 +465,56 @@ export function FlowReportView({
                         <span className="font-medium text-foreground">FLOW Certificate #{certificateId}</span>
                       </div>
                     )}
+
+                    {/* Sections to include (at least one required) */}
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sections to include</p>
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="share-include-report"
+                          checked={shareIncludeReport}
+                          onCheckedChange={async (checked) => {
+                            const val = checked === true;
+                            // Prevent unchecking the last selected section
+                            if (!val && !shareIncludeProfile) return;
+                            setShareIncludeReport(val);
+                            try {
+                              await supabase.functions.invoke("share-report", {
+                                body: { report_id: report.id, action: "toggle", share_include_report: val },
+                              });
+                            } catch (err) {
+                              console.error("Failed to update report visibility:", err);
+                              setShareIncludeReport(!val);
+                            }
+                          }}
+                        />
+                        <label htmlFor="share-include-report" className="text-xs text-muted-foreground cursor-pointer">
+                          FLOW Report
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="share-include-profile"
+                          checked={shareIncludeProfile}
+                          onCheckedChange={async (checked) => {
+                            const val = checked === true;
+                            if (!val && !shareIncludeReport) return;
+                            setShareIncludeProfile(val);
+                            try {
+                              await supabase.functions.invoke("share-report", {
+                                body: { report_id: report.id, action: "toggle", share_include_profile: val },
+                              });
+                            } catch (err) {
+                              console.error("Failed to update profile visibility:", err);
+                              setShareIncludeProfile(!val);
+                            }
+                          }}
+                        />
+                        <label htmlFor="share-include-profile" className="text-xs text-muted-foreground cursor-pointer">
+                          FLOW Profile
+                        </label>
+                      </div>
+                    </div>
 
                     {/* Include feedback checkbox */}
                     <div className="flex items-center gap-2">
@@ -569,9 +651,9 @@ export function FlowReportView({
                 </div>
               </div>
 
-              {/* View Highlighted Text + Replay */}
-              <div className="flex justify-center gap-2">
-                {report.provenance_snapshot && report.provenance_snapshot.length > 0 && (
+              {/* View Highlighted Text */}
+              {report.provenance_snapshot && report.provenance_snapshot.length > 0 && (
+                <div className="flex justify-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -581,22 +663,8 @@ export function FlowReportView({
                     <Eye className="h-3.5 w-3.5" />
                     View Highlighted Text
                   </Button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 text-xs"
-                  onClick={handleLoadReplay}
-                  disabled={loadingReplay}
-                >
-                  {loadingReplay ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Play className="h-3.5 w-3.5" />
-                  )}
-                  Replay
-                </Button>
-              </div>
+                </div>
+              )}
 
               {/* Pre-feedback display */}
               {report.user_feedback_pre && (
