@@ -324,12 +324,7 @@ export function FlowReportView({
         </HighlightedTextErrorBoundary>
       )}
 
-      {/* Replay Overlay (legacy fullscreen — still used when triggered from Replay tab if needed) */}
-      {showReplay && replaySnapshot && (
-        <div className="absolute inset-0 z-10 bg-background">
-          <FlowReplayOverlay events={replaySnapshot} onClose={() => setShowReplay(false)} />
-        </div>
-      )}
+      {/* (Replay rendered inline inside Replay tab below) */}
 
       {/* Content */}
       <ScrollArea ref={scrollAreaRef} className="flex-1">
