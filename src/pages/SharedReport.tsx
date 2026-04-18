@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { FlowRadarChart } from "@/components/flow-report/FlowRadarChart";
@@ -7,11 +7,9 @@ import { FlowInfoSection } from "@/components/flow-report/FlowInfoSection";
 import { TokenUsageSection } from "@/components/flow-report/TokenUsageSection";
 import { ProjectActivitySection } from "@/components/flow-report/ProjectActivitySection";
 import { FlowReplayOverlay, type ReplayEvent } from "@/components/FlowReplayOverlay";
+import { ProfileTabContent } from "@/components/flow-report/ProfileTabContent";
 import {
   PILLAR_KEYS,
-  PILLAR_LABELS,
-  getScoreLabel,
-  getScoreColor,
   extractUserAssessment,
   extractFeedbackScores,
 } from "@/components/flow-report/shared-utils";
@@ -19,8 +17,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Activity, Loader2, ShieldAlert, ExternalLink, Award, Play } from "lucide-react";
 import type { FlowReport, FlowFeedback } from "@/hooks/useFlowAnalysis";
-import FlowWorkProfile from "@/components/FlowWorkProfile";
-import { getFlowProfile } from "@/lib/flow-work-profiles";
 
 export default function SharedReport() {
   const { token } = useParams<{ token: string }>();
@@ -30,11 +26,12 @@ export default function SharedReport() {
   const [notFound, setNotFound] = useState(false);
 
   // Replay state
-  const [showReplay, setShowReplay] = useState(false);
   const [replaySnapshot, setReplaySnapshot] = useState<ReplayEvent[] | null>(null);
   const [loadingReplay, setLoadingReplay] = useState(false);
   const [replayAvailable, setReplayAvailable] = useState(false);
-  const [activeTab, setActiveTab] = useState<"report" | "profile">("report");
+  const [reportAvailable, setReportAvailable] = useState(true);
+  const [profileAvailable, setProfileAvailable] = useState(true);
+  const [activeTab, setActiveTab] = useState<"report" | "profile" | "replay">("report");
 
   useEffect(() => {
     async function fetchReport() {
@@ -46,7 +43,7 @@ export default function SharedReport() {
 
       const { data, error } = await supabase
         .from("flow_reports")
-        .select("id, project_id, project_name, certificate_id, share_token, share_enabled, share_visibility, share_include_feedback, share_include_replay, model_used, created_at, ai_find, ai_lead, ai_organize, ai_write, ai_summary, flow_meta, metrics_snapshot, user_feedback_pre, user_feedback_post")
+        .select("id, project_id, project_name, certificate_id, share_token, share_enabled, share_visibility, share_include_feedback, share_include_replay, share_include_report, share_include_profile, model_used, created_at, ai_find, ai_lead, ai_organize, ai_write, ai_summary, flow_meta, metrics_snapshot, user_feedback_pre, user_feedback_post")
         .eq("share_token", token)
         .eq("share_enabled", true)
         .eq("share_visibility", "public")
@@ -58,9 +55,23 @@ export default function SharedReport() {
         return;
       }
 
+      const row = data as any;
+      // Default to true for backwards compatibility
+      const includeReport = row.share_include_report ?? true;
+      const includeProfile = row.share_include_profile ?? true;
+      const includeReplay = !!row.share_include_replay;
+
       setReport(data as unknown as FlowReport);
-      setProjectName((data as any).project_name ?? "Untitled Project");
-      setReplayAvailable(!!(data as any).share_include_replay);
+      setProjectName(row.project_name ?? "Untitled Project");
+      setReplayAvailable(includeReplay);
+      setReportAvailable(includeReport);
+      setProfileAvailable(includeProfile);
+
+      // Default tab: Report if shared, else Profile, else Replay
+      if (includeReport) setActiveTab("report");
+      else if (includeProfile) setActiveTab("profile");
+      else if (includeReplay) setActiveTab("replay");
+
       setLoading(false);
     }
 
@@ -68,11 +79,7 @@ export default function SharedReport() {
   }, [token]);
 
   const handleLoadReplay = useCallback(async () => {
-    if (!report || !token) return;
-    if (replaySnapshot) {
-      setShowReplay(true);
-      return;
-    }
+    if (!report || !token || replaySnapshot) return;
     setLoadingReplay(true);
     try {
       const { data } = await supabase
@@ -84,7 +91,6 @@ export default function SharedReport() {
         .maybeSingle();
       if (data?.replay_snapshot) {
         setReplaySnapshot(data.replay_snapshot as unknown as ReplayEvent[]);
-        setShowReplay(true);
       }
     } catch (err) {
       console.error("Failed to load replay:", err);
@@ -92,6 +98,13 @@ export default function SharedReport() {
       setLoadingReplay(false);
     }
   }, [report, token, replaySnapshot]);
+
+  // Auto-load replay when replay tab opened
+  useEffect(() => {
+    if (activeTab === "replay" && !replaySnapshot && !loadingReplay) {
+      handleLoadReplay();
+    }
+  }, [activeTab, replaySnapshot, loadingReplay, handleLoadReplay]);
 
   if (loading) {
     return (
@@ -127,14 +140,12 @@ export default function SharedReport() {
     );
   }
 
-
   const flowScores = {
     find: (report.ai_find as any)?.score ?? null,
     lead: (report.ai_lead as any)?.score ?? null,
     organize: (report.ai_organize as any)?.score ?? null,
     write: (report.ai_write as any)?.score ?? null,
   };
-  const flowProfile = getFlowProfile(flowScores);
 
   const certificateId = (report as any).certificate_id;
   const showFeedback = !!(report as any).share_include_feedback;
@@ -157,15 +168,11 @@ export default function SharedReport() {
     }
   }
 
+  // Visible tabs count (more than one means show switcher)
+  const visibleTabsCount = (reportAvailable ? 1 : 0) + (profileAvailable ? 1 : 0) + (replayAvailable ? 1 : 0);
+
   return (
     <div className="min-h-screen bg-background relative">
-      {/* Replay Overlay */}
-      {showReplay && replaySnapshot && (
-        <div className="absolute inset-0 z-10 bg-background">
-          <FlowReplayOverlay events={replaySnapshot} onClose={() => setShowReplay(false)} sanitize />
-        </div>
-      )}
-
       {/* Header */}
       <div className="h-14 border-b border-border flex items-center justify-between px-6 bg-[hsl(var(--ethos-surface))]">
         <div className="flex items-center gap-2 text-sm font-medium text-primary">
@@ -185,142 +192,163 @@ export default function SharedReport() {
 
       <ScrollArea className="h-[calc(100vh-3.5rem)]">
         <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
-          {/* Tab Switcher */}
-          <div className="flex items-center justify-center gap-1">
-            <Button
-              variant={activeTab === "report" ? "default" : "outline"}
-              size="sm"
-              className="h-7 text-xs px-3"
-              onClick={() => setActiveTab("report")}
-            >
-              FLOW Report
-            </Button>
-            <Button
-              variant={activeTab === "profile" ? "default" : "outline"}
-              size="sm"
-              className="h-7 text-xs px-3"
-              onClick={() => setActiveTab("profile")}
-            >
-              FLOW Profile
-            </Button>
-          </div>
+          {/* Tab Switcher (only if multiple tabs visible) */}
+          {visibleTabsCount > 1 && (
+            <div className="flex items-center justify-center gap-1">
+              {reportAvailable && (
+                <Button
+                  variant={activeTab === "report" ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs px-3"
+                  onClick={() => setActiveTab("report")}
+                >
+                  FLOW Report
+                </Button>
+              )}
+              {profileAvailable && (
+                <Button
+                  variant={activeTab === "profile" ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs px-3"
+                  onClick={() => setActiveTab("profile")}
+                >
+                  FLOW Profile
+                </Button>
+              )}
+              {replayAvailable && (
+                <Button
+                  variant={activeTab === "replay" ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs px-3 gap-1"
+                  onClick={() => setActiveTab("replay")}
+                >
+                  <Play className="h-3 w-3" />
+                  Replay
+                </Button>
+              )}
+            </div>
+          )}
 
           {/* FLOW Profile Tab */}
-          {activeTab === "profile" && flowProfile && (
-            <div key="profile" className="animate-card-flip space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground text-center">
-                Collaboration Profile
-              </h3>
-              <FlowWorkProfile profile={flowProfile} scores={flowScores} />
-            </div>
-          )}
-
-          {/* FLOW Report Tab */}
-          {activeTab === "report" && (
-            <>
-          <FlowInfoSection />
-
-          <FlowRadarChart
-            report={report}
-            userFeedback={radarUserFeedback}
-            userLabel={radarUserLabel}
-            userColor={radarUserColor}
-          />
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {PILLAR_KEYS.map((key) => (
-              <ScoreCard
-                key={key}
-                pillarKey={key}
-                pillar={report[`ai_${key}` as keyof FlowReport] as any}
+          {activeTab === "profile" && profileAvailable && (
+            <div key="profile" className="animate-card-flip">
+              <ProfileTabContent
+                aiScores={flowScores}
+                preFeedbackScores={preFeedbackScores}
+                postAssessment={postAssessment}
+                showSelfAssessment={showFeedback}
               />
-            ))}
-          </div>
-
-          {/* Overall Summary */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Overall Summary</h4>
-            <div className="bg-muted/50 rounded-lg p-5">
-              <p className="text-sm text-foreground leading-relaxed">{report.ai_summary}</p>
-            </div>
-          </div>
-
-          {/* Replay button */}
-          {replayAvailable && (
-            <div className="flex justify-center">
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 text-xs"
-                onClick={handleLoadReplay}
-                disabled={loadingReplay}
-              >
-                {loadingReplay ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Play className="h-3.5 w-3.5" />
-                )}
-                Replay
-              </Button>
             </div>
           )}
 
-          {/* User Self-Assessment (read-only) */}
-          {showFeedback && preFeedbackScores && (
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Pre-Analysis Self-Assessment</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {PILLAR_KEYS.map((key) => (
-                  <div key={key} className="border border-border rounded-lg p-3 text-center space-y-1">
-                    <p className="text-[10px] font-medium text-muted-foreground uppercase">{PILLAR_LABELS[key].full.split("—")[0].trim()}</p>
-                    <p className="text-lg font-bold text-foreground">{preFeedbackScores[key]?.toFixed(1) ?? "—"}</p>
-                    <p className="text-[10px] text-muted-foreground">{getScoreLabel(preFeedbackScores[key] ?? null)}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {showFeedback && postAssessment && (
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Post-Analysis Self-Assessment</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {PILLAR_KEYS.map((key) => (
-                  <div key={key} className="border border-border rounded-lg p-3 text-center space-y-1">
-                    <p className="text-[10px] font-medium text-muted-foreground uppercase">{PILLAR_LABELS[key].full.split("—")[0].trim()}</p>
-                    <p className="text-lg font-bold text-foreground">{postAssessment.scores[key]?.toFixed(1) ?? "—"}</p>
-                    <p className="text-[10px] text-muted-foreground">{getScoreLabel(postAssessment.scores[key] ?? null)}</p>
-                  </div>
-                ))}
-              </div>
-              {Object.entries(postAssessment.comments).some(([, v]) => v.trim()) && (
-                <div className="space-y-2 mt-2">
-                  {PILLAR_KEYS.map((key) =>
-                    postAssessment.comments[key]?.trim() ? (
-                      <div key={key} className="bg-muted/30 rounded-md p-3">
-                        <p className="text-[10px] font-medium text-muted-foreground uppercase mb-1">{PILLAR_LABELS[key].full.split("—")[0].trim()}</p>
-                        <p className="text-xs text-foreground">{postAssessment.comments[key]}</p>
-                      </div>
-                    ) : null
-                  )}
-                  {postAssessment.comments.overall?.trim() && (
-                    <div className="bg-muted/30 rounded-md p-3">
-                      <p className="text-[10px] font-medium text-muted-foreground uppercase mb-1">Overall</p>
-                      <p className="text-xs text-foreground">{postAssessment.comments.overall}</p>
-                    </div>
-                  )}
+          {/* Replay Tab */}
+          {activeTab === "replay" && replayAvailable && (
+            <div key="replay" className="animate-card-flip">
+              {loadingReplay ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : replaySnapshot ? (
+                <div className="border border-border rounded-lg overflow-hidden h-[70vh]">
+                  <FlowReplayOverlay events={replaySnapshot} onClose={() => {
+                    if (reportAvailable) setActiveTab("report");
+                    else if (profileAvailable) setActiveTab("profile");
+                  }} sanitize />
+                </div>
+              ) : (
+                <div className="text-center py-16 space-y-3">
+                  <p className="text-sm text-muted-foreground">No replay data available.</p>
                 </div>
               )}
             </div>
           )}
 
-          {/* Token Usage */}
-          {report.flow_meta && <TokenUsageSection meta={report.flow_meta} />}
+          {/* FLOW Report Tab */}
+          {activeTab === "report" && reportAvailable && (
+            <>
+              <FlowInfoSection />
 
-          {/* Project Activity */}
-          {report.metrics_snapshot && <ProjectActivitySection metrics={report.metrics_snapshot} />}
+              <FlowRadarChart
+                report={report}
+                userFeedback={radarUserFeedback}
+                userLabel={radarUserLabel}
+                userColor={radarUserColor}
+              />
 
-          {/* Metadata footer */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {PILLAR_KEYS.map((key) => (
+                  <ScoreCard
+                    key={key}
+                    pillarKey={key}
+                    pillar={report[`ai_${key}` as keyof FlowReport] as any}
+                  />
+                ))}
+              </div>
+
+              {/* Overall Summary */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Overall Summary</h4>
+                <div className="bg-muted/50 rounded-lg p-5">
+                  <p className="text-sm text-foreground leading-relaxed">{report.ai_summary}</p>
+                </div>
+              </div>
+
+              {/* User Self-Assessment (read-only, embedded under report tab) */}
+              {showFeedback && preFeedbackScores && (
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Pre-Analysis Self-Assessment</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {PILLAR_KEYS.map((key) => (
+                      <div key={key} className="border border-border rounded-lg p-3 text-center space-y-1">
+                        <p className="text-[10px] font-medium text-muted-foreground uppercase">{key}</p>
+                        <p className="text-lg font-bold text-foreground">{preFeedbackScores[key]?.toFixed(1) ?? "—"}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {showFeedback && postAssessment && (
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Post-Analysis Self-Assessment</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {PILLAR_KEYS.map((key) => (
+                      <div key={key} className="border border-border rounded-lg p-3 text-center space-y-1">
+                        <p className="text-[10px] font-medium text-muted-foreground uppercase">{key}</p>
+                        <p className="text-lg font-bold text-foreground">{postAssessment.scores[key]?.toFixed(1) ?? "—"}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {Object.entries(postAssessment.comments).some(([, v]) => v.trim()) && (
+                    <div className="space-y-2 mt-2">
+                      {PILLAR_KEYS.map((key) =>
+                        postAssessment.comments[key]?.trim() ? (
+                          <div key={key} className="bg-muted/30 rounded-md p-3">
+                            <p className="text-[10px] font-medium text-muted-foreground uppercase mb-1">{key}</p>
+                            <p className="text-xs text-foreground">{postAssessment.comments[key]}</p>
+                          </div>
+                        ) : null
+                      )}
+                      {postAssessment.comments.overall?.trim() && (
+                        <div className="bg-muted/30 rounded-md p-3">
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase mb-1">Overall</p>
+                          <p className="text-xs text-foreground">{postAssessment.comments.overall}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Token Usage */}
+              {report.flow_meta && <TokenUsageSection meta={report.flow_meta} />}
+
+              {/* Project Activity */}
+              {report.metrics_snapshot && <ProjectActivitySection metrics={report.metrics_snapshot} />}
+            </>
+          )}
+
+          {/* Metadata footer (always shown) */}
           <div className="text-[10px] text-muted-foreground text-center space-y-0.5">
             <p>
               Model: {report.model_used} · Generated{" "}
@@ -329,7 +357,7 @@ export default function SharedReport() {
             <p>Project: {projectName}</p>
           </div>
 
-          {/* Ethos Footer */}
+          {/* Ethos Footer (always shown) */}
           <div className="border-t border-border pt-6 pb-8 mt-8 text-center space-y-3">
             <p className="text-sm font-medium text-foreground">
               This report was generated by{" "}
@@ -359,8 +387,6 @@ export default function SharedReport() {
               FLOW is a proprietary analytical framework by Ethos.
             </p>
           </div>
-            </>
-          )}
         </div>
       </ScrollArea>
     </div>
