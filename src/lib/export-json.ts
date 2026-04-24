@@ -71,6 +71,21 @@ export async function exportProjectAsJson(projectId: string) {
     })
   );
 
+  // Enrich flow reports with band labels (descriptive, user-facing)
+  const enrichedFlowReports = (flowRes.data ?? []).map((r: any) => {
+    const enrichPillar = (p: any) =>
+      p && typeof p === "object"
+        ? { ...p, band_label: getBandLabel(p.score ?? null) }
+        : p;
+    return {
+      ...r,
+      ai_find: enrichPillar(r.ai_find),
+      ai_lead: enrichPillar(r.ai_lead),
+      ai_organize: enrichPillar(r.ai_organize),
+      ai_write: enrichPillar(r.ai_write),
+    };
+  });
+
   const exportData = {
     exported_at: new Date().toISOString(),
     version: "1.0",
@@ -81,7 +96,7 @@ export async function exportProjectAsJson(projectId: string) {
       chat_threads: threadsWithMessages,
       bookmarks: bookmarksRes.data ?? [],
       post_its: postItsRes.data ?? [],
-      flow_reports: flowRes.data ?? [],
+      flow_reports: enrichedFlowReports,
       stats: statsRes.data ?? null,
       imported_documents: docsRes.data ?? [],
       creative_data: creativeRes.data ?? [],
