@@ -6,7 +6,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { getScoreLabel, getScoreColor, PILLAR_ICONS, PILLAR_LABELS, PILLAR_TOOLTIPS } from "./shared-utils";
+import { PILLAR_ICONS, PILLAR_LABELS, PILLAR_TOOLTIPS } from "./shared-utils";
+import { getBandForScore } from "@/lib/flowBands";
 import type { FlowPillar } from "@/hooks/useFlowAnalysis";
 
 interface ScoreCardProps {
@@ -18,12 +19,18 @@ export function ScoreCard({ pillarKey, pillar }: ScoreCardProps) {
   const [expanded, setExpanded] = useState(false);
   const Icon = PILLAR_ICONS[pillarKey as keyof typeof PILLAR_ICONS];
   const labels = PILLAR_LABELS[pillarKey];
-  const scoreLabel = getScoreLabel(pillar.score);
-  const colorClasses = getScoreColor(pillar.score);
+  const band = getBandForScore(pillar?.score ?? null);
+
+  const cardStyle = band
+    ? { backgroundColor: band.bgColor, borderColor: band.color + "55" }
+    : undefined;
 
   return (
-    <div className={`rounded-lg border p-4 space-y-3 ${colorClasses}`}>
-      <div className="flex items-start justify-between">
+    <div
+      className="rounded-lg border p-4 space-y-3 text-foreground"
+      style={cardStyle}
+    >
+      <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <TooltipProvider>
             <Tooltip>
@@ -42,14 +49,17 @@ export function ScoreCard({ pillarKey, pillar }: ScoreCardProps) {
             <p className="text-[10px] opacity-80">{labels.full.split(" — ")[1]}</p>
           </div>
         </div>
-        <div className="text-right">
-          <p className="text-2xl font-bold leading-none">
-            {pillar?.score != null ? Number(pillar.score).toFixed(1) : "—"}
-          </p>
-          <p className="text-[10px] opacity-70 mt-0.5">/ 5.0</p>
-        </div>
+        <span
+          className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap"
+          style={
+            band
+              ? { backgroundColor: band.color, color: "#fff" }
+              : { backgroundColor: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }
+          }
+        >
+          {band ? band.label : "Insufficient evidence"}
+        </span>
       </div>
-      <p className="text-xs font-semibold">{scoreLabel}</p>
       <p className="text-sm leading-relaxed opacity-90">{pillar?.narrative ?? ""}</p>
       {(() => {
         const evidence = Array.isArray(pillar?.evidence) ? pillar.evidence : [];
@@ -74,7 +84,7 @@ export function ScoreCard({ pillarKey, pillar }: ScoreCardProps) {
             className="text-xs font-medium flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity"
           >
             {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            {expanded ? "Hide reasoning" : "Explain this score"}
+            {expanded ? "Hide reasoning" : "Explain this assessment"}
           </button>
           {expanded && (
             <div className="mt-2 text-xs leading-relaxed opacity-80 bg-background/50 rounded-md p-3">
