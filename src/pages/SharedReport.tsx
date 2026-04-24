@@ -305,8 +305,6 @@ export default function SharedReport() {
                   postAssessment={postAssessment}
                 />
               )}
-                </div>
-              )}
 
               {/* Token Usage */}
               {report.flow_meta && <TokenUsageSection meta={report.flow_meta} />}
