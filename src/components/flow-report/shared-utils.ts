@@ -9,24 +9,24 @@ import type {
   FlowUserAssessment,
   FlowReport,
 } from "@/hooks/useFlowAnalysis";
+import { getBandForScore, getBandLabel } from "@/lib/flowBands";
 
+/**
+ * Returns the user-facing band label for a score. Numbers are never shown.
+ * Kept here for backwards compatibility with existing call sites.
+ */
 export function getScoreLabel(score: number | null): string {
-  if (score == null) return "Insufficient evidence";
-  if (score >= 4.5) return "Only Human";
-  if (score >= 3.5) return "Largely Human";
-  if (score >= 2.5) return "More Human";
-  if (score >= 1.5) return "More AI";
-  if (score >= 0.5) return "Largely AI";
-  return "No human contribution detected";
+  return getBandLabel(score);
 }
 
+/**
+ * Returns Tailwind utility classes for a score-tinted card surface, using
+ * the band's bgColor as a soft background tint.
+ */
 export function getScoreColor(score: number | null): string {
-  if (score == null) return "bg-muted text-muted-foreground";
-  if (score >= 4.0) return "bg-[#5D89A8]/25 text-foreground border-[#5D89A8]/40";
-  if (score >= 3.0) return "bg-[#5D89A8]/20 text-foreground border-[#5D89A8]/35";
-  if (score >= 2.0) return "bg-[#5D89A8]/15 text-foreground border-[#5D89A8]/30";
-  if (score >= 1.0) return "bg-[#5D89A8]/10 text-foreground border-[#5D89A8]/20";
-  return "bg-[#5D89A8]/5 text-foreground border-[#5D89A8]/10";
+  const band = getBandForScore(score);
+  if (!band) return "bg-muted text-muted-foreground border-border";
+  return "text-foreground border";
 }
 
 export const PILLAR_ICONS = {
