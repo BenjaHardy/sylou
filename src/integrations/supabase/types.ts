@@ -194,6 +194,7 @@ export type Database = {
           created_at: string
           flow_meta: Json | null
           id: string
+          key_user_contributions: Json | null
           metrics_snapshot: Json | null
           model_used: string
           project_id: string
@@ -223,6 +224,7 @@ export type Database = {
           created_at?: string
           flow_meta?: Json | null
           id?: string
+          key_user_contributions?: Json | null
           metrics_snapshot?: Json | null
           model_used: string
           project_id: string
@@ -252,6 +254,7 @@ export type Database = {
           created_at?: string
           flow_meta?: Json | null
           id?: string
+          key_user_contributions?: Json | null
           metrics_snapshot?: Json | null
           model_used?: string
           project_id?: string

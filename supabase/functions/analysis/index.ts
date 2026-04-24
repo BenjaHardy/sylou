@@ -32,6 +32,7 @@ const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI coll
 5. Assign a score for each pillar using the rubric below. Use half-point increments (0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0) to reflect nuance. If there is insufficient evidence to assess a pillar, assign null instead of a numeric score.
 6. Write a brief narrative for each pillar explaining the assessment in language accessible to the user.
 7. Write an overall summary of the human-AI collaboration. Where applicable, highlight (i) significant user contributions and (ii) areas where the human-AI collaboration provided significant added value in a way that empowered the user and their work; if none, specify there are none.
+8. Identify **3–5 key user contributions**. These are specific, concrete moments where the user's thinking, judgment, knowledge, or creativity meaningfully shaped the final work. If there are genuinely fewer than 3 clear user contributions, return whatever is well-supported by evidence. Do not fabricate contributions to reach 3.
 
 # FLOW PILLAR DEFINITIONS
 
@@ -81,6 +82,7 @@ const CREATIVE_FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating huma
 5. Assign a score for each pillar using the rubric below. Use half-point increments (0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0) to reflect nuance. If there is insufficient evidence to assess a pillar, assign null instead of a numeric score.
 6. Write a brief narrative for each pillar explaining the assessment in language accessible to the user.
 7. Write an overall summary of the human-AI collaboration. Where applicable, highlight (i) significant user contributions and (ii) areas where the human-AI collaboration provided significant added value in a way that empowered the user and their work; if none, specify there are none.
+8. Identify **3–5 key user contributions**. These are specific, concrete moments where the user's thinking, judgment, knowledge, or creativity meaningfully shaped the final work. If there are genuinely fewer than 3 clear user contributions, return whatever is well-supported by evidence. Do not fabricate contributions to reach 3.
 
 # FLOW PILLAR DEFINITIONS
 
@@ -140,13 +142,37 @@ const SUBMIT_FLOW_TOOL = {
   description: "Submit the structured FLOW analysis results",
   input_schema: {
     type: "object" as const,
-    required: ["summary", "find", "lead", "organize", "write"],
+    required: ["summary", "find", "lead", "organize", "write", "key_user_contributions"],
     properties: {
       summary: { type: "string" as const, description: "Overall summary paragraph" },
       find: pillarSchema,
       lead: pillarSchema,
       organize: pillarSchema,
       write: pillarSchema,
+      key_user_contributions: {
+        type: "array" as const,
+        description: "3–5 specific, concrete user contributions that meaningfully shaped the final work.",
+        items: {
+          type: "object" as const,
+          required: ["contribution", "evidence", "why_it_matters"],
+          properties: {
+            contribution: {
+              type: "string" as const,
+              description: "A concise description (one or two sentences) of what the user specifically contributed — such as an idea, a reframing, a decision, domain knowledge, a judgment call, a stylistic or structural choice.",
+            },
+            evidence: {
+              type: "string" as const,
+              description: "Where this contribution appears in the project — cite or paraphrase a specific moment from the chat, the writing content, the creative tools (if available), or the interaction history.",
+            },
+            why_it_matters: {
+              type: "string" as const,
+              description: "Why this contribution was significant for the final work — what would have been missing, weaker, or different without it.",
+            },
+          },
+        },
+        minItems: 0,
+        maxItems: 5,
+      },
     },
   },
 };
@@ -988,6 +1014,7 @@ ${writePillarNotice}`;
         ai_lead: flowResult.lead,
         ai_organize: flowResult.organize,
         ai_write: flowResult.write,
+        key_user_contributions: Array.isArray(flowResult.key_user_contributions) ? flowResult.key_user_contributions : [],
         metrics_snapshot: metricsSnapshot,
         flow_meta: flowMeta,
         provenance_snapshot: segmentMap,

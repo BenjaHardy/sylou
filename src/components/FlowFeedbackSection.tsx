@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { MessageSquareQuote } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { BandSelector } from "@/components/flow-report/BandSelector";
+import { getBandForScore } from "@/lib/flowBands";
 import type { FlowFeedback } from "@/hooks/useFlowAnalysis";
 
 interface Props {
@@ -18,19 +19,21 @@ const PILLARS = [
   { key: "write" as const, label: "Write", desc: "Writing & Text Production" },
 ];
 
+const DEFAULT_SCORE = 2.25; // Collaborative midpoint
+
 export function FlowFeedbackSection({ type, existingFeedback, onSubmit }: Props) {
   const [values, setValues] = useState<FlowFeedback>({
-    find: 2.5,
-    lead: 2.5,
-    organize: 2.5,
-    write: 2.5,
+    find: DEFAULT_SCORE,
+    lead: DEFAULT_SCORE,
+    organize: DEFAULT_SCORE,
+    write: DEFAULT_SCORE,
   });
   const [submitted, setSubmitted] = useState(!!existingFeedback);
 
   if (submitted && existingFeedback) {
     return (
       <div className="border border-border rounded-lg p-4 bg-muted/30">
-        <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
+        <p className="text-xs text-muted-foreground font-medium mb-3 flex items-center gap-1.5">
           <MessageSquareQuote className="h-3.5 w-3.5" />
           <TooltipProvider>
             <Tooltip>
@@ -45,13 +48,25 @@ export function FlowFeedbackSection({ type, existingFeedback, onSubmit }: Props)
             </Tooltip>
           </TooltipProvider>
         </p>
-        <div className="grid grid-cols-4 gap-3 text-center">
-          {PILLARS.map((p) => (
-            <div key={p.key}>
-              <span className="text-xs text-muted-foreground">{p.label}</span>
-              <p className="text-lg font-bold text-foreground">{existingFeedback[p.key].toFixed(1)}</p>
-            </div>
-          ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {PILLARS.map((p) => {
+            const band = getBandForScore(existingFeedback[p.key] ?? null);
+            return (
+              <div key={p.key} className="flex items-center justify-between gap-2 rounded-md bg-background/60 px-3 py-2">
+                <span className="text-xs text-muted-foreground">{p.label}</span>
+                <span
+                  className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                  style={
+                    band
+                      ? { backgroundColor: band.color, color: "#fff" }
+                      : { backgroundColor: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }
+                  }
+                >
+                  {band ? band.label : "—"}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -68,11 +83,11 @@ export function FlowFeedbackSection({ type, existingFeedback, onSubmit }: Props)
         <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
           <MessageSquareQuote className="h-4 w-4 text-primary" />
           {type === "pre"
-            ? "Before viewing detailed results, how would you rate your own contributions?"
-            : "Now that you've seen the analysis, do you agree with the scores?"}
+            ? "Before viewing detailed results, how would you describe your own contributions?"
+            : "Now that you've seen the analysis, do you agree with the assessment?"}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Rate each pillar from 0 (all AI) to 5 (all human). Use half-point increments.
+          For each pillar, pick the band that best describes the human-AI collaboration.
           {type === "pre" && (
             <> Pre-analysis user feedback is only possible the first time the FLOW analysis is run for a given project.</>
           )}
@@ -80,25 +95,15 @@ export function FlowFeedbackSection({ type, existingFeedback, onSubmit }: Props)
       </div>
       <div className="space-y-3">
         {PILLARS.map((p) => (
-          <div key={p.key} className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-foreground">
-                {p.label}{" "}
-                <span className="text-muted-foreground font-normal">— {p.desc}</span>
-              </span>
-              <span className="text-sm font-bold text-foreground w-8 text-right">
-                {values[p.key].toFixed(1)}
-              </span>
-            </div>
-            <Slider
-              min={0}
-              max={5}
-              step={0.5}
-              value={[values[p.key]]}
-              onValueChange={([v]) =>
-                setValues((prev) => ({ ...prev, [p.key]: v }))
-              }
-              className="w-full"
+          <div key={p.key} className="space-y-1.5">
+            <span className="text-xs font-medium text-foreground">
+              {p.label}{" "}
+              <span className="text-muted-foreground font-normal">— {p.desc}</span>
+            </span>
+            <BandSelector
+              value={values[p.key]}
+              onChange={(v) => setValues((prev) => ({ ...prev, [p.key]: v }))}
+              compact
             />
           </div>
         ))}

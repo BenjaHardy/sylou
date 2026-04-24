@@ -63,6 +63,7 @@ import { ProjectActivitySection } from "@/components/flow-report/ProjectActivity
 import { extractUserAssessment, extractFeedbackScores } from "@/components/flow-report/shared-utils";
 import FlowWorkProfile from "@/components/FlowWorkProfile";
 import { ProfileTabContent } from "@/components/flow-report/ProfileTabContent";
+import { KeyUserContributions } from "@/components/flow-report/KeyUserContributions";
 import { getFlowProfile } from "@/lib/flow-work-profiles";
 
 import type {
@@ -650,6 +651,9 @@ export function FlowReportView({
                   <p className="text-sm text-foreground leading-relaxed">{report.ai_summary}</p>
                 </div>
               </div>
+
+              {/* Key User Contributions */}
+              <KeyUserContributions contributions={(report as any).key_user_contributions} />
 
               {/* View Highlighted Text */}
               {report.provenance_snapshot && report.provenance_snapshot.length > 0 && (

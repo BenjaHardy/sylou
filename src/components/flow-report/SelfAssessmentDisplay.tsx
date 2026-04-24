@@ -1,9 +1,26 @@
-import { PILLAR_KEYS, PILLAR_LABELS, getScoreLabel } from "@/components/flow-report/shared-utils";
+import { PILLAR_KEYS, PILLAR_LABELS } from "@/components/flow-report/shared-utils";
+import { getBandForScore } from "@/lib/flowBands";
 import type { FlowFeedback, FlowUserAssessment } from "@/hooks/useFlowAnalysis";
 
 interface SelfAssessmentDisplayProps {
   preFeedbackScores: FlowFeedback | null;
   postAssessment: FlowUserAssessment | null;
+}
+
+function BandChip({ score }: { score: number | null | undefined }) {
+  const band = getBandForScore(score ?? null);
+  return (
+    <span
+      className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+      style={
+        band
+          ? { backgroundColor: band.color, color: "#fff" }
+          : { backgroundColor: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }
+      }
+    >
+      {band ? band.label : "Insufficient evidence"}
+    </span>
+  );
 }
 
 export function SelfAssessmentDisplay({ preFeedbackScores, postAssessment }: SelfAssessmentDisplayProps) {
@@ -14,12 +31,13 @@ export function SelfAssessmentDisplay({ preFeedbackScores, postAssessment }: Sel
       {preFeedbackScores && (
         <div className="space-y-3">
           <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Pre-Analysis Self-Assessment</h4>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {PILLAR_KEYS.map((key) => (
-              <div key={key} className="border border-border rounded-lg p-3 text-center space-y-1">
-                <p className="text-[10px] font-medium text-muted-foreground uppercase">{PILLAR_LABELS[key].full.split("—")[0].trim()}</p>
-                <p className="text-lg font-bold text-foreground">{preFeedbackScores[key]?.toFixed(1) ?? "—"}</p>
-                <p className="text-[10px] text-muted-foreground">{getScoreLabel(preFeedbackScores[key] ?? null)}</p>
+              <div key={key} className="border border-border rounded-lg p-3 flex items-center justify-between gap-2">
+                <p className="text-[11px] font-medium text-muted-foreground uppercase">
+                  {PILLAR_LABELS[key].full.split("—")[0].trim()}
+                </p>
+                <BandChip score={preFeedbackScores[key]} />
               </div>
             ))}
           </div>
@@ -29,12 +47,13 @@ export function SelfAssessmentDisplay({ preFeedbackScores, postAssessment }: Sel
       {postAssessment && (
         <div className="space-y-3">
           <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Post-Analysis Self-Assessment</h4>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {PILLAR_KEYS.map((key) => (
-              <div key={key} className="border border-border rounded-lg p-3 text-center space-y-1">
-                <p className="text-[10px] font-medium text-muted-foreground uppercase">{PILLAR_LABELS[key].full.split("—")[0].trim()}</p>
-                <p className="text-lg font-bold text-foreground">{postAssessment.scores[key]?.toFixed(1) ?? "—"}</p>
-                <p className="text-[10px] text-muted-foreground">{getScoreLabel(postAssessment.scores[key] ?? null)}</p>
+              <div key={key} className="border border-border rounded-lg p-3 flex items-center justify-between gap-2">
+                <p className="text-[11px] font-medium text-muted-foreground uppercase">
+                  {PILLAR_LABELS[key].full.split("—")[0].trim()}
+                </p>
+                <BandChip score={postAssessment.scores[key]} />
               </div>
             ))}
           </div>

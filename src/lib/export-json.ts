@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getBandLabel } from "@/lib/flowBands";
 
 export async function exportProjectAsJson(projectId: string) {
   const [
@@ -38,7 +39,7 @@ export async function exportProjectAsJson(projectId: string) {
     supabase
       .from("flow_reports")
       .select(
-        "id, created_at, model_used, project_name, ai_summary, ai_find, ai_organize, ai_lead, ai_write, ai_editor_summary, flow_meta, metrics_snapshot, certificate_id, user_feedback_pre, user_feedback_pre_at, user_feedback_post, user_feedback_post_at"
+        "id, created_at, model_used, project_name, ai_summary, ai_find, ai_organize, ai_lead, ai_write, key_user_contributions, ai_editor_summary, flow_meta, metrics_snapshot, certificate_id, user_feedback_pre, user_feedback_pre_at, user_feedback_post, user_feedback_post_at"
       )
       .eq("project_id", projectId)
       .order("created_at", { ascending: false }),

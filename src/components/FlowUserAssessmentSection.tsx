@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { MessageSquareQuote, Pencil, Check } from "lucide-react";
+import { BandSelector } from "@/components/flow-report/BandSelector";
+import { getBandForScore } from "@/lib/flowBands";
 import type { FlowUserAssessment, FlowFeedback } from "@/hooks/useFlowAnalysis";
 
 const PILLARS = [
@@ -13,19 +14,17 @@ const PILLARS = [
   { key: "write" as const, label: "Write", desc: "Writing & Text Production" },
 ];
 
+const DEFAULT_SCORE = 2.25; // Collaborative midpoint
+
 interface Props {
   existingAssessment: FlowUserAssessment | null;
   onSubmit: (assessment: FlowUserAssessment) => void;
 }
 
-function isFlowUserAssessment(val: any): val is FlowUserAssessment {
-  return val && typeof val === "object" && "scores" in val && "comments" in val;
-}
-
 export function FlowUserAssessmentSection({ existingAssessment, onSubmit }: Props) {
   const [editing, setEditing] = useState(!existingAssessment);
   const [scores, setScores] = useState<FlowFeedback>(
-    existingAssessment?.scores ?? { find: 2.5, lead: 2.5, organize: 2.5, write: 2.5 }
+    existingAssessment?.scores ?? { find: DEFAULT_SCORE, lead: DEFAULT_SCORE, organize: DEFAULT_SCORE, write: DEFAULT_SCORE }
   );
   const [comments, setComments] = useState<FlowUserAssessment["comments"]>(
     existingAssessment?.comments ?? { find: "", lead: "", organize: "", write: "", overall: "" }
@@ -59,13 +58,25 @@ export function FlowUserAssessmentSection({ existingAssessment, onSubmit }: Prop
             Edit
           </Button>
         </div>
-        <div className="grid grid-cols-4 gap-3 text-center">
-          {PILLARS.map((p) => (
-            <div key={p.key}>
-              <span className="text-xs text-muted-foreground">{p.label}</span>
-              <p className="text-lg font-bold text-foreground">{existingAssessment.scores[p.key].toFixed(1)}</p>
-            </div>
-          ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {PILLARS.map((p) => {
+            const band = getBandForScore(existingAssessment.scores[p.key] ?? null);
+            return (
+              <div key={p.key} className="flex items-center justify-between gap-2 rounded-md bg-background/60 px-3 py-2">
+                <span className="text-xs text-muted-foreground">{p.label}</span>
+                <span
+                  className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                  style={
+                    band
+                      ? { backgroundColor: band.color, color: "#fff" }
+                      : { backgroundColor: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }
+                  }
+                >
+                  {band ? band.label : "—"}
+                </span>
+              </div>
+            );
+          })}
         </div>
         {PILLARS.map((p) =>
           existingAssessment.comments[p.key] ? (
@@ -102,28 +113,20 @@ export function FlowUserAssessmentSection({ existingAssessment, onSubmit }: Prop
         </TooltipProvider>
       </p>
       <p className="text-xs text-muted-foreground">
-        Rate each pillar from 0 (all AI) to 5 (all human) and optionally add comments.
+        For each pillar, pick the band that best describes the human-AI collaboration. Comments are optional.
       </p>
 
       <div className="space-y-4">
         {PILLARS.map((p) => (
           <div key={p.key} className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-foreground">
-                {p.label}{" "}
-                <span className="text-muted-foreground font-normal">— {p.desc}</span>
-              </span>
-              <span className="text-sm font-bold text-foreground w-8 text-right">
-                {scores[p.key].toFixed(1)}
-              </span>
-            </div>
-            <Slider
-              min={0}
-              max={5}
-              step={0.5}
-              value={[scores[p.key]]}
-              onValueChange={([v]) => setScores((prev) => ({ ...prev, [p.key]: v }))}
-              className="w-full"
+            <span className="text-xs font-medium text-foreground">
+              {p.label}{" "}
+              <span className="text-muted-foreground font-normal">— {p.desc}</span>
+            </span>
+            <BandSelector
+              value={scores[p.key]}
+              onChange={(v) => setScores((prev) => ({ ...prev, [p.key]: v }))}
+              compact
             />
             <Textarea
               placeholder={`Comment on ${p.label} (optional)…`}
