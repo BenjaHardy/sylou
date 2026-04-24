@@ -295,50 +295,16 @@ export default function SharedReport() {
                 </div>
               </div>
 
-              {/* User Self-Assessment (read-only, embedded under report tab) */}
-              {showFeedback && preFeedbackScores && (
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Pre-Analysis Self-Assessment</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {PILLAR_KEYS.map((key) => (
-                      <div key={key} className="border border-border rounded-lg p-3 text-center space-y-1">
-                        <p className="text-[10px] font-medium text-muted-foreground uppercase">{key}</p>
-                        <p className="text-lg font-bold text-foreground">{preFeedbackScores[key]?.toFixed(1) ?? "—"}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* Key User Contributions */}
+              <KeyUserContributions contributions={(report as any).key_user_contributions} />
 
-              {showFeedback && postAssessment && (
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Post-Analysis Self-Assessment</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {PILLAR_KEYS.map((key) => (
-                      <div key={key} className="border border-border rounded-lg p-3 text-center space-y-1">
-                        <p className="text-[10px] font-medium text-muted-foreground uppercase">{key}</p>
-                        <p className="text-lg font-bold text-foreground">{postAssessment.scores[key]?.toFixed(1) ?? "—"}</p>
-                      </div>
-                    ))}
-                  </div>
-                  {Object.entries(postAssessment.comments).some(([, v]) => v.trim()) && (
-                    <div className="space-y-2 mt-2">
-                      {PILLAR_KEYS.map((key) =>
-                        postAssessment.comments[key]?.trim() ? (
-                          <div key={key} className="bg-muted/30 rounded-md p-3">
-                            <p className="text-[10px] font-medium text-muted-foreground uppercase mb-1">{key}</p>
-                            <p className="text-xs text-foreground">{postAssessment.comments[key]}</p>
-                          </div>
-                        ) : null
-                      )}
-                      {postAssessment.comments.overall?.trim() && (
-                        <div className="bg-muted/30 rounded-md p-3">
-                          <p className="text-[10px] font-medium text-muted-foreground uppercase mb-1">Overall</p>
-                          <p className="text-xs text-foreground">{postAssessment.comments.overall}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
+              {/* User Self-Assessment (read-only) */}
+              {showFeedback && (
+                <SelfAssessmentDisplay
+                  preFeedbackScores={preFeedbackScores}
+                  postAssessment={postAssessment}
+                />
+              )}
                 </div>
               )}
 
