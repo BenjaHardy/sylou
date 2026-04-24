@@ -652,6 +652,9 @@ export function FlowReportView({
                 </div>
               </div>
 
+              {/* Key User Contributions */}
+              <KeyUserContributions contributions={(report as any).key_user_contributions} />
+
               {/* View Highlighted Text */}
               {report.provenance_snapshot && report.provenance_snapshot.length > 0 && (
                 <div className="flex justify-center gap-2">
