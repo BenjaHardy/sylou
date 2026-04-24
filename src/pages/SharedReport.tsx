@@ -8,8 +8,9 @@ import { TokenUsageSection } from "@/components/flow-report/TokenUsageSection";
 import { ProjectActivitySection } from "@/components/flow-report/ProjectActivitySection";
 import { FlowReplayOverlay, type ReplayEvent } from "@/components/FlowReplayOverlay";
 import { ProfileTabContent } from "@/components/flow-report/ProfileTabContent";
+import { KeyUserContributions } from "@/components/flow-report/KeyUserContributions";
+import { SelfAssessmentDisplay } from "@/components/flow-report/SelfAssessmentDisplay";
 import {
-  PILLAR_KEYS,
   extractUserAssessment,
   extractFeedbackScores,
 } from "@/components/flow-report/shared-utils";
