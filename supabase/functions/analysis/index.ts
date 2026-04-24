@@ -1014,6 +1014,7 @@ ${writePillarNotice}`;
         ai_lead: flowResult.lead,
         ai_organize: flowResult.organize,
         ai_write: flowResult.write,
+        key_user_contributions: Array.isArray(flowResult.key_user_contributions) ? flowResult.key_user_contributions : [],
         metrics_snapshot: metricsSnapshot,
         flow_meta: flowMeta,
         provenance_snapshot: segmentMap,
