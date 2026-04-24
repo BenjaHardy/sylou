@@ -1,4 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { getBandForScore } from "@/lib/flowBands";
 import type { FlowProfile } from "@/lib/flow-work-profiles";
 
 interface FlowWorkProfileProps {
@@ -52,45 +53,50 @@ export default function FlowWorkProfile({ profile, scores }: FlowWorkProfileProp
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {PILLARS.map(({ key, letter, label }) => {
             const score = scores[key];
+            const band = getBandForScore(score);
+            const isLed = band ? score != null && score >= 3 : false;
             const isNull = score === null;
-            const isLed = !isNull && score >= 3;
+
+            const tileStyle = band
+              ? { backgroundColor: band.bgColor, borderColor: band.color + "55" }
+              : undefined;
 
             return (
               <div
                 key={key}
-                className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 ${
-                  isLed
-                    ? "border-[#5D89A8]/30 bg-[#5D89A8]/5"
-                    : "border-border bg-muted/30"
-                }`}
+                className="flex flex-col items-center gap-1.5 rounded-lg border p-3"
+                style={tileStyle}
               >
                 <div
                   className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
                     isLed
-                      ? "bg-[#5D89A8] text-white"
+                      ? "text-white"
                       : isNull
                         ? "border-2 border-dashed border-muted-foreground/30 text-muted-foreground/40"
-                        : "border-2 border-muted-foreground/40 text-muted-foreground/60"
+                        : "border-2 text-muted-foreground/80"
                   }`}
+                  style={
+                    band && isLed
+                      ? { backgroundColor: band.color }
+                      : band
+                        ? { borderColor: band.color }
+                        : undefined
+                  }
                 >
                   {letter}
                 </div>
                 <span className="text-xs font-medium text-muted-foreground">
                   {label}
                 </span>
-                <span className="text-lg font-semibold text-foreground">
-                  {isNull ? "N/A" : score.toFixed(1)}
-                </span>
                 <span
-                  className={`text-[10px] font-medium ${
-                    isLed
-                      ? "text-[#5D89A8]"
-                      : isNull
-                        ? "text-muted-foreground/40"
-                        : "text-muted-foreground"
-                  }`}
+                  className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold text-center"
+                  style={
+                    band
+                      ? { backgroundColor: band.color, color: "#fff" }
+                      : { backgroundColor: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }
+                  }
                 >
-                  {isLed ? "You led" : isNull ? "N/A" : "AI assisted"}
+                  {band ? band.label : "Insufficient evidence"}
                 </span>
               </div>
             );
