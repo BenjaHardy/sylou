@@ -142,13 +142,37 @@ const SUBMIT_FLOW_TOOL = {
   description: "Submit the structured FLOW analysis results",
   input_schema: {
     type: "object" as const,
-    required: ["summary", "find", "lead", "organize", "write"],
+    required: ["summary", "find", "lead", "organize", "write", "key_user_contributions"],
     properties: {
       summary: { type: "string" as const, description: "Overall summary paragraph" },
       find: pillarSchema,
       lead: pillarSchema,
       organize: pillarSchema,
       write: pillarSchema,
+      key_user_contributions: {
+        type: "array" as const,
+        description: "3–5 specific, concrete user contributions that meaningfully shaped the final work.",
+        items: {
+          type: "object" as const,
+          required: ["contribution", "evidence", "why_it_matters"],
+          properties: {
+            contribution: {
+              type: "string" as const,
+              description: "A concise description (one or two sentences) of what the user specifically contributed — such as an idea, a reframing, a decision, domain knowledge, a judgment call, a stylistic or structural choice.",
+            },
+            evidence: {
+              type: "string" as const,
+              description: "Where this contribution appears in the project — cite or paraphrase a specific moment from the chat, the writing content, the creative tools (if available), or the interaction history.",
+            },
+            why_it_matters: {
+              type: "string" as const,
+              description: "Why this contribution was significant for the final work — what would have been missing, weaker, or different without it.",
+            },
+          },
+        },
+        minItems: 0,
+        maxItems: 5,
+      },
     },
   },
 };
