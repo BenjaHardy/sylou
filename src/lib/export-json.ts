@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getBandLabel } from "@/lib/flowBands";
 
 export async function exportProjectAsJson(projectId: string) {
   const [
