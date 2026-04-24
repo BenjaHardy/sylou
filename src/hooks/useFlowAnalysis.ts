@@ -50,6 +50,12 @@ export interface FlowUserAssessment {
   };
 }
 
+export interface KeyUserContribution {
+  contribution: string;
+  evidence: string;
+  why_it_matters: string;
+}
+
 export interface FlowReport {
   id: string;
   project_id: string;
@@ -58,6 +64,7 @@ export interface FlowReport {
   ai_lead: FlowPillar;
   ai_organize: FlowPillar;
   ai_write: FlowPillar;
+  key_user_contributions: KeyUserContribution[] | null;
   flow_meta: FlowMeta | null;
   metrics_snapshot: MetricsSnapshot | null;
   provenance_snapshot: import("@/lib/provenance-tracker").ProvenanceSegment[] | null;
