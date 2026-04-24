@@ -32,6 +32,7 @@ const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI coll
 5. Assign a score for each pillar using the rubric below. Use half-point increments (0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0) to reflect nuance. If there is insufficient evidence to assess a pillar, assign null instead of a numeric score.
 6. Write a brief narrative for each pillar explaining the assessment in language accessible to the user.
 7. Write an overall summary of the human-AI collaboration. Where applicable, highlight (i) significant user contributions and (ii) areas where the human-AI collaboration provided significant added value in a way that empowered the user and their work; if none, specify there are none.
+8. Identify **3–5 key user contributions**. These are specific, concrete moments where the user's thinking, judgment, knowledge, or creativity meaningfully shaped the final work. If there are genuinely fewer than 3 clear user contributions, return whatever is well-supported by evidence. Do not fabricate contributions to reach 3.
 
 # FLOW PILLAR DEFINITIONS
 
