@@ -43,6 +43,10 @@ export function FlowInfoSection({ title = "About this FLOW Report" }: FlowInfoSe
               assessment should be considered alongside the user's own self-assessment when available, as well as the
               other reports and data provided.
             </p>
+            <p className="mt-2">
+              Additionally, the more the user has used Ethos for their meaningful work-related queries (not using
+              external AI), the more the feedback is relevant.
+            </p>
           </div>
           <p className="text-xs text-muted-foreground">
             Learn more at{" "}

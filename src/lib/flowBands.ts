@@ -25,53 +25,54 @@ export type FlowBand = {
 /**
  * The six FLOW bands, ordered from AI-led (innermost on the radar) to
  * Human-authored (outermost). Colors form a continuous AI → Human gradient
- * that fits the Ethos palette (purples → silver-lake-blue → greens).
+ * that runs purple → off-white/slate → blue, with a neutral pivot at the
+ * "Collaborative" midpoint.
  */
 export const FLOW_BANDS: FlowBand[] = [
   {
     label: "AI-led",
-    color: "#7B2D8E",
-    bgColor: "#F3E8F5",
+    color: "#6B2D8E",
+    bgColor: "#EFE4F3",
     minScore: 0.0,
     maxScore: 0.5,
     midpoint: 0.25,
   },
   {
     label: "AI-led, human-refined",
-    color: "#A85FAB",
-    bgColor: "#F7EEF8",
+    color: "#A06CB8",
+    bgColor: "#F3EAF6",
     minScore: 1.0,
     maxScore: 1.5,
     midpoint: 1.25,
   },
   {
     label: "Collaborative",
-    color: "#5D89A8",
-    bgColor: "#EAF1F8",
+    color: "#8A8F96",
+    bgColor: "#F1F1F0",
     minScore: 2.0,
     maxScore: 2.5,
     midpoint: 2.25,
   },
   {
     label: "Human-led, AI-assisted",
-    color: "#3B7A57",
-    bgColor: "#E8F1EC",
+    color: "#5D89A8",
+    bgColor: "#E6EEF5",
     minScore: 3.0,
     maxScore: 3.5,
     midpoint: 3.25,
   },
   {
     label: "Human-led",
-    color: "#1F5038",
-    bgColor: "#DCE9E1",
+    color: "#2F6699",
+    bgColor: "#DCE7F1",
     minScore: 4.0,
     maxScore: 4.5,
     midpoint: 4.25,
   },
   {
     label: "Human-authored",
-    color: "#173B29",
-    bgColor: "#CDE0D5",
+    color: "#1B4A7A",
+    bgColor: "#CFDDEA",
     minScore: 5.0,
     maxScore: 5.0,
     midpoint: 5.0,
