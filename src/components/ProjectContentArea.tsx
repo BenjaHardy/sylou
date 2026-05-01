@@ -342,6 +342,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
           uploading={docsUploading}
           onUpload={uploadDocument}
           onDelete={deleteDocument}
+          onToggleFavourite={toggleFavourite}
           onClose={() => setShowDocuments(false)}
         />
       )}
