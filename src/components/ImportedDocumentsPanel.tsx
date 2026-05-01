@@ -30,7 +30,7 @@ const FILE_ICONS: Record<string, string> = {
   docx: "📃",
 };
 
-export function ImportedDocumentsPanel({ documents, loading, uploading, onUpload, onDelete, onClose }: Props) {
+export function ImportedDocumentsPanel({ documents, loading, uploading, onUpload, onDelete, onToggleFavourite, onClose }: Props) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
