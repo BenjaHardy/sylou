@@ -144,7 +144,34 @@ export function ImportedDocumentsPanel({ documents, loading, uploading, onUpload
                       <p className="text-xs text-muted-foreground/80 mt-1.5 line-clamp-2">{doc.summary}</p>
                     ) : null}
                   </div>
-                  <div className="shrink-0">
+                  <div className="shrink-0 flex items-center gap-1">
+                    <TooltipProvider delayDuration={300}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => onToggleFavourite(doc.id)}
+                            disabled={isProcessing}
+                            className={cn(
+                              "p-1 rounded-md transition-colors",
+                              doc.is_favourite
+                                ? "text-primary hover:text-primary/80"
+                                : "text-muted-foreground/40 hover:text-muted-foreground",
+                              isProcessing && "opacity-40 cursor-not-allowed"
+                            )}
+                            aria-label={doc.is_favourite ? "Unfavourite document" : "Favourite document"}
+                            aria-pressed={doc.is_favourite}
+                          >
+                            <Star
+                              className="h-3.5 w-3.5"
+                              fill={doc.is_favourite ? "currentColor" : "none"}
+                            />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="max-w-[260px] text-xs">
+                          Favourite documents are included in full in every AI conversation, giving the AI complete awareness of their content without needing to look them up. This improves response quality but increases token usage per message.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     {confirmDelete === doc.id ? (
                       <div className="flex items-center gap-1">
                         <Button
