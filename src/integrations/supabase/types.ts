@@ -290,6 +290,7 @@ export type Database = {
           file_path: string
           file_size_bytes: number | null
           id: string
+          is_favourite: boolean
           project_id: string
           summary: string | null
           uploaded_at: string
@@ -300,6 +301,7 @@ export type Database = {
           file_path: string
           file_size_bytes?: number | null
           id?: string
+          is_favourite?: boolean
           project_id: string
           summary?: string | null
           uploaded_at?: string
@@ -310,6 +312,7 @@ export type Database = {
           file_path?: string
           file_size_bytes?: number | null
           id?: string
+          is_favourite?: boolean
           project_id?: string
           summary?: string | null
           uploaded_at?: string

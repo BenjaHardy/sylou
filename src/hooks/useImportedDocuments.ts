@@ -11,10 +11,12 @@ export interface ImportedDocument {
   summary: string | null;
   file_size_bytes: number | null;
   uploaded_at: string;
+  is_favourite: boolean;
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_EXTENSIONS = ["pdf", "txt", "md", "docx"];
+const FAVOURITE_SOFT_CAP_CHARS = 30_000;
 
 export function useImportedDocuments(projectId: string | null) {
   const [documents, setDocuments] = useState<ImportedDocument[]>([]);
@@ -214,12 +216,60 @@ export function useImportedDocuments(projectId: string | null) {
     [documents]
   );
 
+  const toggleFavourite = useCallback(
+    async (docId: string) => {
+      const doc = documents.find((d) => d.id === docId);
+      if (!doc) return;
+      const next = !doc.is_favourite;
+
+      // Optimistic update
+      setDocuments((prev) =>
+        prev.map((d) => (d.id === docId ? { ...d, is_favourite: next } : d))
+      );
+
+      const { error } = await supabase
+        .from("imported_documents")
+        .update({ is_favourite: next })
+        .eq("id", docId);
+
+      if (error) {
+        // Revert on error
+        setDocuments((prev) =>
+          prev.map((d) => (d.id === docId ? { ...d, is_favourite: !next } : d))
+        );
+        toast({
+          title: "Failed to update favourite",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Soft-cap warning: only when toggling ON and crossing the threshold
+      if (next) {
+        const prevTotal = documents
+          .filter((d) => d.is_favourite && d.id !== docId && d.extracted_text)
+          .reduce((sum, d) => sum + (d.extracted_text?.length ?? 0), 0);
+        const newTotal = prevTotal + (doc.extracted_text?.length ?? 0);
+        if (prevTotal <= FAVOURITE_SOFT_CAP_CHARS && newTotal > FAVOURITE_SOFT_CAP_CHARS) {
+          const approxTokens = Math.ceil(newTotal / 4);
+          toast({
+            title: "Heads up: high favourite document load",
+            description: `Your favourite documents total approximately ${approxTokens.toLocaleString()} tokens. This amount is used on every message. Consider unfavouriting documents you no longer need for every response to conserve your token budget.`,
+          });
+        }
+      }
+    },
+    [documents]
+  );
+
   return {
     documents,
     loading,
     uploading,
     uploadDocument,
     deleteDocument,
+    toggleFavourite,
     refreshDocuments: fetchDocuments,
   };
 }

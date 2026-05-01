@@ -140,6 +140,24 @@ Deno.serve(async (req) => {
       prompt = prompt.replace("{target_language}", targetLanguage!);
     }
 
+    // --- Inject favourite reference documents into the system prompt ---
+    const serviceRoleKeyForDocs = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminForDocs = createClient(supabaseUrl, serviceRoleKeyForDocs);
+    const { data: favDocs } = await adminForDocs
+      .from("imported_documents")
+      .select("file_name, extracted_text")
+      .eq("project_id", projectId)
+      .eq("is_favourite", true);
+
+    const favourites = (favDocs ?? []).filter((d: any) => d.extracted_text);
+    if (favourites.length > 0) {
+      let favBlock = `\n\n# REFERENCE DOCUMENTS (ALWAYS AVAILABLE)\n\nThe following documents have been provided by the user as key reference material. Their full content is included below. Use them to inform your response when relevant.\n\n`;
+      for (const doc of favourites) {
+        favBlock += `=== ${doc.file_name} ===\n\n${doc.extracted_text}\n\n`;
+      }
+      prompt += favBlock;
+    }
+
     const llmMessages = [
       { role: "system", content: prompt },
       { role: "user", content: selectedText },

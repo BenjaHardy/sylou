@@ -118,7 +118,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const { markWriting } = useActivityTracker(project?.id ?? null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const { postIts, loading: postItsLoading, createPostIt, updatePostIt, updatePosition, deletePostIt } = usePostIts(project?.id ?? null);
-  const { documents, loading: docsLoading, uploading: docsUploading, uploadDocument, deleteDocument } = useImportedDocuments(project?.id ?? null);
+  const { documents, loading: docsLoading, uploading: docsUploading, uploadDocument, deleteDocument, toggleFavourite } = useImportedDocuments(project?.id ?? null);
   const [activeCreativeTab, setActiveCreativeTab] = useState<"writing" | "worldbuilding" | "characters" | "timeline">("writing");
 
   const isCreativeProject = project?.template === "creative";
@@ -342,6 +342,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
           uploading={docsUploading}
           onUpload={uploadDocument}
           onDelete={deleteDocument}
+          onToggleFavourite={toggleFavourite}
           onClose={() => setShowDocuments(false)}
         />
       )}
