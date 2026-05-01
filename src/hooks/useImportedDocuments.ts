@@ -11,10 +11,12 @@ export interface ImportedDocument {
   summary: string | null;
   file_size_bytes: number | null;
   uploaded_at: string;
+  is_favourite: boolean;
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_EXTENSIONS = ["pdf", "txt", "md", "docx"];
+const FAVOURITE_SOFT_CAP_CHARS = 30_000;
 
 export function useImportedDocuments(projectId: string | null) {
   const [documents, setDocuments] = useState<ImportedDocument[]>([]);
