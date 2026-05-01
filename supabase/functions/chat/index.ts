@@ -335,29 +335,45 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       systemPrompt += "\n\n" + CONCISE_MODE_MODIFIER;
     }
 
-    // --- Fetch imported documents for document index ---
+    // --- Fetch imported documents (for index + favourite full-text injection) ---
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
 
     const { data: importedDocs } = await adminSupabase
       .from("imported_documents")
-      .select("id, file_name, summary")
+      .select("id, file_name, summary, extracted_text, is_favourite")
       .eq("project_id", thread.project_id);
 
-    const hasDocuments = importedDocs && importedDocs.length > 0;
+    const allDocs = importedDocs ?? [];
+    const favourites = allDocs.filter((d: any) => d.is_favourite && d.extracted_text);
+    const nonFavourites = allDocs.filter((d: any) => !d.is_favourite);
+    const hasNonFavDocs = nonFavourites.length > 0;
+    const hasDocuments = hasNonFavDocs; // controls doc tool registration / index block
 
-    // Append document index to system prompt if documents exist
-    if (hasDocuments) {
+    // Append document index to system prompt for NON-favourites only
+    if (hasNonFavDocs) {
       let docIndex = `\n\n# IMPORTED DOCUMENTS\n\nThe user has imported the following reference documents into this project. You can see their titles and summaries below. If you need the full text of any document to answer the user's question, use the read_imported_document tool. Only retrieve documents that are directly relevant to the user's query.\n\n`;
-      for (const doc of importedDocs) {
+      for (const doc of nonFavourites) {
         docIndex += `- Document: "${doc.file_name}" (ID: ${doc.id})\n  Summary: ${doc.summary ?? "No summary available"}\n\n`;
       }
       systemPrompt += docIndex;
     }
 
+    // Append full text of FAVOURITE documents — always available, no tool call needed
+    if (favourites.length > 0) {
+      let favBlock = `\n\n# REFERENCE DOCUMENTS (ALWAYS AVAILABLE)\n\nThe following documents have been provided by the user as key reference material. Their full content is included below. Use them to inform your responses without needing to call the read_imported_document tool.\n\n`;
+      for (const doc of favourites) {
+        favBlock += `=== ${doc.file_name} ===\n\n${doc.extracted_text}\n\n`;
+      }
+      if (hasNonFavDocs) {
+        favBlock += `Note: You also have access to additional imported documents via the read_imported_document tool. Prefer the reference documents above when they contain relevant information; use the tool for the others.\n\n`;
+      }
+      systemPrompt += favBlock;
+    }
+
     // Append web search instructions to system prompt
     if (webSearchEnabled) {
-      const docsContext = hasDocuments
+      const docsContext = (hasNonFavDocs || favourites.length > 0)
         ? " or in the imported documents"
         : "";
       systemPrompt += `\n\n# WEB SEARCH
