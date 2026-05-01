@@ -50,7 +50,7 @@ export async function exportProjectAsJson(projectId: string) {
       .single(),
     supabase
       .from("imported_documents")
-      .select("id, file_name, file_size_bytes, uploaded_at, summary")
+      .select("id, file_name, file_size_bytes, uploaded_at, summary, is_favourite")
       .eq("project_id", projectId),
     supabase
       .from("project_creative_data")
