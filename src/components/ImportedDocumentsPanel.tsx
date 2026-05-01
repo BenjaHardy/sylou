@@ -1,7 +1,9 @@
 import { useState, useRef } from "react";
-import { FileUp, FileText, Trash2, X, Loader2, File } from "lucide-react";
+import { FileUp, FileText, Trash2, X, Loader2, File, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 import type { ImportedDocument } from "@/hooks/useImportedDocuments";
 
 interface Props {
@@ -10,6 +12,7 @@ interface Props {
   uploading: boolean;
   onUpload: (file: File) => void;
   onDelete: (id: string) => void;
+  onToggleFavourite: (id: string) => void;
   onClose: () => void;
 }
 
