@@ -121,7 +121,7 @@ export const PROFILE_PAINTINGS: Record<string, ProfilePainting> = {
     artist: "Fernand Khnopff",
     year: "1891",
     sourceUrl:
-      "https://commons.wikimedia.org/wiki/File:Fernand_Khnopff_-_I_lock_my_door_upon_myself.jpg",
+      "https://commons.wikimedia.org/wiki/File:Fernand_Khnopff_001.jpg",
     rationale:
       "A figure withdrawn into private contemplation. The Thinker shapes ideas and structure inwardly, then hands the words to another voice.",
   },
@@ -131,7 +131,7 @@ export const PROFILE_PAINTINGS: Record<string, ProfilePainting> = {
     artist: "John Singer Sargent",
     year: "1884",
     sourceUrl:
-      "https://commons.wikimedia.org/wiki/File:Madame_X_(Madame_Pierre_Gautreau),_John_Singer_Sargent,_1884_(unfree_frame_crop).jpg",
+      "https://commons.wikimedia.org/wiki/File:Madame_X_(Madame_Pierre_Gautreau)_MET_DT278076.jpg",
     rationale:
       "All presence and silhouette, Madame X commands the canvas through sheer personality. The scandal the painting caused when first exhibited speaks to its raw expressive power.",
   },
