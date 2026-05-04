@@ -412,9 +412,10 @@ When citing information from web search results, always include the source URL i
     ];
 
     // --- Mistral API key ---
-    const mistralKey = Deno.env.get("MISTRAL_API_KEY");
-    if (!mistralKey) {
-      return jsonResponse({ error: "Mistral API key not configured" }, 500);
+    // API key check happens inside callLLM; surface a clean error if missing.
+    const provider = providerFor(chatModel);
+    if (!Deno.env.get(provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY")) {
+      return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 
     // Track total token usage across all calls in the chain
