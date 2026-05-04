@@ -514,7 +514,7 @@ When citing information from web search results, always include the source URL i
                   source_type: "chat",
                   flow_flag: "normal",
                   concise_mode: conciseMode,
-                  model_used: "mistral-large-latest",
+                  model_used: chatModel,
                 };
 
                 const { data: insertedUser } = await adminSupabase
@@ -756,7 +756,7 @@ When citing information from web search results, always include the source URL i
                 source_type: "chat",
                 flow_flag: "normal",
                 concise_mode: conciseMode,
-                model_used: "mistral-large-latest",
+                model_used: chatModel,
               };
 
               if (documentsReferenced.length > 0) {
@@ -912,7 +912,7 @@ When citing information from web search results, always include the source URL i
               source_type: "chat",
               flow_flag: "normal",
               concise_mode: conciseMode,
-              model_used: "mistral-large-latest",
+              model_used: chatModel,
             };
 
             const { data: insertedUser } = await adminSupabase
@@ -1011,7 +1011,7 @@ When citing information from web search results, always include the source URL i
       source_type: "chat",
       flow_flag: "normal",
       concise_mode: conciseMode,
-      model_used: "mistral-large-latest",
+      model_used: chatModel,
     };
 
     const { data: insertedUser } = await supabase
