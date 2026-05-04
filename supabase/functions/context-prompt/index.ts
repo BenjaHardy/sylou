@@ -195,32 +195,31 @@ function formatWebSearchResults(query: string, results: { title: string; url: st
   return `Web search results for: "${query}"\n\n${formatted}`;
 }
 
-async function callMistral(
-  apiKey: string,
+async function callChatModel(
+  model: string,
   messages: { role: string; content: string }[],
   maxTokens = 2000,
 ): Promise<{ text: string; inputChars: number; outputChars: number }> {
-  const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "mistral-large-latest",
-      messages,
-      max_tokens: maxTokens,
-    }),
+  const res = await callLLM({
+    model,
+    messages: messages as any,
+    max_tokens: maxTokens,
   });
 
   if (!res.ok) {
     const errText = await res.text();
-    console.error("Mistral API error:", res.status, errText);
+    console.error("LLM API error:", res.status, errText);
     throw new Error("AI service temporarily unavailable");
   }
 
   const data = await res.json();
-  const rawText = data.choices?.[0]?.message?.content ?? "";
+  let rawText = "";
+  if (providerFor(model) === "anthropic") {
+    const blocks: any[] = data?.content ?? [];
+    rawText = blocks.filter(b => b?.type === "text").map(b => b.text ?? "").join("");
+  } else {
+    rawText = data.choices?.[0]?.message?.content ?? "";
+  }
   const text = cleanLLMContent(rawText);
   const inputChars = messages.reduce((s, m) => s + m.content.length, 0);
   return { text, inputChars, outputChars: text.length };
@@ -463,10 +462,10 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
-    // --- Token budget ---
+    // --- Token budget + preferred chat model ---
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("tokens_used_this_period, monthly_token_budget")
+      .select("tokens_used_this_period, monthly_token_budget, preferred_chat_model")
       .eq("id", user.id)
       .single();
 
@@ -478,10 +477,17 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Monthly token budget exceeded" }, 403);
     }
 
-    const mistralKey = Deno.env.get("MISTRAL_API_KEY");
-    if (!mistralKey) {
-      return jsonResponse({ error: "Mistral API key not configured" }, 500);
+    // Resolve chat model (request override allowed); validate provider key exists.
+    const requestedModel: string | undefined = (await req.clone().json().catch(() => ({})))?.model;
+    const chatModel: string =
+      requestedModel || profile.preferred_chat_model || "mistral-large-3";
+    const provider = providerFor(chatModel);
+    const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
+    if (!Deno.env.get(providerKeyEnv)) {
+      return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
+    // Legacy variable for any remaining Mistral-key references
+    const mistralKey = Deno.env.get("MISTRAL_API_KEY") ?? "";
 
     // --- Parse body ---
     const body = await req.json();
