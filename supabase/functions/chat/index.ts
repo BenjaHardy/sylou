@@ -459,7 +459,7 @@ When citing information from web search results, always include the source URL i
 
         // LLM Call #1: non-streaming with tools
         const call1Body: Record<string, unknown> = {
-          model: "mistral-large-latest",
+          model: chatModel,
           messages: llmMessages,
           max_tokens: 2000,
           tools,
@@ -654,7 +654,7 @@ When citing information from web search results, always include the source URL i
                       Authorization: `Bearer ${mistralKey}`,
                     },
                     body: JSON.stringify({
-                      model: "mistral-large-latest",
+                      model: chatModel,
                       messages: toolMessages,
                       max_tokens: 2000,
                       tools,
@@ -691,7 +691,7 @@ When citing information from web search results, always include the source URL i
                   Authorization: `Bearer ${mistralKey}`,
                 },
                 body: JSON.stringify({
-                  model: "mistral-large-latest",
+                  model: chatModel,
                   messages: toolMessages,
                   max_tokens: 2000,
                   stream: true,
@@ -839,7 +839,7 @@ When citing information from web search results, always include the source URL i
           Authorization: `Bearer ${mistralKey}`,
         },
         body: JSON.stringify({
-          model: "mistral-large-latest",
+          model: chatModel,
           messages: llmMessages,
           max_tokens: 2000,
           stream: true,
@@ -1010,7 +1010,7 @@ When citing information from web search results, always include the source URL i
         Authorization: `Bearer ${mistralKey}`,
       },
       body: JSON.stringify({
-        model: "mistral-large-latest",
+        model: chatModel,
         messages: llmMessages,
         max_tokens: 2000,
       }),
