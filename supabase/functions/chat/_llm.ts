@@ -247,3 +247,26 @@ export function extractDeltaText(parsed: any, _provider: ProviderId): string | n
   }
   return null;
 }
+
+// Unified call: returns raw fetch Response so callers handle stream vs non-stream uniformly.
+export async function callLLM(opts: {
+  model: string;
+  messages: LLMMessage[];
+  max_tokens: number;
+  tools?: LLMTool[];
+  stream?: boolean;
+  forceTool?: string;
+}): Promise<Response> {
+  const provider = providerFor(opts.model);
+  const key = Deno.env.get(envKeyFor(provider));
+  if (!key) throw new Error(`Missing API key for ${provider}`);
+  const body =
+    provider === "anthropic"
+      ? toAnthropicBody({ ...opts })
+      : toOpenAIBody({ ...opts, tool_choice: opts.tools ? "auto" : undefined });
+  return await fetch(endpointFor(provider), {
+    method: "POST",
+    headers: authHeadersFor(provider, key),
+    body: JSON.stringify(body),
+  });
+}
