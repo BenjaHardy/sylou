@@ -13,6 +13,8 @@ import { BookmarkListPanel } from "@/components/BookmarkListPanel";
 import { useBookmarks } from "@/hooks/useBookmarks";
 import { format } from "date-fns";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
+import { useUserSettings } from "@/hooks/useUserSettings";
+import { MODEL_LABELS } from "@/lib/models";
 
 interface Props {
   projectId: string;
@@ -415,6 +417,9 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
             onCreate={(name) => { createThread(name); }}
             onRename={renameThread}
           />
+          <span className="text-[10px] text-muted-foreground/70 hidden md:inline" title="Active chat model — change in Settings">
+            {MODEL_LABELS[useUserSettings().settings.preferred_chat_model] ?? "Model"}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <TooltipProvider delayDuration={300}>
