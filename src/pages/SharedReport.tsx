@@ -18,6 +18,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Activity, Loader2, ShieldAlert, ExternalLink, Award, Play } from "lucide-react";
+import { MODEL_LABELS } from "@/lib/models";
 import type { FlowReport, FlowFeedback } from "@/hooks/useFlowAnalysis";
 
 export default function SharedReport() {
@@ -317,7 +318,7 @@ export default function SharedReport() {
           {/* Metadata footer (always shown) */}
           <div className="text-[10px] text-muted-foreground text-center space-y-0.5">
             <p>
-              Model: {report.model_used} · Generated{" "}
+              Model: {MODEL_LABELS[report.model_used] ?? report.model_used} · Generated{" "}
               {new Date(report.created_at).toLocaleString()}
             </p>
             <p>Project: {projectName}</p>
