@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callLLM, providerFor } from "./_llm.ts";
 
 // Service-role client for ai_editor_actions (bypasses RLS)
 function getAdminClient() {
@@ -194,32 +195,31 @@ function formatWebSearchResults(query: string, results: { title: string; url: st
   return `Web search results for: "${query}"\n\n${formatted}`;
 }
 
-async function callMistral(
-  apiKey: string,
+async function callChatModel(
+  model: string,
   messages: { role: string; content: string }[],
   maxTokens = 2000,
 ): Promise<{ text: string; inputChars: number; outputChars: number }> {
-  const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "mistral-large-latest",
-      messages,
-      max_tokens: maxTokens,
-    }),
+  const res = await callLLM({
+    model,
+    messages: messages as any,
+    max_tokens: maxTokens,
   });
 
   if (!res.ok) {
     const errText = await res.text();
-    console.error("Mistral API error:", res.status, errText);
+    console.error("LLM API error:", res.status, errText);
     throw new Error("AI service temporarily unavailable");
   }
 
   const data = await res.json();
-  const rawText = data.choices?.[0]?.message?.content ?? "";
+  let rawText = "";
+  if (providerFor(model) === "anthropic") {
+    const blocks: any[] = data?.content ?? [];
+    rawText = blocks.filter(b => b?.type === "text").map(b => b.text ?? "").join("");
+  } else {
+    rawText = data.choices?.[0]?.message?.content ?? "";
+  }
   const text = cleanLLMContent(rawText);
   const inputChars = messages.reduce((s, m) => s + m.content.length, 0);
   return { text, inputChars, outputChars: text.length };
@@ -462,10 +462,10 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
-    // --- Token budget ---
+    // --- Token budget + preferred chat model ---
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("tokens_used_this_period, monthly_token_budget")
+      .select("tokens_used_this_period, monthly_token_budget, preferred_chat_model")
       .eq("id", user.id)
       .single();
 
@@ -477,10 +477,17 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Monthly token budget exceeded" }, 403);
     }
 
-    const mistralKey = Deno.env.get("MISTRAL_API_KEY");
-    if (!mistralKey) {
-      return jsonResponse({ error: "Mistral API key not configured" }, 500);
+    // Resolve chat model (request override allowed); validate provider key exists.
+    const requestedModel: string | undefined = (await req.clone().json().catch(() => ({})))?.model;
+    const chatModel: string =
+      requestedModel || profile.preferred_chat_model || "mistral-large-3";
+    const provider = providerFor(chatModel);
+    const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
+    if (!Deno.env.get(providerKeyEnv)) {
+      return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
+    // Legacy variable for any remaining Mistral-key references
+    const mistralKey = Deno.env.get("MISTRAL_API_KEY") ?? "";
 
     // --- Parse body ---
     const body = await req.json();
@@ -551,7 +558,7 @@ Deno.serve(async (req) => {
           content: aiResponseContent,
           source_type: "propose_response",
           flow_flag: "normal",
-          model_used: "mistral-large-latest",
+          model_used: chatModel,
         };
 
         if (documentsReferenced && documentsReferenced.length > 0) {
@@ -678,7 +685,7 @@ Deno.serve(async (req) => {
       creativeDataSection,
     );
 
-    const summaryResult = await callMistral(mistralKey, summaryMessages, 1000);
+    const summaryResult = await callChatModel(chatModel, summaryMessages, 1000);
     const summaryText = summaryResult.text.trim();
 
     // --- 5. Determine summary update ---
@@ -856,6 +863,11 @@ When citing information from web search results, always include the source URL i
     if (hasDocuments) tools.push(buildDocumentTool());
     if (webSearchEnabled) tools.push(buildWebSearchTool());
 
+    // For tool-bearing paths we need OpenAI-shape responses (extractToolCalls).
+    // Anthropic's response shape differs, so transparently fall back to mistral
+    // for these paths. The non-tool path uses callLLM which handles all providers.
+    const toolModel = providerFor(chatModel) === "anthropic" ? "mistral-large-3" : chatModel;
+
     // =========================================================
     // STREAMING PATH — LLM Call #2 with optional tool-use
     // =========================================================
@@ -912,7 +924,7 @@ When citing information from web search results, always include the source URL i
           user_id: user.id,
           project_id,
           function_name: "context-prompt",
-          model_used: "mistral-large-latest",
+          model_used: chatModel,
           input_tokens: Math.ceil(finalInputChars / 4),
           output_tokens: Math.ceil(finalOutputChars / 4),
         });
@@ -956,7 +968,7 @@ When citing information from web search results, always include the source URL i
             content: aiResponse,
             source_type: "ask_response",
             flow_flag: "normal",
-            model_used: "mistral-large-latest",
+            model_used: chatModel,
           };
           if (documentsReferenced.length > 0) {
             askResponseRow.documents_referenced = documentsReferenced;
@@ -999,7 +1011,7 @@ When citing information from web search results, always include the source URL i
 
               // Call #2a: non-streamed with tools (inside stream so response is already sent)
               const call2aBody = {
-                model: "mistral-large-latest",
+                model: chatModel,
                 messages: responseMessages,
                 max_tokens: 2000,
                 tools,
@@ -1115,7 +1127,7 @@ When citing information from web search results, always include the source URL i
                     Authorization: `Bearer ${mistralKey}`,
                   },
                   body: JSON.stringify({
-                    model: "mistral-large-latest",
+                    model: toolModel,
                     messages: toolMessages,
                     max_tokens: 2000,
                     stream: true,
@@ -1199,7 +1211,7 @@ When citing information from web search results, always include the source URL i
           Authorization: `Bearer ${mistralKey}`,
         },
         body: JSON.stringify({
-          model: "mistral-large-latest",
+          model: toolModel,
           messages: responseMessages,
           max_tokens: 2000,
           stream: true,
@@ -1299,7 +1311,7 @@ When citing information from web search results, always include the source URL i
           Authorization: `Bearer ${mistralKey}`,
         },
         body: JSON.stringify({
-          model: "mistral-large-latest",
+          model: toolModel,
           messages: responseMessages,
           max_tokens: 2000,
           tools,
@@ -1365,7 +1377,7 @@ When citing information from web search results, always include the source URL i
           }
         }
 
-        const call2bResult = await callMistral(mistralKey, toolMessages as { role: string; content: string }[], 2000);
+        const call2bResult = await callChatModel(chatModel, toolMessages as { role: string; content: string }[], 2000);
         totalInputChars += call2bResult.inputChars;
         totalOutputChars += call2bResult.outputChars;
         aiResponse = call2bResult.text.trim() || "No response generated.";
@@ -1397,7 +1409,7 @@ When citing information from web search results, always include the source URL i
         user_id: user.id,
         project_id,
         function_name: "context-prompt",
-        model_used: "mistral-large-latest",
+        model_used: chatModel,
         input_tokens: Math.ceil(totalInputChars / 4),
         output_tokens: Math.ceil(totalOutputChars / 4),
       });
@@ -1424,7 +1436,7 @@ When citing information from web search results, always include the source URL i
         }
 
         const askResponseRow: Record<string, unknown> = {
-          thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: "mistral-large-latest",
+          thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: chatModel,
         };
         if (documentsReferenced.length > 0) askResponseRow.documents_referenced = documentsReferenced;
         if (webSearchesPerformed.length > 0) askResponseRow.web_searches_performed = webSearchesPerformed;
@@ -1456,7 +1468,7 @@ When citing information from web search results, always include the source URL i
     }
 
     // ── NO TOOLS — original non-streaming path ──
-    const responseResult = await callMistral(mistralKey, responseMessages, 2000);
+    const responseResult = await callChatModel(chatModel, responseMessages, 2000);
     const aiResponse = responseResult.text.trim();
 
     const finalInputChars = totalInputChars + responseResult.inputChars;
@@ -1487,7 +1499,7 @@ When citing information from web search results, always include the source URL i
       user_id: user.id,
       project_id,
       function_name: "context-prompt",
-      model_used: "mistral-large-latest",
+      model_used: chatModel,
       input_tokens: Math.ceil(finalInputChars / 4),
       output_tokens: Math.ceil(finalOutputChars / 4),
     });
@@ -1514,7 +1526,7 @@ When citing information from web search results, always include the source URL i
       }
 
       const { data: responseMsg } = await supabase.from("chat_messages").insert({
-        thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: "mistral-large-latest",
+        thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: chatModel,
       }).select().single();
       if (responseMsg) insertedMessages.push(responseMsg);
 

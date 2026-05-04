@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callLLM, providerFor } from "./_llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -80,10 +81,10 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
-    // --- Token budget ---
+    // --- Token budget + preferred model ---
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("tokens_used_this_period, monthly_token_budget")
+      .select("tokens_used_this_period, monthly_token_budget, preferred_chat_model")
       .eq("id", user.id)
       .single();
 
@@ -163,10 +164,14 @@ Deno.serve(async (req) => {
       { role: "user", content: selectedText },
     ];
 
-    // --- Mistral API key ---
-    const mistralKey = Deno.env.get("MISTRAL_API_KEY");
-    if (!mistralKey) {
-      return jsonResponse({ error: "Mistral API key not configured" }, 500);
+    // --- Resolve chat model from request body or profile ---
+    const requestedModel: string | undefined = (body as { model?: string }).model;
+    const chatModel: string =
+      requestedModel || profile.preferred_chat_model || "mistral-large-3";
+    const provider = providerFor(chatModel);
+    const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
+    if (!Deno.env.get(providerKeyEnv)) {
+      return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 
     // =========================================================
@@ -175,18 +180,11 @@ Deno.serve(async (req) => {
     if (streamRequested) {
       console.log("[stream:editor-action] entering streaming path");
 
-      const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${mistralKey}`,
-        },
-        body: JSON.stringify({
-          model: "mistral-large-latest",
-          messages: llmMessages,
-          max_tokens: 1000,
-          stream: true,
-        }),
+      const llmRes = await callLLM({
+        model: chatModel,
+        messages: llmMessages as any,
+        max_tokens: 1000,
+        stream: true,
       });
 
       if (!llmRes.ok) {
@@ -223,7 +221,7 @@ Deno.serve(async (req) => {
 
             try {
               const parsed = JSON.parse(payload);
-              const delta = extractDeltaText(parsed, "mistral");
+              const delta = extractDeltaText(parsed, provider);
               if (delta) {
                 fullResponse += delta;
                 if (!clientDisconnected) {
@@ -279,7 +277,7 @@ Deno.serve(async (req) => {
               user_id: user.id,
               project_id: projectId,
               function_name: "editor-action",
-              model_used: "mistral-large-latest",
+              model_used: chatModel,
               input_tokens: Math.ceil(inputChars / 4),
               output_tokens: Math.ceil(outputChars / 4),
             });
@@ -342,17 +340,10 @@ Deno.serve(async (req) => {
     // =========================================================
     // NON-STREAMING PATH (unchanged)
     // =========================================================
-    const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${mistralKey}`,
-      },
-      body: JSON.stringify({
-        model: "mistral-large-latest",
-        messages: llmMessages,
-        max_tokens: 1000,
-      }),
+    const llmRes = await callLLM({
+      model: chatModel,
+      messages: llmMessages as any,
+      max_tokens: 1000,
     });
 
     if (!llmRes.ok) {
@@ -365,8 +356,13 @@ Deno.serve(async (req) => {
     }
 
     const llmData = await llmRes.json();
-    const proposedText =
-      llmData.choices?.[0]?.message?.content ?? "No response generated.";
+    let proposedText: string;
+    if (provider === "anthropic") {
+      const blocks: any[] = llmData?.content ?? [];
+      proposedText = blocks.filter(b => b?.type === "text").map(b => b.text ?? "").join("") || "No response generated.";
+    } else {
+      proposedText = llmData.choices?.[0]?.message?.content ?? "No response generated.";
+    }
 
     // --- Estimate tokens ---
     const inputChars = llmMessages.reduce((sum, m) => sum + m.content.length, 0);
@@ -405,7 +401,7 @@ Deno.serve(async (req) => {
       user_id: user.id,
       project_id: projectId,
       function_name: "editor-action",
-      model_used: "mistral-large-latest",
+      model_used: chatModel,
       input_tokens: Math.ceil(inputChars / 4),
       output_tokens: Math.ceil(outputChars / 4),
     });
