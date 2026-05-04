@@ -361,12 +361,14 @@ export type Database = {
         Row: {
           billing_period_start: string | null
           created_at: string
+          default_concise_mode: boolean
           display_name: string | null
           email: string
           flow_nudges_enabled: boolean | null
           id: string
           monthly_token_budget: number
           preferred_chat_model: string | null
+          preferred_flow_model: string
           preferred_language: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
@@ -377,12 +379,14 @@ export type Database = {
         Insert: {
           billing_period_start?: string | null
           created_at?: string
+          default_concise_mode?: boolean
           display_name?: string | null
           email: string
           flow_nudges_enabled?: boolean | null
           id: string
           monthly_token_budget?: number
           preferred_chat_model?: string | null
+          preferred_flow_model?: string
           preferred_language?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
@@ -393,12 +397,14 @@ export type Database = {
         Update: {
           billing_period_start?: string | null
           created_at?: string
+          default_concise_mode?: boolean
           display_name?: string | null
           email?: string
           flow_nudges_enabled?: boolean | null
           id?: string
           monthly_token_budget?: number
           preferred_chat_model?: string | null
+          preferred_flow_model?: string
           preferred_language?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null

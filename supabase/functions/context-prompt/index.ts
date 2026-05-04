@@ -662,7 +662,7 @@ Deno.serve(async (req) => {
           .select("role, content")
           .in("thread_id", threadIds)
           .order("created_at", { ascending: false })
-          .limit(20)
+          .limit(50)
       : { data: [] };
 
     const recentChat = (recentMessages ?? []).reverse();

@@ -841,28 +841,93 @@ ${writePillarNotice}`;
     const estimatedInputTokens = estimated;
     const contextLimitTokens = 1000000; // Claude Sonnet 4.6 context window
 
+    // --- Resolve FLOW model from profile (or request body) ---
+    const reqBody = (typeof body !== "undefined" ? body : {}) as Record<string, unknown>;
+    const { data: prefRow } = await supabase
+      .from("profiles")
+      .select("preferred_flow_model")
+      .eq("id", user.id)
+      .maybeSingle();
+    const flowModel: string =
+      (reqBody.model as string | undefined) ||
+      (prefRow as { preferred_flow_model?: string } | null)?.preferred_flow_model ||
+      "claude-sonnet-4-6";
+
     // --- Call Anthropic with tool use ---
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!anthropicKey) {
-      return jsonResponse({ error: "Anthropic API key not configured" }, 500);
+    const deepseekKey = Deno.env.get("DEEPSEEK_API_KEY");
+    const mistralKey = Deno.env.get("MISTRAL_API_KEY");
+
+    const isAnthropic = flowModel.startsWith("claude-");
+    const isDeepseek = flowModel.startsWith("deepseek-");
+    if (isAnthropic && !anthropicKey) return jsonResponse({ error: "Anthropic API key not configured" }, 500);
+    if (isDeepseek && !deepseekKey) return jsonResponse({ error: "DeepSeek API key not configured" }, 500);
+    if (!isAnthropic && !isDeepseek && !mistralKey) return jsonResponse({ error: "Mistral API key not configured" }, 500);
+
+    let anthropicRes: Response;
+    if (isAnthropic) {
+      anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": anthropicKey!,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: flowModel,
+          max_tokens: 8192,
+          system: systemPromptTemplate,
+          messages: [{ role: "user", content: userPrompt }],
+          tools: [SUBMIT_FLOW_TOOL],
+          tool_choice: { type: "tool", name: "submit_flow_analysis" },
+        }),
+      });
+    } else {
+      // OpenAI-shape (Mistral / DeepSeek) — use function-calling with forced tool
+      const endpoint = isDeepseek
+        ? "https://api.deepseek.com/v1/chat/completions"
+        : "https://api.mistral.ai/v1/chat/completions";
+      const key = isDeepseek ? deepseekKey! : mistralKey!;
+      const oaRes = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        body: JSON.stringify({
+          model: flowModel,
+          max_tokens: 8192,
+          messages: [
+            { role: "system", content: systemPromptTemplate },
+            { role: "user", content: userPrompt },
+          ],
+          tools: [{
+            type: "function",
+            function: {
+              name: SUBMIT_FLOW_TOOL.name,
+              description: SUBMIT_FLOW_TOOL.description,
+              parameters: SUBMIT_FLOW_TOOL.input_schema,
+            },
+          }],
+          tool_choice: { type: "function", function: { name: SUBMIT_FLOW_TOOL.name } },
+        }),
+      });
+      // Adapt to Anthropic-shape so downstream parsing works.
+      if (!oaRes.ok) {
+        anthropicRes = oaRes;
+      } else {
+        const oaData = await oaRes.json();
+        const tc = oaData?.choices?.[0]?.message?.tool_calls?.[0];
+        let input: unknown = null;
+        try { input = JSON.parse(tc?.function?.arguments ?? "{}"); } catch { /* */ }
+        const adapted = {
+          content: tc ? [{ type: "tool_use", input }] : [],
+          usage: {
+            input_tokens: oaData?.usage?.prompt_tokens,
+            output_tokens: oaData?.usage?.completion_tokens,
+          },
+        };
+        anthropicRes = new Response(JSON.stringify(adapted), { status: 200 });
+      }
     }
 
-    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": anthropicKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 8192,
-        system: systemPromptTemplate,
-        messages: [{ role: "user", content: userPrompt }],
-        tools: [SUBMIT_FLOW_TOOL],
-        tool_choice: { type: "tool", name: "submit_flow_analysis" },
-      }),
-    });
 
     if (!anthropicRes.ok) {
       const errText = await anthropicRes.text();
@@ -1018,7 +1083,7 @@ ${writePillarNotice}`;
         metrics_snapshot: metricsSnapshot,
         flow_meta: flowMeta,
         provenance_snapshot: segmentMap,
-        model_used: "claude-sonnet-4-6",
+        model_used: flowModel,
         project_name: project.name ?? null,
         replay_snapshot: replayEvents,
       } as any)
@@ -1039,7 +1104,7 @@ ${writePillarNotice}`;
         user_id: user.id,
         project_id: projectId,
         function_name: "analysis",
-        model_used: "claude-sonnet-4-6",
+        model_used: flowModel,
         input_tokens: inputTokens,
         output_tokens: outputTokens,
       }),

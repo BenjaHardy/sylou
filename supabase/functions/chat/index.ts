@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callLLM, providerFor } from "./_llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -207,10 +208,10 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
-    // --- Token budget ---
+    // --- Token budget + preferred model ---
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("tokens_used_this_period, monthly_token_budget")
+      .select("tokens_used_this_period, monthly_token_budget, preferred_chat_model")
       .eq("id", user.id)
       .single();
 
@@ -229,6 +230,9 @@ Deno.serve(async (req) => {
     const conciseMode: boolean = body.concise_mode ?? false;
     const streamRequested: boolean = body.stream === true;
     const webSearchEnabled: boolean = body.web_search_enabled ?? false;
+    const requestedModel: string | undefined = body.model;
+    const chatModel: string =
+      requestedModel || profile.preferred_chat_model || "mistral-large-3";
 
     if (!threadId || !message) {
       return jsonResponse({ error: "thread_id and message are required" }, 400);
@@ -408,9 +412,10 @@ When citing information from web search results, always include the source URL i
     ];
 
     // --- Mistral API key ---
-    const mistralKey = Deno.env.get("MISTRAL_API_KEY");
-    if (!mistralKey) {
-      return jsonResponse({ error: "Mistral API key not configured" }, 500);
+    // API key check happens inside callLLM; surface a clean error if missing.
+    const provider = providerFor(chatModel);
+    if (!Deno.env.get(provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY")) {
+      return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 
     // Track total token usage across all calls in the chain
@@ -455,21 +460,14 @@ When citing information from web search results, always include the source URL i
 
         // LLM Call #1: non-streaming with tools
         const call1Body: Record<string, unknown> = {
-          model: "mistral-large-latest",
+          model: chatModel,
           messages: llmMessages,
           max_tokens: 2000,
           tools,
           tool_choice: "auto",
         };
 
-        const call1Res = await fetch("https://api.mistral.ai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${mistralKey}`,
-          },
-          body: JSON.stringify(call1Body),
-        });
+        const call1Res = await callLLM(call1Body);
 
         if (!call1Res.ok) {
           const errText = await call1Res.text();
@@ -517,7 +515,7 @@ When citing information from web search results, always include the source URL i
                   source_type: "chat",
                   flow_flag: "normal",
                   concise_mode: conciseMode,
-                  model_used: "mistral-large-latest",
+                  model_used: chatModel,
                 };
 
                 const { data: insertedUser } = await adminSupabase
@@ -643,20 +641,13 @@ When citing information from web search results, always include the source URL i
 
                 // Check if the LLM wants to make more tool calls
                 if (iteration < MAX_ITERATIONS) {
-                  const nextRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                      Authorization: `Bearer ${mistralKey}`,
-                    },
-                    body: JSON.stringify({
-                      model: "mistral-large-latest",
+                  const nextRes = await callLLM({
+                      model: chatModel,
                       messages: toolMessages,
                       max_tokens: 2000,
                       tools,
                       tool_choice: "auto",
-                    }),
-                  });
+                    });
 
                   if (!nextRes.ok) {
                     currentToolCalls = [];
@@ -680,19 +671,12 @@ When citing information from web search results, always include the source URL i
 
               // LLM Call #2: streaming with tool results (no tools this time)
               console.log("[stream] starting Call #2 streaming");
-              const call2Res = await fetch("https://api.mistral.ai/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${mistralKey}`,
-                },
-                body: JSON.stringify({
-                  model: "mistral-large-latest",
+              const call2Res = await callLLM({
+                  model: chatModel,
                   messages: toolMessages,
                   max_tokens: 2000,
                   stream: true,
-                }),
-              });
+                });
 
               if (!call2Res.ok) {
                 const errText = await call2Res.text();
@@ -773,7 +757,7 @@ When citing information from web search results, always include the source URL i
                 source_type: "chat",
                 flow_flag: "normal",
                 concise_mode: conciseMode,
-                model_used: "mistral-large-latest",
+                model_used: chatModel,
               };
 
               if (documentsReferenced.length > 0) {
@@ -828,19 +812,12 @@ When citing information from web search results, always include the source URL i
       // ---- NO TOOLS — streaming path using ReadableStream ----
       console.log("[stream] no tools, standard streaming path");
 
-      const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${mistralKey}`,
-        },
-        body: JSON.stringify({
-          model: "mistral-large-latest",
+      const llmRes = await callLLM({
+          model: chatModel,
           messages: llmMessages,
           max_tokens: 2000,
           stream: true,
-        }),
-      });
+        });
 
       if (!llmRes.ok) {
         const errText = await llmRes.text();
@@ -936,7 +913,7 @@ When citing information from web search results, always include the source URL i
               source_type: "chat",
               flow_flag: "normal",
               concise_mode: conciseMode,
-              model_used: "mistral-large-latest",
+              model_used: chatModel,
             };
 
             const { data: insertedUser } = await adminSupabase
@@ -999,18 +976,11 @@ When citing information from web search results, always include the source URL i
     // =========================================================
     // NON-STREAMING PATH (unchanged)
     // =========================================================
-    const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${mistralKey}`,
-      },
-      body: JSON.stringify({
-        model: "mistral-large-latest",
+    const llmRes = await callLLM({
+        model: chatModel,
         messages: llmMessages,
         max_tokens: 2000,
-      }),
-    });
+      });
 
     if (!llmRes.ok) {
       const errText = await llmRes.text();
@@ -1042,7 +1012,7 @@ When citing information from web search results, always include the source URL i
       source_type: "chat",
       flow_flag: "normal",
       concise_mode: conciseMode,
-      model_used: "mistral-large-latest",
+      model_used: chatModel,
     };
 
     const { data: insertedUser } = await supabase
