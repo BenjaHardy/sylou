@@ -18,6 +18,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Activity, Loader2, ShieldAlert, ExternalLink, Award, Play } from "lucide-react";
+import { MODEL_LABELS } from "@/lib/models";
 import type { FlowReport, FlowFeedback } from "@/hooks/useFlowAnalysis";
 
 export default function SharedReport() {
