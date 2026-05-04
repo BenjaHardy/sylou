@@ -15,9 +15,12 @@ export function estimateTokens(text: string): number {
 /** Context window sizes for supported models */
 export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   "claude-sonnet-4-6": 1_000_000,
+  "claude-opus-4-7": 1_000_000,
   "claude-3-5-sonnet": 200_000,
   "claude-3-opus": 200_000,
+  "mistral-large-3": 256_000,
   "mistral-large-latest": 128_000,
+  "deepseek-v4-flash": 1_000_000,
   default: 200_000,
 };
 
