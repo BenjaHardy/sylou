@@ -223,6 +223,7 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
 export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker, conciseMode, onConciseModeChange, onSetMessages, onActiveThreadChange, onUploadDocument, documentUploading, webSearchEnabled: webSearchEnabledProp, onWebSearchEnabledChange }: Props) {
   const { threads, activeThreadId, activeThreadName, setActiveThreadId, createThread, renameThread } = useChatThread(projectId);
   const { messages, loading, sending, phase, sendMessage, budgetRemaining, refreshMessages, appendMessages, setMessages } = useChatMessages(activeThreadId);
+  const { settings: userSettings } = useUserSettings();
   const { bookmarks, createBookmark, updateBookmark, deleteBookmark, getBookmarkForMessage } = useBookmarks(projectId);
   const [input, setInput] = useState("");
   const [localWebSearchEnabled, setLocalWebSearchEnabled] = useState(false);
@@ -418,7 +419,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
             onRename={renameThread}
           />
           <span className="text-[10px] text-muted-foreground/70 hidden md:inline" title="Active chat model — change in Settings">
-            {MODEL_LABELS[useUserSettings().settings.preferred_chat_model] ?? "Model"}
+            {MODEL_LABELS[userSettings.preferred_chat_model] ?? "Model"}
           </span>
         </div>
         <div className="flex items-center gap-2">
