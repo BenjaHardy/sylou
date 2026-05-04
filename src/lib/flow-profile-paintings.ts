@@ -167,11 +167,11 @@ export const PROFILE_PAINTINGS: Record<string, ProfilePainting> = {
   },
   "---W": {
     image: wScribe,
-    title: "Saint Matthew and the Angel",
-    artist: "Caravaggio",
-    year: "1602",
+    title: "The Evangelist Matthew Inspired by the Angel",
+    artist: "Rembrandt van Rijn",
+    year: "1661",
     sourceUrl:
-      "https://commons.wikimedia.org/wiki/File:The_Inspiration_of_Saint_Matthew_by_Caravaggio.jpg",
+      "https://commons.wikimedia.org/wiki/File:Rembrandt_Harmensz._van_Rijn_049.jpg",
     rationale:
       "The angel whispers, the evangelist writes. The Scribe gives the words their final shape, through tone or rhythm or breath, even when the inspiration came from elsewhere.",
   },
