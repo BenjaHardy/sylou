@@ -33,6 +33,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { FlowHighlightedText } from "@/components/FlowHighlightedText";
 import { FlowReplayOverlay, type ReplayEvent } from "@/components/FlowReplayOverlay";
 import { QRCodeSVG } from "qrcode.react";
+import { MODEL_LABELS } from "@/lib/models";
 import { FlowPledgeBadge } from "@/components/flow-report/FlowPledgeBadge";
 import {
   ArrowLeft,
@@ -708,7 +709,7 @@ export function FlowReportView({
               {/* Metadata footer */}
               <div className="text-[10px] text-muted-foreground text-center space-y-0.5">
                 <p>
-                  Model: {(await import("@/lib/models")).MODEL_LABELS[report.model_used] ?? report.model_used} · Generated{" "}
+                  Model: {MODEL_LABELS[report.model_used] ?? report.model_used} · Generated{" "}
                   {new Date(report.created_at).toLocaleString()}
                 </p>
                 <p>Project: {projectName}</p>
