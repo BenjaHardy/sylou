@@ -180,18 +180,11 @@ Deno.serve(async (req) => {
     if (streamRequested) {
       console.log("[stream:editor-action] entering streaming path");
 
-      const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${mistralKey}`,
-        },
-        body: JSON.stringify({
-          model: "mistral-large-latest",
-          messages: llmMessages,
-          max_tokens: 1000,
-          stream: true,
-        }),
+      const llmRes = await callLLM({
+        model: chatModel,
+        messages: llmMessages as any,
+        max_tokens: 1000,
+        stream: true,
       });
 
       if (!llmRes.ok) {
@@ -228,7 +221,7 @@ Deno.serve(async (req) => {
 
             try {
               const parsed = JSON.parse(payload);
-              const delta = extractDeltaText(parsed, "mistral");
+              const delta = extractDeltaText(parsed, provider);
               if (delta) {
                 fullResponse += delta;
                 if (!clientDisconnected) {
@@ -284,7 +277,7 @@ Deno.serve(async (req) => {
               user_id: user.id,
               project_id: projectId,
               function_name: "editor-action",
-              model_used: "mistral-large-latest",
+              model_used: chatModel,
               input_tokens: Math.ceil(inputChars / 4),
               output_tokens: Math.ceil(outputChars / 4),
             });
@@ -347,17 +340,10 @@ Deno.serve(async (req) => {
     // =========================================================
     // NON-STREAMING PATH (unchanged)
     // =========================================================
-    const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${mistralKey}`,
-      },
-      body: JSON.stringify({
-        model: "mistral-large-latest",
-        messages: llmMessages,
-        max_tokens: 1000,
-      }),
+    const llmRes = await callLLM({
+      model: chatModel,
+      messages: llmMessages as any,
+      max_tokens: 1000,
     });
 
     if (!llmRes.ok) {
