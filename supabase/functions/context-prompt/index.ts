@@ -558,7 +558,7 @@ Deno.serve(async (req) => {
           content: aiResponseContent,
           source_type: "propose_response",
           flow_flag: "normal",
-          model_used: "mistral-large-latest",
+          model_used: chatModel,
         };
 
         if (documentsReferenced && documentsReferenced.length > 0) {
@@ -685,7 +685,7 @@ Deno.serve(async (req) => {
       creativeDataSection,
     );
 
-    const summaryResult = await callMistral(mistralKey, summaryMessages, 1000);
+    const summaryResult = await callChatModel(chatModel, summaryMessages, 1000);
     const summaryText = summaryResult.text.trim();
 
     // --- 5. Determine summary update ---
@@ -919,7 +919,7 @@ When citing information from web search results, always include the source URL i
           user_id: user.id,
           project_id,
           function_name: "context-prompt",
-          model_used: "mistral-large-latest",
+          model_used: chatModel,
           input_tokens: Math.ceil(finalInputChars / 4),
           output_tokens: Math.ceil(finalOutputChars / 4),
         });
@@ -963,7 +963,7 @@ When citing information from web search results, always include the source URL i
             content: aiResponse,
             source_type: "ask_response",
             flow_flag: "normal",
-            model_used: "mistral-large-latest",
+            model_used: chatModel,
           };
           if (documentsReferenced.length > 0) {
             askResponseRow.documents_referenced = documentsReferenced;
@@ -1006,7 +1006,7 @@ When citing information from web search results, always include the source URL i
 
               // Call #2a: non-streamed with tools (inside stream so response is already sent)
               const call2aBody = {
-                model: "mistral-large-latest",
+                model: chatModel,
                 messages: responseMessages,
                 max_tokens: 2000,
                 tools,
@@ -1122,7 +1122,7 @@ When citing information from web search results, always include the source URL i
                     Authorization: `Bearer ${mistralKey}`,
                   },
                   body: JSON.stringify({
-                    model: "mistral-large-latest",
+                    model: chatModel,
                     messages: toolMessages,
                     max_tokens: 2000,
                     stream: true,
@@ -1206,7 +1206,7 @@ When citing information from web search results, always include the source URL i
           Authorization: `Bearer ${mistralKey}`,
         },
         body: JSON.stringify({
-          model: "mistral-large-latest",
+          model: chatModel,
           messages: responseMessages,
           max_tokens: 2000,
           stream: true,
@@ -1306,7 +1306,7 @@ When citing information from web search results, always include the source URL i
           Authorization: `Bearer ${mistralKey}`,
         },
         body: JSON.stringify({
-          model: "mistral-large-latest",
+          model: chatModel,
           messages: responseMessages,
           max_tokens: 2000,
           tools,
@@ -1372,7 +1372,7 @@ When citing information from web search results, always include the source URL i
           }
         }
 
-        const call2bResult = await callMistral(mistralKey, toolMessages as { role: string; content: string }[], 2000);
+        const call2bResult = await callChatModel(chatModel, toolMessages as { role: string; content: string }[], 2000);
         totalInputChars += call2bResult.inputChars;
         totalOutputChars += call2bResult.outputChars;
         aiResponse = call2bResult.text.trim() || "No response generated.";
@@ -1404,7 +1404,7 @@ When citing information from web search results, always include the source URL i
         user_id: user.id,
         project_id,
         function_name: "context-prompt",
-        model_used: "mistral-large-latest",
+        model_used: chatModel,
         input_tokens: Math.ceil(totalInputChars / 4),
         output_tokens: Math.ceil(totalOutputChars / 4),
       });
@@ -1431,7 +1431,7 @@ When citing information from web search results, always include the source URL i
         }
 
         const askResponseRow: Record<string, unknown> = {
-          thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: "mistral-large-latest",
+          thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: chatModel,
         };
         if (documentsReferenced.length > 0) askResponseRow.documents_referenced = documentsReferenced;
         if (webSearchesPerformed.length > 0) askResponseRow.web_searches_performed = webSearchesPerformed;
@@ -1463,7 +1463,7 @@ When citing information from web search results, always include the source URL i
     }
 
     // ── NO TOOLS — original non-streaming path ──
-    const responseResult = await callMistral(mistralKey, responseMessages, 2000);
+    const responseResult = await callChatModel(chatModel, responseMessages, 2000);
     const aiResponse = responseResult.text.trim();
 
     const finalInputChars = totalInputChars + responseResult.inputChars;
@@ -1494,7 +1494,7 @@ When citing information from web search results, always include the source URL i
       user_id: user.id,
       project_id,
       function_name: "context-prompt",
-      model_used: "mistral-large-latest",
+      model_used: chatModel,
       input_tokens: Math.ceil(finalInputChars / 4),
       output_tokens: Math.ceil(finalOutputChars / 4),
     });
@@ -1521,7 +1521,7 @@ When citing information from web search results, always include the source URL i
       }
 
       const { data: responseMsg } = await supabase.from("chat_messages").insert({
-        thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: "mistral-large-latest",
+        thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: chatModel,
       }).select().single();
       if (responseMsg) insertedMessages.push(responseMsg);
 
