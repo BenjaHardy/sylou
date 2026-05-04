@@ -70,8 +70,9 @@ function WelcomeScreen() {
             <li>• You can have multiple threads per project</li>
             <li>• <span className="font-medium text-foreground">Concise mode</span> for straight-to-the-point AI feedback</li>
             <li>• Use bookmarks to easily find chat messages</li>
-            <li>• Select text in the editor and use <span className="font-medium text-foreground">Ask</span> or <span className="font-medium text-foreground">Propose</span> for AI feedback that is aware of your project and context</li>
+            <li>• Select text in the editor and use <span className="font-medium text-foreground">Ask</span> or <span className="font-medium text-foreground">Propose</span> for AI feedback that is aware of your project and context (same for the creative writing tools)</li>
             <li>• At the bottom of the chat area, you can upload documents for discussion or enable/disable AI web search</li>
+            <li>• Mark imported documents as <span className="font-medium text-foreground">favourites</span> to give the AI complete awareness of the documents without needing to look them up; this improves response quality but increases token usage per message</li>
           </ul>
         </div>
 
