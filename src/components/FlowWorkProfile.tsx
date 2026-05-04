@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { getBandForScore } from "@/lib/flowBands";
 import type { FlowProfile } from "@/lib/flow-work-profiles";
+import ProfilePaintingReveal from "@/components/flow-report/ProfilePaintingReveal";
 
 interface FlowWorkProfileProps {
   profile: FlowProfile;
@@ -48,6 +49,9 @@ export default function FlowWorkProfile({ profile, scores }: FlowWorkProfileProp
         <p className="text-sm leading-relaxed text-foreground/80 text-center max-w-lg mx-auto">
           {profile.description}
         </p>
+
+        {/* Painting Reveal */}
+        <ProfilePaintingReveal code={profile.code} />
 
         {/* Pillar Breakdown */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
