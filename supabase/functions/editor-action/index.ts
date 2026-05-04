@@ -164,10 +164,14 @@ Deno.serve(async (req) => {
       { role: "user", content: selectedText },
     ];
 
-    // --- Mistral API key ---
-    const mistralKey = Deno.env.get("MISTRAL_API_KEY");
-    if (!mistralKey) {
-      return jsonResponse({ error: "Mistral API key not configured" }, 500);
+    // --- Resolve chat model from request body or profile ---
+    const requestedModel: string | undefined = (body as { model?: string }).model;
+    const chatModel: string =
+      requestedModel || profile.preferred_chat_model || "mistral-large-3";
+    const provider = providerFor(chatModel);
+    const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
+    if (!Deno.env.get(providerKeyEnv)) {
+      return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 
     // =========================================================
