@@ -1083,7 +1083,7 @@ ${writePillarNotice}`;
         metrics_snapshot: metricsSnapshot,
         flow_meta: flowMeta,
         provenance_snapshot: segmentMap,
-        model_used: "claude-sonnet-4-6",
+        model_used: flowModel,
         project_name: project.name ?? null,
         replay_snapshot: replayEvents,
       } as any)
@@ -1104,7 +1104,7 @@ ${writePillarNotice}`;
         user_id: user.id,
         project_id: projectId,
         function_name: "analysis",
-        model_used: "claude-sonnet-4-6",
+        model_used: flowModel,
         input_tokens: inputTokens,
         output_tokens: outputTokens,
       }),
