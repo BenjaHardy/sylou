@@ -19,6 +19,7 @@ import { useImportedDocuments } from "@/hooks/useImportedDocuments";
 import { PostItsPanel } from "@/components/PostItsPanel";
 import { ImportedDocumentsPanel } from "@/components/ImportedDocumentsPanel";
 import { useFlowAnalysis } from "@/hooks/useFlowAnalysis";
+import { useUserSettings } from "@/hooks/useUserSettings";
 import { useCreativeData } from "@/hooks/useCreativeData";
 import { WorldBuildingNotes } from "@/components/creative-tools/WorldBuildingNotes";
 import type { WorldBuildingData } from "@/components/creative-tools/WorldBuildingNotes";
