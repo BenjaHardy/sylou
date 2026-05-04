@@ -356,8 +356,13 @@ Deno.serve(async (req) => {
     }
 
     const llmData = await llmRes.json();
-    const proposedText =
-      llmData.choices?.[0]?.message?.content ?? "No response generated.";
+    let proposedText: string;
+    if (provider === "anthropic") {
+      const blocks: any[] = llmData?.content ?? [];
+      proposedText = blocks.filter(b => b?.type === "text").map(b => b.text ?? "").join("") || "No response generated.";
+    } else {
+      proposedText = llmData.choices?.[0]?.message?.content ?? "No response generated.";
+    }
 
     // --- Estimate tokens ---
     const inputChars = llmMessages.reduce((sum, m) => sum + m.content.length, 0);
@@ -396,7 +401,7 @@ Deno.serve(async (req) => {
       user_id: user.id,
       project_id: projectId,
       function_name: "editor-action",
-      model_used: "mistral-large-latest",
+      model_used: chatModel,
       input_tokens: Math.ceil(inputChars / 4),
       output_tokens: Math.ceil(outputChars / 4),
     });
