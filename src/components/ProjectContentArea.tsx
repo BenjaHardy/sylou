@@ -98,6 +98,18 @@ const DEFAULT_CHAT_SIZE = 30;
 export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }: Props) {
   const [chatExpanded, setChatExpanded] = useState(false);
   const [conciseMode, setConciseMode] = useState(false);
+  // Seed initial concise mode from user profile (only on first profile load).
+  const { settings: _userSettings } = useUserSettings();
+  const seededConciseRef = useRef(false);
+  useEffect(() => {
+    if (!seededConciseRef.current && _userSettings.default_concise_mode) {
+      setConciseMode(true);
+      seededConciseRef.current = true;
+    } else if (!seededConciseRef.current && _userSettings.email) {
+      // Profile loaded with default off — mark seeded to avoid re-applying later
+      seededConciseRef.current = true;
+    }
+  }, [_userSettings.default_concise_mode, _userSettings.email]);
   const [showFlowReport, setShowFlowReport] = useState(false);
   const [showPostIts, setShowPostIts] = useState(false);
   const [showDocuments, setShowDocuments] = useState(false);

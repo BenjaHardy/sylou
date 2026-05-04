@@ -1127,7 +1127,7 @@ When citing information from web search results, always include the source URL i
                     Authorization: `Bearer ${mistralKey}`,
                   },
                   body: JSON.stringify({
-                    model: chatModel,
+                    model: toolModel,
                     messages: toolMessages,
                     max_tokens: 2000,
                     stream: true,
@@ -1211,7 +1211,7 @@ When citing information from web search results, always include the source URL i
           Authorization: `Bearer ${mistralKey}`,
         },
         body: JSON.stringify({
-          model: chatModel,
+          model: toolModel,
           messages: responseMessages,
           max_tokens: 2000,
           stream: true,
@@ -1311,7 +1311,7 @@ When citing information from web search results, always include the source URL i
           Authorization: `Bearer ${mistralKey}`,
         },
         body: JSON.stringify({
-          model: chatModel,
+          model: toolModel,
           messages: responseMessages,
           max_tokens: 2000,
           tools,
