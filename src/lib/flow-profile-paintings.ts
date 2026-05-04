@@ -121,7 +121,7 @@ export const PROFILE_PAINTINGS: Record<string, ProfilePainting> = {
     artist: "Fernand Khnopff",
     year: "1891",
     sourceUrl:
-      "https://commons.wikimedia.org/wiki/File:Fernand_Khnopff_001.jpg",
+      "https://commons.wikimedia.org/wiki/File:Detail,_I_lock_my_door_upon_myself,_Khnopff.png",
     rationale:
       "A figure withdrawn into private contemplation. The Thinker shapes ideas and structure inwardly, then hands the words to another voice.",
   },
