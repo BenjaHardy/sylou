@@ -967,6 +967,39 @@ ${writePillarNotice}`;
         Array.isArray((p as Record<string, unknown>).evidence) && "narrative" in p
       );
     }
+
+    // Strict schema guardrail — reject if too many pillars are malformed (likely a bad model response)
+    const pillarValidity = [
+      isValidPillar(flowResult.find),
+      isValidPillar(flowResult.lead),
+      isValidPillar(flowResult.organize),
+      isValidPillar(flowResult.write),
+    ];
+    const validPillarCount = pillarValidity.filter(Boolean).length;
+    const hasSummary = !!flowResult.summary && typeof flowResult.summary === "string";
+    if (validPillarCount < 3 || !hasSummary) {
+      console.error("FLOW schema validation failed", {
+        model: flowModel,
+        validPillarCount,
+        hasSummary,
+      });
+      // Log token usage for transparency, but flag as schema_invalid and skip insert
+      try {
+        await supabase.from("token_usage").insert({
+          user_id: user.id,
+          project_id: projectId,
+          function_name: "analysis:schema_invalid",
+          model_used: flowModel,
+          input_tokens: anthropicData?.usage?.input_tokens ?? 0,
+          output_tokens: anthropicData?.usage?.output_tokens ?? 0,
+        });
+      } catch (_) { /* ignore */ }
+      return jsonResponse(
+        { error: "Analysis could not be completed with this model — try Claude Sonnet 4.6." },
+        502
+      );
+    }
+
     if (!isValidPillar(flowResult.find)) flowResult.find = defaultPillar;
     if (!isValidPillar(flowResult.lead)) flowResult.lead = defaultPillar;
     if (!isValidPillar(flowResult.organize)) flowResult.organize = defaultPillar;
