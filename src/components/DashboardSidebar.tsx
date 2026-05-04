@@ -2,7 +2,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   Plus, FolderOpen, ChevronLeft, ChevronRight, LogOut,
   MoreHorizontal, Pencil, Trash2, FileText, GraduationCap,
-  Sparkles, Briefcase,
+  Sparkles, Briefcase, Settings as SettingsIcon,
 } from "lucide-react";
 import ethosLogo from "@/assets/ethos-logo.png";
 import { useState } from "react";
@@ -10,8 +10,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SettingsDialog } from "@/components/SettingsDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,6 +49,7 @@ export function DashboardSidebar({ selectedProjectId, onSelectProject, onNewProj
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
   const [renameTarget, setRenameTarget] = useState<Project | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const { data: projects, isLoading } = useProjects();
   const renameProject = useRenameProject();
@@ -186,25 +190,45 @@ export function DashboardSidebar({ selectedProjectId, onSelectProject, onNewProj
 
         {/* User */}
         <div className="p-4 border-t border-sidebar-border">
-          <div className={`flex items-center ${collapsed ? "justify-center" : "gap-4"}`}>
-            <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center text-xs font-bold text-primary-foreground shrink-0">
-              {initials}
-            </div>
-            {!collapsed && (
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-sidebar-foreground truncate">{displayName}</p>
-                <button
-                  onClick={signOut}
-                  className="text-xs text-sidebar-muted hover:text-sidebar-foreground transition-colors flex items-center gap-1"
-                >
-                  <LogOut className="h-3 w-3" />
-                  Sign out
-                </button>
-              </div>
-            )}
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className={`w-full flex items-center rounded-md hover:bg-ethos-navy-light transition-colors p-1 -m-1 ${
+                  collapsed ? "justify-center" : "gap-3"
+                }`}
+                aria-label="Open user menu"
+              >
+                <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center text-xs font-bold text-primary-foreground shrink-0">
+                  {initials}
+                </div>
+                {!collapsed && (
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className="text-sm font-medium text-sidebar-foreground truncate">{displayName}</p>
+                    <p className="text-[11px] text-sidebar-muted truncate">{user?.email}</p>
+                  </div>
+                )}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="top" className="w-56">
+              <DropdownMenuLabel className="font-normal">
+                <p className="text-sm font-medium truncate">{displayName}</p>
+                <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
+                <SettingsIcon className="h-4 w-4 mr-2" />
+                Settings…
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={signOut}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </aside>
+
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
 
       {/* Rename dialog */}
       <AlertDialog open={!!renameTarget} onOpenChange={(v) => !v && setRenameTarget(null)}>
