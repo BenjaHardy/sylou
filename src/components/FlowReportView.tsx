@@ -64,6 +64,7 @@ import { ProjectActivitySection } from "@/components/flow-report/ProjectActivity
 import { extractUserAssessment, extractFeedbackScores } from "@/components/flow-report/shared-utils";
 import FlowWorkProfile from "@/components/FlowWorkProfile";
 import { ProfileTabContent } from "@/components/flow-report/ProfileTabContent";
+import { WritingSnapshotTab } from "@/components/flow-report/WritingSnapshotTab";
 import { KeyUserContributions } from "@/components/flow-report/KeyUserContributions";
 import { getFlowProfile } from "@/lib/flow-work-profiles";
 
@@ -94,7 +95,7 @@ export function FlowReportView({
 }: Props) {
   const [preFeedbackViewed, setPreFeedbackViewed] = useState(false);
   const [feedbackToggle, setFeedbackToggle] = useState<"pre" | "post">("post");
-  const [activeTab, setActiveTab] = useState<"report" | "profile" | "replay">("report");
+  const [activeTab, setActiveTab] = useState<"report" | "writing" | "profile" | "replay">("report");
   const [showHighlighted, setShowHighlighted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -342,6 +343,14 @@ export function FlowReportView({
               FLOW Report
             </Button>
             <Button
+              variant={activeTab === "writing" ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs px-3"
+              onClick={() => setActiveTab("writing")}
+            >
+              Writing
+            </Button>
+            <Button
               variant={activeTab === "profile" ? "default" : "outline"}
               size="sm"
               className="h-7 text-xs px-3"
@@ -371,6 +380,16 @@ export function FlowReportView({
                 aiScores={flowScores}
                 preFeedbackScores={preFeedbackScores}
                 postAssessment={existingAssessment}
+              />
+            </div>
+          )}
+
+          {/* Writing Snapshot Tab */}
+          {activeTab === "writing" && (
+            <div key="writing" className="animate-card-flip">
+              <WritingSnapshotTab
+                snapshot={(report as any)?.writing_snapshot ?? ""}
+                capturedAt={report?.created_at}
               />
             </div>
           )}
@@ -517,6 +536,10 @@ export function FlowReportView({
                         </label>
                       </div>
                     </div>
+
+                    <p className="text-[10px] text-muted-foreground italic leading-relaxed">
+                      The writing snapshot is always included in shared reports so reviewers can see the work that was assessed.
+                    </p>
 
                     {/* Include feedback checkbox */}
                     <div className="flex items-center gap-2">

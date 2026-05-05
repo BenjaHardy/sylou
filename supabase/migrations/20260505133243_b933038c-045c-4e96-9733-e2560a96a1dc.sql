@@ -1,0 +1,1 @@
+ALTER TABLE public.flow_reports ADD COLUMN IF NOT EXISTS writing_snapshot text NOT NULL DEFAULT '';

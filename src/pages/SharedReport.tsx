@@ -8,6 +8,7 @@ import { TokenUsageSection } from "@/components/flow-report/TokenUsageSection";
 import { ProjectActivitySection } from "@/components/flow-report/ProjectActivitySection";
 import { FlowReplayOverlay, type ReplayEvent } from "@/components/FlowReplayOverlay";
 import { ProfileTabContent } from "@/components/flow-report/ProfileTabContent";
+import { WritingSnapshotTab } from "@/components/flow-report/WritingSnapshotTab";
 import { KeyUserContributions } from "@/components/flow-report/KeyUserContributions";
 import { SelfAssessmentDisplay } from "@/components/flow-report/SelfAssessmentDisplay";
 import {
@@ -34,7 +35,7 @@ export default function SharedReport() {
   const [replayAvailable, setReplayAvailable] = useState(false);
   const [reportAvailable, setReportAvailable] = useState(true);
   const [profileAvailable, setProfileAvailable] = useState(true);
-  const [activeTab, setActiveTab] = useState<"report" | "profile" | "replay">("report");
+  const [activeTab, setActiveTab] = useState<"report" | "writing" | "profile" | "replay">("report");
 
   useEffect(() => {
     async function fetchReport() {
@@ -46,7 +47,7 @@ export default function SharedReport() {
 
       const { data, error } = await supabase
         .from("flow_reports")
-        .select("id, project_id, project_name, certificate_id, share_token, share_enabled, share_visibility, share_include_feedback, share_include_replay, share_include_report, share_include_profile, model_used, created_at, ai_find, ai_lead, ai_organize, ai_write, ai_summary, key_user_contributions, flow_meta, metrics_snapshot, user_feedback_pre, user_feedback_post")
+        .select("id, project_id, project_name, certificate_id, share_token, share_enabled, share_visibility, share_include_feedback, share_include_replay, share_include_report, share_include_profile, model_used, created_at, ai_find, ai_lead, ai_organize, ai_write, ai_summary, key_user_contributions, flow_meta, metrics_snapshot, user_feedback_pre, user_feedback_post, writing_snapshot")
         .eq("share_token", token)
         .eq("share_enabled", true)
         .eq("share_visibility", "public")
@@ -70,10 +71,9 @@ export default function SharedReport() {
       setReportAvailable(includeReport);
       setProfileAvailable(includeProfile);
 
-      // Default tab: Report if shared, else Profile, else Replay
+      // Default tab: Report if shared, else Writing (always available)
       if (includeReport) setActiveTab("report");
-      else if (includeProfile) setActiveTab("profile");
-      else if (includeReplay) setActiveTab("replay");
+      else setActiveTab("writing");
 
       setLoading(false);
     }
@@ -171,8 +171,8 @@ export default function SharedReport() {
     }
   }
 
-  // Visible tabs count (more than one means show switcher)
-  const visibleTabsCount = (reportAvailable ? 1 : 0) + (profileAvailable ? 1 : 0) + (replayAvailable ? 1 : 0);
+  // Writing tab is always visible; others depend on share toggles
+  const visibleTabsCount = 1 + (reportAvailable ? 1 : 0) + (profileAvailable ? 1 : 0) + (replayAvailable ? 1 : 0);
 
   return (
     <div className="min-h-screen bg-background relative">
@@ -195,7 +195,7 @@ export default function SharedReport() {
 
       <ScrollArea className="h-[calc(100vh-3.5rem)]">
         <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
-          {/* Tab Switcher (only if multiple tabs visible) */}
+          {/* Tab Switcher */}
           {visibleTabsCount > 1 && (
             <div className="flex items-center justify-center gap-1">
               {reportAvailable && (
@@ -208,6 +208,14 @@ export default function SharedReport() {
                   FLOW Report
                 </Button>
               )}
+              <Button
+                variant={activeTab === "writing" ? "default" : "outline"}
+                size="sm"
+                className="h-7 text-xs px-3"
+                onClick={() => setActiveTab("writing")}
+              >
+                Writing
+              </Button>
               {profileAvailable && (
                 <Button
                   variant={activeTab === "profile" ? "default" : "outline"}
@@ -229,6 +237,16 @@ export default function SharedReport() {
                   Replay
                 </Button>
               )}
+            </div>
+          )}
+
+          {/* Writing Snapshot Tab (always available) */}
+          {activeTab === "writing" && (
+            <div key="writing" className="animate-card-flip">
+              <WritingSnapshotTab
+                snapshot={(report as any)?.writing_snapshot ?? ""}
+                capturedAt={report?.created_at}
+              />
             </div>
           )}
 

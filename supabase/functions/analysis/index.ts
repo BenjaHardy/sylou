@@ -1119,6 +1119,7 @@ ${writePillarNotice}`;
         model_used: flowModel,
         project_name: project.name ?? null,
         replay_snapshot: replayEvents,
+        writing_snapshot: writingContent,
       } as any)
       .select()
       .single();
