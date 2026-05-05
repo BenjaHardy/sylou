@@ -8,6 +8,7 @@ import { TokenUsageSection } from "@/components/flow-report/TokenUsageSection";
 import { ProjectActivitySection } from "@/components/flow-report/ProjectActivitySection";
 import { FlowReplayOverlay, type ReplayEvent } from "@/components/FlowReplayOverlay";
 import { ProfileTabContent } from "@/components/flow-report/ProfileTabContent";
+import { WritingSnapshotTab } from "@/components/flow-report/WritingSnapshotTab";
 import { KeyUserContributions } from "@/components/flow-report/KeyUserContributions";
 import { SelfAssessmentDisplay } from "@/components/flow-report/SelfAssessmentDisplay";
 import {
