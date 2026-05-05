@@ -534,12 +534,12 @@ export function FlowReportView({
                         <label htmlFor="share-include-profile" className="text-xs text-muted-foreground cursor-pointer">
                           FLOW Profile
                         </label>
+                      </div>
                     </div>
 
                     <p className="text-[10px] text-muted-foreground italic leading-relaxed">
                       The writing snapshot is always included in shared reports so reviewers can see the work that was assessed.
                     </p>
-                    </div>
 
                     {/* Include feedback checkbox */}
                     <div className="flex items-center gap-2">
