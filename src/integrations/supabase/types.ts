@@ -212,6 +212,7 @@ export type Database = {
           user_feedback_post_at: string | null
           user_feedback_pre: Json | null
           user_feedback_pre_at: string | null
+          writing_snapshot: string
         }
         Insert: {
           ai_editor_summary?: Json | null
@@ -242,6 +243,7 @@ export type Database = {
           user_feedback_post_at?: string | null
           user_feedback_pre?: Json | null
           user_feedback_pre_at?: string | null
+          writing_snapshot?: string
         }
         Update: {
           ai_editor_summary?: Json | null
@@ -272,6 +274,7 @@ export type Database = {
           user_feedback_post_at?: string | null
           user_feedback_pre?: Json | null
           user_feedback_pre_at?: string | null
+          writing_snapshot?: string
         }
         Relationships: [
           {
