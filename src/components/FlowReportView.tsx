@@ -384,6 +384,16 @@ export function FlowReportView({
             </div>
           )}
 
+          {/* Writing Snapshot Tab */}
+          {activeTab === "writing" && (
+            <div key="writing" className="animate-card-flip">
+              <WritingSnapshotTab
+                snapshot={(report as any)?.writing_snapshot ?? ""}
+                capturedAt={report?.created_at}
+              />
+            </div>
+          )}
+
           {/* Replay Tab */}
           {activeTab === "replay" && (
             <div key="replay" className="animate-card-flip">
