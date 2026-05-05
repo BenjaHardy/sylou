@@ -35,7 +35,7 @@ export default function SharedReport() {
   const [replayAvailable, setReplayAvailable] = useState(false);
   const [reportAvailable, setReportAvailable] = useState(true);
   const [profileAvailable, setProfileAvailable] = useState(true);
-  const [activeTab, setActiveTab] = useState<"report" | "profile" | "replay">("report");
+  const [activeTab, setActiveTab] = useState<"report" | "writing" | "profile" | "replay">("report");
 
   useEffect(() => {
     async function fetchReport() {
