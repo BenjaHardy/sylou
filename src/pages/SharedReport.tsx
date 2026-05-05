@@ -71,10 +71,9 @@ export default function SharedReport() {
       setReportAvailable(includeReport);
       setProfileAvailable(includeProfile);
 
-      // Default tab: Report if shared, else Profile, else Replay
+      // Default tab: Report if shared, else Writing (always available)
       if (includeReport) setActiveTab("report");
-      else if (includeProfile) setActiveTab("profile");
-      else if (includeReplay) setActiveTab("replay");
+      else setActiveTab("writing");
 
       setLoading(false);
     }
