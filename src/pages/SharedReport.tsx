@@ -172,8 +172,8 @@ export default function SharedReport() {
     }
   }
 
-  // Visible tabs count (more than one means show switcher)
-  const visibleTabsCount = (reportAvailable ? 1 : 0) + (profileAvailable ? 1 : 0) + (replayAvailable ? 1 : 0);
+  // Writing tab is always visible; others depend on share toggles
+  const visibleTabsCount = 1 + (reportAvailable ? 1 : 0) + (profileAvailable ? 1 : 0) + (replayAvailable ? 1 : 0);
 
   return (
     <div className="min-h-screen bg-background relative">
@@ -196,7 +196,7 @@ export default function SharedReport() {
 
       <ScrollArea className="h-[calc(100vh-3.5rem)]">
         <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
-          {/* Tab Switcher (only if multiple tabs visible) */}
+          {/* Tab Switcher */}
           {visibleTabsCount > 1 && (
             <div className="flex items-center justify-center gap-1">
               {reportAvailable && (
@@ -209,6 +209,14 @@ export default function SharedReport() {
                   FLOW Report
                 </Button>
               )}
+              <Button
+                variant={activeTab === "writing" ? "default" : "outline"}
+                size="sm"
+                className="h-7 text-xs px-3"
+                onClick={() => setActiveTab("writing")}
+              >
+                Writing
+              </Button>
               {profileAvailable && (
                 <Button
                   variant={activeTab === "profile" ? "default" : "outline"}
@@ -230,6 +238,16 @@ export default function SharedReport() {
                   Replay
                 </Button>
               )}
+            </div>
+          )}
+
+          {/* Writing Snapshot Tab (always available) */}
+          {activeTab === "writing" && (
+            <div key="writing" className="animate-card-flip">
+              <WritingSnapshotTab
+                snapshot={(report as any)?.writing_snapshot ?? ""}
+                capturedAt={report?.created_at}
+              />
             </div>
           )}
 
