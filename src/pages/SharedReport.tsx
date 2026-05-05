@@ -208,14 +208,6 @@ export default function SharedReport() {
                   FLOW Report
                 </Button>
               )}
-              <Button
-                variant={activeTab === "writing" ? "default" : "outline"}
-                size="sm"
-                className="h-7 text-xs px-3"
-                onClick={() => setActiveTab("writing")}
-              >
-                Writing
-              </Button>
               {profileAvailable && (
                 <Button
                   variant={activeTab === "profile" ? "default" : "outline"}
@@ -237,6 +229,14 @@ export default function SharedReport() {
                   Replay
                 </Button>
               )}
+              <Button
+                variant={activeTab === "writing" ? "default" : "outline"}
+                size="sm"
+                className="h-7 text-xs px-3"
+                onClick={() => setActiveTab("writing")}
+              >
+                Writing
+              </Button>
             </div>
           )}
 
