@@ -64,6 +64,7 @@ import { ProjectActivitySection } from "@/components/flow-report/ProjectActivity
 import { extractUserAssessment, extractFeedbackScores } from "@/components/flow-report/shared-utils";
 import FlowWorkProfile from "@/components/FlowWorkProfile";
 import { ProfileTabContent } from "@/components/flow-report/ProfileTabContent";
+import { WritingSnapshotTab } from "@/components/flow-report/WritingSnapshotTab";
 import { KeyUserContributions } from "@/components/flow-report/KeyUserContributions";
 import { getFlowProfile } from "@/lib/flow-work-profiles";
 
