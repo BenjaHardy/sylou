@@ -343,14 +343,6 @@ export function FlowReportView({
               FLOW Report
             </Button>
             <Button
-              variant={activeTab === "writing" ? "default" : "outline"}
-              size="sm"
-              className="h-7 text-xs px-3"
-              onClick={() => setActiveTab("writing")}
-            >
-              Writing
-            </Button>
-            <Button
               variant={activeTab === "profile" ? "default" : "outline"}
               size="sm"
               className="h-7 text-xs px-3"
@@ -370,6 +362,14 @@ export function FlowReportView({
             >
               <Play className="h-3 w-3" />
               Replay
+            </Button>
+            <Button
+              variant={activeTab === "writing" ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs px-3"
+              onClick={() => setActiveTab("writing")}
+            >
+              Writing
             </Button>
           </div>
 
