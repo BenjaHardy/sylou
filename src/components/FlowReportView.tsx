@@ -94,7 +94,7 @@ export function FlowReportView({
 }: Props) {
   const [preFeedbackViewed, setPreFeedbackViewed] = useState(false);
   const [feedbackToggle, setFeedbackToggle] = useState<"pre" | "post">("post");
-  const [activeTab, setActiveTab] = useState<"report" | "profile" | "replay">("report");
+  const [activeTab, setActiveTab] = useState<"report" | "writing" | "profile" | "replay">("report");
   const [showHighlighted, setShowHighlighted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
