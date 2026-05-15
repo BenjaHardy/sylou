@@ -147,7 +147,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
 
             <p className="text-[11px] text-muted-foreground italic border-t pt-3">
               Indicative provider rates as of April 2026 — shown for transparency.
-              Your actual usage is metered against your Ethos token budget, not
+              Your actual usage is metered against your Sylou token budget, not
               billed per-token at these rates. Switching models takes effect on
               your next prompt; in-flight requests finish on the previous model.
             </p>
