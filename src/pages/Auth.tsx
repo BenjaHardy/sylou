@@ -1,5 +1,5 @@
 import { useState } from "react";
-import ethosLogo from "@/assets/ethos-logo.png";
+import sylouLogo from "@/assets/sylou-logo.png";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -59,7 +59,7 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[hsl(var(--ethos-surface))] p-4">
-      <img src={ethosLogo} alt="Ethos" className="h-10 mb-6" />
+      <img src={sylouLogo} alt="Sylou" className="h-10 mb-6" />
       <div className="w-full max-w-[400px] bg-card shadow-depth rounded-lg overflow-hidden">
         {/* Tabs */}
         <div className="flex border-b border-border">

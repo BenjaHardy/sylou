@@ -4,7 +4,7 @@ import {
   MoreHorizontal, Pencil, Trash2, FileText, GraduationCap,
   Sparkles, Briefcase, Settings as SettingsIcon,
 } from "lucide-react";
-import ethosLogo from "@/assets/ethos-logo.png";
+import sylouLogo from "@/assets/sylou-logo.png";
 import { useState } from "react";
 import {
   DropdownMenu,
@@ -85,7 +85,7 @@ export function DashboardSidebar({ selectedProjectId, onSelectProject, onNewProj
       >
         {/* Header */}
         <div className="p-4 flex items-center justify-between">
-          {!collapsed && <img src={ethosLogo} alt="Ethos" className="h-12" />}
+          {!collapsed && <img src={sylouLogo} alt="Sylou" className="h-12" />}
           <button
             onClick={() => setCollapsed(!collapsed)}
             className="p-1 text-sidebar-muted hover:text-sidebar-foreground transition-colors rounded-md"

@@ -43,7 +43,7 @@ function drawBadge(
   ctx.fillStyle = "#1a1a2e";
   ctx.font = "bold 11px system-ui, sans-serif";
   ctx.textAlign = "left";
-  ctx.fillText("Created with Ethos", 12, 24);
+  ctx.fillText("Created with Sylou", 12, 24);
 
   ctx.fillStyle = "#3b82f6";
   ctx.font = "bold 13px system-ui, sans-serif";

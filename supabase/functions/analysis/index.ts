@@ -19,7 +19,7 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ---------------------------------------------------------------------------
-// FLOW Prompt v1.2 – full text from Ethos_FLOW_Prompt.docx
+// FLOW Prompt v1.2 – full text from Sylou_FLOW_Prompt.docx
 // ---------------------------------------------------------------------------
 const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a writing project. Your task is to assess how a human user collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework).
 
