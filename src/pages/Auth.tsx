@@ -59,7 +59,7 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[hsl(var(--ethos-surface))] p-4">
-      <img src={sylouLogo} alt="Sylou" className="h-10 mb-6" />
+      <img src={sylouLogo} alt="Sylou" className="h-16 mb-6" />
       <div className="w-full max-w-[400px] bg-card shadow-depth rounded-lg overflow-hidden">
         {/* Tabs */}
         <div className="flex border-b border-border">
