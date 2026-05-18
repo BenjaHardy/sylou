@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, KeyboardEvent, useCallback, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp, BookmarkIcon, Globe, Paperclip } from "lucide-react";
+import sylouShiba from "@/assets/sylou-shiba.png";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -133,7 +134,7 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
               : "bg-muted text-muted-foreground"
           }`}
         >
-          {isUser ? <User className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
+          {isUser ? <User className="h-3.5 w-3.5" /> : <img src={sylouShiba} alt="Sylou" className="h-3.5 w-3.5 object-contain" />}
         </div>
         <div
           className={`max-w-[80%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed ${
@@ -472,7 +473,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <Bot className="h-8 w-8 text-muted-foreground/40 mb-2" />
+            <img src={sylouShiba} alt="Sylou" className="h-8 w-8 object-contain opacity-40 mb-2" />
             <p className="text-sm text-muted-foreground">
               Start a conversation with your AI writing assistant.
             </p>
@@ -493,7 +494,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
         {sending && !messages.some((m) => m.id === "streaming-assistant" || m.id === "streaming-ask") && (
           <div className="flex gap-2.5">
             <div className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 bg-muted text-muted-foreground">
-              <Bot className="h-3.5 w-3.5" />
+              <img src={sylouShiba} alt="Sylou" className="h-3.5 w-3.5 object-contain" />
             </div>
             <div className="bg-muted rounded-xl px-3.5 py-2.5">
               {phase === "searching_web" ? (
