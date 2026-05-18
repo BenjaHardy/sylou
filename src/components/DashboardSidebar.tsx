@@ -85,7 +85,7 @@ export function DashboardSidebar({ selectedProjectId, onSelectProject, onNewProj
       >
         {/* Header */}
         <div className="p-4 flex items-center justify-between">
-          {!collapsed && <img src={sylouLogo} alt="Sylou" className="h-12" />}
+          {!collapsed && <img src={sylouLogo} alt="Sylou" className="h-[4.5rem]" />}
           <button
             onClick={() => setCollapsed(!collapsed)}
             className="p-1 text-sidebar-muted hover:text-sidebar-foreground transition-colors rounded-md"
