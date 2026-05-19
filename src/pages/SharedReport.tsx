@@ -196,6 +196,10 @@ export default function SharedReport() {
 
       <ScrollArea className="h-[calc(100vh-3.5rem)]">
         <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
+          {/* Sylou logo */}
+          <div className="flex justify-center">
+            <img src={sylouLogo} alt="Sylou" className="h-12" />
+          </div>
           {/* Tab Switcher */}
           {visibleTabsCount > 1 && (
             <div className="flex items-center justify-center gap-1">
