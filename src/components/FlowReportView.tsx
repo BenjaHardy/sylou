@@ -30,6 +30,7 @@ class HighlightedTextErrorBoundary extends Component<
 }
 
 import { supabase } from "@/integrations/supabase/client";
+import sylouLogo from "@/assets/sylou-logo.png";
 import { FlowHighlightedText } from "@/components/FlowHighlightedText";
 import { FlowReplayOverlay, type ReplayEvent } from "@/components/FlowReplayOverlay";
 import { QRCodeSVG } from "qrcode.react";
@@ -332,6 +333,10 @@ export function FlowReportView({
       {/* Content */}
       <ScrollArea ref={scrollAreaRef} className="flex-1">
         <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
+          {/* Sylou logo */}
+          <div className="flex justify-center">
+            <img src={sylouLogo} alt="Sylou" className="h-12" />
+          </div>
           {/* Tab Switcher */}
           <div className="flex items-center justify-center gap-1">
             <Button
