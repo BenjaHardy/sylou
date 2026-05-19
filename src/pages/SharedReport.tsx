@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import sylouLogo from "@/assets/sylou-logo.png";
 import { FlowRadarChart } from "@/components/flow-report/FlowRadarChart";
 import { ScoreCard } from "@/components/flow-report/ScoreCard";
 import { FlowInfoSection } from "@/components/flow-report/FlowInfoSection";
