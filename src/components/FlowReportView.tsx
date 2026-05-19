@@ -30,6 +30,7 @@ class HighlightedTextErrorBoundary extends Component<
 }
 
 import { supabase } from "@/integrations/supabase/client";
+import sylouLogo from "@/assets/sylou-logo.png";
 import { FlowHighlightedText } from "@/components/FlowHighlightedText";
 import { FlowReplayOverlay, type ReplayEvent } from "@/components/FlowReplayOverlay";
 import { QRCodeSVG } from "qrcode.react";
