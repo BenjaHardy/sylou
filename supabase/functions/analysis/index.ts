@@ -932,9 +932,9 @@ ${writePillarNotice}`;
 
     if (!anthropicRes.ok) {
       const errText = await anthropicRes.text();
-      console.error("Anthropic API error:", anthropicRes.status, errText);
+      console.error("LLM API error:", anthropicRes.status, errText);
       return jsonResponse(
-        { error: "AI analysis service temporarily unavailable. Please try again." },
+        { error: extractProviderError(providerFor(flowModel), anthropicRes.status, errText) },
         502
       );
     }
