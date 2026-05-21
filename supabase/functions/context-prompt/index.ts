@@ -209,7 +209,7 @@ async function callChatModel(
   if (!res.ok) {
     const errText = await res.text();
     console.error("LLM API error:", res.status, errText);
-    throw new Error("AI service temporarily unavailable");
+    throw new Error(extractProviderError(providerFor(model), res.status, errText));
   }
 
   const data = await res.json();
