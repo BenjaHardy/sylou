@@ -1137,7 +1137,7 @@ When citing information from web search results, always include the source URL i
                 if (!call2bRes.ok) {
                   const errText = await call2bRes.text();
                   console.error("[stream:context-prompt] Call #2b error:", call2bRes.status, errText);
-                  controller.enqueue(sseEvent({ done: true, error: "AI service temporarily unavailable." }));
+                  controller.enqueue(sseEvent({ done: true, error: extractProviderError("mistral", call2bRes.status, errText) }));
                   return;
                 }
 
