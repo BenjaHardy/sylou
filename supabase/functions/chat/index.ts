@@ -586,7 +586,7 @@ When citing information from web search results, always include the source URL i
               // Build conversation with tool results
               const toolMessages: Array<Record<string, unknown>> = [
                 ...llmMessages,
-                call1Data.choices[0].message,
+                norm1.assistantMessage as unknown as Record<string, unknown>,
               ];
 
               // Resolve tool calls iteratively (up to 5 iterations)
@@ -646,10 +646,9 @@ When citing information from web search results, always include the source URL i
                 if (iteration < MAX_ITERATIONS) {
                   const nextRes = await callLLM({
                       model: chatModel,
-                      messages: toolMessages,
+                      messages: toolMessages as any,
                       max_tokens: 2000,
-                      tools,
-                      tool_choice: "auto",
+                      tools: tools as any,
                     });
 
                   if (!nextRes.ok) {
@@ -658,12 +657,13 @@ When citing information from web search results, always include the source URL i
                   }
 
                   const nextData = await nextRes.json();
-                  const nextContent = cleanLLMContent(nextData.choices?.[0]?.message?.content ?? "");
+                  const nextNorm = normaliseResponse(providerFor(chatModel), nextData);
+                  const nextContent = cleanLLMContent(nextNorm.text);
                   totalOutputChars += nextContent.length;
-                  currentToolCalls = extractToolCalls(nextData);
+                  currentToolCalls = nextNorm.toolCalls;
 
                   if (currentToolCalls.length > 0) {
-                    toolMessages.push(nextData.choices[0].message);
+                    toolMessages.push(nextNorm.assistantMessage as unknown as Record<string, unknown>);
                   } else {
                     // No more tool calls — discard any text from intermediate call
                     // and fall through to a proper streaming Call #2
@@ -671,6 +671,7 @@ When citing information from web search results, always include the source URL i
                   }
                 }
               }
+
 
               // LLM Call #2: streaming with tool results (no tools this time)
               console.log("[stream] starting Call #2 streaming");
