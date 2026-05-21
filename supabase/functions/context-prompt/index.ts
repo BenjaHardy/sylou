@@ -1192,7 +1192,8 @@ When citing information from web search results, always include the source URL i
               }
             } catch (err) {
               console.error("[stream:context-prompt] error in tool-use path:", err);
-              try { controller.enqueue(sseEvent({ done: true, error: "AI service temporarily unavailable." })); } catch { /* */ }
+              const msg = err instanceof Error && err.message ? err.message.slice(0, 200) : "AI service temporarily unavailable.";
+              try { controller.enqueue(sseEvent({ done: true, error: msg })); } catch { /* */ }
             } finally {
               controller.close();
             }
