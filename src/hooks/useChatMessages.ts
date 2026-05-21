@@ -98,7 +98,29 @@ export function useChatMessages(threadId: string | null) {
         if (!res.ok) {
           const errBody = await res.text();
           console.error("Chat function error:", res.status, errBody);
-          setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+          let serverMsg = "";
+          try {
+            const parsed = JSON.parse(errBody);
+            if (typeof parsed?.error === "string") serverMsg = parsed.error.slice(0, 200);
+          } catch { /* not JSON */ }
+          setMessages((prev) => {
+            const without = prev.filter((m) => m.id !== optimisticId);
+            return [
+              ...without,
+              {
+                id: "error-assistant",
+                thread_id: threadId!,
+                role: "assistant",
+                content: serverMsg || "Sorry, something went wrong. Please try again.",
+                created_at: new Date().toISOString(),
+                source_type: "chat",
+                flow_flag: null,
+                concise_mode: null,
+                tutor_mode: null,
+                model_used: null,
+              } as ChatMessage,
+            ];
+          });
           setSending(false);
           return;
         }
