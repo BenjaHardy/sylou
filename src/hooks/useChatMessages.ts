@@ -240,7 +240,25 @@ export function useChatMessages(threadId: string | null) {
 
           if (data?.error) {
             console.error("Chat API error:", data.error);
-            setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+            const serverMsg = typeof data.error === "string" ? data.error.slice(0, 200) : "";
+            setMessages((prev) => {
+              const without = prev.filter((m) => m.id !== optimisticId);
+              return [
+                ...without,
+                {
+                  id: "error-assistant",
+                  thread_id: threadId!,
+                  role: "assistant",
+                  content: serverMsg || "Sorry, something went wrong. Please try again.",
+                  created_at: new Date().toISOString(),
+                  source_type: "chat",
+                  flow_flag: null,
+                  concise_mode: null,
+                  tutor_mode: null,
+                  model_used: null,
+                } as ChatMessage,
+              ];
+            });
             setSending(false);
             return;
           }
