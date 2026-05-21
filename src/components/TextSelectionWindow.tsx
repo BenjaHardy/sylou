@@ -135,14 +135,15 @@ export function TextSelectionWindow({
   const isCreativeModule = sourceModule !== "editor";
   const actions = isCreativeModule ? CREATIVE_ACTIONS : tutorMode ? TUTOR_ACTIONS : NORMAL_ACTIONS;
 
-  // Position the panel
+  // Position the panel (add scrollTop/scrollLeft because the panel is an
+  // absolute child of the scrollable editor wrapper — see AISelectionButton).
   const editorRect = editorElement.getBoundingClientRect();
-  const top = anchorRect.bottom - editorRect.top + 8;
+  const top = anchorRect.bottom - editorRect.top + editorElement.scrollTop + 8;
   const left = Math.max(
     8,
     Math.min(
-      anchorRect.left - editorRect.left,
-      editorRect.width - 340
+      anchorRect.left - editorRect.left + editorElement.scrollLeft,
+      editorElement.scrollLeft + editorRect.width - 340
     )
   );
 

@@ -43,9 +43,14 @@ export function AISelectionButton({ editorElement, onOpen }: Props) {
       selectedTextRef.current = text;
       selectionRectRef.current = rect;
 
+      // editorElement is `position: relative` and `overflow-y-auto`. Absolute
+      // children live in its content coordinate space, so we must add scrollTop
+      // (and scrollLeft) to keep the button next to the selection at any scroll
+      // position. Without this, the button drifts toward the top of the editor
+      // for long documents.
       setPosition({
-        top: rect.bottom - editorRect.top + 4,
-        left: rect.left - editorRect.left + rect.width / 2,
+        top: rect.bottom - editorRect.top + editorElement.scrollTop + 4,
+        left: rect.left - editorRect.left + editorElement.scrollLeft + rect.width / 2,
       });
       setVisible(true);
     }, 300);
@@ -53,11 +58,22 @@ export function AISelectionButton({ editorElement, onOpen }: Props) {
 
   useEffect(() => {
     document.addEventListener("selectionchange", handleSelectionChange);
+    // Hide the button while the user is scrolling inside the editor — without
+    // this the button visually slides with the content (it's pinned to content
+    // coords) which feels janky. The selectionchange listener re-evaluates and
+    // re-shows it when scrolling stops and the selection is still active.
+    const hideOnScroll = () => {
+      setVisible(false);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(handleSelectionChange, 200);
+    };
+    editorElement?.addEventListener("scroll", hideOnScroll, { passive: true });
     return () => {
       document.removeEventListener("selectionchange", handleSelectionChange);
+      editorElement?.removeEventListener("scroll", hideOnScroll);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [handleSelectionChange]);
+  }, [handleSelectionChange, editorElement]);
 
   if (!visible) return null;
 
