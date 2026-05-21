@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { providerFor, extractProviderError } from "./_llm.ts";
+import { callLLM, providerFor, normaliseResponse, extractProviderError, envKeyFor } from "./_llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -854,102 +854,47 @@ ${writePillarNotice}`;
       (prefRow as { preferred_flow_model?: string } | null)?.preferred_flow_model ||
       "claude-sonnet-4-6";
 
-    // --- Call Anthropic with tool use ---
-    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-    const deepseekKey = Deno.env.get("DEEPSEEK_API_KEY");
-    const mistralKey = Deno.env.get("MISTRAL_API_KEY");
-
-    const isAnthropic = flowModel.startsWith("claude-");
-    const isDeepseek = flowModel.startsWith("deepseek-");
-    if (isAnthropic && !anthropicKey) return jsonResponse({ error: "Anthropic API key not configured" }, 500);
-    if (isDeepseek && !deepseekKey) return jsonResponse({ error: "DeepSeek API key not configured" }, 500);
-    if (!isAnthropic && !isDeepseek && !mistralKey) return jsonResponse({ error: "Mistral API key not configured" }, 500);
-
-    let anthropicRes: Response;
-    if (isAnthropic) {
-      anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": anthropicKey!,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: flowModel,
-          max_tokens: 8192,
-          system: systemPromptTemplate,
-          messages: [{ role: "user", content: userPrompt }],
-          tools: [SUBMIT_FLOW_TOOL],
-          tool_choice: { type: "tool", name: "submit_flow_analysis" },
-        }),
-      });
-    } else {
-      // OpenAI-shape (Mistral / DeepSeek) — use function-calling with forced tool
-      const endpoint = isDeepseek
-        ? "https://api.deepseek.com/v1/chat/completions"
-        : "https://api.mistral.ai/v1/chat/completions";
-      const key = isDeepseek ? deepseekKey! : mistralKey!;
-      const oaRes = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-        body: JSON.stringify({
-          model: flowModel,
-          max_tokens: 8192,
-          messages: [
-            { role: "system", content: systemPromptTemplate },
-            { role: "user", content: userPrompt },
-          ],
-          tools: [{
-            type: "function",
-            function: {
-              name: SUBMIT_FLOW_TOOL.name,
-              description: SUBMIT_FLOW_TOOL.description,
-              parameters: SUBMIT_FLOW_TOOL.input_schema,
-            },
-          }],
-          tool_choice: { type: "function", function: { name: SUBMIT_FLOW_TOOL.name } },
-        }),
-      });
-      // Adapt to Anthropic-shape so downstream parsing works.
-      if (!oaRes.ok) {
-        anthropicRes = oaRes;
-      } else {
-        const oaData = await oaRes.json();
-        const tc = oaData?.choices?.[0]?.message?.tool_calls?.[0];
-        let input: unknown = null;
-        try { input = JSON.parse(tc?.function?.arguments ?? "{}"); } catch { /* */ }
-        const adapted = {
-          content: tc ? [{ type: "tool_use", input }] : [],
-          usage: {
-            input_tokens: oaData?.usage?.prompt_tokens,
-            output_tokens: oaData?.usage?.completion_tokens,
-          },
-        };
-        anthropicRes = new Response(JSON.stringify(adapted), { status: 200 });
-      }
+    // --- Call LLM with tool use (provider-agnostic) ---
+    const provider = providerFor(flowModel);
+    if (!Deno.env.get(envKeyFor(provider))) {
+      return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 
+    const llmRes = await callLLM({
+      model: flowModel,
+      max_tokens: 8192,
+      messages: [
+        { role: "system", content: systemPromptTemplate },
+        { role: "user", content: userPrompt },
+      ],
+      tools: [{
+        type: "function",
+        function: {
+          name: SUBMIT_FLOW_TOOL.name,
+          description: SUBMIT_FLOW_TOOL.description,
+          parameters: SUBMIT_FLOW_TOOL.input_schema,
+        },
+      }],
+      forceTool: SUBMIT_FLOW_TOOL.name,
+    });
 
-    if (!anthropicRes.ok) {
-      const errText = await anthropicRes.text();
-      console.error("LLM API error:", anthropicRes.status, errText);
+    if (!llmRes.ok) {
+      const errText = await llmRes.text();
+      console.error("LLM API error:", llmRes.status, errText);
       return jsonResponse(
-        { error: extractProviderError(providerFor(flowModel), anthropicRes.status, errText) },
+        { error: extractProviderError(provider, llmRes.status, errText) },
         502
       );
     }
 
-    const anthropicData = await anthropicRes.json();
+    const rawData = await llmRes.json();
+    const normalised = normaliseResponse(provider, rawData);
+    const toolCall = normalised.toolCalls.find((tc) => tc.name === SUBMIT_FLOW_TOOL.name);
 
-    // Extract tool_use result
-    const toolUseBlock = anthropicData.content?.find(
-      (block: { type: string }) => block.type === "tool_use"
-    );
-
-    if (!toolUseBlock?.input) {
+    if (!toolCall?.arguments) {
       console.error(
         "No tool_use block found in response:",
-        JSON.stringify(anthropicData)
+        JSON.stringify(rawData)
       );
       return jsonResponse(
         { error: "AI analysis returned unexpected format. Please try again." },
@@ -957,7 +902,14 @@ ${writePillarNotice}`;
       );
     }
 
-    const flowResult = toolUseBlock.input;
+    // Keep downstream variable names for minimal churn.
+    const anthropicData = {
+      usage: {
+        input_tokens: normalised.usage?.input_tokens,
+        output_tokens: normalised.usage?.output_tokens,
+      },
+    };
+    const flowResult = toolCall.arguments;
 
     // Validate all required pillars are structured objects
     const defaultPillar = { reasoning: "Insufficient data", evidence: [], score: null, narrative: "Could not be assessed." };
