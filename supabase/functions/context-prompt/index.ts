@@ -1221,9 +1221,9 @@ When citing information from web search results, always include the source URL i
 
       if (!llmRes.ok) {
         const errText = await llmRes.text();
-        console.error("[stream:context-prompt] Mistral API error:", llmRes.status, errText);
+        console.error("[stream:context-prompt] LLM API error:", llmRes.status, errText);
         return jsonResponse(
-          { error: "AI service temporarily unavailable. Please try again." },
+          { error: extractProviderError("mistral", llmRes.status, errText) },
           502
         );
       }
