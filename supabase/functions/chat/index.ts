@@ -473,7 +473,7 @@ When citing information from web search results, always include the source URL i
           const errText = await call1Res.text();
           console.error("[stream] Call #1 error:", call1Res.status, errText);
           return jsonResponse(
-            { error: "AI service temporarily unavailable. Please try again." },
+            { error: extractProviderError(providerFor(chatModel), call1Res.status, errText) },
             502
           );
         }
