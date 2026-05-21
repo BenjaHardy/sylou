@@ -165,10 +165,11 @@ export function useChatMessages(threadId: string | null) {
             onPhase: (p) => {
               setPhase(p);
             },
-            onDone: (evt) => {
+              onDone: (evt) => {
               receivedDone = true;
               setPhase(null);
               if (evt.error) {
+                const serverMsg = typeof evt.error === "string" ? evt.error.slice(0, 200) : "";
                 // Server-side error — show inline error bubble, keep user message
                 setMessages((prev) => {
                   const without = prev.filter((m) => m.id !== streamingId);
@@ -178,7 +179,7 @@ export function useChatMessages(threadId: string | null) {
                       id: "error-assistant",
                       thread_id: threadId,
                       role: "assistant",
-                      content: "Sorry, something went wrong. Please try again.",
+                      content: serverMsg || "Sorry, something went wrong. Please try again.",
                       created_at: new Date().toISOString(),
                       source_type: "chat",
                       flow_flag: null,
