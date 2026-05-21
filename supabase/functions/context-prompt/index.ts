@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callLLM, providerFor, extractProviderError } from "./_llm.ts";
+import { callLLM, providerFor, normaliseResponse, extractProviderError } from "./_llm.ts";
 
 // Service-role client for ai_editor_actions (bypasses RLS)
 function getAdminClient() {
@@ -486,8 +486,6 @@ Deno.serve(async (req) => {
     if (!Deno.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
-    // Legacy variable for any remaining Mistral-key references
-    const mistralKey = Deno.env.get("MISTRAL_API_KEY") ?? "";
 
     // --- Parse body ---
     const body = await req.json();
@@ -863,10 +861,9 @@ When citing information from web search results, always include the source URL i
     if (hasDocuments) tools.push(buildDocumentTool());
     if (webSearchEnabled) tools.push(buildWebSearchTool());
 
-    // For tool-bearing paths we need OpenAI-shape responses (extractToolCalls).
-    // Anthropic's response shape differs, so transparently fall back to mistral
-    // for these paths. The non-tool path uses callLLM which handles all providers.
-    const toolModel = providerFor(chatModel) === "anthropic" ? "mistral-large-latest" : chatModel;
+    // All LLM calls (tool-bearing and not) go through callLLM, which handles
+    // provider routing + body translation. normaliseResponse uniformly extracts
+    // tool calls and the assistant message regardless of provider.
 
     // =========================================================
     // STREAMING PATH — LLM Call #2 with optional tool-use
@@ -1009,34 +1006,25 @@ When citing information from web search results, always include the source URL i
               // Emit initial phase so the client knows we're working
               controller.enqueue(sseEvent({ phase: "reviewing" }));
 
-              // Call #2a: non-streamed with tools (inside stream so response is already sent)
-              const call2aBody = {
+              // Call #2a: non-streamed with tools (provider-aware via callLLM)
+              const call2aRes = await callLLM({
                 model: chatModel,
-                messages: responseMessages,
+                messages: responseMessages as any,
                 max_tokens: 2000,
-                tools,
-                tool_choice: "auto",
-              };
-
-              const call2aRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${mistralKey}`,
-                },
-                body: JSON.stringify(call2aBody),
+                tools: tools as any,
               });
 
               if (!call2aRes.ok) {
                 const errText = await call2aRes.text();
                 console.error("[stream:context-prompt] Call #2a error:", call2aRes.status, errText);
-                controller.enqueue(sseEvent({ error: extractProviderError("mistral", call2aRes.status, errText) }));
+                controller.enqueue(sseEvent({ error: extractProviderError(providerFor(chatModel), call2aRes.status, errText) }));
                 return;
               }
 
               const call2aData = await call2aRes.json();
-              const toolCalls = extractToolCalls(call2aData);
-              const call2aContent = cleanLLMContent(call2aData.choices?.[0]?.message?.content ?? "");
+              const norm2a = normaliseResponse(providerFor(chatModel), call2aData);
+              const toolCalls = norm2a.toolCalls;
+              const call2aContent = cleanLLMContent(norm2a.text);
               const call2aInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
               totalInputChars += call2aInputChars;
               totalOutputChars += call2aContent.length;
@@ -1069,9 +1057,12 @@ When citing information from web search results, always include the source URL i
                 // ── Tool use detected ──
                 console.log("[stream:context-prompt] tool use detected:", toolCalls.length, "calls");
 
+                // Tool messages stay in OpenAI shape; toAnthropicBody in _llm.ts
+                // translates `role:"tool"` and assistant `tool_calls` to Anthropic's
+                // tool_result / tool_use content blocks transparently.
                 const toolMessages: Array<Record<string, unknown>> = [
                   ...responseMessages,
-                  call2aData.choices[0].message,
+                  norm2a.assistantMessage as unknown as Record<string, unknown>,
                 ];
 
                 for (const tc of toolCalls.slice(0, 5)) {
@@ -1118,26 +1109,19 @@ When citing information from web search results, always include the source URL i
                   }
                 }
 
-                // Call #2b: streaming with tool results
+                // Call #2b: streaming with tool results (provider-aware via callLLM)
                 console.log("[stream:context-prompt] starting Call #2b streaming");
-                const call2bRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${mistralKey}`,
-                  },
-                  body: JSON.stringify({
-                    model: toolModel,
-                    messages: toolMessages,
-                    max_tokens: 2000,
-                    stream: true,
-                  }),
+                const call2bRes = await callLLM({
+                  model: chatModel,
+                  messages: toolMessages as any,
+                  max_tokens: 2000,
+                  stream: true,
                 });
 
                 if (!call2bRes.ok) {
                   const errText = await call2bRes.text();
                   console.error("[stream:context-prompt] Call #2b error:", call2bRes.status, errText);
-                  controller.enqueue(sseEvent({ done: true, error: extractProviderError("mistral", call2bRes.status, errText) }));
+                  controller.enqueue(sseEvent({ done: true, error: extractProviderError(providerFor(chatModel), call2bRes.status, errText) }));
                   return;
                 }
 
@@ -1163,7 +1147,7 @@ When citing information from web search results, always include the source URL i
 
                     try {
                       const parsed = JSON.parse(payload);
-                      const delta = extractDeltaText(parsed, "mistral");
+                      const delta = extractDeltaText(parsed, providerFor(chatModel));
                       if (delta) {
                         fullResponse += delta;
                         try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
@@ -1205,25 +1189,18 @@ When citing information from web search results, always include the source URL i
       // ── NO TOOLS — streaming Call #2 using ReadableStream ──
       console.log("[stream:context-prompt] no tools, standard streaming");
 
-      const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${mistralKey}`,
-        },
-        body: JSON.stringify({
-          model: toolModel,
-          messages: responseMessages,
-          max_tokens: 2000,
-          stream: true,
-        }),
+      const llmRes = await callLLM({
+        model: chatModel,
+        messages: responseMessages as any,
+        max_tokens: 2000,
+        stream: true,
       });
 
       if (!llmRes.ok) {
         const errText = await llmRes.text();
         console.error("[stream:context-prompt] LLM API error:", llmRes.status, errText);
         return jsonResponse(
-          { error: extractProviderError("mistral", llmRes.status, errText) },
+          { error: extractProviderError(providerFor(chatModel), llmRes.status, errText) },
           502
         );
       }
@@ -1255,7 +1232,7 @@ When citing information from web search results, always include the source URL i
 
                 try {
                   const parsed = JSON.parse(payload);
-                  const delta = extractDeltaText(parsed, "mistral");
+                  const delta = extractDeltaText(parsed, providerFor(chatModel));
                   if (delta) {
                     fullResponse += delta;
                     try {
@@ -1305,30 +1282,23 @@ When citing information from web search results, always include the source URL i
     // =========================================================
 
     if (hasTools) {
-      const call2aRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${mistralKey}`,
-        },
-        body: JSON.stringify({
-          model: toolModel,
-          messages: responseMessages,
-          max_tokens: 2000,
-          tools,
-          tool_choice: "auto",
-        }),
+      const call2aRes = await callLLM({
+        model: chatModel,
+        messages: responseMessages as any,
+        max_tokens: 2000,
+        tools: tools as any,
       });
 
       if (!call2aRes.ok) {
         const errText = await call2aRes.text();
         console.error("Call #2a error:", call2aRes.status, errText);
-        throw new Error(extractProviderError("mistral", call2aRes.status, errText));
+        throw new Error(extractProviderError(providerFor(chatModel), call2aRes.status, errText));
       }
 
       const call2aData = await call2aRes.json();
-      const toolCalls = extractToolCalls(call2aData);
-      const call2aContent = cleanLLMContent(call2aData.choices?.[0]?.message?.content ?? "");
+      const norm2a = normaliseResponse(providerFor(chatModel), call2aData);
+      const toolCalls = norm2a.toolCalls;
+      const call2aContent = cleanLLMContent(norm2a.text);
       totalInputChars += responseMessages.reduce((s, m) => s + m.content.length, 0);
       totalOutputChars += call2aContent.length;
 
@@ -1339,7 +1309,7 @@ When citing information from web search results, always include the source URL i
       } else {
         const toolMessages: Array<Record<string, unknown>> = [
           ...responseMessages,
-          call2aData.choices[0].message,
+          norm2a.assistantMessage as unknown as Record<string, unknown>,
         ];
 
         for (const tc of toolCalls.slice(0, 5)) {
