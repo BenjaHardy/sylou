@@ -1284,30 +1284,23 @@ When citing information from web search results, always include the source URL i
     // =========================================================
 
     if (hasTools) {
-      const call2aRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${mistralKey}`,
-        },
-        body: JSON.stringify({
-          model: toolModel,
-          messages: responseMessages,
-          max_tokens: 2000,
-          tools,
-          tool_choice: "auto",
-        }),
+      const call2aRes = await callLLM({
+        model: chatModel,
+        messages: responseMessages as any,
+        max_tokens: 2000,
+        tools: tools as any,
       });
 
       if (!call2aRes.ok) {
         const errText = await call2aRes.text();
         console.error("Call #2a error:", call2aRes.status, errText);
-        throw new Error(extractProviderError("mistral", call2aRes.status, errText));
+        throw new Error(extractProviderError(providerFor(chatModel), call2aRes.status, errText));
       }
 
       const call2aData = await call2aRes.json();
-      const toolCalls = extractToolCalls(call2aData);
-      const call2aContent = cleanLLMContent(call2aData.choices?.[0]?.message?.content ?? "");
+      const norm2a = normaliseResponse(providerFor(chatModel), call2aData);
+      const toolCalls = norm2a.toolCalls;
+      const call2aContent = cleanLLMContent(norm2a.text);
       totalInputChars += responseMessages.reduce((s, m) => s + m.content.length, 0);
       totalOutputChars += call2aContent.length;
 
@@ -1318,7 +1311,7 @@ When citing information from web search results, always include the source URL i
       } else {
         const toolMessages: Array<Record<string, unknown>> = [
           ...responseMessages,
-          call2aData.choices[0].message,
+          norm2a.assistantMessage as unknown as Record<string, unknown>,
         ];
 
         for (const tc of toolCalls.slice(0, 5)) {
