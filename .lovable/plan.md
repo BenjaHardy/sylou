@@ -1,57 +1,85 @@
-## Add "Writing" Tab to FLOW Report
+# Fix LLM choice regressions
 
-A new tab will display the writing content **as it existed at the moment the FLOW analysis was run**. The snapshot is frozen — subsequent edits never modify it. A new analysis creates a new snapshot in a new report. The tab is **mandatory**: always shown in both the in-app report and shared reports, and it cannot be toggled off in share settings.
+## Confirmed root causes
 
-### 1. Database
+1. **Chat header doesn't update on model change.** `useUserSettings()` is called independently in `SettingsDialog` and `ChatPanel`. Each call owns its own `useState`. When Settings persists to the DB, ChatPanel's local copy never re-reads, so `MODEL_LABELS[userSettings.preferred_chat_model]` keeps showing the old label until full reload.
 
-Migration on `flow_reports`:
-- Add `writing_snapshot text NOT NULL DEFAULT ''` — stores the HTML/text of `writing_content.content` captured at analysis time.
-- Backfill existing rows with `''` (older reports will show an empty-state message in the new tab).
+2. **Mistral never replies.** Edge logs: `[stream] Call #1 error: 400 {"message":"Invalid model: mistral-large-3"}`. The catalog ships fictional IDs.
 
-No share toggle column is added — the tab is always visible.
+3. **DeepSeek never replies.** `deepseek-v4-flash` is not a DeepSeek API ID; the right one is `deepseek-chat`.
 
-### 2. Edge function (`supabase/functions/analysis/index.ts`)
+4. **Claude "No response generated" when documents are imported.** Verified online: `claude-sonnet-4-6` and `claude-opus-4-7` are valid (dateless 4.6-generation format). The real bug is in the **two-pass tool flow** in `supabase/functions/chat/index.ts` (mirrored in `context-prompt/index.ts`). It reads the first-call response as OpenAI shape:
 
-When inserting the new `flow_reports` row (~line 1108), include:
+   ```ts
+   call1Data.choices?.[0]?.message?.content
+   extractToolCalls(call1Data)               // OpenAI-shape only
+   toolMessages.push(call1Data.choices[0].message)
+   ```
+
+   For Anthropic the raw response has no `choices` — text + `tool_use` live in `content` blocks — so `call1Content` is `""`, `toolCalls` is `[]`, execution falls into the "no tool use, emit Call #1 directly" branch and emits the fallback string `"No response generated."`. This matches the symptom exactly: plain chat works (no imported docs ⇒ `hasTools = false` ⇒ standard streaming path handles Anthropic SSE via `extractDeltaText`); the moment a doc is uploaded, the `read_imported_document` tool registers and the broken two-pass path takes over.
+
+## Changes
+
+### 1. Real Mistral / DeepSeek model IDs (`src/lib/models.ts`)
+
+```text
+mistral-large-3     → mistral-large-latest   (label "Mistral Large")
+deepseek-v4-flash   → deepseek-chat          (label "DeepSeek Chat", keep experimental)
 ```
-writing_snapshot: writingContent,
+
+Keep Claude entries unchanged. Update `DEFAULT_CHAT_MODEL` to `mistral-large-latest`. Add legacy aliases in `MODEL_LABELS` (`"mistral-large-3": "Mistral Large"`, `"deepseek-v4-flash": "DeepSeek Chat"`) so historical `chat_messages.model_used` / `flow_reports.model_used` rows still render a friendly label without any data backfill.
+
+### 2. Backfill profiles + column defaults
+
+Migration on `public.profiles`:
+- `UPDATE` rows where `preferred_chat_model = 'mistral-large-3'` → `'mistral-large-latest'` and `preferred_flow_model` / `preferred_chat_model = 'deepseek-v4-flash'` → `'deepseek-chat'`.
+- Change the column default for `preferred_chat_model` from `'mistral-large-3'` to `'mistral-large-latest'`.
+
+Historical `chat_messages.model_used` and `flow_reports.model_used` are intentionally **not** backfilled — display is handled by the legacy MODEL_LABELS aliases above.
+
+### 3. Patch edge-function fallback constants
+
+Replace hardcoded `"mistral-large-3"` with `"mistral-large-latest"` in the final fallback (after request override and profile preference) in `supabase/functions/chat/index.ts` and `supabase/functions/context-prompt/index.ts`.
+
+### 4. Make the two-pass tool flow provider-agnostic
+
+In `supabase/functions/chat/index.ts` (mirror in `context-prompt/index.ts`), adopt the existing `normaliseResponse(providerFor(model), data)` helper from `_llm.ts`:
+
+- After `call1Res.json()`: `const norm = normaliseResponse(providerFor(chatModel), call1Data)`. Use `norm.text` / `norm.toolCalls` / `norm.assistantMessage` instead of `call1Data.choices?.[0]?.message?.content`, `extractToolCalls(call1Data)`, and `call1Data.choices[0].message`.
+- **Inside the `while` loop**, apply the **same normalisation to every iteration** — each `callLLM(...)` follow-up call must run through `normaliseResponse` before its `text` / `toolCalls` / `assistantMessage` are consumed. This covers multi-step flows where the model reads a document then issues a web search (or vice-versa) across iterations.
+- `normaliseResponse` already returns `assistantMessage` in the project's normalised OpenAI-style `LLMMessage` shape, which `toAnthropicBody` round-trips correctly via its existing `tool_calls` handling, so no per-provider branching is needed at push time.
+
+This is the only edit needed for Claude + documents to work; it also hardens the path against any future provider added to `providerFor()`.
+
+### 5. Share user-settings state across the app (gated on auth)
+
+Add `UserSettingsProvider` in `src/contexts/UserSettingsContext.tsx`:
+
+- Owns the single `useState` + `refresh` + `update` (lifted verbatim from the current hook body).
+- **Gate the fetch on the auth session**: read `useAuth()` and only call the Supabase query when `session !== null`. While `session` is `null`, hold the defaults without firing a request. Re-fetch when the user id changes (login / logout).
+- Re-export `useUserSettings` as a thin `useContext` wrapper so every existing call site keeps working unchanged.
+
+Mount once in `src/App.tsx` **inside** `<AuthProvider>` and outside `<Routes>` so it lives in the auth-aware subtree but persists across route changes:
+
+```tsx
+<AuthProvider>
+  <UserSettingsProvider>
+    <Routes>...</Routes>
+  </UserSettingsProvider>
+</AuthProvider>
 ```
-`writingContent` is already fetched at line 621.
 
-### 3. Frontend — new component
+`update()` already does an optimistic `setSettings({...prev, ...patch})`, so once state is shared the chat-pane header label flips the instant the user picks a new model.
 
-`src/components/flow-report/WritingSnapshotTab.tsx`:
-- Props: `{ snapshot: string; capturedAt: string; projectName?: string }`.
-- Renders the snapshot inside a styled, read-only container using `dangerouslySetInnerHTML` (writing is stored as TipTap HTML — same rendering approach used elsewhere in the app for FLOW highlights).
-- Header: "Writing snapshot" + small caption "Captured when this FLOW analysis ran on {date}. Later edits to the project are not reflected here."
-- Empty-state for legacy reports with empty `writing_snapshot`: "No writing snapshot is available for this report (it was generated before snapshots were introduced)."
+### 6. Verification
 
-### 4. Frontend — wire into tab switchers
+- Pick each of the four models in the chat header → header label updates immediately, no reload needed.
+- Send a plain chat message with each model → real response, no `Invalid model` errors in `chat` function logs.
+- Upload a document and ask a question with each Claude model → real answer, not the fallback string. `[stream] tool iteration N` log lines should appear and Call #2 should produce text.
+- Tail `chat` and `context-prompt` logs for `Invalid model` and "No response generated." occurrences — both should be gone.
 
-`src/components/FlowReportView.tsx`:
-- Extend `activeTab` union to include `"writing"`.
-- Add a "Writing" button in the tab switcher (between Report and Profile).
-- Render `<WritingSnapshotTab />` when active.
+## Technical notes
 
-`src/pages/SharedReport.tsx`:
-- Extend `activeTab` union with `"writing"`.
-- Always render the Writing tab button (no `available` gate — mandatory).
-- Adjust default-tab logic so Writing is the fallback if Report is hidden.
-- Update `visibleTabsCount` to always count Writing.
-- Select `writing_snapshot, created_at` from `flow_reports` in the existing fetch.
-
-### 5. Share settings UI
-
-In the dialog that toggles `share_include_report` / `share_include_profile` / `share_include_replay`, add a non-interactive note: "The writing snapshot is always included in shared reports so reviewers can see the work that was assessed." No new toggle is added.
-
-### 6. Out of scope
-
-- Re-running analysis on the same report (already creates a new report row with its own snapshot — no change needed).
-- Diffing the snapshot against current writing.
-- Storing per-pillar excerpts (already covered by `key_user_contributions`).
-
-### Technical notes
-
-- The snapshot is plain HTML from TipTap; size is bounded by the same writing-budget limits already enforced before analysis runs, so no extra size guard is needed.
-- RLS: `flow_reports` already exposes shared rows publicly via `share_enabled = true`; the new column inherits that policy automatically.
-- `src/integrations/supabase/types.ts` regenerates automatically after migration.
+- `providerFor()` keys off the `mistral-` / `claude-` / `deepseek-` prefixes — the new IDs preserve those prefixes, so the router needs no change.
+- `normaliseResponse()` is exported from `_llm.ts` but not yet used in the chat function; adopting it is a pure refactor (no new helper code).
+- No schema change beyond the profile data backfill + default tweak.

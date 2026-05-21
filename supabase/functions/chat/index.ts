@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callLLM, providerFor } from "./_llm.ts";
+import { callLLM, providerFor, normaliseResponse } from "./_llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -232,7 +232,7 @@ Deno.serve(async (req) => {
     const webSearchEnabled: boolean = body.web_search_enabled ?? false;
     const requestedModel: string | undefined = body.model;
     const chatModel: string =
-      requestedModel || profile.preferred_chat_model || "mistral-large-3";
+      requestedModel || profile.preferred_chat_model || "mistral-large-latest";
 
     if (!threadId || !message) {
       return jsonResponse({ error: "thread_id and message are required" }, 400);
@@ -479,11 +479,12 @@ When citing information from web search results, always include the source URL i
         }
 
         const call1Data = await call1Res.json();
-        let toolCalls = extractToolCalls(call1Data);
+        const norm1 = normaliseResponse(providerFor(chatModel), call1Data);
+        let toolCalls = norm1.toolCalls;
 
         // Track tokens from Call #1
         totalInputChars += llmMessages.reduce((s, m) => s + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length), 0);
-        const call1Content = cleanLLMContent(call1Data.choices?.[0]?.message?.content ?? "");
+        const call1Content = cleanLLMContent(norm1.text);
         totalOutputChars += call1Content.length;
 
         if (toolCalls.length === 0) {
@@ -517,6 +518,8 @@ When citing information from web search results, always include the source URL i
                   concise_mode: conciseMode,
                   model_used: chatModel,
                 };
+
+
 
                 const { data: insertedUser } = await adminSupabase
                   .from("chat_messages")
@@ -583,7 +586,7 @@ When citing information from web search results, always include the source URL i
               // Build conversation with tool results
               const toolMessages: Array<Record<string, unknown>> = [
                 ...llmMessages,
-                call1Data.choices[0].message,
+                norm1.assistantMessage as unknown as Record<string, unknown>,
               ];
 
               // Resolve tool calls iteratively (up to 5 iterations)
@@ -643,10 +646,9 @@ When citing information from web search results, always include the source URL i
                 if (iteration < MAX_ITERATIONS) {
                   const nextRes = await callLLM({
                       model: chatModel,
-                      messages: toolMessages,
+                      messages: toolMessages as any,
                       max_tokens: 2000,
-                      tools,
-                      tool_choice: "auto",
+                      tools: tools as any,
                     });
 
                   if (!nextRes.ok) {
@@ -655,12 +657,13 @@ When citing information from web search results, always include the source URL i
                   }
 
                   const nextData = await nextRes.json();
-                  const nextContent = cleanLLMContent(nextData.choices?.[0]?.message?.content ?? "");
+                  const nextNorm = normaliseResponse(providerFor(chatModel), nextData);
+                  const nextContent = cleanLLMContent(nextNorm.text);
                   totalOutputChars += nextContent.length;
-                  currentToolCalls = extractToolCalls(nextData);
+                  currentToolCalls = nextNorm.toolCalls;
 
                   if (currentToolCalls.length > 0) {
-                    toolMessages.push(nextData.choices[0].message);
+                    toolMessages.push(nextNorm.assistantMessage as unknown as Record<string, unknown>);
                   } else {
                     // No more tool calls — discard any text from intermediate call
                     // and fall through to a proper streaming Call #2
@@ -668,6 +671,7 @@ When citing information from web search results, always include the source URL i
                   }
                 }
               }
+
 
               // LLM Call #2: streaming with tool results (no tools this time)
               console.log("[stream] starting Call #2 streaming");

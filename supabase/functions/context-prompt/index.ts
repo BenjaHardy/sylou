@@ -480,7 +480,7 @@ Deno.serve(async (req) => {
     // Resolve chat model (request override allowed); validate provider key exists.
     const requestedModel: string | undefined = (await req.clone().json().catch(() => ({})))?.model;
     const chatModel: string =
-      requestedModel || profile.preferred_chat_model || "mistral-large-3";
+      requestedModel || profile.preferred_chat_model || "mistral-large-latest";
     const provider = providerFor(chatModel);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
     if (!Deno.env.get(providerKeyEnv)) {
@@ -866,7 +866,7 @@ When citing information from web search results, always include the source URL i
     // For tool-bearing paths we need OpenAI-shape responses (extractToolCalls).
     // Anthropic's response shape differs, so transparently fall back to mistral
     // for these paths. The non-tool path uses callLLM which handles all providers.
-    const toolModel = providerFor(chatModel) === "anthropic" ? "mistral-large-3" : chatModel;
+    const toolModel = providerFor(chatModel) === "anthropic" ? "mistral-large-latest" : chatModel;
 
     // =========================================================
     // STREAMING PATH — LLM Call #2 with optional tool-use
