@@ -866,7 +866,7 @@ When citing information from web search results, always include the source URL i
     // For tool-bearing paths we need OpenAI-shape responses (extractToolCalls).
     // Anthropic's response shape differs, so transparently fall back to mistral
     // for these paths. The non-tool path uses callLLM which handles all providers.
-    const toolModel = providerFor(chatModel) === "anthropic" ? "mistral-large-3" : chatModel;
+    const toolModel = providerFor(chatModel) === "anthropic" ? "mistral-large-latest" : chatModel;
 
     // =========================================================
     // STREAMING PATH — LLM Call #2 with optional tool-use
