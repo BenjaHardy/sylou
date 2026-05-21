@@ -1323,7 +1323,7 @@ When citing information from web search results, always include the source URL i
       if (!call2aRes.ok) {
         const errText = await call2aRes.text();
         console.error("Call #2a error:", call2aRes.status, errText);
-        throw new Error("AI service temporarily unavailable");
+        throw new Error(extractProviderError("mistral", call2aRes.status, errText));
       }
 
       const call2aData = await call2aRes.json();
