@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callLLM, providerFor } from "./_llm.ts";
+import { callLLM, providerFor, extractProviderError } from "./_llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -189,9 +189,9 @@ Deno.serve(async (req) => {
 
       if (!llmRes.ok) {
         const errText = await llmRes.text();
-        console.error("[stream:editor-action] Mistral API error:", llmRes.status, errText);
+        console.error("[stream:editor-action] LLM API error:", llmRes.status, errText);
         return jsonResponse(
-          { error: "AI service temporarily unavailable. Please try again." },
+          { error: extractProviderError(provider, llmRes.status, errText) },
           502
         );
       }
@@ -348,9 +348,9 @@ Deno.serve(async (req) => {
 
     if (!llmRes.ok) {
       const errText = await llmRes.text();
-      console.error("Mistral API error:", llmRes.status, errText);
+      console.error("LLM API error:", llmRes.status, errText);
       return jsonResponse(
-        { error: "AI service temporarily unavailable. Please try again." },
+        { error: extractProviderError(provider, llmRes.status, errText) },
         502
       );
     }

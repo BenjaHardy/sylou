@@ -270,3 +270,19 @@ export async function callLLM(opts: {
     body: JSON.stringify(body),
   });
 }
+
+// Extract a safe, user-friendly error message from an upstream provider error
+// body. Only surfaces `error.message` (string), truncated, to avoid leaking
+// keys, account IDs, request IDs, headers, or stack traces.
+export function extractProviderError(provider: ProviderId, status: number, rawBody: string): string {
+  const providerName = provider === "anthropic" ? "Claude" : provider === "deepseek" ? "DeepSeek" : "Mistral";
+  let msg = "";
+  try {
+    const j = JSON.parse(rawBody);
+    const candidate = j?.error?.message ?? j?.error ?? j?.message;
+    if (typeof candidate === "string") msg = candidate;
+  } catch { /* not JSON */ }
+  if (!msg) msg = `HTTP ${status}`;
+  if (msg.length > 200) msg = msg.slice(0, 197) + "...";
+  return `${providerName}: ${msg}`;
+}

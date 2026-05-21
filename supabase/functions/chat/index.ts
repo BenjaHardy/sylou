@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callLLM, providerFor, normaliseResponse } from "./_llm.ts";
+import { callLLM, providerFor, normaliseResponse, extractProviderError } from "./_llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -473,7 +473,7 @@ When citing information from web search results, always include the source URL i
           const errText = await call1Res.text();
           console.error("[stream] Call #1 error:", call1Res.status, errText);
           return jsonResponse(
-            { error: "AI service temporarily unavailable. Please try again." },
+            { error: extractProviderError(providerFor(chatModel), call1Res.status, errText) },
             502
           );
         }
@@ -685,7 +685,8 @@ When citing information from web search results, always include the source URL i
               if (!call2Res.ok) {
                 const errText = await call2Res.text();
                 console.error("[stream] Call #2 error:", call2Res.status, errText);
-                try { controller.enqueue(sseEvent({ done: true, error: "AI service temporarily unavailable." })); } catch { /* */ }
+                const msg = extractProviderError(providerFor(chatModel), call2Res.status, errText);
+                try { controller.enqueue(sseEvent({ done: true, error: msg })); } catch { /* */ }
                 controller.close();
                 return;
               }
@@ -825,9 +826,9 @@ When citing information from web search results, always include the source URL i
 
       if (!llmRes.ok) {
         const errText = await llmRes.text();
-        console.error("[stream] Mistral API error:", llmRes.status, errText);
+        console.error("[stream] LLM API error:", llmRes.status, errText);
         return jsonResponse(
-          { error: "AI service temporarily unavailable. Please try again." },
+          { error: extractProviderError(providerFor(chatModel), llmRes.status, errText) },
           502
         );
       }
@@ -988,9 +989,9 @@ When citing information from web search results, always include the source URL i
 
     if (!llmRes.ok) {
       const errText = await llmRes.text();
-      console.error("Mistral API error:", llmRes.status, errText);
+      console.error("LLM API error:", llmRes.status, errText);
       return jsonResponse(
-        { error: "AI service temporarily unavailable. Please try again." },
+        { error: extractProviderError(providerFor(chatModel), llmRes.status, errText) },
         502
       );
     }

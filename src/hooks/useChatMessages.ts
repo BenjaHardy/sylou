@@ -98,7 +98,29 @@ export function useChatMessages(threadId: string | null) {
         if (!res.ok) {
           const errBody = await res.text();
           console.error("Chat function error:", res.status, errBody);
-          setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+          let serverMsg = "";
+          try {
+            const parsed = JSON.parse(errBody);
+            if (typeof parsed?.error === "string") serverMsg = parsed.error.slice(0, 200);
+          } catch { /* not JSON */ }
+          setMessages((prev) => {
+            const without = prev.filter((m) => m.id !== optimisticId);
+            return [
+              ...without,
+              {
+                id: "error-assistant",
+                thread_id: threadId!,
+                role: "assistant",
+                content: serverMsg || "Sorry, something went wrong. Please try again.",
+                created_at: new Date().toISOString(),
+                source_type: "chat",
+                flow_flag: null,
+                concise_mode: null,
+                tutor_mode: null,
+                model_used: null,
+              } as ChatMessage,
+            ];
+          });
           setSending(false);
           return;
         }
@@ -147,6 +169,7 @@ export function useChatMessages(threadId: string | null) {
               receivedDone = true;
               setPhase(null);
               if (evt.error) {
+                const serverMsg = typeof evt.error === "string" ? evt.error.slice(0, 200) : "";
                 // Server-side error — show inline error bubble, keep user message
                 setMessages((prev) => {
                   const without = prev.filter((m) => m.id !== streamingId);
@@ -156,7 +179,7 @@ export function useChatMessages(threadId: string | null) {
                       id: "error-assistant",
                       thread_id: threadId,
                       role: "assistant",
-                      content: "Sorry, something went wrong. Please try again.",
+                      content: serverMsg || "Sorry, something went wrong. Please try again.",
                       created_at: new Date().toISOString(),
                       source_type: "chat",
                       flow_flag: null,
@@ -217,7 +240,25 @@ export function useChatMessages(threadId: string | null) {
 
           if (data?.error) {
             console.error("Chat API error:", data.error);
-            setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+            const serverMsg = typeof data.error === "string" ? data.error.slice(0, 200) : "";
+            setMessages((prev) => {
+              const without = prev.filter((m) => m.id !== optimisticId);
+              return [
+                ...without,
+                {
+                  id: "error-assistant",
+                  thread_id: threadId!,
+                  role: "assistant",
+                  content: serverMsg || "Sorry, something went wrong. Please try again.",
+                  created_at: new Date().toISOString(),
+                  source_type: "chat",
+                  flow_flag: null,
+                  concise_mode: null,
+                  tutor_mode: null,
+                  model_used: null,
+                } as ChatMessage,
+              ];
+            });
             setSending(false);
             return;
           }

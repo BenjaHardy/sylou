@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callLLM, providerFor } from "./_llm.ts";
+import { callLLM, providerFor, extractProviderError } from "./_llm.ts";
 
 // Service-role client for ai_editor_actions (bypasses RLS)
 function getAdminClient() {
@@ -209,7 +209,7 @@ async function callChatModel(
   if (!res.ok) {
     const errText = await res.text();
     console.error("LLM API error:", res.status, errText);
-    throw new Error("AI service temporarily unavailable");
+    throw new Error(extractProviderError(providerFor(model), res.status, errText));
   }
 
   const data = await res.json();
@@ -1030,7 +1030,7 @@ When citing information from web search results, always include the source URL i
               if (!call2aRes.ok) {
                 const errText = await call2aRes.text();
                 console.error("[stream:context-prompt] Call #2a error:", call2aRes.status, errText);
-                controller.enqueue(sseEvent({ error: "AI service temporarily unavailable. Please try again." }));
+                controller.enqueue(sseEvent({ error: extractProviderError("mistral", call2aRes.status, errText) }));
                 return;
               }
 
@@ -1137,7 +1137,7 @@ When citing information from web search results, always include the source URL i
                 if (!call2bRes.ok) {
                   const errText = await call2bRes.text();
                   console.error("[stream:context-prompt] Call #2b error:", call2bRes.status, errText);
-                  controller.enqueue(sseEvent({ done: true, error: "AI service temporarily unavailable." }));
+                  controller.enqueue(sseEvent({ done: true, error: extractProviderError("mistral", call2bRes.status, errText) }));
                   return;
                 }
 
@@ -1192,7 +1192,8 @@ When citing information from web search results, always include the source URL i
               }
             } catch (err) {
               console.error("[stream:context-prompt] error in tool-use path:", err);
-              try { controller.enqueue(sseEvent({ done: true, error: "AI service temporarily unavailable." })); } catch { /* */ }
+              const msg = err instanceof Error && err.message ? err.message.slice(0, 200) : "AI service temporarily unavailable.";
+              try { controller.enqueue(sseEvent({ done: true, error: msg })); } catch { /* */ }
             } finally {
               controller.close();
             }
@@ -1220,9 +1221,9 @@ When citing information from web search results, always include the source URL i
 
       if (!llmRes.ok) {
         const errText = await llmRes.text();
-        console.error("[stream:context-prompt] Mistral API error:", llmRes.status, errText);
+        console.error("[stream:context-prompt] LLM API error:", llmRes.status, errText);
         return jsonResponse(
-          { error: "AI service temporarily unavailable. Please try again." },
+          { error: extractProviderError("mistral", llmRes.status, errText) },
           502
         );
       }
@@ -1322,7 +1323,7 @@ When citing information from web search results, always include the source URL i
       if (!call2aRes.ok) {
         const errText = await call2aRes.text();
         console.error("Call #2a error:", call2aRes.status, errText);
-        throw new Error("AI service temporarily unavailable");
+        throw new Error(extractProviderError("mistral", call2aRes.status, errText));
       }
 
       const call2aData = await call2aRes.json();
