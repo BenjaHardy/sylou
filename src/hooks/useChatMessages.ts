@@ -165,7 +165,7 @@ export function useChatMessages(threadId: string | null) {
             onPhase: (p) => {
               setPhase(p);
             },
-              onDone: (evt) => {
+            onDone: (evt) => {
               receivedDone = true;
               setPhase(null);
               if (evt.error) {
