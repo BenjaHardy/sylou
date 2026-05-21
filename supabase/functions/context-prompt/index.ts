@@ -480,7 +480,7 @@ Deno.serve(async (req) => {
     // Resolve chat model (request override allowed); validate provider key exists.
     const requestedModel: string | undefined = (await req.clone().json().catch(() => ({})))?.model;
     const chatModel: string =
-      requestedModel || profile.preferred_chat_model || "mistral-large-3";
+      requestedModel || profile.preferred_chat_model || "mistral-large-latest";
     const provider = providerFor(chatModel);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
     if (!Deno.env.get(providerKeyEnv)) {

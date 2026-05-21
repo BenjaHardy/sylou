@@ -22,8 +22,8 @@ export interface ModelInfo {
 
 export const MODELS: ModelInfo[] = [
   {
-    id: "mistral-large-3",
-    label: "Mistral Large 3",
+    id: "mistral-large-latest",
+    label: "Mistral Large",
     provider: "mistral",
     pricing: { input: 2.0, output: 6.0 },
     contextLimit: 256_000,
@@ -44,8 +44,8 @@ export const MODELS: ModelInfo[] = [
     contextLimit: 1_000_000,
   },
   {
-    id: "deepseek-v4-flash",
-    label: "DeepSeek V4 Flash",
+    id: "deepseek-chat",
+    label: "DeepSeek Chat",
     provider: "deepseek",
     pricing: { input: 0.14, output: 0.28 },
     contextLimit: 1_000_000,
@@ -59,8 +59,10 @@ export const MODEL_LABELS: Record<string, string> = MODELS.reduce(
     return acc;
   },
   {
-    // Legacy slug fallback (data may have been backfilled but tolerate stragglers)
-    "mistral-large-latest": "Mistral Large 3",
+    // Legacy IDs — kept so historical chat_messages.model_used /
+    // flow_reports.model_used rows still render a friendly label.
+    "mistral-large-3": "Mistral Large",
+    "deepseek-v4-flash": "DeepSeek Chat",
   } as Record<string, string>,
 );
 
@@ -68,5 +70,5 @@ export function getModel(id: string): ModelInfo | undefined {
   return MODELS.find((m) => m.id === id);
 }
 
-export const DEFAULT_CHAT_MODEL = "mistral-large-3";
+export const DEFAULT_CHAT_MODEL = "mistral-large-latest";
 export const DEFAULT_FLOW_MODEL = "claude-sonnet-4-6";

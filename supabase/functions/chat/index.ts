@@ -232,7 +232,7 @@ Deno.serve(async (req) => {
     const webSearchEnabled: boolean = body.web_search_enabled ?? false;
     const requestedModel: string | undefined = body.model;
     const chatModel: string =
-      requestedModel || profile.preferred_chat_model || "mistral-large-3";
+      requestedModel || profile.preferred_chat_model || "mistral-large-latest";
 
     if (!threadId || !message) {
       return jsonResponse({ error: "thread_id and message are required" }, 400);
