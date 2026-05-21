@@ -486,8 +486,6 @@ Deno.serve(async (req) => {
     if (!Deno.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
-    // Legacy variable for any remaining Mistral-key references
-    const mistralKey = Deno.env.get("MISTRAL_API_KEY") ?? "";
 
     // --- Parse body ---
     const body = await req.json();
