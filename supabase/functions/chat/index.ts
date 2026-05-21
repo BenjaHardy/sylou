@@ -886,7 +886,7 @@ When citing information from web search results, always include the source URL i
 
                 try {
                   const parsed = JSON.parse(payload);
-                  const delta = extractDeltaText(parsed, "mistral");
+                  const delta = extractDeltaText(parsed, providerFor(chatModel));
                   if (delta) {
                     fullResponse += delta;
                     try {
