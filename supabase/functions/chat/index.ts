@@ -685,7 +685,8 @@ When citing information from web search results, always include the source URL i
               if (!call2Res.ok) {
                 const errText = await call2Res.text();
                 console.error("[stream] Call #2 error:", call2Res.status, errText);
-                try { controller.enqueue(sseEvent({ done: true, error: "AI service temporarily unavailable." })); } catch { /* */ }
+                const msg = extractProviderError(providerFor(chatModel), call2Res.status, errText);
+                try { controller.enqueue(sseEvent({ done: true, error: msg })); } catch { /* */ }
                 controller.close();
                 return;
               }
