@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callLLM, providerFor } from "./_llm.ts";
+import { callLLM, providerFor, normaliseResponse } from "./_llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -479,11 +479,12 @@ When citing information from web search results, always include the source URL i
         }
 
         const call1Data = await call1Res.json();
-        let toolCalls = extractToolCalls(call1Data);
+        const norm1 = normaliseResponse(providerFor(chatModel), call1Data);
+        let toolCalls = norm1.toolCalls;
 
         // Track tokens from Call #1
         totalInputChars += llmMessages.reduce((s, m) => s + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length), 0);
-        const call1Content = cleanLLMContent(call1Data.choices?.[0]?.message?.content ?? "");
+        const call1Content = cleanLLMContent(norm1.text);
         totalOutputChars += call1Content.length;
 
         if (toolCalls.length === 0) {
@@ -517,6 +518,8 @@ When citing information from web search results, always include the source URL i
                   concise_mode: conciseMode,
                   model_used: chatModel,
                 };
+
+
 
                 const { data: insertedUser } = await adminSupabase
                   .from("chat_messages")
