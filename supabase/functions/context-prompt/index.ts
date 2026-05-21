@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callLLM, providerFor } from "./_llm.ts";
+import { callLLM, providerFor, extractProviderError } from "./_llm.ts";
 
 // Service-role client for ai_editor_actions (bypasses RLS)
 function getAdminClient() {
