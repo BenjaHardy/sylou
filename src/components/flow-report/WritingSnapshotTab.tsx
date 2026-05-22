@@ -32,8 +32,8 @@ export function WritingSnapshotTab({ snapshot, capturedAt }: Props) {
       {hasContent ? (
         <div
           className="prose prose-sm max-w-none rounded-md border border-border bg-[hsl(var(--ethos-surface))] px-6 py-5 text-foreground"
-          // Snapshot is TipTap-generated HTML produced by the same trusted editor used elsewhere in the app.
-          dangerouslySetInnerHTML={{ __html: snapshot }}
+          // Snapshot is TipTap-generated HTML; sanitized for safety on the public shared report route.
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(snapshot) }}
         />
       ) : (
         <div className="rounded-md border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">
