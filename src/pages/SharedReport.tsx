@@ -46,12 +46,10 @@ export default function SharedReport() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("flow_reports")
+      const { data, error } = await (supabase as any)
+        .from("flow_reports_public")
         .select("id, project_id, project_name, certificate_id, share_token, share_enabled, share_visibility, share_include_feedback, share_include_replay, share_include_report, share_include_profile, model_used, created_at, ai_find, ai_lead, ai_organize, ai_write, ai_summary, key_user_contributions, flow_meta, metrics_snapshot, user_feedback_pre, user_feedback_post, writing_snapshot")
         .eq("share_token", token)
-        .eq("share_enabled", true)
-        .eq("share_visibility", "public")
         .maybeSingle();
 
       if (error || !data) {
@@ -86,12 +84,10 @@ export default function SharedReport() {
     if (!report || !token || replaySnapshot) return;
     setLoadingReplay(true);
     try {
-      const { data } = await supabase
-        .from("flow_reports")
+      const { data } = await (supabase as any)
+        .from("flow_reports_public")
         .select("replay_snapshot")
         .eq("share_token", token)
-        .eq("share_enabled", true)
-        .eq("share_include_replay", true)
         .maybeSingle();
       if (data?.replay_snapshot) {
         setReplaySnapshot(data.replay_snapshot as unknown as ReplayEvent[]);
