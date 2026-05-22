@@ -1,4 +1,5 @@
 import { FileText } from "lucide-react";
+import DOMPurify from "dompurify";
 
 interface Props {
   snapshot: string;
