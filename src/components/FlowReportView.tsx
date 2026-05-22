@@ -606,17 +606,39 @@ export function FlowReportView({
                       </Button>
                     </div>
 
-                    {/* QR Code + Pledge Badge */}
+                    {/* QR Code */}
+                    <div className="flex flex-col items-center gap-2 pt-2">
+                      <span className="text-xs text-muted-foreground">QR Code</span>
+                      <div className="bg-white p-3 rounded-lg">
+                        <QRCodeSVG value={shareUrl} size={120} />
+                      </div>
+                    </div>
+
+                    {/* Pledge Badges */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                       <div className="flex flex-col items-center gap-2">
-                        <span className="text-xs text-muted-foreground">QR Code</span>
-                        <div className="bg-white p-3 rounded-lg">
-                          <QRCodeSVG value={shareUrl} size={120} />
-                        </div>
+                        <span className="text-xs text-muted-foreground">FLOW Pledge Badge (Radar Chart)</span>
+                        <FlowPledgeBadge
+                          variant="radar"
+                          aiScores={{
+                            find: report.ai_find?.score ?? null,
+                            lead: report.ai_lead?.score ?? null,
+                            organize: report.ai_organize?.score ?? null,
+                            write: report.ai_write?.score ?? null,
+                          }}
+                          certificateId={certificateId || ""}
+                          shareUrl={shareUrl}
+                        />
                       </div>
                       <div className="flex flex-col items-center gap-2">
-                        <span className="text-xs text-muted-foreground">FLOW Pledge Badge</span>
+                        <span className="text-xs text-muted-foreground">FLOW Pledge Badge (Profile)</span>
                         <FlowPledgeBadge
+                          variant="profile"
+                          profile={{
+                            code: flowProfile.code,
+                            name: flowProfile.name,
+                            tagline: flowProfile.tagline,
+                          }}
                           aiScores={{
                             find: report.ai_find?.score ?? null,
                             lead: report.ai_lead?.score ?? null,
@@ -628,6 +650,7 @@ export function FlowReportView({
                         />
                       </div>
                     </div>
+
                   </div>
                 )}
               </div>
