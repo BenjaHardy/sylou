@@ -201,7 +201,7 @@ export function FlowReportView({
     }
   };
 
-  const shareUrl = shareToken ? `${window.location.origin}/report/${shareToken}` : "";
+  const shareUrl = shareToken ? `${PUBLIC_SITE_URL}/report/${shareToken}` : "";
 
   const handleCopy = () => {
     navigator.clipboard.writeText(shareUrl);
