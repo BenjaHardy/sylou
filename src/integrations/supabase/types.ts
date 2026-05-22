@@ -709,7 +709,104 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      flow_reports_public: {
+        Row: {
+          ai_find: Json | null
+          ai_lead: Json | null
+          ai_organize: Json | null
+          ai_summary: string | null
+          ai_write: Json | null
+          certificate_id: string | null
+          created_at: string | null
+          flow_meta: Json | null
+          id: string | null
+          key_user_contributions: Json | null
+          metrics_snapshot: Json | null
+          model_used: string | null
+          project_id: string | null
+          project_name: string | null
+          replay_snapshot: Json | null
+          share_enabled: boolean | null
+          share_include_feedback: boolean | null
+          share_include_profile: boolean | null
+          share_include_replay: boolean | null
+          share_include_report: boolean | null
+          share_token: string | null
+          share_visibility: string | null
+          user_feedback_post: Json | null
+          user_feedback_post_at: string | null
+          user_feedback_pre: Json | null
+          user_feedback_pre_at: string | null
+          writing_snapshot: string | null
+        }
+        Insert: {
+          ai_find?: Json | null
+          ai_lead?: Json | null
+          ai_organize?: Json | null
+          ai_summary?: string | null
+          ai_write?: Json | null
+          certificate_id?: string | null
+          created_at?: string | null
+          flow_meta?: Json | null
+          id?: string | null
+          key_user_contributions?: Json | null
+          metrics_snapshot?: Json | null
+          model_used?: string | null
+          project_id?: string | null
+          project_name?: string | null
+          replay_snapshot?: never
+          share_enabled?: boolean | null
+          share_include_feedback?: boolean | null
+          share_include_profile?: boolean | null
+          share_include_replay?: boolean | null
+          share_include_report?: boolean | null
+          share_token?: string | null
+          share_visibility?: string | null
+          user_feedback_post?: never
+          user_feedback_post_at?: never
+          user_feedback_pre?: never
+          user_feedback_pre_at?: never
+          writing_snapshot?: string | null
+        }
+        Update: {
+          ai_find?: Json | null
+          ai_lead?: Json | null
+          ai_organize?: Json | null
+          ai_summary?: string | null
+          ai_write?: Json | null
+          certificate_id?: string | null
+          created_at?: string | null
+          flow_meta?: Json | null
+          id?: string | null
+          key_user_contributions?: Json | null
+          metrics_snapshot?: Json | null
+          model_used?: string | null
+          project_id?: string | null
+          project_name?: string | null
+          replay_snapshot?: never
+          share_enabled?: boolean | null
+          share_include_feedback?: boolean | null
+          share_include_profile?: boolean | null
+          share_include_replay?: boolean | null
+          share_include_report?: boolean | null
+          share_token?: string | null
+          share_visibility?: string | null
+          user_feedback_post?: never
+          user_feedback_post_at?: never
+          user_feedback_pre?: never
+          user_feedback_pre_at?: never
+          writing_snapshot?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flow_reports_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       increment_tokens_used: {
