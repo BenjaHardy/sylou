@@ -1079,11 +1079,12 @@ When citing information from web search results, always include the source URL i
                       .from("imported_documents")
                       .select("extracted_text, file_name")
                       .eq("id", docId)
-                      .single();
+                      .eq("project_id", project_id)
+                      .maybeSingle();
 
                     const toolResult = docData?.extracted_text
                       ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
-                      : `Document not found or text not yet extracted.`;
+                      : `Document not found in this project or text not yet extracted.`;
 
                     totalInputChars += toolResult.length;
 
@@ -1322,11 +1323,12 @@ When citing information from web search results, always include the source URL i
               .from("imported_documents")
               .select("extracted_text, file_name")
               .eq("id", docId)
-              .single();
+              .eq("project_id", project_id)
+              .maybeSingle();
 
             const toolResult = docData?.extracted_text
               ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
-              : `Document not found or text not yet extracted.`;
+              : `Document not found in this project or text not yet extracted.`;
             totalInputChars += toolResult.length;
 
             toolMessages.push({
