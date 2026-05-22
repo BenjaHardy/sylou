@@ -31,6 +31,7 @@ class HighlightedTextErrorBoundary extends Component<
 
 import { supabase } from "@/integrations/supabase/client";
 import sylouLogo from "@/assets/sylou-logo.png";
+import { PUBLIC_SITE_URL } from "@/lib/site";
 import { FlowHighlightedText } from "@/components/FlowHighlightedText";
 import { FlowReplayOverlay, type ReplayEvent } from "@/components/FlowReplayOverlay";
 import { QRCodeSVG } from "qrcode.react";
@@ -201,7 +202,7 @@ export function FlowReportView({
     }
   };
 
-  const shareUrl = shareToken ? `${window.location.origin}/report/${shareToken}` : "";
+  const shareUrl = shareToken ? `${PUBLIC_SITE_URL}/report/${shareToken}` : "";
 
   const handleCopy = () => {
     navigator.clipboard.writeText(shareUrl);

@@ -1,16 +1,30 @@
-## Issue
+## Problem
 
-In `src/hooks/useFlowAnalysis.ts` (line ~107), the `flow_reports` query lists every column individually but omits `writing_snapshot`. `FlowReportView.tsx` then reads `(report as any)?.writing_snapshot ?? ""`, which is always empty, so `WritingSnapshotTab` falls back to its "no snapshot available" message.
+In `src/components/FlowReportView.tsx` (line 204), the share URL is built as:
 
-The shared/public route (`SharedReport.tsx`, querying the `flow_reports_public` view) already includes the snapshot — that path is unaffected. This regression only impacts the owner's in-app view.
+```ts
+const shareUrl = shareToken ? `${window.location.origin}/report/${shareToken}` : "";
+```
+
+`window.location.origin` returns whatever host the user is currently browsing — so when you open the app through the Lovable preview/editor URL, the generated share link points to `id-preview--…lovable.app/report/<token>`, which requires a Lovable login. The share token itself is fine; only the base URL is wrong.
+
+Note: existing reports already saved in the database don't store the URL — the link is reconstructed every time. So this is a pure frontend fix, no migration or data backfill needed. Old reports will automatically use the new link as soon as the change is published.
 
 ## Fix
 
-Add `writing_snapshot` to the `.select(...)` column list in `useFlowAnalysis.ts` (the query that loads the latest report for `FlowReportView`).
+Introduce a canonical public base URL and use it instead of `window.location.origin` when building share links.
 
-That's the only change required. No DB, RLS, or edge function work needed.
+1. Add a constant `PUBLIC_SITE_URL = "https://sylou.eu"` (single source of truth, e.g. in `src/lib/utils.ts` or a new `src/lib/site.ts`).
+2. In `FlowReportView.tsx`, replace the `shareUrl` line with:
+   ```ts
+   const shareUrl = shareToken ? `${PUBLIC_SITE_URL}/report/${shareToken}` : "";
+   ```
+3. Grep for any other `window.location.origin` usages tied to share/report/certificate links and migrate them the same way (quick check; likely only this one).
+
+Optional hardening (recommended but small): also read from an env override `VITE_PUBLIC_SITE_URL` so non-production environments can override it, falling back to `https://sylou.eu`.
 
 ## Verification
 
-- Open an existing FLOW report generated after snapshots launched → snapshot tab renders the captured HTML.
-- Open an old report from before snapshots → still shows the empty-state message (because the column is genuinely empty/null).
+- Open the HEC project's FLOW report from the Lovable preview, click Share → copy link → confirm it now starts with `https://sylou.eu/report/…`.
+- Open that link in a private window (not logged into Lovable) → the shared report loads via the public `flow_reports_public` view.
+- Existing already-shared reports work without any DB change since the link is rebuilt on each render.
