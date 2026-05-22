@@ -281,11 +281,11 @@ export function FlowReportView({
   if (hasBothFeedback) {
     if (feedbackToggle === "pre") {
       radarUserFeedback = preFeedbackScores;
-      radarUserLabel = "Pre-analysis";
+      radarUserLabel = "Pre-analysis (user assessment)";
       radarUserColor = greenColor;
     } else {
       radarUserFeedback = postFeedbackScores;
-      radarUserLabel = "Post-analysis";
+      radarUserLabel = "Post-analysis (user assessment)";
       radarUserColor = orangeColor;
     }
   } else if (postFeedbackScores) {
