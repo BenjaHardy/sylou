@@ -27,7 +27,7 @@ interface FlowPledgeBadgeProps {
 }
 
 const BADGE_W = 320;
-const BADGE_H = 180;
+const BADGE_H = 200;
 const BADGE_FOOTER_URL = "Visit www.meetsylou.eu";
 
 const QR_SIZE = 72;
@@ -39,7 +39,7 @@ const PILLAR_KEYS = ["find", "lead", "organize", "write"] as const;
 const PILLAR_LABELS = ["F", "L", "O", "W"];
 // Radar placed in the left area, avoiding QR on the right.
 const RADAR_CX = 122;
-const RADAR_CY = 88;
+const RADAR_CY = 104;
 const RADAR_R = 38;
 
 function drawCommonChrome(
