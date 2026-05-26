@@ -722,6 +722,7 @@ export type Database = {
           certificate_id: string | null
           created_at: string | null
           flow_meta: Json | null
+          generator_info: Json | null
           id: string | null
           key_user_contributions: Json | null
           metrics_snapshot: Json | null
@@ -751,6 +752,7 @@ export type Database = {
           certificate_id?: string | null
           created_at?: string | null
           flow_meta?: Json | null
+          generator_info?: Json | null
           id?: string | null
           key_user_contributions?: Json | null
           metrics_snapshot?: Json | null
@@ -780,6 +782,7 @@ export type Database = {
           certificate_id?: string | null
           created_at?: string | null
           flow_meta?: Json | null
+          generator_info?: Json | null
           id?: string | null
           key_user_contributions?: Json | null
           metrics_snapshot?: Json | null
