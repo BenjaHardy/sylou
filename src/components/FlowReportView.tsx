@@ -625,6 +625,7 @@ export function FlowReportView({
                           }}
                           certificateId={certificateId || ""}
                           shareUrl={shareUrl}
+                          generatorInfo={(report as any).generator_info ?? null}
                         />
                       </div>
                       <div className="flex flex-col items-center gap-2">
@@ -644,7 +645,9 @@ export function FlowReportView({
                           }}
                           certificateId={certificateId || ""}
                           shareUrl={shareUrl}
+                          generatorInfo={(report as any).generator_info ?? null}
                         />
+
                       </div>
                     </div>
 
