@@ -60,17 +60,17 @@ function drawCommonChrome(
   ctx.font = "bold 13px system-ui, sans-serif";
   ctx.fillText("FLOW Analysed", 12, 42);
 
-  // Footer URL (centered)
+  // Footer URL (left-aligned under "Created with Sylou")
   ctx.fillStyle = "#3b82f6";
   ctx.font = "600 9px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText(BADGE_FOOTER_URL, BADGE_W / 2, BADGE_H - 24);
+  ctx.textAlign = "left";
+  ctx.fillText(BADGE_FOOTER_URL, 12, BADGE_H - 24);
 
   // Certificate ID
   ctx.fillStyle = "#6b7280";
   ctx.font = "9px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText(`Certificate #${certificateId}`, BADGE_W / 2, BADGE_H - 10);
+  ctx.textAlign = "left";
+  ctx.fillText(`Certificate #${certificateId}`, 12, BADGE_H - 10);
 }
 
 function drawQrLabel(ctx: CanvasRenderingContext2D) {
