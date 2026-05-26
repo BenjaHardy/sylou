@@ -259,6 +259,8 @@ export default function SharedReport() {
                 preFeedbackScores={preFeedbackScores}
                 postAssessment={postAssessment}
                 showSelfAssessment={showFeedback}
+                flowMeta={report.flow_meta}
+                metricsSnapshot={report.metrics_snapshot}
               />
             </div>
           )}
