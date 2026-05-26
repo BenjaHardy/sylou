@@ -46,14 +46,6 @@ export function ProjectActivitySection({ metrics }: { metrics: MetricsSnapshot }
             Chat prompts
           </span>
           <span className="text-right font-medium text-foreground">{metrics.chat_prompt_count_normal + metrics.chat_prompt_count_tutor}</span>
-          <span className="text-muted-foreground flex items-center gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild><Shield className="h-3 w-3 cursor-help" /></TooltipTrigger>
-              <TooltipContent side="top" className="max-w-xs text-xs">Number of sanity checks performed.</TooltipContent>
-            </Tooltip>
-            Sanity checks
-          </span>
-          <span className="text-right font-medium text-foreground">{metrics.sanity_check_count}</span>
         </TooltipProvider>
       </div>
     </div>
