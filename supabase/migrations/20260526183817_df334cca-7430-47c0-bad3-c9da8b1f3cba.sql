@@ -1,0 +1,1 @@
+ALTER TABLE public.flow_reports ADD COLUMN generator_info JSONB;
