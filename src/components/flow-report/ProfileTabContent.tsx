@@ -1,10 +1,13 @@
 import { useState } from "react";
+import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import FlowWorkProfile from "@/components/FlowWorkProfile";
 import { FlowInfoSection } from "@/components/flow-report/FlowInfoSection";
 import { SelfAssessmentDisplay } from "@/components/flow-report/SelfAssessmentDisplay";
+import { TokenUsageSection } from "@/components/flow-report/TokenUsageSection";
+import { ProjectActivitySection } from "@/components/flow-report/ProjectActivitySection";
 import { getFlowProfile } from "@/lib/flow-work-profiles";
-import type { FlowFeedback, FlowUserAssessment } from "@/hooks/useFlowAnalysis";
+import type { FlowFeedback, FlowUserAssessment, FlowReport } from "@/hooks/useFlowAnalysis";
 
 type ProfileSource = "ai" | "pre" | "post";
 
@@ -13,6 +16,8 @@ interface ProfileTabContentProps {
   preFeedbackScores: FlowFeedback | null;
   postAssessment: FlowUserAssessment | null;
   showSelfAssessment?: boolean;
+  flowMeta?: FlowReport["flow_meta"] | null;
+  metricsSnapshot?: FlowReport["metrics_snapshot"] | null;
 }
 
 const SOURCE_LABELS: Record<ProfileSource, string> = {
