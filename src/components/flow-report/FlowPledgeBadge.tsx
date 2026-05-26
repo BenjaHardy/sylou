@@ -61,17 +61,19 @@ function drawCommonChrome(
   ctx.textBaseline = "alphabetic";
   const prefix = "Created with ";
   const prefixW = ctx.measureText(prefix).width;
-  ctx.fillText(prefix, 12, 24);
+  // Text baseline aligned with vertical middle of the logo.
+  const logoTop = 8;
+  const textBaseline = logoTop + LOGO_H / 2 + 4;
+  ctx.fillText(prefix, 12, textBaseline);
   if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
-    // Vertically align logo around the text baseline.
-    ctx.drawImage(logoImg, 12 + prefixW, 24 - LOGO_H + 4, LOGO_W, LOGO_H);
+    ctx.drawImage(logoImg, 12 + prefixW, logoTop, LOGO_W, LOGO_H);
   } else {
-    ctx.fillText("Sylou", 12 + prefixW, 24);
+    ctx.fillText("Sylou", 12 + prefixW, textBaseline);
   }
 
   ctx.fillStyle = "#3b82f6";
   ctx.font = "bold 13px system-ui, sans-serif";
-  ctx.fillText("FLOW Analysed", 12, 42);
+  ctx.fillText("FLOW Analysed", 12, 64);
 
   // Footer URL (left-aligned under "Created with Sylou")
   ctx.fillStyle = "#3b82f6";
