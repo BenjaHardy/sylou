@@ -310,6 +310,26 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           {chars === 1 ? "character" : "characters"}
         </span>
         <div className="flex items-center gap-3">
+          <span className="text-muted-foreground/60">
+            Sylou™ ·{" "}
+            <a
+              href="https://www.gnu.org/licenses/agpl-3.0.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline"
+            >
+              AGPL-3.0
+            </a>{" "}
+            ·{" "}
+            <a
+              href="https://www.meetsylou.eu"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline"
+            >
+              meetsylou.eu
+            </a>
+          </span>
           <span>
             {saveState.status === "saving" && "Saving…"}
             {saveState.status === "saved" && !isDirty && "✓ Saved"}
