@@ -268,8 +268,8 @@ export function FlowPledgeBadge(props: FlowPledgeBadgeProps) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const qrCanvas =
       qrContainerRef.current?.querySelector("canvas") as HTMLCanvasElement | null;
-    draw(ctx, props, dpr, qrCanvas);
-  }, [props, qrReady]);
+    draw(ctx, props, dpr, qrCanvas, logoImg);
+  }, [props, qrReady, logoImg]);
 
   const downloadBadge = useCallback(() => {
     const canvas = canvasRef.current;
