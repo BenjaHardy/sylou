@@ -608,13 +608,8 @@ export function FlowReportView({
                       </Button>
                     </div>
 
-                    {/* QR Code */}
-                    <div className="flex flex-col items-center gap-2 pt-2">
-                      <span className="text-xs text-muted-foreground">QR Code</span>
-                      <div className="bg-white p-3 rounded-lg">
-                        <QRCodeSVG value={shareUrl} size={120} />
-                      </div>
-                    </div>
+
+
 
                     {/* Pledge Badges */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
