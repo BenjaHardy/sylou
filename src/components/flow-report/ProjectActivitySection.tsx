@@ -1,4 +1,4 @@
-import { BarChart3, Clock, Pencil, MessageSquare, Shield } from "lucide-react";
+import { BarChart3, Clock, Pencil, MessageSquare } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
