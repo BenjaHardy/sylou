@@ -9,6 +9,14 @@ const LOGO_W = Math.round((644 / 554) * LOGO_H);
 
 export type FlowPledgeBadgeVariant = "radar" | "profile";
 
+export interface BadgeGeneratorInfo {
+  instance_label?: string;
+  instance_domain?: string | null;
+  version?: string;
+  commit_hash?: string;
+  is_modified?: boolean;
+}
+
 interface FlowPledgeBadgeProps {
   aiScores: {
     find: number | null;
@@ -24,16 +32,18 @@ interface FlowPledgeBadgeProps {
     name: string;
     tagline: string;
   };
+  generatorInfo?: BadgeGeneratorInfo | null;
 }
 
 const BADGE_W = 320;
-const BADGE_H = 200;
-const BADGE_FOOTER_URL = "Visit www.meetsylou.eu";
+const BADGE_H = 214;
+const BADGE_FOOTER_URL = "Learn more at meetsylou.eu";
 
 const QR_SIZE = 72;
 const QR_X = BADGE_W - QR_SIZE - 14;
 // Vertically centered between top and bottom of the badge.
 const QR_Y = Math.round((BADGE_H - QR_SIZE) / 2);
+
 
 const PILLAR_KEYS = ["find", "lead", "organize", "write"] as const;
 const PILLAR_LABELS = ["F", "L", "O", "W"];
