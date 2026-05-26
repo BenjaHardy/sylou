@@ -28,12 +28,13 @@ const BADGE_FOOTER_URL = "Visit www.meetsylou.eu";
 
 const QR_SIZE = 72;
 const QR_X = BADGE_W - QR_SIZE - 14;
-const QR_Y = 14;
+// Vertically centered between top and bottom of the badge.
+const QR_Y = Math.round((BADGE_H - QR_SIZE) / 2);
 
 const PILLAR_KEYS = ["find", "lead", "organize", "write"] as const;
 const PILLAR_LABELS = ["F", "L", "O", "W"];
 // Radar placed in the left area, avoiding QR on the right.
-const RADAR_CX = 110;
+const RADAR_CX = 122;
 const RADAR_CY = 88;
 const RADAR_R = 38;
 
@@ -59,17 +60,17 @@ function drawCommonChrome(
   ctx.font = "bold 13px system-ui, sans-serif";
   ctx.fillText("FLOW Analysed", 12, 42);
 
-  // Footer URL (centered)
+  // Footer URL (left-aligned under "Created with Sylou")
   ctx.fillStyle = "#3b82f6";
   ctx.font = "600 9px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText(BADGE_FOOTER_URL, BADGE_W / 2, BADGE_H - 24);
+  ctx.textAlign = "left";
+  ctx.fillText(BADGE_FOOTER_URL, 12, BADGE_H - 24);
 
   // Certificate ID
   ctx.fillStyle = "#6b7280";
   ctx.font = "9px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText(`Certificate #${certificateId}`, BADGE_W / 2, BADGE_H - 10);
+  ctx.textAlign = "left";
+  ctx.fillText(`Certificate #${certificateId}`, 12, BADGE_H - 10);
 }
 
 function drawQrLabel(ctx: CanvasRenderingContext2D) {
