@@ -219,10 +219,11 @@ function draw(
   props: FlowPledgeBadgeProps,
   dpr: number,
   qrCanvas: HTMLCanvasElement | null,
+  logoImg: HTMLImageElement | null,
 ) {
   ctx.save();
   ctx.scale(dpr, dpr);
-  drawCommonChrome(ctx, props.certificateId);
+  drawCommonChrome(ctx, props.certificateId, logoImg);
   if (props.variant === "profile" && props.profile) {
     drawProfile(ctx, props.profile);
   } else {
@@ -240,6 +241,13 @@ export function FlowPledgeBadge(props: FlowPledgeBadgeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const qrContainerRef = useRef<HTMLDivElement>(null);
   const [qrReady, setQrReady] = useState(0);
+  const [logoImg, setLogoImg] = useState<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setLogoImg(img);
+    img.src = sylouLogo;
+  }, []);
 
   // Bump qrReady once mounted and on shareUrl change so the effect redraws after QR renders.
   useEffect(() => {
