@@ -4,6 +4,7 @@ import { useNavigate, Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Mail, Lock } from "lucide-react";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export default function Auth() {
   const { user, loading } = useAuth();
@@ -33,7 +34,8 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[hsl(var(--ethos-surface))] p-4">
+    <div className="min-h-screen flex flex-col bg-[hsl(var(--ethos-surface))]">
+      <div className="flex-1 flex flex-col items-center justify-center p-4">
       <img src={sylouLogo} alt="Sylou" className="h-16 mb-6" />
       <div className="w-full flex flex-col items-center gap-4">
         {/* Open-source notice */}
@@ -96,6 +98,8 @@ export default function Auth() {
           </form>
         </div>
       </div>
+      </div>
+      <SiteFooter />
     </div>
   );
 }
