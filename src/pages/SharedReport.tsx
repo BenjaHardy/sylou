@@ -361,13 +361,10 @@ export default function SharedReport() {
               <p className="text-xs text-muted-foreground">Certificate: {certificateId}</p>
             )}
             {(() => {
-              const gi = (report as any).generator_info as {
-                instance_label?: string;
-                instance_domain?: string | null;
-                version?: string;
-                commit_hash?: string;
-                is_modified?: boolean;
-              } | null | undefined;
+              const gi =
+                (report as unknown as { generator_info?: GeneratorInfo | null })
+                  .generator_info ?? null;
+
 
               const meetsylouLink = (
                 <a
