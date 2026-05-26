@@ -1095,6 +1095,7 @@ ${writePillarNotice}`;
         project_name: project.name ?? null,
         replay_snapshot: replayEvents,
         writing_snapshot: writingContent,
+        generator_info: GENERATOR_INFO,
       } as any)
       .select()
       .single();
