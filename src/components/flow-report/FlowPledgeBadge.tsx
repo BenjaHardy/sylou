@@ -2,6 +2,10 @@ import { useRef, useEffect, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
+import sylouLogo from "@/assets/sylou-logo.png";
+
+const LOGO_H = 26;
+const LOGO_W = Math.round((644 / 554) * LOGO_H);
 
 export type FlowPledgeBadgeVariant = "radar" | "profile";
 
