@@ -2,6 +2,10 @@ import { useRef, useEffect, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
+import sylouLogo from "@/assets/sylou-logo.png";
+
+const LOGO_H = 26;
+const LOGO_W = Math.round((644 / 554) * LOGO_H);
 
 export type FlowPledgeBadgeVariant = "radar" | "profile";
 
@@ -41,6 +45,7 @@ const RADAR_R = 38;
 function drawCommonChrome(
   ctx: CanvasRenderingContext2D,
   certificateId: string,
+  logoImg: HTMLImageElement | null,
 ) {
   ctx.fillStyle = "#ffffff";
   ctx.strokeStyle = "#d1d5db";
@@ -54,7 +59,15 @@ function drawCommonChrome(
   ctx.font = "bold 11px system-ui, sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
-  ctx.fillText("Created with Sylou", 12, 24);
+  const prefix = "Created with ";
+  const prefixW = ctx.measureText(prefix).width;
+  ctx.fillText(prefix, 12, 24);
+  if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+    // Vertically align logo around the text baseline.
+    ctx.drawImage(logoImg, 12 + prefixW, 24 - LOGO_H + 4, LOGO_W, LOGO_H);
+  } else {
+    ctx.fillText("Sylou", 12 + prefixW, 24);
+  }
 
   ctx.fillStyle = "#3b82f6";
   ctx.font = "bold 13px system-ui, sans-serif";
@@ -206,10 +219,11 @@ function draw(
   props: FlowPledgeBadgeProps,
   dpr: number,
   qrCanvas: HTMLCanvasElement | null,
+  logoImg: HTMLImageElement | null,
 ) {
   ctx.save();
   ctx.scale(dpr, dpr);
-  drawCommonChrome(ctx, props.certificateId);
+  drawCommonChrome(ctx, props.certificateId, logoImg);
   if (props.variant === "profile" && props.profile) {
     drawProfile(ctx, props.profile);
   } else {
@@ -227,6 +241,13 @@ export function FlowPledgeBadge(props: FlowPledgeBadgeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const qrContainerRef = useRef<HTMLDivElement>(null);
   const [qrReady, setQrReady] = useState(0);
+  const [logoImg, setLogoImg] = useState<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setLogoImg(img);
+    img.src = sylouLogo;
+  }, []);
 
   // Bump qrReady once mounted and on shareUrl change so the effect redraws after QR renders.
   useEffect(() => {
@@ -247,8 +268,8 @@ export function FlowPledgeBadge(props: FlowPledgeBadgeProps) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const qrCanvas =
       qrContainerRef.current?.querySelector("canvas") as HTMLCanvasElement | null;
-    draw(ctx, props, dpr, qrCanvas);
-  }, [props, qrReady]);
+    draw(ctx, props, dpr, qrCanvas, logoImg);
+  }, [props, qrReady, logoImg]);
 
   const downloadBadge = useCallback(() => {
     const canvas = canvasRef.current;
