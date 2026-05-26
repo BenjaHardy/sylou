@@ -277,7 +277,7 @@ function draw(
 ) {
   ctx.save();
   ctx.scale(dpr, dpr);
-  drawCommonChrome(ctx, props.certificateId, logoImg);
+  drawCommonChrome(ctx, props.certificateId, logoImg, props.generatorInfo);
   if (props.variant === "profile" && props.profile) {
     drawProfile(ctx, props.profile);
   } else {
