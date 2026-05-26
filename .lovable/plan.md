@@ -1,25 +1,47 @@
-## Goal
+## Update `src/pages/Auth.tsx` — sign-in only + open-source notice
 
-Embed the share-link QR code directly inside each FLOW Pledge Badge PNG, and remove the standalone QR Code block from the Share Report section.
+Rewrite the page to be sign-in only, with an "open source" notice card above the sign-in card. No changes to auth logic, Supabase calls, or routing.
 
-## Changes
+### What stays
+- `useAuth` guard (`loading` / redirect if `user`).
+- Sylou logo at the top.
+- Centered layout on `bg-[hsl(var(--ethos-surface))]`, card width `max-w-[400px]`.
+- Email + password sign-in fields, icons, error display.
+- `supabase.auth.signInWithPassword({ email, password })` call and `navigate("/")` on success.
 
-### 1. `src/components/flow-report/FlowPledgeBadge.tsx`
-- Increase badge width to make room for a small QR on the right side of the header area (new layout: `BADGE_W = 300`, `BADGE_H = 180`; tweak constants as needed for both variants).
-- Render a hidden `QRCodeCanvas` (from `qrcode.react`) at ~64px with the `shareUrl`, then `drawImage` it into the badge canvas in a dedicated corner (e.g. top-right for both variants, with a small "Scan to view" label underneath in 8px gray).
-- Keep all existing elements: header ("Created with Sylou" / "FLOW Analysed"), radar OR profile content, "Visit www.meetsylou.eu" footer, certificate ID.
-- Re-flow the radar's `RADAR_CX/CY/R` and the profile's text block so they don't overlap the QR.
-- Wait for the hidden QR canvas to be ready before drawing (use a ref + effect ordering, or `requestAnimationFrame`).
+### What is removed
+- `AuthMode` type, `mode` state, `displayName` state.
+- Tabs row (Sign In / Sign Up buttons).
+- Sign-up branch of `handleSubmit` (the `signUp` call and display name field).
+- `handleOAuth` function, "or continue with" divider, Google / Microsoft buttons.
+- `User` icon import, `AnimatePresence` + `motion.form` wrapper (replaced by a plain `<form>` since there's no longer a mode to animate between). `User` removed from `lucide-react` import.
 
-### 2. `src/components/FlowReportView.tsx`
-- Delete the standalone "QR Code" block (lines ~611–617).
-- Keep the two-badge grid below it unchanged (the badges themselves now contain the QR).
-- Drop the now-unused `QRCodeSVG` import if no other usage remains.
+### What is added — notice card above sign-in
+A sibling card rendered above the sign-in card inside a shared vertical flex container (`flex flex-col items-center gap-4`), so on mobile the two cards stack with comfortable spacing.
 
-### 3. `src/pages/SharedReport.tsx`
-- If the shared-report page mirrors the same Share Report section, apply the same removal there. (Verify during build.)
+Notice card:
+- Same `max-w-[400px]` width, `rounded-lg`, `border border-border`.
+- Visually lighter than the sign-in card: `bg-muted/40` (or `bg-secondary/50`), no shadow, `p-5`.
+- Heading: `<h2 class="text-sm font-semibold text-foreground">Sylou is open source</h2>`.
+- Body: two `<p class="text-xs text-muted-foreground leading-relaxed mt-2">` paragraphs.
+  - P1: "This is the maintainer's instance and is not open for public sign-up. To learn more about Sylou, visit [meetsylou.eu](https://www.meetsylou.eu)."
+  - P2: "To run your own instance, see the source on [GitHub](https://github.com/)."
+- Links inline, styled `text-primary hover:underline`, `target="_blank" rel="noopener noreferrer"`. GitHub URL is a placeholder per the user.
 
-## Out of scope
+### Resulting structure (sketch)
 
-- No change to share-link generation, certificate ID, profile data, or backend.
-- No change to badge download filename pattern.
+```text
+<div min-h-screen flex flex-col items-center justify-center bg-ethos-surface p-4>
+  <img sylouLogo />                        // unchanged
+  <div flex flex-col items-center gap-4 w-full>
+    <NoticeCard max-w-[400px] />           // new
+    <SignInCard max-w-[400px]>             // simplified
+      <form onSubmit={handleSubmit}>
+        email, password, error, submit
+      </form>
+    </SignInCard>
+  </div>
+</div>
+```
+
+No other files are touched.
