@@ -386,6 +386,8 @@ export function FlowReportView({
                 aiScores={flowScores}
                 preFeedbackScores={preFeedbackScores}
                 postAssessment={existingAssessment}
+                flowMeta={report.flow_meta}
+                metricsSnapshot={report.metrics_snapshot}
               />
             </div>
           )}
