@@ -48,7 +48,7 @@ export default function SharedReport() {
 
       const { data, error } = await (supabase as any)
         .from("flow_reports_public")
-        .select("id, project_id, project_name, certificate_id, share_token, share_enabled, share_visibility, share_include_feedback, share_include_replay, share_include_report, share_include_profile, model_used, created_at, ai_find, ai_lead, ai_organize, ai_write, ai_summary, key_user_contributions, flow_meta, metrics_snapshot, user_feedback_pre, user_feedback_post, writing_snapshot")
+        .select("id, project_id, project_name, certificate_id, share_token, share_enabled, share_visibility, share_include_feedback, share_include_replay, share_include_report, share_include_profile, model_used, created_at, ai_find, ai_lead, ai_organize, ai_write, ai_summary, key_user_contributions, flow_meta, metrics_snapshot, user_feedback_pre, user_feedback_post, writing_snapshot, generator_info")
         .eq("share_token", token)
         .maybeSingle();
 
