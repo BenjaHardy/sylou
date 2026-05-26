@@ -2,6 +2,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { getBandForScore } from "@/lib/flowBands";
 import type { FlowProfile } from "@/lib/flow-work-profiles";
 import ProfilePaintingReveal from "@/components/flow-report/ProfilePaintingReveal";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { PILLAR_TOOLTIPS } from "@/components/flow-report/shared-utils";
 
 interface FlowWorkProfileProps {
   profile: FlowProfile;
