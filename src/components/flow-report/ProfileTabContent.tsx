@@ -110,6 +110,26 @@ export function ProfileTabContent({
           postAssessment={postAssessment}
         />
       )}
+
+      {/* Token Usage */}
+      {flowMeta && <TokenUsageSection meta={flowMeta} />}
+
+      {/* Imported Documents Notices */}
+      {flowMeta?.imported_documents_mode === "summaries" && (
+        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+          <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <span>Imported documents were included as summaries due to context length limits.</span>
+        </div>
+      )}
+      {flowMeta?.imported_documents_mode === "excluded" && (
+        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+          <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <span>Imported documents ({flowMeta.imported_documents_count}) were excluded from this analysis due to context length limits.</span>
+        </div>
+      )}
+
+      {/* Project Activity */}
+      {metricsSnapshot && <ProjectActivitySection metrics={metricsSnapshot} />}
     </div>
   );
 }
