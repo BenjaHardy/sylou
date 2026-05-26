@@ -61,9 +61,9 @@ function drawCommonChrome(
   ctx.textBaseline = "alphabetic";
   const prefix = "Created with ";
   const prefixW = ctx.measureText(prefix).width;
-  // Text baseline aligned with vertical middle of the logo.
+  // Text baseline aligned with the "Sylou" wordmark (lower portion of the logo).
   const logoTop = 8;
-  const textBaseline = logoTop + LOGO_H / 2 + 4;
+  const textBaseline = logoTop + LOGO_H - 6;
   ctx.fillText(prefix, 12, textBaseline);
   if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
     ctx.drawImage(logoImg, 12 + prefixW, logoTop, LOGO_W, LOGO_H);
