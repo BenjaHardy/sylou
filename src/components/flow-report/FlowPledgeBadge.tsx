@@ -1,6 +1,7 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
+import { QRCodeCanvas } from "qrcode.react";
 
 export type FlowPledgeBadgeVariant = "radar" | "profile";
 
@@ -21,21 +22,25 @@ interface FlowPledgeBadgeProps {
   };
 }
 
-const BADGE_W = 260;
-const BADGE_H = 160;
+const BADGE_W = 320;
+const BADGE_H = 180;
 const BADGE_FOOTER_URL = "Visit www.meetsylou.eu";
+
+const QR_SIZE = 72;
+const QR_X = BADGE_W - QR_SIZE - 14;
+const QR_Y = 14;
 
 const PILLAR_KEYS = ["find", "lead", "organize", "write"] as const;
 const PILLAR_LABELS = ["F", "L", "O", "W"];
-const RADAR_CX = 185;
-const RADAR_CY = 72;
-const RADAR_R = 34;
+// Radar placed in the left area, avoiding QR on the right.
+const RADAR_CX = 110;
+const RADAR_CY = 88;
+const RADAR_R = 38;
 
 function drawCommonChrome(
   ctx: CanvasRenderingContext2D,
   certificateId: string,
 ) {
-  // Background
   ctx.fillStyle = "#ffffff";
   ctx.strokeStyle = "#d1d5db";
   ctx.lineWidth = 1;
@@ -44,7 +49,6 @@ function drawCommonChrome(
   ctx.fill();
   ctx.stroke();
 
-  // Header text
   ctx.fillStyle = "#1a1a2e";
   ctx.font = "bold 11px system-ui, sans-serif";
   ctx.textAlign = "left";
@@ -68,11 +72,18 @@ function drawCommonChrome(
   ctx.fillText(`Certificate #${certificateId}`, BADGE_W / 2, BADGE_H - 10);
 }
 
+function drawQrLabel(ctx: CanvasRenderingContext2D) {
+  ctx.fillStyle = "#6b7280";
+  ctx.font = "8px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText("Scan to view", QR_X + QR_SIZE / 2, QR_Y + QR_SIZE + 10);
+}
+
 function drawRadar(
   ctx: CanvasRenderingContext2D,
   scores: FlowPledgeBadgeProps["aiScores"],
 ) {
-  // Grid circles
   ctx.strokeStyle = "#e5e7eb";
   ctx.lineWidth = 0.5;
   for (let r = 1; r <= 3; r++) {
@@ -148,7 +159,6 @@ function wrapLines(
     }
   }
   if (cur && lines.length < maxLines) lines.push(cur);
-  // Ellipsis if there's leftover
   const joined = lines.join(" ");
   if (joined.length < text.length && lines.length > 0) {
     let last = lines[lines.length - 1];
@@ -164,32 +174,29 @@ function drawProfile(
   ctx: CanvasRenderingContext2D,
   profile: NonNullable<FlowPledgeBadgeProps["profile"]>,
 ) {
-  const cx = BADGE_W / 2;
-  let y = 70;
+  // Left content area excludes the QR on the right.
+  const leftAreaW = QR_X - 12;
+  const cx = 12 + leftAreaW / 2;
+  let y = 78;
 
-  // "FLOW" label
-  ctx.fillStyle = "#5b7a99"; // Silver Lake Blue-ish
+  ctx.fillStyle = "#5b7a99";
   ctx.font = "bold 10px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
-  // letter-spacing via manual draw
-  const flow = "F L O W";
-  ctx.fillText(flow, cx, y);
+  ctx.fillText("F L O W", cx, y);
   y += 18;
 
-  // Profile name
   ctx.fillStyle = "#1a1a2e";
-  ctx.font = "bold 15px system-ui, sans-serif";
+  ctx.font = "bold 14px system-ui, sans-serif";
   ctx.fillText(profile.name, cx, y);
-  y += 16;
+  y += 14;
 
-  // Tagline (italic, wrapped)
   ctx.fillStyle = "#6b7280";
-  ctx.font = "italic 10px system-ui, sans-serif";
-  const lines = wrapLines(ctx, profile.tagline, BADGE_W - 28, 2);
+  ctx.font = "italic 9px system-ui, sans-serif";
+  const lines = wrapLines(ctx, profile.tagline, leftAreaW - 8, 2);
   for (const line of lines) {
     ctx.fillText(line, cx, y);
-    y += 12;
+    y += 11;
   }
 }
 
@@ -197,6 +204,7 @@ function draw(
   ctx: CanvasRenderingContext2D,
   props: FlowPledgeBadgeProps,
   dpr: number,
+  qrCanvas: HTMLCanvasElement | null,
 ) {
   ctx.save();
   ctx.scale(dpr, dpr);
@@ -206,12 +214,24 @@ function draw(
   } else {
     drawRadar(ctx, props.aiScores);
   }
+  if (qrCanvas) {
+    ctx.drawImage(qrCanvas, QR_X, QR_Y, QR_SIZE, QR_SIZE);
+    drawQrLabel(ctx);
+  }
   ctx.restore();
 }
 
 export function FlowPledgeBadge(props: FlowPledgeBadgeProps) {
   const { certificateId, shareUrl, variant = "radar" } = props;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const qrContainerRef = useRef<HTMLDivElement>(null);
+  const [qrReady, setQrReady] = useState(0);
+
+  // Bump qrReady once mounted and on shareUrl change so the effect redraws after QR renders.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setQrReady((n) => n + 1));
+    return () => cancelAnimationFrame(id);
+  }, [shareUrl]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -224,8 +244,10 @@ export function FlowPledgeBadge(props: FlowPledgeBadgeProps) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    draw(ctx, props, dpr);
-  }, [props]);
+    const qrCanvas =
+      qrContainerRef.current?.querySelector("canvas") as HTMLCanvasElement | null;
+    draw(ctx, props, dpr, qrCanvas);
+  }, [props, qrReady]);
 
   const downloadBadge = useCallback(() => {
     const canvas = canvasRef.current;
@@ -243,6 +265,10 @@ export function FlowPledgeBadge(props: FlowPledgeBadgeProps) {
 
   return (
     <div className="flex flex-col items-center gap-2">
+      {/* Hidden QR canvas used as image source for the badge */}
+      <div ref={qrContainerRef} style={{ position: "absolute", left: -9999, top: -9999 }} aria-hidden>
+        <QRCodeCanvas value={shareUrl} size={QR_SIZE * 3} includeMargin={false} level="M" />
+      </div>
       <a href={shareUrl} target="_blank" rel="noopener noreferrer">
         <canvas
           ref={canvasRef}
