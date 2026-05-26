@@ -1,29 +1,25 @@
-# Mirror FLOW Report extras into FLOW Profile tab
+## Goal
 
-Two small additions so the FLOW Profile tab shows the same pillar tooltips and quantitative footer as the FLOW Report tab.
+Embed the share-link QR code directly inside each FLOW Pledge Badge PNG, and remove the standalone QR Code block from the Share Report section.
 
-## 1. Pillar tooltips on the Profile card
+## Changes
 
-File: `src/components/FlowWorkProfile.tsx`
+### 1. `src/components/flow-report/FlowPledgeBadge.tsx`
+- Increase badge width to make room for a small QR on the right side of the header area (new layout: `BADGE_W = 300`, `BADGE_H = 180`; tweak constants as needed for both variants).
+- Render a hidden `QRCodeCanvas` (from `qrcode.react`) at ~64px with the `shareUrl`, then `drawImage` it into the badge canvas in a dedicated corner (e.g. top-right for both variants, with a small "Scan to view" label underneath in 8px gray).
+- Keep all existing elements: header ("Created with Sylou" / "FLOW Analysed"), radar OR profile content, "Visit www.meetsylou.eu" footer, certificate ID.
+- Re-flow the radar's `RADAR_CX/CY/R` and the profile's text block so they don't overlap the QR.
+- Wait for the hidden QR canvas to be ready before drawing (use a ref + effect ordering, or `requestAnimationFrame`).
 
-- Import `Tooltip`, `TooltipContent`, `TooltipProvider`, `TooltipTrigger` from `@/components/ui/tooltip`, and `PILLAR_TOOLTIPS` from `@/components/flow-report/shared-utils`.
-- Wrap each pillar tile's letter circle (the F / L / O / W disc) in a `Tooltip` whose `TooltipContent` shows `PILLAR_TOOLTIPS[key]`, matching the ScoreCard pattern (`side="top"`, `max-w-xs text-xs`, `cursor-help` on the trigger).
-- Single shared `TooltipProvider` wrapping the pillar grid is fine.
+### 2. `src/components/FlowReportView.tsx`
+- Delete the standalone "QR Code" block (lines ~611–617).
+- Keep the two-badge grid below it unchanged (the badges themselves now contain the QR).
+- Drop the now-unused `QRCodeSVG` import if no other usage remains.
 
-No changes to copy or layout — only adds hover behavior identical to the FLOW Report's ScoreCard tooltips.
+### 3. `src/pages/SharedReport.tsx`
+- If the shared-report page mirrors the same Share Report section, apply the same removal there. (Verify during build.)
 
-## 2. Token Usage + Project Activity at the bottom of the Profile tab
+## Out of scope
 
-File: `src/components/flow-report/ProfileTabContent.tsx`
-
-- Extend props with optional `flowMeta?: FlowReport["flow_meta"]` and `metricsSnapshot?: FlowReport["metrics_snapshot"]`.
-- Below the existing content (after `SelfAssessmentDisplay`), render — when present — the same blocks that appear in `FlowReportView`:
-  - `<TokenUsageSection meta={flowMeta} />`
-  - The two `imported_documents_mode` info notices (`summaries` / `excluded`) using the same markup.
-  - `<ProjectActivitySection metrics={metricsSnapshot} />`
-
-Files: `src/components/FlowReportView.tsx` and `src/pages/SharedReport.tsx`
-
-- Pass `flowMeta={report.flow_meta}` and `metricsSnapshot={report.metrics_snapshot}` to `ProfileTabContent`. Figures will therefore be identical to the FLOW Report tab (same source data).
-
-No new components, no backend changes, no behavior changes elsewhere.
+- No change to share-link generation, certificate ID, profile data, or backend.
+- No change to badge download filename pattern.
