@@ -38,9 +38,11 @@ export default function Auth() {
       <div className="w-full flex flex-col items-center gap-4">
         {/* Open-source notice */}
         <aside className="w-full max-w-[400px] bg-muted/40 border border-border rounded-lg p-5">
-          <h2 className="text-sm font-semibold text-foreground">Sylou is open source</h2>
-          <p className="text-xs text-muted-foreground leading-relaxed mt-2">
-            This is the maintainer's instance and is not open for public sign-up. To learn more about Sylou, visit{" "}
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Sylou is an open-source, self-hostable writing environment that makes human-AI collaboration transparent. This is the maintainer's instance and is not open for public sign-up.
+          </p>
+          <p className="text-xs text-muted-foreground leading-relaxed mt-3">
+            To learn about Sylou, visit{" "}
             <a
               href="https://www.meetsylou.eu"
               target="_blank"
@@ -49,21 +51,10 @@ export default function Auth() {
             >
               meetsylou.eu
             </a>
-            .
-          </p>
-          <p className="text-xs text-muted-foreground leading-relaxed mt-2">
-            To run your own instance, see the source on{" "}
-            <a
-              href="https://github.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              GitHub
-            </a>
-            .
+            . To run your own instance, see the source on GitHub (link coming soon).
           </p>
         </aside>
+
 
         {/* Sign-in card */}
         <div className="w-full max-w-[400px] bg-card shadow-depth rounded-lg overflow-hidden">
