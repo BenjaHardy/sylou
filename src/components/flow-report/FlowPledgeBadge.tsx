@@ -4,7 +4,7 @@ import { Download } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import sylouLogo from "@/assets/sylou-logo.png";
 
-const LOGO_H = 26;
+const LOGO_H = 39;
 const LOGO_W = Math.round((644 / 554) * LOGO_H);
 
 export type FlowPledgeBadgeVariant = "radar" | "profile";
@@ -27,7 +27,7 @@ interface FlowPledgeBadgeProps {
 }
 
 const BADGE_W = 320;
-const BADGE_H = 180;
+const BADGE_H = 200;
 const BADGE_FOOTER_URL = "Visit www.meetsylou.eu";
 
 const QR_SIZE = 72;
@@ -39,7 +39,7 @@ const PILLAR_KEYS = ["find", "lead", "organize", "write"] as const;
 const PILLAR_LABELS = ["F", "L", "O", "W"];
 // Radar placed in the left area, avoiding QR on the right.
 const RADAR_CX = 122;
-const RADAR_CY = 88;
+const RADAR_CY = 104;
 const RADAR_R = 38;
 
 function drawCommonChrome(
@@ -61,17 +61,19 @@ function drawCommonChrome(
   ctx.textBaseline = "alphabetic";
   const prefix = "Created with ";
   const prefixW = ctx.measureText(prefix).width;
-  ctx.fillText(prefix, 12, 24);
+  // Text baseline aligned with vertical middle of the logo.
+  const logoTop = 8;
+  const textBaseline = logoTop + LOGO_H / 2 + 4;
+  ctx.fillText(prefix, 12, textBaseline);
   if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
-    // Vertically align logo around the text baseline.
-    ctx.drawImage(logoImg, 12 + prefixW, 24 - LOGO_H + 4, LOGO_W, LOGO_H);
+    ctx.drawImage(logoImg, 12 + prefixW, logoTop, LOGO_W, LOGO_H);
   } else {
-    ctx.fillText("Sylou", 12 + prefixW, 24);
+    ctx.fillText("Sylou", 12 + prefixW, textBaseline);
   }
 
   ctx.fillStyle = "#3b82f6";
   ctx.font = "bold 13px system-ui, sans-serif";
-  ctx.fillText("FLOW Analysed", 12, 42);
+  ctx.fillText("FLOW Analysed", 12, 64);
 
   // Footer URL (left-aligned under "Created with Sylou")
   ctx.fillStyle = "#3b82f6";
@@ -191,7 +193,7 @@ function drawProfile(
   // Left content area excludes the QR on the right.
   const leftAreaW = QR_X - 12;
   const cx = 12 + leftAreaW / 2;
-  let y = 78;
+  let y = 100;
 
   ctx.fillStyle = "#5b7a99";
   ctx.font = "bold 10px system-ui, sans-serif";
