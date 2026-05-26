@@ -1,10 +1,13 @@
 import { useState } from "react";
+import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import FlowWorkProfile from "@/components/FlowWorkProfile";
 import { FlowInfoSection } from "@/components/flow-report/FlowInfoSection";
 import { SelfAssessmentDisplay } from "@/components/flow-report/SelfAssessmentDisplay";
+import { TokenUsageSection } from "@/components/flow-report/TokenUsageSection";
+import { ProjectActivitySection } from "@/components/flow-report/ProjectActivitySection";
 import { getFlowProfile } from "@/lib/flow-work-profiles";
-import type { FlowFeedback, FlowUserAssessment } from "@/hooks/useFlowAnalysis";
+import type { FlowFeedback, FlowUserAssessment, FlowReport } from "@/hooks/useFlowAnalysis";
 
 type ProfileSource = "ai" | "pre" | "post";
 
@@ -13,6 +16,8 @@ interface ProfileTabContentProps {
   preFeedbackScores: FlowFeedback | null;
   postAssessment: FlowUserAssessment | null;
   showSelfAssessment?: boolean;
+  flowMeta?: FlowReport["flow_meta"] | null;
+  metricsSnapshot?: FlowReport["metrics_snapshot"] | null;
 }
 
 const SOURCE_LABELS: Record<ProfileSource, string> = {
@@ -26,6 +31,8 @@ export function ProfileTabContent({
   preFeedbackScores,
   postAssessment,
   showSelfAssessment = true,
+  flowMeta = null,
+  metricsSnapshot = null,
 }: ProfileTabContentProps) {
   const [source, setSource] = useState<ProfileSource>("ai");
 
@@ -103,6 +110,26 @@ export function ProfileTabContent({
           postAssessment={postAssessment}
         />
       )}
+
+      {/* Token Usage */}
+      {flowMeta && <TokenUsageSection meta={flowMeta} />}
+
+      {/* Imported Documents Notices */}
+      {flowMeta?.imported_documents_mode === "summaries" && (
+        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+          <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <span>Imported documents were included as summaries due to context length limits.</span>
+        </div>
+      )}
+      {flowMeta?.imported_documents_mode === "excluded" && (
+        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+          <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <span>Imported documents ({flowMeta.imported_documents_count}) were excluded from this analysis due to context length limits.</span>
+        </div>
+      )}
+
+      {/* Project Activity */}
+      {metricsSnapshot && <ProjectActivitySection metrics={metricsSnapshot} />}
     </div>
   );
 }
