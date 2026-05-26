@@ -34,7 +34,7 @@ import sylouLogo from "@/assets/sylou-logo.png";
 import { PUBLIC_SITE_URL } from "@/lib/site";
 import { FlowHighlightedText } from "@/components/FlowHighlightedText";
 import { FlowReplayOverlay, type ReplayEvent } from "@/components/FlowReplayOverlay";
-import { QRCodeSVG } from "qrcode.react";
+
 import { MODEL_LABELS } from "@/lib/models";
 import { FlowPledgeBadge } from "@/components/flow-report/FlowPledgeBadge";
 import {
