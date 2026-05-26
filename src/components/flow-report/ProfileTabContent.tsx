@@ -31,6 +31,8 @@ export function ProfileTabContent({
   preFeedbackScores,
   postAssessment,
   showSelfAssessment = true,
+  flowMeta = null,
+  metricsSnapshot = null,
 }: ProfileTabContentProps) {
   const [source, setSource] = useState<ProfileSource>("ai");
 
