@@ -28,12 +28,13 @@ const BADGE_FOOTER_URL = "Visit www.meetsylou.eu";
 
 const QR_SIZE = 72;
 const QR_X = BADGE_W - QR_SIZE - 14;
-const QR_Y = 14;
+// Vertically centered between top and bottom of the badge.
+const QR_Y = Math.round((BADGE_H - QR_SIZE) / 2);
 
 const PILLAR_KEYS = ["find", "lead", "organize", "write"] as const;
 const PILLAR_LABELS = ["F", "L", "O", "W"];
 // Radar placed in the left area, avoiding QR on the right.
-const RADAR_CX = 110;
+const RADAR_CX = 122;
 const RADAR_CY = 88;
 const RADAR_R = 38;
 
