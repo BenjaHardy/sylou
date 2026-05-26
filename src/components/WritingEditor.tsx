@@ -319,15 +319,6 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
               className="hover:underline"
             >
               AGPL-3.0
-            </a>{" "}
-            ·{" "}
-            <a
-              href="https://www.meetsylou.eu"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:underline"
-            >
-              meetsylou.eu
             </a>
           </span>
           <span>
