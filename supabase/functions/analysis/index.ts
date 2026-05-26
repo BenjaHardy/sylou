@@ -2,6 +2,26 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, normaliseResponse, extractProviderError, envKeyFor } from "./_llm.ts";
 
 const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "*";
+
+// Generator provenance — captured at report-generation time so shared
+// reports retain their origin metadata regardless of where they are viewed.
+//
+// `is_modified` is hardcoded to `false` in the official codebase. Forks that
+// modify the source are encouraged to set this to `true` as a transparency
+// signal, but the authoritative evidence of modification is the commit_hash
+// — viewers can compare it against the official Sylou repository's release
+// tags to verify.
+const SYLOU_INSTANCE_LABEL  = Deno.env.get("SYLOU_INSTANCE_LABEL")  ?? "self-hosted";
+const SYLOU_INSTANCE_DOMAIN = Deno.env.get("SYLOU_INSTANCE_DOMAIN") ?? null;
+const SYLOU_VERSION         = Deno.env.get("SYLOU_VERSION")         ?? "unknown";
+const SYLOU_COMMIT_HASH     = Deno.env.get("SYLOU_COMMIT_HASH")     ?? "unknown";
+const GENERATOR_INFO = {
+  instance_label:  SYLOU_INSTANCE_LABEL,
+  instance_domain: SYLOU_INSTANCE_DOMAIN,
+  version:         SYLOU_VERSION,
+  commit_hash:     SYLOU_COMMIT_HASH,
+  is_modified:     false,
+} as const;
 const corsHeaders = {
   "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
   "Vary": "Origin",
@@ -1075,6 +1095,7 @@ ${writePillarNotice}`;
         project_name: project.name ?? null,
         replay_snapshot: replayEvents,
         writing_snapshot: writingContent,
+        generator_info: GENERATOR_INFO,
       } as any)
       .select()
       .single();
