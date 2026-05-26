@@ -193,7 +193,7 @@ function drawProfile(
   // Left content area excludes the QR on the right.
   const leftAreaW = QR_X - 12;
   const cx = 12 + leftAreaW / 2;
-  let y = 78;
+  let y = 100;
 
   ctx.fillStyle = "#5b7a99";
   ctx.font = "bold 10px system-ui, sans-serif";
