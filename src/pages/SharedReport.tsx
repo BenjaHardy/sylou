@@ -23,6 +23,16 @@ import { Activity, Loader2, ShieldAlert, ExternalLink, Award, Play } from "lucid
 import { MODEL_LABELS } from "@/lib/models";
 import type { FlowReport, FlowFeedback } from "@/hooks/useFlowAnalysis";
 
+interface GeneratorInfo {
+  instance_label?: string;
+  instance_domain?: string | null;
+  version?: string;
+  commit_hash?: string;
+  is_modified?: boolean;
+}
+
+
+
 export default function SharedReport() {
   const { token } = useParams<{ token: string }>();
   const [report, setReport] = useState<FlowReport | null>(null);
@@ -351,13 +361,10 @@ export default function SharedReport() {
               <p className="text-xs text-muted-foreground">Certificate: {certificateId}</p>
             )}
             {(() => {
-              const gi = (report as any).generator_info as {
-                instance_label?: string;
-                instance_domain?: string | null;
-                version?: string;
-                commit_hash?: string;
-                is_modified?: boolean;
-              } | null | undefined;
+              const gi =
+                (report as unknown as { generator_info?: GeneratorInfo | null })
+                  .generator_info ?? null;
+
 
               const meetsylouLink = (
                 <a
