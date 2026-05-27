@@ -19,7 +19,7 @@ import {
   Undo2, Redo2,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Search, X, ChevronDown, Palette,
-  FileDown, Lock,
+  FileDown, Lock, FileText,
 } from "lucide-react";
 
 interface Props {
@@ -28,6 +28,8 @@ interface Props {
   onExportDOCX?: () => void;
   onExportJSON?: () => void;
   subscriptionTier?: string;
+  pageView?: boolean;
+  onTogglePageView?: () => void;
 }
 
 const FONT_SIZES = ["10", "12", "14", "16", "18", "20", "24", "28", "32"];
@@ -170,7 +172,7 @@ function FontColorPicker({ editor }: { editor: Editor }) {
   );
 }
 
-export function EditorToolbar({ editor, onExportPDF, onExportDOCX, onExportJSON, subscriptionTier = "free" }: Props) {
+export function EditorToolbar({ editor, onExportPDF, onExportDOCX, onExportJSON, subscriptionTier = "free", pageView = false, onTogglePageView }: Props) {
   const isFree = subscriptionTier === "free";
   const [findOpen, setFindOpen] = useState(false);
   const [findText, setFindText] = useState("");
@@ -358,6 +360,19 @@ export function EditorToolbar({ editor, onExportPDF, onExportDOCX, onExportJSON,
         >
           <Search size={iconSize} />
         </Toggle>
+
+        <Separator orientation="vertical" className="mx-1 h-6" />
+
+        {/* Page view toggle */}
+        {onTogglePageView && (
+          <ToolbarToggle
+            pressed={pageView}
+            onPressedChange={onTogglePageView}
+            title="Page view"
+          >
+            <FileText size={iconSize} />
+          </ToolbarToggle>
+        )}
 
         <Separator orientation="vertical" className="mx-1 h-6" />
 

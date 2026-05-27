@@ -180,3 +180,23 @@
     overflow: visible !important;
   }
 }
+
+/* Page view: A4 sheet for the writing editor */
+.editor-page-sheet {
+  width: 21cm;
+  min-height: 29.7cm;
+  padding: 2.5cm;
+  background: hsl(var(--background));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
+  border-radius: 2px;
+}
+
+@media print {
+  .editor-page-sheet {
+    width: 100%;
+    min-height: 0;
+    padding: 0;
+    box-shadow: none;
+    border-radius: 0;
+  }
+}
