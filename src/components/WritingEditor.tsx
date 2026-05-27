@@ -383,10 +383,14 @@ function ExportEnabledToolbar({
   editor,
   userId,
   projectId,
+  pageView,
+  onTogglePageView,
 }: {
   editor: any;
   userId?: string;
   projectId: string;
+  pageView?: boolean;
+  onTogglePageView?: () => void;
 }) {
   const [tier, setTier] = useState("free");
   const [projectName, setProjectName] = useState("document");
