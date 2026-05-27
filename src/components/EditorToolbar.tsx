@@ -19,7 +19,7 @@ import {
   Undo2, Redo2,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Search, X, ChevronDown, Palette,
-  FileDown, Lock,
+  FileDown, Lock, FileText,
 } from "lucide-react";
 
 interface Props {
