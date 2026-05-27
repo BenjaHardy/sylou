@@ -230,6 +230,13 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     setAiPanelOpen(false);
   }, [projectId]);
 
+  // Toggle pagination plugin when page view changes
+  useEffect(() => {
+    if (!editor) return;
+    editor.commands.setPaginationEnabled(pageView);
+  }, [editor, pageView]);
+
+
   const handleOpenAIPanel = useCallback((rect: DOMRect, text: string) => {
     setAiAnchorRect(rect);
     setAiSelectedText(text);
