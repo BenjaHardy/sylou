@@ -172,7 +172,7 @@ function FontColorPicker({ editor }: { editor: Editor }) {
   );
 }
 
-export function EditorToolbar({ editor, onExportPDF, onExportDOCX, onExportJSON, subscriptionTier = "free" }: Props) {
+export function EditorToolbar({ editor, onExportPDF, onExportDOCX, onExportJSON, subscriptionTier = "free", pageView = false, onTogglePageView }: Props) {
   const isFree = subscriptionTier === "free";
   const [findOpen, setFindOpen] = useState(false);
   const [findText, setFindText] = useState("");
