@@ -273,9 +273,24 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
         editor={editor}
         userId={user?.id}
         projectId={projectId}
+        pageView={pageView}
+        onTogglePageView={() => setPageView((v) => !v)}
       />
-      <div ref={editorWrapperRef} className="flex-1 overflow-y-auto bg-background relative">
-        <EditorContent editor={editor} className="h-full" />
+      <div
+        ref={editorWrapperRef}
+        className={`flex-1 overflow-y-auto relative ${
+          pageView ? "bg-muted" : "bg-background"
+        }`}
+      >
+        {pageView ? (
+          <div className="flex justify-center py-8 print:py-0">
+            <div className="editor-page-sheet">
+              <EditorContent editor={editor} />
+            </div>
+          </div>
+        ) : (
+          <EditorContent editor={editor} className="h-full" />
+        )}
 
         {/* Floating AI button on text selection */}
         {!aiPanelOpen && (
