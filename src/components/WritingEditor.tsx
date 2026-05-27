@@ -57,6 +57,9 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   const [aiSelectionFrom, setAiSelectionFrom] = useState(0);
   const [aiSelectionTo, setAiSelectionTo] = useState(0);
 
+  // Page view (session-only)
+  const [pageView, setPageView] = useState(false);
+
   // Flush refs: useWritingContent and useProvenanceTracker return new flushSave
   // callbacks when projectId changes (they close over the new project). Storing
   // them in refs lets us expose a single stable flush callback to the parent
