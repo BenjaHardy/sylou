@@ -363,6 +363,19 @@ export function EditorToolbar({ editor, onExportPDF, onExportDOCX, onExportJSON,
 
         <Separator orientation="vertical" className="mx-1 h-6" />
 
+        {/* Page view toggle */}
+        {onTogglePageView && (
+          <ToolbarToggle
+            pressed={pageView}
+            onPressedChange={onTogglePageView}
+            title="Page view"
+          >
+            <FileText size={iconSize} />
+          </ToolbarToggle>
+        )}
+
+        <Separator orientation="vertical" className="mx-1 h-6" />
+
         {/* Export */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
