@@ -28,6 +28,8 @@ interface Props {
   onExportDOCX?: () => void;
   onExportJSON?: () => void;
   subscriptionTier?: string;
+  pageView?: boolean;
+  onTogglePageView?: () => void;
 }
 
 const FONT_SIZES = ["10", "12", "14", "16", "18", "20", "24", "28", "32"];
