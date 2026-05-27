@@ -458,6 +458,8 @@ function ExportEnabledToolbar({
       onExportDOCX={handleExportDOCX}
       onExportJSON={handleExportJSON}
       subscriptionTier={tier}
+      pageView={pageView}
+      onTogglePageView={onTogglePageView}
     />
   );
 }
