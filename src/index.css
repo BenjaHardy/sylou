@@ -183,12 +183,36 @@
 
 /* Page view: A4 sheet for the writing editor */
 .editor-page-sheet {
+  --page-content-height: calc(29.7cm - 5cm);
+  --page-gap: 1.5cm;
+  --page-margin: 2.5cm;
+  position: relative;
   width: 21cm;
   min-height: 29.7cm;
-  padding: 2.5cm;
+  padding: var(--page-margin);
   background: hsl(var(--background));
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
   border-radius: 2px;
+}
+
+/* Automatic page-break spacer (inserted by the pagination plugin). Bleeds past
+   the sheet's white padding so it reads as the inter-page gutter. */
+.pm-page-spacer {
+  position: relative;
+  margin-left: calc(-1 * var(--page-margin) - 2rem);
+  margin-right: calc(-1 * var(--page-margin) - 2rem);
+  background: hsl(var(--muted));
+  pointer-events: none;
+  user-select: none;
+}
+
+.pm-page-number {
+  position: absolute;
+  right: calc(var(--page-margin) + 2rem);
+  bottom: 0.5cm;
+  font-size: 0.6875rem;
+  color: hsl(var(--muted-foreground));
+  letter-spacing: 0.02em;
 }
 
 @media print {
@@ -198,5 +222,9 @@
     padding: 0;
     box-shadow: none;
     border-radius: 0;
+  }
+  .pm-page-spacer,
+  .pm-page-number {
+    display: none !important;
   }
 }

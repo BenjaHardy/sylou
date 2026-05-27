@@ -10,6 +10,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import TextStyle from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
 import { FontSize } from "@/lib/tiptap-font-size";
+import { Pagination } from "@/lib/editor-extensions/pagination";
 import { useWritingContent } from "@/hooks/useWritingContent";
 import { useProvenanceTracker } from "@/hooks/useProvenanceTracker";
 import { EditorToolbar } from "@/components/EditorToolbar";
@@ -89,6 +90,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       TextStyle,
       Color,
       FontSize,
+      Pagination,
     ],
     editorProps: {
       attributes: {
@@ -227,6 +229,13 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     setInitialSet(false);
     setAiPanelOpen(false);
   }, [projectId]);
+
+  // Toggle pagination plugin when page view changes
+  useEffect(() => {
+    if (!editor) return;
+    editor.commands.setPaginationEnabled(pageView);
+  }, [editor, pageView]);
+
 
   const handleOpenAIPanel = useCallback((rect: DOMRect, text: string) => {
     setAiAnchorRect(rect);
