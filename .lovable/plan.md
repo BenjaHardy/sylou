@@ -1,57 +1,102 @@
-# Automatic page breaks in the writing editor
+# Per-request CORS allow-list
 
-Add real visual page breaks to the existing A4 page-view mode, using a ProseMirror plugin that measures block heights and inserts spacer + page-number decorations. No changes to the document, undo, save, provenance, export, or print pipelines.
+## Goal
 
-## Scope
-
-- Active only when the existing `pageView` toggle is on.
-- Session-only (matches the toggle's persistence).
-- Visual + on-screen only. PDF/print continues to use today's flat layout.
-- Page numbers shown as small labels in the right margin of each page.
-
-## How it works
-
-1. The A4 sheet's inner content area has a known fixed height: `A4_HEIGHT - 2 * PAGE_MARGIN` (≈ 29.7cm − 2 × 2.5cm = 24.7cm). Computed once from CSS custom properties so the values stay in sync with the sheet styling.
-2. A ProseMirror plugin (`pagination`) observes the editor:
-   - On every transaction (debounced ~150ms via `requestAnimationFrame` + timeout) and on container `ResizeObserver` events, it walks the top-level block DOM children of the editor root.
-   - For each block it reads `offsetTop` and `offsetHeight` relative to the editor root.
-   - It tracks `currentPageBottom` (initialized to `pageContentHeight`). When a block's bottom would exceed `currentPageBottom`, it records a break before that block: the spacer height equals `currentPageBottom - blockTop + pageGap`, where `pageGap` is the visual gutter between sheets (e.g. 1.5cm).
-   - Then advances `currentPageBottom += pageContentHeight + pageGap` and continues.
-3. The plugin produces a `DecorationSet` of widget decorations:
-   - **Spacer widget** before each break position: a non-editable `<div>` with the computed `margin-top` (or `height`) and a grey background matching the backdrop, so it reads as the inter-page gutter.
-   - **Page-number widget** at the top of each page: a small absolutely-positioned `<span>` in the right margin showing "Page N".
-4. Decorations are recomputed only when (a) the doc changes, (b) the editor width changes, or (c) the toggle flips. They are torn down when `pageView` is off.
-
-### Edge cases handled
-
-- **Oversized single block** (paragraph or image taller than a page): no break inserted inside it; it simply spills past its page boundary. Acceptable for v1.
-- **Images loading after initial measure**: the `ResizeObserver` on the editor root catches the height change and reruns the pass.
-- **Selection/cursor**: widget decorations are non-editable and `side: -1`, so they never become a selection target and don't shift cursor positions.
-- **Provenance**: zero document mutations means the existing provenance mapping is unaffected.
+Replace the module-scoped `corsHeaders` constant in every edge function with a per-request helper that parses `ALLOWED_ORIGIN` as a comma-separated allow-list, echoes the incoming `Origin` only when it matches, and otherwise omits `Access-Control-Allow-Origin` entirely. Fail safe on missing config, no wildcard logic in source.
 
 ## Files to change
 
-1. **`src/lib/editor-extensions/pagination.ts`** (new)
-   - TipTap `Extension.create({ name: 'pagination' })` that registers a ProseMirror plugin.
-   - Plugin owns the `DecorationSet`, the `ResizeObserver`, and the debounced recompute.
-   - Reads `pageContentHeight`, `pageGap`, `pageMargin` from CSS variables on the editor's nearest `.editor-page-sheet` ancestor (with sensible JS fallbacks).
-   - Exposes an `enabled` storage flag toggled via `editor.commands.setPaginationEnabled(boolean)`.
+All six edge functions, identical refactor:
+- `supabase/functions/chat/index.ts`
+- `supabase/functions/analysis/index.ts`
+- `supabase/functions/editor-action/index.ts`
+- `supabase/functions/context-prompt/index.ts`
+- `supabase/functions/extract-text/index.ts`
+- `supabase/functions/share-report/index.ts`
 
-2. **`src/components/WritingEditor.tsx`**
-   - Register the new extension in the TipTap `extensions` array.
-   - In the existing `useEffect` (or a new one keyed on `pageView`), call `editor?.commands.setPaginationEnabled(pageView)`.
-   - No structural changes to the sheet wrapper from the previous step.
+Plus documentation:
+- `supabase/functions/.env.example` — document `ALLOWED_ORIGIN`.
 
-3. **`src/index.css`**
-   - Add CSS variables on `.editor-page-sheet`: `--page-content-height`, `--page-gap`, `--page-margin`.
-   - Style `.pm-page-spacer` (grey gutter look matching `bg-muted`) and `.pm-page-number` (small, muted-foreground, positioned in the right margin).
-   - Ensure `@media print` hides both decorations (they are screen-only).
+## Refactor pattern
 
-## Out of scope (for this iteration)
+In each function, remove the top-level `ALLOWED_ORIGIN` + `corsHeaders` constant and replace with:
 
-- Real PDF/print pagination (would need `@page` CSS + per-block `break-inside: avoid` and a separate render path).
-- Manual page-break insertion via toolbar / shortcut.
-- Splitting oversized single blocks across pages.
-- Headers/footers per page.
+```ts
+// Parse once at module load.
+const ALLOWED_ORIGINS_RAW = Deno.env.get("ALLOWED_ORIGIN") ?? "";
+const ALLOWED_ORIGINS = ALLOWED_ORIGINS_RAW
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
-If automatic breaks feel right, we can layer those on next.
+if (ALLOWED_ORIGINS.length === 0) {
+  console.warn(
+    "[cors] ALLOWED_ORIGIN is not set. No cross-origin browser requests " +
+    "will be accepted. Set ALLOWED_ORIGIN to a comma-separated list of " +
+    "origins this instance is served from (e.g. https://example.com).",
+  );
+}
+
+const BASE_CORS_HEADERS = {
+  "Vary": "Origin",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  // Methods header added where the function previously set one; otherwise omit.
+};
+
+function corsHeadersFor(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin");
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    return { ...BASE_CORS_HEADERS, "Access-Control-Allow-Origin": origin };
+  }
+  // Non-matching or missing Origin: omit ACAO entirely.
+  // Browsers will block; non-browser callers don't need it.
+  return { ...BASE_CORS_HEADERS };
+}
+```
+
+Then within each `Deno.serve` handler:
+- Compute `const corsHeaders = corsHeadersFor(req);` at the top of the handler.
+- Use that local `corsHeaders` in every response (preflight `OPTIONS`, JSON responses, streaming responses, error responses).
+- Any helper that builds responses (e.g. `jsonResponse`) must take `corsHeaders` as a parameter rather than reading a module-level constant. Update call sites accordingly.
+
+No regex matching. No wildcard fallback. No echoing of unmatched origins.
+
+## .env.example addition
+
+Append to `supabase/functions/.env.example`:
+
+```
+# ---------------------------------------------------------------------------
+# CORS allow-list
+# ---------------------------------------------------------------------------
+# Comma-separated list of origins (scheme + host, no path, no trailing slash)
+# from which browser clients are allowed to call these edge functions. The
+# function echoes back the request's Origin header only if it appears in
+# this list; otherwise the Access-Control-Allow-Origin header is omitted and
+# the browser blocks the response.
+#
+# Example:
+# ALLOWED_ORIGIN=https://sylou.eu,https://app.example.com
+#
+# If unset, no cross-origin browser requests will be accepted and a warning
+# is logged at function startup. Do NOT set this to "*" in production — it
+# would allow any site on the internet to call your backend from a user's
+# browser.
+ALLOWED_ORIGIN=
+```
+
+## Out of scope
+
+- No change to client-side code, auth, RLS, or function business logic.
+- No change to `supabase/config.toml`.
+- No regex / wildcard matching of preview subdomains — operators manage their own allow-list via the secret.
+- Print/PDF, pagination, and other ongoing features are untouched.
+
+## Verification
+
+After the edits:
+1. Deploy the six functions.
+2. From the browser preview, confirm chat + FLOW analysis work (Origin will be in the allow-list once the user adds the preview URL to `ALLOWED_ORIGIN`).
+3. `curl` without an `Origin` header: response still succeeds (CORS header simply absent, which is fine for non-browser callers).
+4. `curl` with a bogus `Origin`: response body succeeds but lacks `Access-Control-Allow-Origin`, so a real browser would block it.
