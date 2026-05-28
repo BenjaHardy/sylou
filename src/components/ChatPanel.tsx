@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, KeyboardEvent, useCallback, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp, BookmarkIcon, Globe, Paperclip } from "lucide-react";
 import sylouShiba from "@/assets/sylou-shiba.png";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
@@ -157,6 +158,7 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
           ) : (
             <div className="prose-chat break-words">
               <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
                 components={{
                   p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
                   ul: ({ children }) => <ul className="list-disc pl-4 mb-2 last:mb-0 space-y-1">{children}</ul>,
@@ -182,6 +184,16 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
                   blockquote: ({ children }) => (
                     <blockquote className="border-l-2 border-primary/30 pl-3 my-2 text-muted-foreground italic">{children}</blockquote>
                   ),
+                  table: ({ children }) => (
+                    <div className="overflow-x-auto my-2">
+                      <table className="w-full text-xs border-collapse">{children}</table>
+                    </div>
+                  ),
+                  thead: ({ children }) => <thead className="border-b border-border">{children}</thead>,
+                  tbody: ({ children }) => <tbody>{children}</tbody>,
+                  tr: ({ children }) => <tr className="border-b border-border/50 last:border-0">{children}</tr>,
+                  th: ({ children }) => <th className="text-left font-semibold px-2 py-1.5 align-top">{children}</th>,
+                  td: ({ children }) => <td className="px-2 py-1.5 align-top">{children}</td>,
                 }}
               >
                 {message.content}
