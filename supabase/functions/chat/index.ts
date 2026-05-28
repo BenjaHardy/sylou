@@ -1,19 +1,34 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, normaliseResponse, extractProviderError } from "./_llm.ts";
 
-const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "*";
-const corsHeaders = {
-  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+// --- CORS allow-list (parsed once at module load) ---
+const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGIN") ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+if (ALLOWED_ORIGINS.length === 0) {
+  console.warn(
+    "[cors] ALLOWED_ORIGIN is not set. No cross-origin browser requests " +
+    "will be accepted. Set ALLOWED_ORIGIN to a comma-separated list of " +
+    "origins this instance is served from (e.g. https://example.com).",
+  );
+}
+
+const BASE_CORS_HEADERS: Record<string, string> = {
   "Vary": "Origin",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-function jsonResponse(body: Record<string, unknown>, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+function corsHeadersFor(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin");
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    return { ...BASE_CORS_HEADERS, "Access-Control-Allow-Origin": origin };
+  }
+  // Non-matching or missing Origin: omit Access-Control-Allow-Origin entirely.
+  // Browsers will block the response; non-browser callers ignore CORS.
+  return { ...BASE_CORS_HEADERS };
 }
 
 /**
@@ -185,6 +200,13 @@ function formatWebSearchResults(query: string, results: { title: string; url: st
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = corsHeadersFor(req);
+  const jsonResponse = (body: Record<string, unknown>, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
