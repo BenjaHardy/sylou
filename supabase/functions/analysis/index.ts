@@ -584,6 +584,13 @@ function formatCreativeDataForAnalysis(
 // ---------------------------------------------------------------------------
 
 Deno.serve(async (req) => {
+  const corsHeaders = corsHeadersFor(req);
+  const jsonResponse = (body: Record<string, unknown>, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
