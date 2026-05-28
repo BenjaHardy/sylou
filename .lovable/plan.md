@@ -1,102 +1,49 @@
-# Per-request CORS allow-list
+# Fix tables in the chat pane
 
-## Goal
+## Root cause
 
-Replace the module-scoped `corsHeaders` constant in every edge function with a per-request helper that parses `ALLOWED_ORIGIN` as a comma-separated allow-list, echoes the incoming `Origin` only when it matches, and otherwise omits `Access-Control-Allow-Origin` entirely. Fail safe on missing config, no wildcard logic in source.
-
-## Files to change
-
-All six edge functions, identical refactor:
-- `supabase/functions/chat/index.ts`
-- `supabase/functions/analysis/index.ts`
-- `supabase/functions/editor-action/index.ts`
-- `supabase/functions/context-prompt/index.ts`
-- `supabase/functions/extract-text/index.ts`
-- `supabase/functions/share-report/index.ts`
-
-Plus documentation:
-- `supabase/functions/.env.example` — document `ALLOWED_ORIGIN`.
-
-## Refactor pattern
-
-In each function, remove the top-level `ALLOWED_ORIGIN` + `corsHeaders` constant and replace with:
-
-```ts
-// Parse once at module load.
-const ALLOWED_ORIGINS_RAW = Deno.env.get("ALLOWED_ORIGIN") ?? "";
-const ALLOWED_ORIGINS = ALLOWED_ORIGINS_RAW
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
-
-if (ALLOWED_ORIGINS.length === 0) {
-  console.warn(
-    "[cors] ALLOWED_ORIGIN is not set. No cross-origin browser requests " +
-    "will be accepted. Set ALLOWED_ORIGIN to a comma-separated list of " +
-    "origins this instance is served from (e.g. https://example.com).",
-  );
-}
-
-const BASE_CORS_HEADERS = {
-  "Vary": "Origin",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-  // Methods header added where the function previously set one; otherwise omit.
-};
-
-function corsHeadersFor(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin");
-  if (origin && ALLOWED_ORIGINS.includes(origin)) {
-    return { ...BASE_CORS_HEADERS, "Access-Control-Allow-Origin": origin };
-  }
-  // Non-matching or missing Origin: omit ACAO entirely.
-  // Browsers will block; non-browser callers don't need it.
-  return { ...BASE_CORS_HEADERS };
-}
-```
-
-Then within each `Deno.serve` handler:
-- Compute `const corsHeaders = corsHeadersFor(req);` at the top of the handler.
-- Use that local `corsHeaders` in every response (preflight `OPTIONS`, JSON responses, streaming responses, error responses).
-- Any helper that builds responses (e.g. `jsonResponse`) must take `corsHeaders` as a parameter rather than reading a module-level constant. Update call sites accordingly.
-
-No regex matching. No wildcard fallback. No echoing of unmatched origins.
-
-## .env.example addition
-
-Append to `supabase/functions/.env.example`:
+`src/components/ChatPanel.tsx` renders assistant messages with `ReactMarkdown` using only the default CommonMark parser. CommonMark does not define table syntax, so when the LLM returns a GitHub-flavored pipe table like:
 
 ```
-# ---------------------------------------------------------------------------
-# CORS allow-list
-# ---------------------------------------------------------------------------
-# Comma-separated list of origins (scheme + host, no path, no trailing slash)
-# from which browser clients are allowed to call these edge functions. The
-# function echoes back the request's Origin header only if it appears in
-# this list; otherwise the Access-Control-Allow-Origin header is omitted and
-# the browser blocks the response.
-#
-# Example:
-# ALLOWED_ORIGIN=https://sylou.eu,https://app.example.com
-#
-# If unset, no cross-origin browser requests will be accepted and a warning
-# is logged at function startup. Do NOT set this to "*" in production — it
-# would allow any site on the internet to call your backend from a user's
-# browser.
-ALLOWED_ORIGIN=
+| Col A | Col B |
+| ----- | ----- |
+| 1     | 2     |
 ```
 
-## Out of scope
+react-markdown parses the whole thing as one paragraph of literal `|` and `-` characters — exactly the "single blurb of text" symptom. No `<table>` ever reaches the DOM.
 
-- No change to client-side code, auth, RLS, or function business logic.
-- No change to `supabase/config.toml`.
-- No regex / wildcard matching of preview subdomains — operators manage their own allow-list via the secret.
-- Print/PDF, pagination, and other ongoing features are untouched.
+The same component already maps custom renderers for `p`, `ul`, `ol`, `code`, etc., but has no `table`/`thead`/`tbody`/`tr`/`th`/`td` mappings either, so even if a table node existed it would render unstyled.
+
+`MiniTipTapEditor` and other surfaces are unrelated — this is purely the chat bubble renderer.
+
+## Change
+
+Scope: frontend-only, single component file plus one dependency.
+
+1. Add `remark-gfm` so react-markdown parses GFM features (tables, strikethrough, task lists, autolinks).
+   - Install with **Bun** (`bun add remark-gfm`) — the Lovable build pipeline uses Bun and `bun.lockb` is the canonical lockfile in this repo. This will update `package.json` and `bun.lockb` together.
+   - Import in `ChatPanel.tsx`: `import remarkGfm from "remark-gfm";`
+   - Pass `remarkPlugins={[remarkGfm]}` to the `<ReactMarkdown>` instance in `ChatBubble`.
+
+2. Add table component mappings to the existing `components={{ ... }}` map in `ChatBubble`, themed with semantic tokens only and made horizontally scrollable so wide tables don't break the bubble's `max-w-[80%]` constraint. Inline `<table>` with Tailwind classes (no shadcn `Table` import — keeps the streamed-markdown renderer self-contained):
+   - `table`: wrap in `<div className="overflow-x-auto my-2">` and render `<table className="w-full text-xs border-collapse">`.
+   - `thead`: `<thead className="border-b border-border">`.
+   - `tbody`: `<tbody>`.
+   - `tr`: `<tr className="border-b border-border/50 last:border-0">`.
+   - `th`: `<th className="text-left font-semibold px-2 py-1.5 align-top">`.
+   - `td`: `<td className="px-2 py-1.5 align-top">`.
+
+3. Leave the `prose-chat` wrapper and all other component mappings untouched. User messages stay as plain `<p>` with `whitespace-pre-wrap` (not markdown-parsed).
+
+## Out of scope (flagged, not fixed here)
+
+- **Dual lockfiles.** The repo currently commits both `bun.lockb` (+ `bun.lock`) and `package-lock.json`. Before open-sourcing, you'll want to pick one and delete the other so contributors get reproducible installs from a single source of truth. Not part of this fix — but worth a separate cleanup pass.
+- No edge function changes — the LLM already produces valid GFM tables; only the renderer was wrong.
+- No changes to other markdown surfaces (FLOW report, creative tools, editor). The same `remark-gfm` fix can be applied there later if needed.
 
 ## Verification
 
-After the edits:
-1. Deploy the six functions.
-2. From the browser preview, confirm chat + FLOW analysis work (Origin will be in the allow-list once the user adds the preview URL to `ALLOWED_ORIGIN`).
-3. `curl` without an `Origin` header: response still succeeds (CORS header simply absent, which is fine for non-browser callers).
-4. `curl` with a bogus `Origin`: response body succeeds but lacks `Access-Control-Allow-Origin`, so a real browser would block it.
+- Ask Sylou: "reply with a small markdown table of 3 rows comparing X and Y" — confirm the bubble renders an actual `<table>` with borders, not a wall of `|` characters.
+- Confirm a wide table scrolls horizontally inside the bubble instead of overflowing the chat pane.
+- Confirm non-table assistant messages (lists, code, bold, links) still render identically.
+- Confirm `package.json` and `bun.lockb` are both updated together by the `bun add` step.
