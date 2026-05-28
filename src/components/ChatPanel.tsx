@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, KeyboardEvent, useCallback, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp, BookmarkIcon, Globe, Paperclip } from "lucide-react";
 import sylouShiba from "@/assets/sylou-shiba.png";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
