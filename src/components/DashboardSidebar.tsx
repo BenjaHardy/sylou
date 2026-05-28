@@ -2,8 +2,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   Plus, FolderOpen, ChevronLeft, ChevronRight, LogOut,
   MoreHorizontal, Pencil, Trash2, FileText, GraduationCap,
-  Sparkles, Briefcase, Settings as SettingsIcon,
+  Sparkles, Briefcase, Settings as SettingsIcon, Info,
 } from "lucide-react";
+import { AboutDialog } from "@/components/AboutDialog";
 import sylouLogo from "@/assets/sylou-logo.png";
 import { useState } from "react";
 import {
@@ -50,6 +51,7 @@ export function DashboardSidebar({ selectedProjectId, onSelectProject, onNewProj
   const [renameTarget, setRenameTarget] = useState<Project | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   const { data: projects, isLoading } = useProjects();
   const renameProject = useRenameProject();
@@ -215,6 +217,10 @@ export function DashboardSidebar({ selectedProjectId, onSelectProject, onNewProj
                 <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setAboutOpen(true)}>
+                <Info className="h-4 w-4 mr-2" />
+                About
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
                 <SettingsIcon className="h-4 w-4 mr-2" />
                 Settings…
@@ -229,6 +235,7 @@ export function DashboardSidebar({ selectedProjectId, onSelectProject, onNewProj
       </aside>
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
 
       {/* Rename dialog */}
       <AlertDialog open={!!renameTarget} onOpenChange={(v) => !v && setRenameTarget(null)}>
