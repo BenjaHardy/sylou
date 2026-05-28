@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { ProjectContentArea } from "@/components/ProjectContentArea";
 import { NewProjectDialog } from "@/components/NewProjectDialog";
