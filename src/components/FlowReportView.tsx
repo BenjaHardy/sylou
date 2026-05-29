@@ -381,7 +381,7 @@ export function FlowReportView({
 
           {/* FLOW Profile Tab */}
           {activeTab === "profile" && (
-            <div key="profile" className="animate-card-flip">
+            <div key="profile" className="animate-card-flip space-y-8">
               <ProfileTabContent
                 aiScores={flowScores}
                 preFeedbackScores={preFeedbackScores}
@@ -389,6 +389,14 @@ export function FlowReportView({
                 flowMeta={report.flow_meta}
                 metricsSnapshot={report.metrics_snapshot}
               />
+              <div className="text-[10px] text-muted-foreground text-center space-y-0.5">
+                <p>
+                  Model: {MODEL_LABELS[report.model_used] ?? report.model_used} · Generated{" "}
+                  {new Date(report.created_at).toLocaleString()}
+                </p>
+                <p>Project: {projectName}</p>
+              </div>
+              <FlowReportFooter />
             </div>
           )}
 
