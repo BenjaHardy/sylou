@@ -13,7 +13,7 @@ export function FlowReportFooter() {
         <ExternalLink className="h-3 w-3" />
       </a>
       <p className="text-[10px] text-muted-foreground">
-        FLOW is a proprietary analytical framework by Sylou. Learn more at{" "}
+        Learn more at{" "}
         <a
           href="https://www.meetsylou.eu"
           target="_blank"
