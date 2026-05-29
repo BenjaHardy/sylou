@@ -36,7 +36,7 @@ const EVENT_COLORS: Record<string, string> = {
 
 const EVENT_LABELS: Record<string, string> = {
   writing_version: "Writing Version",
-  chat_message: "Chat Message",
+  chat_message: "Chat Message (AI)",
   ai_editor_action: "AI Editor Action",
 };
 
