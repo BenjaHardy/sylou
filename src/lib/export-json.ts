@@ -12,6 +12,7 @@ export async function exportProjectAsJson(projectId: string) {
     statsRes,
     docsRes,
     creativeRes,
+    editorActionsRes,
   ] = await Promise.all([
     supabase
       .from("projects")
