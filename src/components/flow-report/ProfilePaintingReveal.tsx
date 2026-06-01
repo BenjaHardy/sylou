@@ -14,7 +14,10 @@ export default function ProfilePaintingReveal({ code }: ProfilePaintingRevealPro
 
   if (!revealed) {
     return (
-      <div className="flex flex-col items-center gap-2 pt-2">
+      <div
+        data-ai-generated="false"
+        className="flex flex-col items-center gap-2 pt-2"
+      >
         <button
           type="button"
           onClick={() => setRevealed(true)}
@@ -32,6 +35,7 @@ export default function ProfilePaintingReveal({ code }: ProfilePaintingRevealPro
 
   return (
     <div
+      data-ai-generated="false"
       className="flex flex-col items-center gap-3 pt-2 animate-fade-in"
       style={{ animationDuration: "400ms" }}
     >

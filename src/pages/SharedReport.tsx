@@ -23,7 +23,11 @@ import { Activity, Loader2, ShieldAlert, ExternalLink, Award, Play } from "lucid
 import { MODEL_LABELS } from "@/lib/models";
 import type { FlowReport, FlowFeedback } from "@/hooks/useFlowAnalysis";
 
-const AI_GENERATED_SECTIONS_REPORT_TAB = "ai-assessment";
+const AI_GENERATED_SECTIONS = {
+  report: "ai-assessment",
+  profile: "ai-profile-selection",
+} as const;
+type AiTabKey = keyof typeof AI_GENERATED_SECTIONS;
 
 interface GeneratorInfo {
   instance_label?: string;
@@ -49,6 +53,7 @@ export default function SharedReport() {
   const [reportAvailable, setReportAvailable] = useState(true);
   const [profileAvailable, setProfileAvailable] = useState(true);
   const [activeTab, setActiveTab] = useState<"report" | "writing" | "profile" | "replay">("report");
+  const [profileSource, setProfileSource] = useState<"ai" | "pre" | "post">("ai");
 
   useEffect(() => {
     async function fetchReport() {
@@ -117,20 +122,27 @@ export default function SharedReport() {
   useEffect(() => {
     const modelKey = report?.model_used;
     if (!modelKey) return;
+
+    // Determine which AI section key applies to the current tab.
+    let sectionKey: AiTabKey | null = null;
+    if (activeTab === "report") sectionKey = "report";
+    else if (activeTab === "profile" && profileSource === "ai") sectionKey = "profile";
+    if (!sectionKey) return;
+
     const modelName = MODEL_LABELS[modelKey] ?? modelKey;
     const tags: HTMLMetaElement[] = [
       Object.assign(document.createElement("meta"), { name: "ai-generated", content: "true" }),
       Object.assign(document.createElement("meta"), { name: "ai-model", content: modelName }),
       Object.assign(document.createElement("meta"), {
         name: "ai-generated-sections",
-        content: AI_GENERATED_SECTIONS_REPORT_TAB,
+        content: AI_GENERATED_SECTIONS[sectionKey],
       }),
     ];
     tags.forEach((t) => document.head.appendChild(t));
     return () => {
       tags.forEach((t) => t.parentNode?.removeChild(t));
     };
-  }, [report?.model_used]);
+  }, [report?.model_used, activeTab, profileSource]);
 
   // Auto-load replay when replay tab opened
   useEffect(() => {
@@ -294,6 +306,9 @@ export default function SharedReport() {
                 showSelfAssessment={showFeedback}
                 flowMeta={report.flow_meta}
                 metricsSnapshot={report.metrics_snapshot}
+                source={profileSource}
+                onSourceChange={setProfileSource}
+                aiModelName={MODEL_LABELS[report.model_used] ?? report.model_used}
               />
             </div>
           )}

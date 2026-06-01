@@ -18,6 +18,11 @@ interface ProfileTabContentProps {
   showSelfAssessment?: boolean;
   flowMeta?: FlowReport["flow_meta"] | null;
   metricsSnapshot?: FlowReport["metrics_snapshot"] | null;
+  /** Optional controlled source (used by SharedReport to drive tab-aware AI markers). */
+  source?: ProfileSource;
+  onSourceChange?: (source: ProfileSource) => void;
+  /** AI model display name; required to mark the AI-derived profile card. */
+  aiModelName?: string;
 }
 
 const SOURCE_LABELS: Record<ProfileSource, string> = {
@@ -33,8 +38,16 @@ export function ProfileTabContent({
   showSelfAssessment = true,
   flowMeta = null,
   metricsSnapshot = null,
+  source: controlledSource,
+  onSourceChange,
+  aiModelName,
 }: ProfileTabContentProps) {
-  const [source, setSource] = useState<ProfileSource>("ai");
+  const [uncontrolledSource, setUncontrolledSource] = useState<ProfileSource>("ai");
+  const source = controlledSource ?? uncontrolledSource;
+  const setSource = (next: ProfileSource) => {
+    if (onSourceChange) onSourceChange(next);
+    else setUncontrolledSource(next);
+  };
 
   const postFeedbackScores = postAssessment?.scores ?? null;
 
@@ -95,13 +108,30 @@ export function ProfileTabContent({
         </div>
       )}
 
-      {/* Profile card with flip animation per source */}
-      <div key={source} className="animate-card-flip space-y-4">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground text-center">
-          Your Collaboration Profile ({SOURCE_LABELS[source]})
-        </h3>
-        <FlowWorkProfile profile={activeProfile} scores={activeScores} />
-      </div>
+      {/* Profile card with flip animation per source. Only the AI-derived
+          variant carries Article 50(2) machine-readable markers; pre/post
+          self-assessment variants are human-authored and stay unmarked. */}
+      {source === "ai" ? (
+        <section
+          key={source}
+          data-ai-generated="true"
+          data-ai-model={aiModelName}
+          aria-label="AI-derived collaboration profile"
+          className="animate-card-flip space-y-4"
+        >
+          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground text-center">
+            Your Collaboration Profile ({SOURCE_LABELS[source]})
+          </h3>
+          <FlowWorkProfile profile={activeProfile} scores={activeScores} />
+        </section>
+      ) : (
+        <div key={source} className="animate-card-flip space-y-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground text-center">
+            Your Collaboration Profile ({SOURCE_LABELS[source]})
+          </h3>
+          <FlowWorkProfile profile={activeProfile} scores={activeScores} />
+        </div>
+      )}
 
       {/* Self-assessment scores below */}
       {showSelfAssessment && (
