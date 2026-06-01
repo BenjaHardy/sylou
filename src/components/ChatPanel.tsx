@@ -125,8 +125,17 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
 
   const sourceLabel = SOURCE_LABELS[sourceType];
 
+  const assistantAttrs = !isUser
+    ? {
+        role: "article" as const,
+        "aria-label": "AI assistant message",
+        "data-ai-generated": "true",
+        "data-ai-model": message.model_used ?? "unspecified",
+      }
+    : {};
+
   return (
-    <div data-message-id={message.id} className="relative group/msg">
+    <div data-message-id={message.id} className="relative group/msg" {...assistantAttrs}>
       <div className={`flex gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`} data-chat-role={message.role}>
         <div
           className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 ${
@@ -148,6 +157,11 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
                 : "bg-muted text-foreground"
           }`}
         >
+          {!isUser && (
+            <span className="block text-xs font-medium text-muted-foreground mb-1">
+              AI Assistant
+            </span>
+          )}
           {sourceLabel && (
             <span className="block text-[10px] uppercase tracking-wider font-semibold text-primary/60 mb-1">
               {sourceLabel}
@@ -200,6 +214,7 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
               </ReactMarkdown>
             </div>
           )}
+
           <span
             className={`block text-[10px] mt-1.5 ${
               isUser ? "text-primary/50 text-right" : "text-muted-foreground/60"
