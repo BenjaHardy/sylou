@@ -57,6 +57,11 @@ export async function exportProjectAsJson(projectId: string) {
       .from("project_creative_data")
       .select("tool_type, data, updated_at")
       .eq("project_id", projectId),
+    supabase
+      .from("ai_editor_actions")
+      .select("id, action_type, outcome, instruction_text, selected_text_preview, ai_response_preview, ai_response_full, char_count_original, char_count_result, created_at")
+      .eq("project_id", projectId)
+      .order("created_at"),
   ]);
 
   // Fetch messages for each thread
