@@ -107,8 +107,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           const tracker = getTracker();
           const text = ed.state.doc.textBetween(from, to, "\n");
           if (text) {
-            const dominant = tracker.getDominantSource(from, to);
-            tracker.setInternalClipboard(text, dominant);
+            tracker.setInternalClipboardSlice(tracker.getSegmentSlice(from, to, text));
           }
           return false;
         },
@@ -120,23 +119,25 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           const tracker = getTracker();
           const text = ed2.state.doc.textBetween(from, to, "\n");
           if (text) {
-            const dominant = tracker.getDominantSource(from, to);
-            tracker.setInternalClipboard(text, dominant);
+            tracker.setInternalClipboardSlice(tracker.getSegmentSlice(from, to, text));
           }
           return false;
         },
       drop: (_view, event) => {
-          // Capture the drag source's dominant provenance before the drop transaction fires
+          // Capture per-segment provenance of the drag source so the drop
+          // preserves the multi-source breakdown instead of collapsing to
+          // a single dominant tag.
           const ed = editor;
           if (!ed) return false;
           const { from, to } = ed.state.selection;
-          if (from === to) return false; // no selection being dragged
+          if (from === to) return false;
           const tracker = getTracker();
-          const dominant = tracker.getDominantSource(from, to);
           const text = ed.state.doc.textBetween(from, to, "\n");
+          const slice = tracker.getSegmentSlice(from, to, text);
           tracker.setPendingSignal({
-            source: dominant,
-            originalText: dominant === "typed" || dominant === "chat_user" ? null : text,
+            kind: "slice",
+            segments: slice.segments,
+            totalLength: slice.totalLength,
           });
           return false; // let ProseMirror handle the actual drop
         },
@@ -145,10 +146,19 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
         const tracker = getTracker();
         const pastedText = event.clipboardData?.getData("text/plain") ?? "";
         if (pastedText) {
-          // classifyPaste runs the full priority chain (internal clipboard →
-          // AI registry → chat clipboard → external) then stores the result
-          // as the pending signal for the upcoming transaction.
-          tracker.setPendingSignal(tracker.classifyPaste(pastedText));
+          // Prefer per-segment replay if the paste matches the internal
+          // clipboard; otherwise fall back to the single-source priority
+          // chain (AI registry → chat clipboard → external).
+          const slice = tracker.consumeInternalClipboardSlice(pastedText);
+          if (slice) {
+            tracker.setPendingSignal({
+              kind: "slice",
+              segments: slice.segments,
+              totalLength: slice.totalLength,
+            });
+          } else {
+            tracker.setPendingSignal(tracker.classifyPaste(pastedText));
+          }
         }
         return false;
       },
