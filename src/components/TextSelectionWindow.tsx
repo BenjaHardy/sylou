@@ -610,7 +610,12 @@ export function TextSelectionWindow({
         </button>
       </div>
 
+      <p className="text-xs text-muted-foreground text-center px-3 pt-2">
+        You're chatting with an AI assistant. AI responses may be incorrect, verify what matters.
+      </p>
+
       <div className="p-3">
+
         {/* Actions phase */}
         {phase === "actions" && (
           <div className="space-y-2">
