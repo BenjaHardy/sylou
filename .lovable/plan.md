@@ -1,12 +1,12 @@
-Update Claude Opus model from 4.7 to 4.8 in the model registry and token estimation map.
+Remove the "Sanity Check" action from the text selection window ("Interact with AI").
 
-## Changes
+Scope
+- File: `src/components/TextSelectionWindow.tsx`
 
-1. **`src/lib/models.ts`**
-   - Change the `MODELS` entry: `id` from `"claude-opus-4-7"` to `"claude-opus-4-8"`, `label` from `"Claude Opus 4.7"` to `"Claude Opus 4.8"`.
-   - Add `"claude-opus-4-7": "Claude Opus 4.7"` to the `MODEL_LABELS` legacy fallback map so historical records still render correctly.
+Changes
+1. Remove `"sanity-check"` from the `ActionId` union type.
+2. Remove the `{ id: "sanity-check", label: "Sanity Check", row: 2 }` entry from `NORMAL_ACTIONS`.
+3. Remove the `{ id: "sanity-check", label: "Sanity Check", row: 1 }` entry from `TUTOR_ACTIONS`.
+4. Remove the no-op `if (actionId === "sanity-check") { return; }` block inside `handleAction`.
 
-2. **`src/lib/estimateTokens.ts`**
-   - Update the `MODEL_CONTEXT_LIMITS` key from `"claude-opus-4-7"` to `"claude-opus-4-8"` (limit stays `1_000_000`).
-
-No edge function references to `"claude-opus-4-7"` were found; the inline `callLLM` helpers use `"claude-opus-4-8"` already or are model-agnostic.
+No other files or edge functions reference this action.
