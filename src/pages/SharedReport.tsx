@@ -306,6 +306,9 @@ export default function SharedReport() {
                 showSelfAssessment={showFeedback}
                 flowMeta={report.flow_meta}
                 metricsSnapshot={report.metrics_snapshot}
+                source={profileSource}
+                onSourceChange={setProfileSource}
+                aiModelName={MODEL_LABELS[report.model_used] ?? report.model_used}
               />
             </div>
           )}
