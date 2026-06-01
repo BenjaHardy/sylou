@@ -39,7 +39,7 @@ export function FlowFeedbackSection({ type, existingFeedback, onSubmit }: Props)
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="cursor-help">
-                  {type === "pre" ? "Self-assessment (pre-analysis feedback)" : "Self-assessment (post-analysis feedback)"}
+                  {type === "pre" ? "Self-assessment (pre-analysis feedback by user)" : "Self-assessment (post-analysis feedback by user)"}
                 </span>
               </TooltipTrigger>
               <TooltipContent>
