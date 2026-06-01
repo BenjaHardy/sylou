@@ -122,20 +122,27 @@ export default function SharedReport() {
   useEffect(() => {
     const modelKey = report?.model_used;
     if (!modelKey) return;
+
+    // Determine which AI section key applies to the current tab.
+    let sectionKey: AiTabKey | null = null;
+    if (activeTab === "report") sectionKey = "report";
+    else if (activeTab === "profile" && profileSource === "ai") sectionKey = "profile";
+    if (!sectionKey) return;
+
     const modelName = MODEL_LABELS[modelKey] ?? modelKey;
     const tags: HTMLMetaElement[] = [
       Object.assign(document.createElement("meta"), { name: "ai-generated", content: "true" }),
       Object.assign(document.createElement("meta"), { name: "ai-model", content: modelName }),
       Object.assign(document.createElement("meta"), {
         name: "ai-generated-sections",
-        content: AI_GENERATED_SECTIONS_REPORT_TAB,
+        content: AI_GENERATED_SECTIONS[sectionKey],
       }),
     ];
     tags.forEach((t) => document.head.appendChild(t));
     return () => {
       tags.forEach((t) => t.parentNode?.removeChild(t));
     };
-  }, [report?.model_used]);
+  }, [report?.model_used, activeTab, profileSource]);
 
   // Auto-load replay when replay tab opened
   useEffect(() => {
