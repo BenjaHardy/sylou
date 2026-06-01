@@ -630,7 +630,11 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
             </p>
           )}
         </div>
+        <p className="text-xs text-muted-foreground text-center pt-2">
+          You're chatting with an AI assistant. AI responses may be incorrect, verify what matters.
+        </p>
       </div>
+
     </div>
   );
 }
