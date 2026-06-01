@@ -149,9 +149,74 @@ export class ProvenanceTracker {
 
   // ─── Internal Editor Clipboard ──────────────────────────
 
-  /** Called on copy/cut within the editor to record the dominant source of the selection */
-  setInternalClipboard(text: string, source: SegmentSource) {
-    this._internalClipboard = { text, source };
+  /**
+   * Build a per-segment provenance slice covering [from, to). Used by
+   * copy/cut/drop handlers to capture the multi-source breakdown of the
+   * selection. `text` is the ProseMirror textBetween of the same range,
+   * stored verbatim for paste-match lookups.
+   *
+   * `original_text` policy:
+   *   - Full-segment coverage  → preserve original_text verbatim
+   *   - Partial coverage       → set null (the field is a block-level claim,
+   *                              truncating would fabricate it)
+   *
+   * Uncovered ranges fall back to `typed` (matching getDominantSource line
+   * 175) and log a console.debug, since gaps should not occur normally.
+   */
+  getSegmentSlice(from: number, to: number, text: string): ProvenanceSlice {
+    const totalLength = Math.max(0, to - from);
+    const segments: ProvenanceSliceSegment[] = [];
+    if (totalLength === 0) return { text, segments, totalLength };
+
+    const sorted = [...this.segments].sort((a, b) => a.start - b.start);
+    let cursor = from;
+    for (const seg of sorted) {
+      if (seg.end <= from) continue;
+      if (seg.start >= to) break;
+      const overlapStart = Math.max(seg.start, from);
+      const overlapEnd = Math.min(seg.end, to);
+      if (overlapEnd <= overlapStart) continue;
+
+      if (overlapStart > cursor) {
+        console.debug(
+          "[ProvenanceTracker] uncovered range in getSegmentSlice",
+          { from, to, gapStart: cursor, gapEnd: overlapStart },
+        );
+        segments.push({
+          offset: cursor - from,
+          length: overlapStart - cursor,
+          source: "typed",
+          original_text: null,
+        });
+      }
+
+      const isFullSegment = overlapStart === seg.start && overlapEnd === seg.end;
+      segments.push({
+        offset: overlapStart - from,
+        length: overlapEnd - overlapStart,
+        source: seg.source,
+        original_text: isFullSegment ? seg.original_text : null,
+      });
+      cursor = overlapEnd;
+    }
+    if (cursor < to) {
+      console.debug(
+        "[ProvenanceTracker] uncovered range in getSegmentSlice",
+        { from, to, gapStart: cursor, gapEnd: to },
+      );
+      segments.push({
+        offset: cursor - from,
+        length: to - cursor,
+        source: "typed",
+        original_text: null,
+      });
+    }
+    return { text, segments, totalLength };
+  }
+
+  /** Called on copy/cut within the editor to record the per-segment provenance slice. */
+  setInternalClipboardSlice(slice: ProvenanceSlice) {
+    this._internalClipboard = slice;
   }
 
   /**
