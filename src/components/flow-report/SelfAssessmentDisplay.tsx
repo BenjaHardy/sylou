@@ -30,7 +30,7 @@ export function SelfAssessmentDisplay({ preFeedbackScores, postAssessment }: Sel
     <>
       {preFeedbackScores && (
         <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Pre-Analysis Self-Assessment</h4>
+          <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Pre-Analysis Self-Assessment (by User)</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {PILLAR_KEYS.map((key) => (
               <div key={key} className="border border-border rounded-lg p-3 flex items-center justify-between gap-2">
@@ -46,7 +46,7 @@ export function SelfAssessmentDisplay({ preFeedbackScores, postAssessment }: Sel
 
       {postAssessment && (
         <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Post-Analysis Self-Assessment</h4>
+          <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Post-Analysis Self-Assessment (by User)</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {PILLAR_KEYS.map((key) => (
               <div key={key} className="border border-border rounded-lg p-3 flex items-center justify-between gap-2">
