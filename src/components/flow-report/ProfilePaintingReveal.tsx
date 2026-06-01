@@ -35,6 +35,7 @@ export default function ProfilePaintingReveal({ code }: ProfilePaintingRevealPro
 
   return (
     <div
+      data-ai-generated="false"
       className="flex flex-col items-center gap-3 pt-2 animate-fade-in"
       style={{ animationDuration: "400ms" }}
     >
