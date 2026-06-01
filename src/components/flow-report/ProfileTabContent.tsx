@@ -18,6 +18,11 @@ interface ProfileTabContentProps {
   showSelfAssessment?: boolean;
   flowMeta?: FlowReport["flow_meta"] | null;
   metricsSnapshot?: FlowReport["metrics_snapshot"] | null;
+  /** Optional controlled source (used by SharedReport to drive tab-aware AI markers). */
+  source?: ProfileSource;
+  onSourceChange?: (source: ProfileSource) => void;
+  /** AI model display name; required to mark the AI-derived profile card. */
+  aiModelName?: string;
 }
 
 const SOURCE_LABELS: Record<ProfileSource, string> = {
@@ -33,8 +38,16 @@ export function ProfileTabContent({
   showSelfAssessment = true,
   flowMeta = null,
   metricsSnapshot = null,
+  source: controlledSource,
+  onSourceChange,
+  aiModelName,
 }: ProfileTabContentProps) {
-  const [source, setSource] = useState<ProfileSource>("ai");
+  const [uncontrolledSource, setUncontrolledSource] = useState<ProfileSource>("ai");
+  const source = controlledSource ?? uncontrolledSource;
+  const setSource = (next: ProfileSource) => {
+    if (onSourceChange) onSourceChange(next);
+    else setUncontrolledSource(next);
+  };
 
   const postFeedbackScores = postAssessment?.scores ?? null;
 
