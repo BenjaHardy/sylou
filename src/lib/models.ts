@@ -37,8 +37,8 @@ export const MODELS: ModelInfo[] = [
     note: "Recommended for FLOW analysis",
   },
   {
-    id: "claude-opus-4-7",
-    label: "Claude Opus 4.7",
+    id: "claude-opus-4-8",
+    label: "Claude Opus 4.8",
     provider: "anthropic",
     pricing: { input: 5.0, output: 25.0 },
     contextLimit: 1_000_000,
@@ -63,6 +63,7 @@ export const MODEL_LABELS: Record<string, string> = MODELS.reduce(
     // flow_reports.model_used rows still render a friendly label.
     "mistral-large-3": "Mistral Large",
     "deepseek-v4-flash": "DeepSeek Chat",
+    "claude-opus-4-7": "Claude Opus 4.7",
   } as Record<string, string>,
 );
 
