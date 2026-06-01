@@ -106,6 +106,7 @@ export async function exportProjectAsJson(projectId: string) {
       stats: statsRes.data ?? null,
       imported_documents: docsRes.data ?? [],
       creative_data: creativeRes.data ?? [],
+      ai_editor_actions: editorActionsRes.data ?? [],
     },
   };
 
