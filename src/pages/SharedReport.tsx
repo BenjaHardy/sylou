@@ -53,6 +53,7 @@ export default function SharedReport() {
   const [reportAvailable, setReportAvailable] = useState(true);
   const [profileAvailable, setProfileAvailable] = useState(true);
   const [activeTab, setActiveTab] = useState<"report" | "writing" | "profile" | "replay">("report");
+  const [profileSource, setProfileSource] = useState<"ai" | "pre" | "post">("ai");
 
   useEffect(() => {
     async function fetchReport() {
