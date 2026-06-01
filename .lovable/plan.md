@@ -1,25 +1,12 @@
+Update Claude Opus model from 4.7 to 4.8 in the model registry and token estimation map.
+
 ## Changes
 
-### 1. `src/components/flow-report/FlowReportFooter.tsx`
-Remove the sentence "FLOW is a proprietary analytical framework by Sylou." The footer keeps:
-- "Powered by Sylou — AI-Use Transparency" (link)
-- "Learn more at www.meetsylou.eu" (trailing line)
+1. **`src/lib/models.ts`**
+   - Change the `MODELS` entry: `id` from `"claude-opus-4-7"` to `"claude-opus-4-8"`, `label` from `"Claude Opus 4.7"` to `"Claude Opus 4.8"`.
+   - Add `"claude-opus-4-7": "Claude Opus 4.7"` to the `MODEL_LABELS` legacy fallback map so historical records still render correctly.
 
-### 2. `src/components/FlowReportView.tsx`
-The metadata block (Model/Generated/Project) + `<FlowReportFooter />` currently render only inside the FLOW Report tab (lines 762–771).
+2. **`src/lib/estimateTokens.ts`**
+   - Update the `MODEL_CONTEXT_LIMITS` key from `"claude-opus-4-7"` to `"claude-opus-4-8"` (limit stays `1_000_000`).
 
-Render the same block at the bottom of:
-- FLOW Report tab (existing — unchanged)
-- FLOW Profile tab (new — append after `<ProfileTabContent />`)
-
-Replay and Writing tabs: no change. Uses existing values (`report.model_used` via `MODEL_LABELS`, `report.created_at`, `projectName`); no new props/data.
-
-### 3. `src/pages/SharedReport.tsx` (public share view)
-Apply the same two changes:
-- Footer copy update inherited automatically via `FlowReportFooter` (shared component, if used). If `SharedReport.tsx` inlines its own footer, edit it to match.
-- Render the metadata + footer block at the bottom of both the FLOW Report and FLOW Profile sections/tabs (whichever the share view exposes); skip Replay and Writing.
-
-Will read `SharedReport.tsx` during build to confirm whether it uses `FlowReportFooter` directly or duplicates the markup, then apply minimal edits accordingly.
-
-### Out of scope
-No styling changes beyond placement.
+No edge function references to `"claude-opus-4-7"` were found; the inline `callLLM` helpers use `"claude-opus-4-8"` already or are model-agnostic.
