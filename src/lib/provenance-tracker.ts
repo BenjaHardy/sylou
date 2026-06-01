@@ -33,6 +33,24 @@ export interface ProvenanceSegment {
 
 const MAX_HISTORY = 100;
 
+/** A single per-source slice of a copied/dragged selection, in positional units. */
+export interface ProvenanceSliceSegment {
+  offset: number;
+  length: number;
+  source: SegmentSource;
+  original_text: string | null;
+}
+
+export interface ProvenanceSlice {
+  text: string;
+  segments: ProvenanceSliceSegment[];
+  totalLength: number; // ProseMirror positional length (to - from)
+}
+
+export type PendingSignal =
+  | { kind: "single"; source: SegmentSource; originalText: string | null }
+  | { kind: "slice"; segments: ProvenanceSliceSegment[]; totalLength: number };
+
 export class ProvenanceTracker {
   private segments: ProvenanceSegment[] = [];
   private _aiResultTexts = new Map<string, number>(); // text -> timestamp
@@ -40,21 +58,21 @@ export class ProvenanceTracker {
   private _chatClipboardExpiry: ReturnType<typeof setTimeout> | null = null;
 
   /**
-   * Internal editor clipboard — stores text + dominant source when user
-   * copies/cuts within the TipTap editor. Persists until overwritten by
-   * the next copy/cut event (users may paste multiple times).
+   * Internal editor clipboard — stores the full per-segment provenance slice
+   * captured on copy/cut. Persists until overwritten by the next copy/cut
+   * (users may paste multiple times).
    */
-  private _internalClipboard: { text: string; source: SegmentSource } | null = null;
+  private _internalClipboard: ProvenanceSlice | null = null;
 
   /**
    * Unified pending signal for the next insertion classification.
    * Set before a ProseMirror transaction fires by one of:
-   *   - Paste handler: setPendingSignal(classifyPaste(text))
-   *   - Drop handler:  setPendingSignal({ source, originalText })
-   *   - AI accept:     setPendingSignal({ source: "ai_editor", originalText: null })
-   * Consumed (and cleared) by classifyInsertion() when filling gaps.
+   *   - Paste handler:  setPendingSignal({ kind: "slice", ... }) or single
+   *   - Drop handler:   setPendingSignal({ kind: "slice", ... })
+   *   - AI accept:      setPendingSignal({ source: "ai_editor", originalText: null })
+   * Consumed (and cleared) by the gap-fill path in applyTransaction.
    */
-  private _pendingSignal: { source: SegmentSource; originalText: string | null } | null = null;
+  private _pendingSignal: PendingSignal | null = null;
 
   /** Skip tracking flag — used during programmatic content resets */
   private _skipTracking = false;
