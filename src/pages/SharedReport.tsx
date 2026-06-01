@@ -325,33 +325,40 @@ export default function SharedReport() {
             <>
               <FlowInfoSection />
 
-              <FlowRadarChart
-                report={report}
-                userFeedback={radarUserFeedback}
-                userLabel={radarUserLabel}
-                userColor={radarUserColor}
-              />
+              <section
+                data-ai-generated="true"
+                data-ai-model={MODEL_LABELS[report.model_used] ?? report.model_used}
+                aria-label="AI-generated assessment"
+                className="space-y-8"
+              >
+                <FlowRadarChart
+                  report={report}
+                  userFeedback={radarUserFeedback}
+                  userLabel={radarUserLabel}
+                  userColor={radarUserColor}
+                />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {PILLAR_KEYS.map((key) => (
-                  <ScoreCard
-                    key={key}
-                    pillarKey={key}
-                    pillar={report[`ai_${key}` as keyof FlowReport] as any}
-                  />
-                ))}
-              </div>
-
-              {/* Overall Summary */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Overall Summary</h4>
-                <div className="bg-muted/50 rounded-lg p-5">
-                  <p className="text-sm text-foreground leading-relaxed">{report.ai_summary}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {PILLAR_KEYS.map((key) => (
+                    <ScoreCard
+                      key={key}
+                      pillarKey={key}
+                      pillar={report[`ai_${key}` as keyof FlowReport] as any}
+                    />
+                  ))}
                 </div>
-              </div>
 
-              {/* Key User Contributions */}
-              <KeyUserContributions contributions={(report as any).key_user_contributions} />
+                {/* Overall Summary */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Overall Summary</h4>
+                  <div className="bg-muted/50 rounded-lg p-5">
+                    <p className="text-sm text-foreground leading-relaxed">{report.ai_summary}</p>
+                  </div>
+                </div>
+
+                {/* Key User Contributions */}
+                <KeyUserContributions contributions={(report as any).key_user_contributions} />
+              </section>
 
               {/* User Self-Assessment (read-only) */}
               {showFeedback && (
