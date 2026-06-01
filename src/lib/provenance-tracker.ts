@@ -620,17 +620,59 @@ export class ProvenanceTracker {
   }
 
   /**
-   * Classify a gap (newly inserted content).
-   * Consumes _pendingSignal if set, otherwise defaults to "typed".
-   * For AI insertions where originalText is null, uses the gap text itself.
+   * Classify a gap (newly inserted content) into one or more segments.
+   * - `slice` pending signal with matching length → emit one segment per slice piece
+   * - `slice` pending signal with length mismatch → degrade to dominant single segment
+   * - `single` pending signal → one segment from the signal
+   * - no signal → default `typed`
+   */
+  private classifyGap(gapStart: number, gapEnd: number, gapText: string): ProvenanceSegment[] {
+    const gapLength = gapEnd - gapStart;
+    const signal = this._pendingSignal;
+
+    if (signal?.kind === "slice") {
+      this._pendingSignal = null;
+      if (signal.totalLength === gapLength) {
+        return signal.segments.map(s => ({
+          start: gapStart + s.offset,
+          end: gapStart + s.offset + s.length,
+          source: s.source,
+          original_text: s.original_text,
+        }));
+      }
+      // Length mismatch — graceful degradation to dominant single source
+      const cov = new Map<SegmentSource, number>();
+      for (const s of signal.segments) cov.set(s.source, (cov.get(s.source) ?? 0) + s.length);
+      let best: SegmentSource = "typed";
+      let bestLen = 0;
+      for (const [src, len] of cov) if (len > bestLen) { best = src; bestLen = len; }
+      console.debug(
+        "[ProvenanceTracker] slice/gap length mismatch — degrading to dominant",
+        { gapStart, gapEnd, gapLength, sliceTotal: signal.totalLength, dominant: best },
+      );
+      return [{ start: gapStart, end: gapEnd, source: best, original_text: null }];
+    }
+
+    const classification = this.classifyInsertion(gapText);
+    return [{
+      start: gapStart,
+      end: gapEnd,
+      source: classification.source,
+      original_text: classification.originalText,
+    }];
+  }
+
+  /**
+   * Classify a gap using only the `single` pending signal (or default).
+   * Slice signals are handled upstream by classifyGap.
    */
   private classifyInsertion(text: string): { source: SegmentSource; originalText: string | null } {
-    if (this._pendingSignal) {
-      const s = this._pendingSignal;
+    const signal = this._pendingSignal;
+    if (signal?.kind === "single") {
       this._pendingSignal = null;
       return {
-        source: s.source,
-        originalText: s.originalText ?? (s.source === "ai_editor" ? text : null),
+        source: signal.source,
+        originalText: signal.originalText ?? (signal.source === "ai_editor" ? text : null),
       };
     }
     return { source: "typed", originalText: null };
