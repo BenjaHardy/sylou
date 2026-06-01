@@ -108,13 +108,30 @@ export function ProfileTabContent({
         </div>
       )}
 
-      {/* Profile card with flip animation per source */}
-      <div key={source} className="animate-card-flip space-y-4">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground text-center">
-          Your Collaboration Profile ({SOURCE_LABELS[source]})
-        </h3>
-        <FlowWorkProfile profile={activeProfile} scores={activeScores} />
-      </div>
+      {/* Profile card with flip animation per source. Only the AI-derived
+          variant carries Article 50(2) machine-readable markers; pre/post
+          self-assessment variants are human-authored and stay unmarked. */}
+      {source === "ai" ? (
+        <section
+          key={source}
+          data-ai-generated="true"
+          data-ai-model={aiModelName}
+          aria-label="AI-derived collaboration profile"
+          className="animate-card-flip space-y-4"
+        >
+          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground text-center">
+            Your Collaboration Profile ({SOURCE_LABELS[source]})
+          </h3>
+          <FlowWorkProfile profile={activeProfile} scores={activeScores} />
+        </section>
+      ) : (
+        <div key={source} className="animate-card-flip space-y-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground text-center">
+            Your Collaboration Profile ({SOURCE_LABELS[source]})
+          </h3>
+          <FlowWorkProfile profile={activeProfile} scores={activeScores} />
+        </div>
+      )}
 
       {/* Self-assessment scores below */}
       {showSelfAssessment && (
