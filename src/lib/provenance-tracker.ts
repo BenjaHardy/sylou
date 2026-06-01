@@ -580,13 +580,7 @@ export class ProvenanceTracker {
 
       if (segStart > cursor) {
         const gapText = this.extractText(transaction.doc, cursor, segStart);
-        const classification = this.classifyInsertion(gapText);
-        result.push({
-          start: cursor,
-          end: segStart,
-          source: classification.source,
-          original_text: classification.originalText,
-        });
+        result.push(...this.classifyGap(cursor, segStart, gapText));
       }
 
       if (segEnd > segStart) {
@@ -599,13 +593,7 @@ export class ProvenanceTracker {
     // Fill trailing gap
     if (cursor < newDocSize) {
       const gapText = this.extractText(transaction.doc, cursor, newDocSize);
-      const classification = this.classifyInsertion(gapText);
-      result.push({
-        start: cursor,
-        end: newDocSize,
-        source: classification.source,
-        original_text: classification.originalText,
-      });
+      result.push(...this.classifyGap(cursor, newDocSize, gapText));
     }
 
     this.segments = result;
