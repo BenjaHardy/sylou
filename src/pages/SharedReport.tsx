@@ -23,6 +23,8 @@ import { Activity, Loader2, ShieldAlert, ExternalLink, Award, Play } from "lucid
 import { MODEL_LABELS } from "@/lib/models";
 import type { FlowReport, FlowFeedback } from "@/hooks/useFlowAnalysis";
 
+const AI_GENERATED_SECTIONS_REPORT_TAB = "ai-assessment";
+
 interface GeneratorInfo {
   instance_label?: string;
   instance_domain?: string | null;
@@ -108,6 +110,27 @@ export default function SharedReport() {
       setLoadingReplay(false);
     }
   }, [report, token, replaySnapshot]);
+
+  // Article 50(2): expose machine-readable AI-generation markers in <head>
+  // while a shared report is mounted. Cleaned up on unmount/model change so
+  // these tags do not leak into other routes.
+  useEffect(() => {
+    const modelKey = report?.model_used;
+    if (!modelKey) return;
+    const modelName = MODEL_LABELS[modelKey] ?? modelKey;
+    const tags: HTMLMetaElement[] = [
+      Object.assign(document.createElement("meta"), { name: "ai-generated", content: "true" }),
+      Object.assign(document.createElement("meta"), { name: "ai-model", content: modelName }),
+      Object.assign(document.createElement("meta"), {
+        name: "ai-generated-sections",
+        content: AI_GENERATED_SECTIONS_REPORT_TAB,
+      }),
+    ];
+    tags.forEach((t) => document.head.appendChild(t));
+    return () => {
+      tags.forEach((t) => t.parentNode?.removeChild(t));
+    };
+  }, [report?.model_used]);
 
   // Auto-load replay when replay tab opened
   useEffect(() => {
