@@ -33,6 +33,24 @@ export interface ProvenanceSegment {
 
 const MAX_HISTORY = 100;
 
+/** A single per-source slice of a copied/dragged selection, in positional units. */
+export interface ProvenanceSliceSegment {
+  offset: number;
+  length: number;
+  source: SegmentSource;
+  original_text: string | null;
+}
+
+export interface ProvenanceSlice {
+  text: string;
+  segments: ProvenanceSliceSegment[];
+  totalLength: number; // ProseMirror positional length (to - from)
+}
+
+export type PendingSignal =
+  | { kind: "single"; source: SegmentSource; originalText: string | null }
+  | { kind: "slice"; segments: ProvenanceSliceSegment[]; totalLength: number };
+
 export class ProvenanceTracker {
   private segments: ProvenanceSegment[] = [];
   private _aiResultTexts = new Map<string, number>(); // text -> timestamp
@@ -40,21 +58,21 @@ export class ProvenanceTracker {
   private _chatClipboardExpiry: ReturnType<typeof setTimeout> | null = null;
 
   /**
-   * Internal editor clipboard — stores text + dominant source when user
-   * copies/cuts within the TipTap editor. Persists until overwritten by
-   * the next copy/cut event (users may paste multiple times).
+   * Internal editor clipboard — stores the full per-segment provenance slice
+   * captured on copy/cut. Persists until overwritten by the next copy/cut
+   * (users may paste multiple times).
    */
-  private _internalClipboard: { text: string; source: SegmentSource } | null = null;
+  private _internalClipboard: ProvenanceSlice | null = null;
 
   /**
    * Unified pending signal for the next insertion classification.
    * Set before a ProseMirror transaction fires by one of:
-   *   - Paste handler: setPendingSignal(classifyPaste(text))
-   *   - Drop handler:  setPendingSignal({ source, originalText })
-   *   - AI accept:     setPendingSignal({ source: "ai_editor", originalText: null })
-   * Consumed (and cleared) by classifyInsertion() when filling gaps.
+   *   - Paste handler:  setPendingSignal({ kind: "slice", ... }) or single
+   *   - Drop handler:   setPendingSignal({ kind: "slice", ... })
+   *   - AI accept:      setPendingSignal({ source: "ai_editor", originalText: null })
+   * Consumed (and cleared) by the gap-fill path in applyTransaction.
    */
-  private _pendingSignal: { source: SegmentSource; originalText: string | null } | null = null;
+  private _pendingSignal: PendingSignal | null = null;
 
   /** Skip tracking flag — used during programmatic content resets */
   private _skipTracking = false;
@@ -131,9 +149,74 @@ export class ProvenanceTracker {
 
   // ─── Internal Editor Clipboard ──────────────────────────
 
-  /** Called on copy/cut within the editor to record the dominant source of the selection */
-  setInternalClipboard(text: string, source: SegmentSource) {
-    this._internalClipboard = { text, source };
+  /**
+   * Build a per-segment provenance slice covering [from, to). Used by
+   * copy/cut/drop handlers to capture the multi-source breakdown of the
+   * selection. `text` is the ProseMirror textBetween of the same range,
+   * stored verbatim for paste-match lookups.
+   *
+   * `original_text` policy:
+   *   - Full-segment coverage  → preserve original_text verbatim
+   *   - Partial coverage       → set null (the field is a block-level claim,
+   *                              truncating would fabricate it)
+   *
+   * Uncovered ranges fall back to `typed` (matching getDominantSource line
+   * 175) and log a console.debug, since gaps should not occur normally.
+   */
+  getSegmentSlice(from: number, to: number, text: string): ProvenanceSlice {
+    const totalLength = Math.max(0, to - from);
+    const segments: ProvenanceSliceSegment[] = [];
+    if (totalLength === 0) return { text, segments, totalLength };
+
+    const sorted = [...this.segments].sort((a, b) => a.start - b.start);
+    let cursor = from;
+    for (const seg of sorted) {
+      if (seg.end <= from) continue;
+      if (seg.start >= to) break;
+      const overlapStart = Math.max(seg.start, from);
+      const overlapEnd = Math.min(seg.end, to);
+      if (overlapEnd <= overlapStart) continue;
+
+      if (overlapStart > cursor) {
+        console.debug(
+          "[ProvenanceTracker] uncovered range in getSegmentSlice",
+          { from, to, gapStart: cursor, gapEnd: overlapStart },
+        );
+        segments.push({
+          offset: cursor - from,
+          length: overlapStart - cursor,
+          source: "typed",
+          original_text: null,
+        });
+      }
+
+      const isFullSegment = overlapStart === seg.start && overlapEnd === seg.end;
+      segments.push({
+        offset: overlapStart - from,
+        length: overlapEnd - overlapStart,
+        source: seg.source,
+        original_text: isFullSegment ? seg.original_text : null,
+      });
+      cursor = overlapEnd;
+    }
+    if (cursor < to) {
+      console.debug(
+        "[ProvenanceTracker] uncovered range in getSegmentSlice",
+        { from, to, gapStart: cursor, gapEnd: to },
+      );
+      segments.push({
+        offset: cursor - from,
+        length: to - cursor,
+        source: "typed",
+        original_text: null,
+      });
+    }
+    return { text, segments, totalLength };
+  }
+
+  /** Called on copy/cut within the editor to record the per-segment provenance slice. */
+  setInternalClipboardSlice(slice: ProvenanceSlice) {
+    this._internalClipboard = slice;
   }
 
   /**
@@ -213,13 +296,34 @@ export class ProvenanceTracker {
 
   /**
    * Check (without clearing) if pasted text matches the internal editor clipboard.
-   * Returns the stored source or null if no match.
+   * Returns the dominant source for backward compat with classifyPaste; the
+   * full slice is consumed via consumeInternalClipboardSlice instead.
    */
   private checkInternalClipboard(pastedText: string): SegmentSource | null {
+    const slice = this.consumeInternalClipboardSlice(pastedText);
+    if (!slice) return null;
+    // Derive dominant source for the single-signal fallback path
+    const cov = new Map<SegmentSource, number>();
+    for (const s of slice.segments) {
+      cov.set(s.source, (cov.get(s.source) ?? 0) + s.length);
+    }
+    let best: SegmentSource = "typed";
+    let bestLen = 0;
+    for (const [src, len] of cov) {
+      if (len > bestLen) { best = src; bestLen = len; }
+    }
+    return best;
+  }
+
+  /**
+   * Check (without clearing) if pasted text matches the internal clipboard
+   * and return the full per-segment slice if so. Supports multiple pastes.
+   */
+  consumeInternalClipboardSlice(pastedText: string): ProvenanceSlice | null {
     if (!this._internalClipboard) return null;
     const normalize = (t: string) => t.trim().replace(/\s+/g, " ");
     if (normalize(pastedText) === normalize(this._internalClipboard.text)) {
-      return this._internalClipboard.source;
+      return this._internalClipboard;
     }
     return null;
   }
@@ -228,11 +332,19 @@ export class ProvenanceTracker {
 
   /**
    * Set a pending signal that will classify the next insertion.
-   * Called by paste, drag-drop, and AI-accept handlers *before*
-   * the ProseMirror transaction fires.
+   * Accepts either the legacy `{ source, originalText }` shape (auto-wrapped
+   * as `kind: "single"`) or an explicit discriminated-union signal.
    */
-  setPendingSignal(signal: { source: SegmentSource; originalText: string | null }) {
-    this._pendingSignal = signal;
+  setPendingSignal(
+    signal:
+      | { source: SegmentSource; originalText: string | null }
+      | PendingSignal,
+  ) {
+    if ("kind" in signal) {
+      this._pendingSignal = signal;
+    } else {
+      this._pendingSignal = { kind: "single", source: signal.source, originalText: signal.originalText };
+    }
   }
 
   // ─── AI Result Registry ─────────────────────────────────
@@ -468,13 +580,7 @@ export class ProvenanceTracker {
 
       if (segStart > cursor) {
         const gapText = this.extractText(transaction.doc, cursor, segStart);
-        const classification = this.classifyInsertion(gapText);
-        result.push({
-          start: cursor,
-          end: segStart,
-          source: classification.source,
-          original_text: classification.originalText,
-        });
+        result.push(...this.classifyGap(cursor, segStart, gapText));
       }
 
       if (segEnd > segStart) {
@@ -487,13 +593,7 @@ export class ProvenanceTracker {
     // Fill trailing gap
     if (cursor < newDocSize) {
       const gapText = this.extractText(transaction.doc, cursor, newDocSize);
-      const classification = this.classifyInsertion(gapText);
-      result.push({
-        start: cursor,
-        end: newDocSize,
-        source: classification.source,
-        original_text: classification.originalText,
-      });
+      result.push(...this.classifyGap(cursor, newDocSize, gapText));
     }
 
     this.segments = result;
@@ -520,17 +620,59 @@ export class ProvenanceTracker {
   }
 
   /**
-   * Classify a gap (newly inserted content).
-   * Consumes _pendingSignal if set, otherwise defaults to "typed".
-   * For AI insertions where originalText is null, uses the gap text itself.
+   * Classify a gap (newly inserted content) into one or more segments.
+   * - `slice` pending signal with matching length → emit one segment per slice piece
+   * - `slice` pending signal with length mismatch → degrade to dominant single segment
+   * - `single` pending signal → one segment from the signal
+   * - no signal → default `typed`
+   */
+  private classifyGap(gapStart: number, gapEnd: number, gapText: string): ProvenanceSegment[] {
+    const gapLength = gapEnd - gapStart;
+    const signal = this._pendingSignal;
+
+    if (signal?.kind === "slice") {
+      this._pendingSignal = null;
+      if (signal.totalLength === gapLength) {
+        return signal.segments.map(s => ({
+          start: gapStart + s.offset,
+          end: gapStart + s.offset + s.length,
+          source: s.source,
+          original_text: s.original_text,
+        }));
+      }
+      // Length mismatch — graceful degradation to dominant single source
+      const cov = new Map<SegmentSource, number>();
+      for (const s of signal.segments) cov.set(s.source, (cov.get(s.source) ?? 0) + s.length);
+      let best: SegmentSource = "typed";
+      let bestLen = 0;
+      for (const [src, len] of cov) if (len > bestLen) { best = src; bestLen = len; }
+      console.debug(
+        "[ProvenanceTracker] slice/gap length mismatch — degrading to dominant",
+        { gapStart, gapEnd, gapLength, sliceTotal: signal.totalLength, dominant: best },
+      );
+      return [{ start: gapStart, end: gapEnd, source: best, original_text: null }];
+    }
+
+    const classification = this.classifyInsertion(gapText);
+    return [{
+      start: gapStart,
+      end: gapEnd,
+      source: classification.source,
+      original_text: classification.originalText,
+    }];
+  }
+
+  /**
+   * Classify a gap using only the `single` pending signal (or default).
+   * Slice signals are handled upstream by classifyGap.
    */
   private classifyInsertion(text: string): { source: SegmentSource; originalText: string | null } {
-    if (this._pendingSignal) {
-      const s = this._pendingSignal;
+    const signal = this._pendingSignal;
+    if (signal?.kind === "single") {
       this._pendingSignal = null;
       return {
-        source: s.source,
-        originalText: s.originalText ?? (s.source === "ai_editor" ? text : null),
+        source: signal.source,
+        originalText: signal.originalText ?? (signal.source === "ai_editor" ? text : null),
       };
     }
     return { source: "typed", originalText: null };
