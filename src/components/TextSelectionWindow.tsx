@@ -15,8 +15,8 @@ type ActionId =
   | "simplify"
   | "expand"
   | "ask"
-  | "propose"
-  | "sanity-check";
+  | "propose";
+
 
 type Phase = "actions" | "loading" | "streaming" | "result" | "input" | "modify";
 
@@ -51,15 +51,14 @@ const NORMAL_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
   { id: "expand", label: "Expand", row: 1 },
   { id: "ask", label: "Ask", row: 2 },
   { id: "propose", label: "Propose", row: 2 },
-  { id: "sanity-check", label: "Sanity Check", row: 2 },
 ];
 
 const TUTOR_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
   { id: "fix-grammar", label: "Fix grammar", row: 1 },
   { id: "translate", label: "Translate", row: 1 },
   { id: "ask", label: "Ask", row: 1 },
-  { id: "sanity-check", label: "Sanity Check", row: 1 },
 ];
+
 
 const CREATIVE_ACTIONS: { id: ActionId; label: string; row: 1 | 2 }[] = [
   { id: "ask", label: "Ask", row: 1 },
@@ -441,9 +440,7 @@ export function TextSelectionWindow({
     (actionId: ActionId) => {
       setActiveAction(actionId);
 
-      if (actionId === "sanity-check") {
-        return;
-      }
+
 
       if (actionId === "ask" || actionId === "propose") {
         setPhase("input");
