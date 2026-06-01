@@ -296,13 +296,34 @@ export class ProvenanceTracker {
 
   /**
    * Check (without clearing) if pasted text matches the internal editor clipboard.
-   * Returns the stored source or null if no match.
+   * Returns the dominant source for backward compat with classifyPaste; the
+   * full slice is consumed via consumeInternalClipboardSlice instead.
    */
   private checkInternalClipboard(pastedText: string): SegmentSource | null {
+    const slice = this.consumeInternalClipboardSlice(pastedText);
+    if (!slice) return null;
+    // Derive dominant source for the single-signal fallback path
+    const cov = new Map<SegmentSource, number>();
+    for (const s of slice.segments) {
+      cov.set(s.source, (cov.get(s.source) ?? 0) + s.length);
+    }
+    let best: SegmentSource = "typed";
+    let bestLen = 0;
+    for (const [src, len] of cov) {
+      if (len > bestLen) { best = src; bestLen = len; }
+    }
+    return best;
+  }
+
+  /**
+   * Check (without clearing) if pasted text matches the internal clipboard
+   * and return the full per-segment slice if so. Supports multiple pastes.
+   */
+  consumeInternalClipboardSlice(pastedText: string): ProvenanceSlice | null {
     if (!this._internalClipboard) return null;
     const normalize = (t: string) => t.trim().replace(/\s+/g, " ");
     if (normalize(pastedText) === normalize(this._internalClipboard.text)) {
-      return this._internalClipboard.source;
+      return this._internalClipboard;
     }
     return null;
   }
@@ -311,11 +332,19 @@ export class ProvenanceTracker {
 
   /**
    * Set a pending signal that will classify the next insertion.
-   * Called by paste, drag-drop, and AI-accept handlers *before*
-   * the ProseMirror transaction fires.
+   * Accepts either the legacy `{ source, originalText }` shape (auto-wrapped
+   * as `kind: "single"`) or an explicit discriminated-union signal.
    */
-  setPendingSignal(signal: { source: SegmentSource; originalText: string | null }) {
-    this._pendingSignal = signal;
+  setPendingSignal(
+    signal:
+      | { source: SegmentSource; originalText: string | null }
+      | PendingSignal,
+  ) {
+    if ("kind" in signal) {
+      this._pendingSignal = signal;
+    } else {
+      this._pendingSignal = { kind: "single", source: signal.source, originalText: signal.originalText };
+    }
   }
 
   // ─── AI Result Registry ─────────────────────────────────
