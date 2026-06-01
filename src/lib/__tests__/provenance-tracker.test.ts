@@ -146,7 +146,7 @@ describe("ProvenanceTracker slice paste round-trip", () => {
     const newOnes = segs.filter(s => s.start >= 30);
     expect(newOnes.map(s => s.source)).toEqual(["typed", "ai_editor", "external"]);
     expect(newOnes[0]).toMatchObject({ start: 30, end: 35 });
-    expect(newOnes[1]).toMatchObject({ start: 35, end: 50, original_text: null });
+    expect(newOnes[1]).toMatchObject({ start: 35, end: 50, original_text: "AI ORIGINAL_15" });
     expect(newOnes[2]).toMatchObject({ start: 50, end: 53, original_text: null });
   });
 
