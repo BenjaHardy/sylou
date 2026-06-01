@@ -23,7 +23,11 @@ import { Activity, Loader2, ShieldAlert, ExternalLink, Award, Play } from "lucid
 import { MODEL_LABELS } from "@/lib/models";
 import type { FlowReport, FlowFeedback } from "@/hooks/useFlowAnalysis";
 
-const AI_GENERATED_SECTIONS_REPORT_TAB = "ai-assessment";
+const AI_GENERATED_SECTIONS = {
+  report: "ai-assessment",
+  profile: "ai-profile-selection",
+} as const;
+type AiTabKey = keyof typeof AI_GENERATED_SECTIONS;
 
 interface GeneratorInfo {
   instance_label?: string;
