@@ -45,7 +45,7 @@ export function FlowUserAssessmentSection({ existingAssessment, onSubmit }: Prop
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="cursor-help">Self-assessment (post-analysis feedback)</span>
+                  <span className="cursor-help">Self-assessment (post-analysis feedback by user)</span>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>After viewing results</p>
@@ -104,7 +104,7 @@ export function FlowUserAssessmentSection({ existingAssessment, onSubmit }: Prop
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="cursor-help">Self-assessment (post-analysis feedback)</span>
+              <span className="cursor-help">Self-assessment (post-analysis feedback by user)</span>
             </TooltipTrigger>
             <TooltipContent>
               <p>After viewing results</p>
