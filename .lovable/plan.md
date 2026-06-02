@@ -1,22 +1,26 @@
-## Move chat bookmark bars/icons inward from the right edge
+## Remove the unused "Checks" (sanity check) badge from the activity bar
 
-The bookmark colored bar and the hover bookmark icon on chat messages are anchored at `right-0`, which puts them flush against the panel's right edge — overlapping the resizable panel's drag handle and making them hard to click.
+### UI change
 
-### Change
+In `src/components/ProjectActivityBar.tsx`:
+- Drop the `Shield` import from `lucide-react`.
+- Remove the `Checks` entry from `ACTIVITY_TOOLTIPS`.
+- Remove the `{ icon: Shield, label: "Checks", ... }` item from the `items` array.
 
-In `src/components/ChatPanel.tsx`, shift both the bookmark bar and the hover bookmark icon ~8px inward (from `right-0` to `right-2`). This applies in both spots where they're rendered:
+The remaining three badges (Active, Writing, Prompts) stay unchanged.
 
-- The `writing_summary` bubble branch (≈ lines 104–121)
-- The standard chat bubble branch (≈ lines 229–246)
+### Other "sanity check" references (left in place)
 
-Specifically:
-- Hover `BookmarkIcon` button: `right-0` → `right-2`
-- Bookmark colored bar: `right-0` → `right-2`, and drop `rounded-r` in favor of `rounded` so the now-detached bar looks intentional on both sides.
+The feature isn't wired to any UI other than the badge above, but the data plumbing still exists. None of these need to change for this request — flagging for awareness:
 
-No logic, hook, or styling-token changes — pure positioning tweak in the presentation layer.
+- `src/hooks/useProjectStats.ts` — selects `sanity_check_count` from the stats table; type field still exposed.
+- `src/hooks/useFlowAnalysis.ts` — `sanity_check_count` field on the analysis type.
+- `supabase/functions/analysis/index.ts:1027` — copies `sanity_check_count` into the analysis payload.
+- `src/integrations/supabase/types.ts` — generated DB column types (Row/Insert/Update).
+
+No FLOW report component, export (DOCX/JSON), or other view reads the value. If you want, a follow-up can prune the field from the hooks, the analysis edge function, and (via migration) the DB column. Not doing that here since the request was scoped to the icon.
 
 ### Verification
 
-- Hover a non-bookmarked message: icon sits clear of the resize handle and is clickable.
-- Bookmarked message: colored bar sits slightly inset, fully clickable, opens the popover.
-- Resize the chat panel: bookmark elements stay clear of the drag handle at all widths.
+- Open a project; the activity bar at the bottom of the editor shows only Active / Writing / Prompts. No shield icon, no layout shift.
+- Tooltips on the remaining three badges still work.

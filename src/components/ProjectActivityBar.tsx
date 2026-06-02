@@ -1,4 +1,4 @@
-import { Clock, Pencil, MessageSquare, Shield } from "lucide-react";
+import { Clock, Pencil, MessageSquare } from "lucide-react";
 import { useProjectStats, type ProjectStats } from "@/hooks/useProjectStats";
 import {
   Tooltip,
@@ -22,7 +22,6 @@ const ACTIVITY_TOOLTIPS = {
   Active: "Total time the project was open and the user was actively interacting (typing, clicking, scrolling).",
   Writing: "Time spent typing or editing in the writing editor specifically.",
   Prompts: "Number of messages sent to the AI chat assistant.",
-  Checks: "Number of sanity checks performed on the project.",
 } as const;
 
 export function ProjectActivityBar({ projectId }: Props) {
@@ -34,7 +33,6 @@ export function ProjectActivityBar({ projectId }: Props) {
     { icon: Clock, label: "Active" as const, value: formatDuration(stats.total_active_time_seconds) },
     { icon: Pencil, label: "Writing" as const, value: formatDuration(stats.total_writing_time_seconds) },
     { icon: MessageSquare, label: "Prompts" as const, value: `${stats.chat_prompt_count_normal + stats.chat_prompt_count_tutor}` },
-    { icon: Shield, label: "Checks" as const, value: `${stats.sanity_check_count}` },
   ];
 
   return (
