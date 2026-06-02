@@ -550,6 +550,7 @@ Deno.serve(async (req) => {
 
         const documentsReferenced: string[] | undefined = body.documents_referenced;
         const webSearchesPerformed: string[] | undefined = body.web_searches_performed;
+        const conciseMode: boolean = body.concise_mode ?? false;
 
         const insertedMessages = [];
 
@@ -561,10 +562,13 @@ Deno.serve(async (req) => {
           content: userPromptContent,
           source_type: "propose_prompt",
           flow_flag: "normal",
+          concise_mode: conciseMode,
         }).select().single();
         if (promptMsg) insertedMessages.push(promptMsg);
 
         if (summary_update && summary_update !== "No update needed.") {
+          // writing_summary intentionally omits concise_mode (defaults to false):
+          // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER.
           const { data: summaryMsg } = await supabase.from("chat_messages").insert({
             thread_id,
             role: "assistant",
@@ -582,6 +586,7 @@ Deno.serve(async (req) => {
           source_type: "propose_response",
           flow_flag: "normal",
           model_used: chatModel,
+          concise_mode: conciseMode,
         };
 
         if (documentsReferenced && documentsReferenced.length > 0) {
@@ -970,10 +975,13 @@ When citing information from web search results, always include the source URL i
             content: userPromptContent,
             source_type: "ask_prompt",
             flow_flag: "normal",
+            concise_mode: conciseMode,
           }).select().single();
           if (promptMsg) insertedMessages.push(promptMsg);
 
           if (summaryUpdate !== "No update needed.") {
+            // writing_summary intentionally omits concise_mode (defaults to false):
+            // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER.
             const { data: summaryMsg } = await supabase.from("chat_messages").insert({
               thread_id,
               role: "assistant",
@@ -991,6 +999,7 @@ When citing information from web search results, always include the source URL i
             source_type: "ask_response",
             flow_flag: "normal",
             model_used: chatModel,
+            concise_mode: conciseMode,
           };
           if (documentsReferenced.length > 0) {
             askResponseRow.documents_referenced = documentsReferenced;
@@ -1422,11 +1431,13 @@ When citing information from web search results, always include the source URL i
         const userPromptContent = `[Ask] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\nQuestion: ${instruction}`;
 
         const { data: promptMsg } = await supabase.from("chat_messages").insert({
-          thread_id, role: "user", content: userPromptContent, source_type: "ask_prompt", flow_flag: "normal",
+          thread_id, role: "user", content: userPromptContent, source_type: "ask_prompt", flow_flag: "normal", concise_mode: conciseMode,
         }).select().single();
         if (promptMsg) insertedMessages.push(promptMsg);
 
         if (summaryUpdate !== "No update needed.") {
+          // writing_summary intentionally omits concise_mode (defaults to false):
+          // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER.
           const { data: summaryMsg } = await supabase.from("chat_messages").insert({
             thread_id, role: "assistant", content: summaryUpdate, source_type: "writing_summary", flow_flag: "not_assessed",
           }).select().single();
@@ -1434,7 +1445,7 @@ When citing information from web search results, always include the source URL i
         }
 
         const askResponseRow: Record<string, unknown> = {
-          thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: chatModel,
+          thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: chatModel, concise_mode: conciseMode,
         };
         if (documentsReferenced.length > 0) askResponseRow.documents_referenced = documentsReferenced;
         if (webSearchesPerformed.length > 0) askResponseRow.web_searches_performed = webSearchesPerformed;
@@ -1512,11 +1523,13 @@ When citing information from web search results, always include the source URL i
       const userPromptContent = `[Ask] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\nQuestion: ${instruction}`;
 
       const { data: promptMsg } = await supabase.from("chat_messages").insert({
-        thread_id, role: "user", content: userPromptContent, source_type: "ask_prompt", flow_flag: "normal",
+        thread_id, role: "user", content: userPromptContent, source_type: "ask_prompt", flow_flag: "normal", concise_mode: conciseMode,
       }).select().single();
       if (promptMsg) insertedMessages.push(promptMsg);
 
       if (summaryUpdate !== "No update needed.") {
+        // writing_summary intentionally omits concise_mode (defaults to false):
+        // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER.
         const { data: summaryMsg } = await supabase.from("chat_messages").insert({
           thread_id, role: "assistant", content: summaryUpdate, source_type: "writing_summary", flow_flag: "not_assessed",
         }).select().single();
@@ -1524,7 +1537,7 @@ When citing information from web search results, always include the source URL i
       }
 
       const { data: responseMsg } = await supabase.from("chat_messages").insert({
-        thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: chatModel,
+        thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: chatModel, concise_mode: conciseMode,
       }).select().single();
       if (responseMsg) insertedMessages.push(responseMsg);
 
