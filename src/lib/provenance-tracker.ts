@@ -610,9 +610,17 @@ export class ProvenanceTracker {
     const gapLength = gapEnd - gapStart;
     const signal = this._pendingSignal;
 
+    // Bound on the gap-vs-slice length delta we will tolerate before falling
+    // back to dominant-source degradation. Sized to cover ~1–2 crossed block
+    // boundaries (paragraph / list-item open+close tokens). Larger structural
+    // complexity makes positional misalignment risk meaningful — degrade instead.
+    const MAX_BOUNDARY_DELTA = 4;
+
     if (signal?.kind === "slice") {
       this._pendingSignal = null;
-      if (signal.totalLength === gapLength) {
+      const delta = gapLength - signal.totalLength;
+
+      if (delta === 0) {
         return signal.segments.map(s => ({
           start: gapStart + s.offset,
           end: gapStart + s.offset + s.length,
@@ -620,17 +628,75 @@ export class ProvenanceTracker {
           original_text: s.original_text,
         }));
       }
-      // Length mismatch — graceful degradation to dominant single source
+
+      // Dominant source — used both as the trailing-filler tag in the
+      // tolerance branch and as the fallback when delta exceeds bound.
       const cov = new Map<SegmentSource, number>();
       for (const s of signal.segments) cov.set(s.source, (cov.get(s.source) ?? 0) + s.length);
-      let best: SegmentSource = "typed";
+      let dominant: SegmentSource = "typed";
       let bestLen = 0;
-      for (const [src, len] of cov) if (len > bestLen) { best = src; bestLen = len; }
+      for (const [src, len] of cov) if (len > bestLen) { dominant = src; bestLen = len; }
+
+      if (Math.abs(delta) <= MAX_BOUNDARY_DELTA) {
+        // Tolerance branch — NOT exact arithmetic.
+        //
+        // The slice signal measures plain-text characters; the drop gap
+        // measures ProseMirror document positions, which include block-
+        // boundary tokens (paragraph / list-item open+close). The two
+        // differ by a few positions whenever the dragged selection
+        // crosses a block boundary.
+        //
+        // We trade a sub-character positional misalignment for keeping
+        // the multi-source breakdown. The misalignment is usually
+        // invisible because it lands inside the boundary tokens
+        // themselves; in the worst case (source transition mid-block on
+        // the far side of a crossed boundary) a region of at most
+        // MAX_BOUNDARY_DELTA chars near the boundary may be tagged with
+        // the neighbouring source.
+        //
+        // MAX_BOUNDARY_DELTA = 4 keeps that region at wrapper-token
+        // scale. Above the bound, structural complexity makes the
+        // misalignment risk meaningful — we degrade to dominant instead.
+        //
+        // Proper fix: switch the slice signal from character offsets to
+        // document positions in getSegmentSlice. Deferred — see
+        // mem://constraints/deferred-features.
+        if (delta > 0) {
+          const segs: ProvenanceSegment[] = signal.segments.map(s => ({
+            start: gapStart + s.offset,
+            end: gapStart + s.offset + s.length,
+            source: s.source,
+            original_text: s.original_text,
+          }));
+          segs.push({
+            start: gapStart + signal.totalLength,
+            end: gapEnd,
+            source: dominant,
+            original_text: null,
+          });
+          return segs;
+        }
+        // delta < 0: clamp segments at gapEnd; drop segments starting past it.
+        const segs: ProvenanceSegment[] = [];
+        for (const s of signal.segments) {
+          const segStart = gapStart + s.offset;
+          if (segStart >= gapEnd) break;
+          const segEnd = Math.min(gapStart + s.offset + s.length, gapEnd);
+          segs.push({
+            start: segStart,
+            end: segEnd,
+            source: s.source,
+            original_text: s.original_text,
+          });
+        }
+        return segs;
+      }
+
       console.debug(
-        "[ProvenanceTracker] slice/gap length mismatch — degrading to dominant",
-        { gapStart, gapEnd, gapLength, sliceTotal: signal.totalLength, dominant: best },
+        "[ProvenanceTracker] cross-block drag-drop exceeded boundary tolerance: degraded to dominant",
+        { gapStart, gapEnd, gapLength, sliceTotal: signal.totalLength, delta, max: MAX_BOUNDARY_DELTA, dominant },
       );
-      return [{ start: gapStart, end: gapEnd, source: best, original_text: null }];
+      return [{ start: gapStart, end: gapEnd, source: dominant, original_text: null }];
     }
 
     const classification = this.classifyInsertion(gapText);
