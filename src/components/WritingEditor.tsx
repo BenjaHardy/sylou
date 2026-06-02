@@ -144,10 +144,6 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
             segments: slice.segments,
             totalLength: slice.totalLength,
           });
-          console.debug("[provenance] dragstart: slice signal set", {
-            totalLength: slice.totalLength,
-            segments: slice.segments.length,
-          });
           return false;
         },
         drop: (_view, event) => {
@@ -156,7 +152,6 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           // is already pending (set by our dragstart), this is an internal
           // drag — let it flow through. Otherwise treat as external.
           if (tracker.hasPendingSliceSignal()) {
-            console.debug("[provenance] drop: internal (slice signal present)");
             return false;
           }
           const dt = event.dataTransfer;
@@ -166,13 +161,10 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
               source: "external",
               originalText: droppedText,
             });
-            console.debug("[provenance] drop: external", { length: droppedText.length });
-          } else {
-            // No usable plaintext on the dataTransfer — fall through and let
-            // the gap classify as `typed` rather than fabricate an external
-            // tag from missing data.
-            console.debug("[provenance] drop: no plaintext on dataTransfer, falling through");
           }
+          // No usable plaintext on the dataTransfer — fall through and let
+          // the gap classify as `typed` rather than fabricate an external
+          // tag from missing data.
           return false;
         },
         dragend: (_view, _event) => {
@@ -182,7 +174,6 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           // otherwise corrupt the next unrelated paste/gap-fill.
           const tracker = getTracker();
           tracker.clearPendingSignal();
-          console.debug("[provenance] dragend: pending signal cleared");
           return false;
         },
       },
