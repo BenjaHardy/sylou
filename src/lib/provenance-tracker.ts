@@ -155,14 +155,14 @@ export class ProvenanceTracker {
    * selection. `text` is the ProseMirror textBetween of the same range,
    * stored verbatim for paste-match lookups.
    *
-    * `original_text` policy:
-    *   - Full-segment coverage  → preserve original_text verbatim
-    *   - Partial coverage       → set null (the field is a block-level claim,
-    *                              truncating would fabricate it)
-    *
-    * Uncovered ranges fall back to `typed` and log a console.debug,
-    * since gaps should not occur normally.
-    */
+   * `original_text` policy:
+   *   - Full-segment coverage  → preserve original_text verbatim
+   *   - Partial coverage       → set null (the field is a block-level claim,
+   *                              truncating would fabricate it)
+   *
+   * Uncovered ranges fall back to `typed` and log a console.debug,
+   * since gaps should not occur normally.
+   */
   getSegmentSlice(from: number, to: number, text: string): ProvenanceSlice {
     const totalLength = Math.max(0, to - from);
     const segments: ProvenanceSliceSegment[] = [];
