@@ -317,6 +317,16 @@ export class ProvenanceTracker {
     }
   }
 
+  /** True iff a per-segment slice signal is currently pending. */
+  hasPendingSliceSignal(): boolean {
+    return this._pendingSignal?.kind === "slice";
+  }
+
+  /** Clear any pending insertion signal. Safe no-op if none is set. */
+  clearPendingSignal() {
+    this._pendingSignal = null;
+  }
+
   // ─── AI Result Registry ─────────────────────────────────
 
   /** Register an AI result text for manual copy/paste detection */
