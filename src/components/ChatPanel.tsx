@@ -104,7 +104,7 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
         {!bookmark && (
           <button
             onClick={onCreateBookmark}
-            className="absolute right-0 top-2 opacity-0 group-hover/msg:opacity-100 transition-opacity p-1 text-muted-foreground hover:text-primary"
+            className="absolute right-2 top-2 opacity-0 group-hover/msg:opacity-100 transition-opacity p-1 text-muted-foreground hover:text-primary"
             aria-label="Bookmark this message"
           >
             <BookmarkIcon className="h-3.5 w-3.5" />
@@ -114,7 +114,7 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
         {bookmark && (
           <BookmarkPopover bookmark={bookmark} onUpdate={onUpdateBookmark} onDelete={onDeleteBookmark}>
             <button
-              className={`absolute right-0 top-0 bottom-0 w-[3px] rounded-r ${BOOKMARK_BAR_COLORS[bookmark.color] ?? BOOKMARK_BAR_COLORS.blue} cursor-pointer hover:w-[5px] transition-all`}
+              className={`absolute right-2 top-0 bottom-0 w-[3px] rounded ${BOOKMARK_BAR_COLORS[bookmark.color] ?? BOOKMARK_BAR_COLORS.blue} cursor-pointer hover:w-[5px] transition-all`}
               aria-label="Edit bookmark"
             />
           </BookmarkPopover>
@@ -229,7 +229,7 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
       {!bookmark && (
         <button
           onClick={onCreateBookmark}
-          className="absolute right-0 top-2 opacity-0 group-hover/msg:opacity-100 transition-opacity p-1 text-muted-foreground hover:text-primary"
+          className="absolute right-2 top-2 opacity-0 group-hover/msg:opacity-100 transition-opacity p-1 text-muted-foreground hover:text-primary"
           aria-label="Bookmark this message"
         >
           <BookmarkIcon className="h-3.5 w-3.5" />
@@ -239,7 +239,7 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
       {bookmark && (
         <BookmarkPopover bookmark={bookmark} onUpdate={onUpdateBookmark} onDelete={onDeleteBookmark}>
           <button
-            className={`absolute right-0 top-0 bottom-0 w-[3px] rounded-r ${BOOKMARK_BAR_COLORS[bookmark.color] ?? BOOKMARK_BAR_COLORS.blue} cursor-pointer hover:w-[5px] transition-all`}
+            className={`absolute right-2 top-0 bottom-0 w-[3px] rounded ${BOOKMARK_BAR_COLORS[bookmark.color] ?? BOOKMARK_BAR_COLORS.blue} cursor-pointer hover:w-[5px] transition-all`}
             aria-label="Edit bookmark"
           />
         </BookmarkPopover>
