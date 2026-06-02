@@ -533,6 +533,7 @@ When citing information from web search results, always include the source URL i
                   source_type: "chat",
                   flow_flag: "normal",
                   concise_mode: conciseMode,
+                  tutor_mode: tutorMode,
                 };
                 const assistantMsgRow: Record<string, unknown> = {
                   thread_id: threadId,
@@ -541,6 +542,7 @@ When citing information from web search results, always include the source URL i
                   source_type: "chat",
                   flow_flag: "normal",
                   concise_mode: conciseMode,
+                  tutor_mode: tutorMode,
                   model_used: chatModel,
                 };
 
