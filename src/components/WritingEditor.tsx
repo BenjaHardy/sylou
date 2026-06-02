@@ -473,8 +473,46 @@ function ExportEnabledToolbar({
   }, [projectId]);
 
   const handleExportPDF = useCallback(() => {
+    // Render the editor HTML into a print-only container appended to <body>.
+    // The live app is nested inside h-screen + overflow-hidden ancestors that
+    // clip content to the viewport, which caused the browser to only paginate
+    // page 1 when printing directly. The print CSS hides everything else and
+    // reveals this container so all pages flow naturally.
+    const html = editor.getHTML();
+
+    const container = document.createElement("div");
+    // .prose + .tiptap keeps typography consistent with the on-screen editor.
+    container.className = "print-export-root prose tiptap";
+    container.innerHTML = html;
+    document.body.appendChild(container);
+
+    // Browsers use document.title as the default PDF filename. Sanitize to
+    // avoid characters (slashes, quotes, control chars) that can cause the
+    // browser to fall back to "Untitled.pdf".
+    const safeName =
+      (projectName || "document")
+        .replace(/[^a-zA-Z0-9 _.-]/g, "")
+        .trim()
+        .slice(0, 80) || "document";
+    const originalTitle = document.title;
+    document.title = safeName;
+
+    let cleanedUp = false;
+    const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      container.remove();
+      document.title = originalTitle;
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+    // Fallback: some browsers (notably Safari) don't reliably fire afterprint.
+    // 30s is well beyond a print dialog interaction but ensures we don't leak.
+    setTimeout(cleanup, 30_000);
+
     window.print();
-  }, []);
+  }, [editor, projectName]);
+
 
   const handleExportDOCX = useCallback(async () => {
     if (tier === "free") {
