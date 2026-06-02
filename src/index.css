@@ -223,16 +223,6 @@
   letter-spacing: 0.02em;
 }
 
-@media print {
-  .editor-page-sheet {
-    width: 100%;
-    min-height: 0;
-    padding: 0;
-    box-shadow: none;
-    border-radius: 0;
-  }
-  .pm-page-spacer,
-  .pm-page-number {
-    display: none !important;
-  }
-}
+/* No @media print rules for .editor-page-sheet are needed — the live editor
+   tree is hidden during print; printing happens out of a .print-export-root
+   container appended to <body>. */
