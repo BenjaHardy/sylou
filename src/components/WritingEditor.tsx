@@ -98,6 +98,10 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           "prose prose-sm sm:prose max-w-none focus:outline-none min-h-full px-8 py-6",
         style: "font-size:16px;line-height:1.6;",
       },
+      // NOTE: keys in `handleDOMEvents` must be raw DOM event names
+      // (`copy`, `cut`, `drop`, `dragstart`, `dragend`, ...). TipTap does
+      // NOT validate them — a misnamed key (e.g. `handleCut`) is silently
+      // never invoked. Double-check names when adding handlers here.
       handleDOMEvents: {
         copy: (_view, event) => {
           const ed = editor;
@@ -111,7 +115,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           }
           return false;
         },
-        handleCut: (_view, event) => {
+        cut: (_view, event) => {
           const ed2 = editor;
           if (!ed2) return false;
           const { from, to } = ed2.state.selection;
@@ -123,10 +127,11 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           }
           return false;
         },
-      drop: (_view, event) => {
-          // Capture per-segment provenance of the drag source so the drop
-          // preserves the multi-source breakdown instead of collapsing to
-          // a single dominant tag.
+        // Drag & drop: capture the per-segment slice at `dragstart` (when
+        // selection still reflects the drag source). At `drop` the selection
+        // has typically moved to the drop target, so reading it there would
+        // miss or mis-size the slice and degrade to the dominant source.
+        dragstart: (_view, event) => {
           const ed = editor;
           if (!ed) return false;
           const { from, to } = ed.state.selection;
@@ -139,7 +144,46 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
             segments: slice.segments,
             totalLength: slice.totalLength,
           });
-          return false; // let ProseMirror handle the actual drop
+          console.debug("[provenance] dragstart: slice signal set", {
+            totalLength: slice.totalLength,
+            segments: slice.segments.length,
+          });
+          return false;
+        },
+        drop: (_view, event) => {
+          const tracker = getTracker();
+          // Tracker state is the single source of truth: if a slice signal
+          // is already pending (set by our dragstart), this is an internal
+          // drag — let it flow through. Otherwise treat as external.
+          if (tracker.hasPendingSliceSignal()) {
+            console.debug("[provenance] drop: internal (slice signal present)");
+            return false;
+          }
+          const dt = event.dataTransfer;
+          const droppedText = dt ? dt.getData("text/plain") : "";
+          if (droppedText) {
+            tracker.setPendingSignal({
+              source: "external",
+              originalText: droppedText,
+            });
+            console.debug("[provenance] drop: external", { length: droppedText.length });
+          } else {
+            // No usable plaintext on the dataTransfer — fall through and let
+            // the gap classify as `typed` rather than fabricate an external
+            // tag from missing data.
+            console.debug("[provenance] drop: no plaintext on dataTransfer, falling through");
+          }
+          return false;
+        },
+        dragend: (_view, _event) => {
+          // ALWAYS clear: if the drop occurred in this editor the signal was
+          // already consumed (no-op); if the user dropped outside the editor
+          // no drop transaction fired and the stale slice signal would
+          // otherwise corrupt the next unrelated paste/gap-fill.
+          const tracker = getTracker();
+          tracker.clearPendingSignal();
+          console.debug("[provenance] dragend: pending signal cleared");
+          return false;
         },
       },
       handlePaste: (_view, event) => {
