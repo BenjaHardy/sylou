@@ -152,32 +152,40 @@
 .tiptap a { color: hsl(var(--primary)); text-decoration: underline; }
 .tiptap hr { border-color: hsl(var(--border)); margin: 1em 0; }
 
-/* Print styles for PDF export */
+/* Print styles for PDF export.
+   The live app shell uses h-screen + overflow-hidden ancestors which clip
+   content to the viewport, so printing it directly only ever produces page 1.
+   Instead, handleExportPDF mounts the editor HTML into a `.print-export-root`
+   container appended to <body>; this @media print block hides everything else
+   and reveals that container so the browser can paginate freely. */
+.print-export-root { display: none; }
+
 @media print {
-  body {
-    background: white !important;
-    color: black !important;
+  body { background: white !important; color: black !important; }
+
+  /* Hide every direct child of <body> except our print container.
+     This covers Radix/shadcn portals (Dialog, Tooltip, Toast, Popover,
+     DropdownMenu, Sonner) which mount outside #root. */
+  body > *:not(.print-export-root) { display: none !important; }
+
+  .print-export-root {
+    display: block !important;
+    background: white;
+    color: black;
+    padding: 1.5cm;
   }
 
-  [data-radix-popper-content-wrapper] {
-    display: none !important;
+  /* Reduce awkward breaks: keep short blocks together and avoid orphaning
+     headings at page bottoms. */
+  .print-export-root p,
+  .print-export-root li {
+    page-break-inside: avoid;
   }
-
-  /* Editor content fills the page */
-  .tiptap {
-    min-height: auto !important;
-    padding: 0 !important;
-  }
-
-  .prose {
-    max-width: 100% !important;
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-
-  /* Let the editor content area fill and overflow naturally */
-  .flex.flex-col.h-full.min-h-0 > .flex-1 {
-    overflow: visible !important;
+  .print-export-root h1,
+  .print-export-root h2,
+  .print-export-root h3 {
+    page-break-after: avoid;
+    page-break-inside: avoid;
   }
 }
 
