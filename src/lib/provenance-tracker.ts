@@ -18,7 +18,7 @@
  *   typed       [t]   — user typed
  *   chat_ai     [cc]  — copied from chat assistant message
  *   chat_user   [t]   — copied from chat user message (maps to typed in annotations)
- *   ai_editor   [ai]  — inserted via TextSelectionWindow (Accept/Modify)
+ *   ai_editor   [ai]  — inserted via TextSelectionWindow (Accept/Reject)
  *   external    [ce]  — pasted from external source
  */
 

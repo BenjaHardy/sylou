@@ -1,67 +1,24 @@
-# Fix: PDF export only prints first page
+## Goal
+Remove the "Modify" option entirely from the AI text-selection window. After this change, every action (Propose, Fix grammar, Rewrite, Simplify, Expand, Translate, Ask) will only offer Accept / Reject on its result. Accept and Reject behaviour is unchanged.
 
-## Root cause
+## Changes — `src/components/TextSelectionWindow.tsx`
 
-`handleExportPDF` called `window.print()` on the live app. The editor sits
-inside `h-screen` / `overflow-hidden` / `min-h-0` / `ResizablePanel` ancestors
-(`Index.tsx` → `ProjectContentArea` → `ResizablePanel` → editor wrapper) that
-clip content to viewport height. The browser only paginated what fit in that
-clipped box, so anything past the first viewport never reached the printer.
+1. **Streaming phase UI** (lines ~692–705): remove the disabled "Modify" `<Button>` from the placeholder action row.
+2. **Result phase UI** (lines ~736–747): remove the "Modify" `<Button>` that switches to the modify phase.
+3. **Modify phase block** (lines ~761–801): delete the entire `{phase === "modify" && (...)}` JSX block.
+4. **Type `Phase`** (line 21): drop the `"modify"` literal from the union.
+5. **Dead code cleanup**:
+   - Remove `editableText` state and its `useState`.
+   - Remove `handleAcceptModified` callback (lines ~525–567).
+   - Remove the unused `Pencil` import from `lucide-react` (line 2).
+6. **Comment update** in `src/lib/provenance-tracker.ts` line 21: change `(Accept/Modify)` to `(Accept/Reject)` to keep documentation accurate.
 
-## Fix — dedicated print container
+## Not changed
+- `handleAccept` and `handleReject` are untouched — Accept/Reject paths for both predefined editor actions and Propose continue to work exactly as before.
+- Backend (`context-prompt`, `editor-action`) is untouched. The `outcome: "modified"` value in `ai_editor_actions` becomes unreachable from the UI but the column/values are left as-is for historical records.
 
-`handleExportPDF` now mounts `editor.getHTML()` into a `.print-export-root`
-container appended to `<body>`, calls `window.print()`, and removes the
-container in `afterprint` (with a 30 s `setTimeout` fallback for Safari).
-A new `@media print` block in `src/index.css` hides every other body child
-and lets the print container flow freely.
-
-Provenance markers (`[t]/[cc]/[ce]/[ai]`) are intentionally not included —
-they travel with the FLOW report and JSON export. A future enhancement could
-add a provenance appendix.
-
-## Implementation notes (decisions made during build)
-
-### Portal hiding rule
-
-Grep for `createPortal` in `src/` returned no matches — we don't use
-`react-dom/createPortal` directly. However the app uses Radix/shadcn
-primitives (Dialog, Tooltip, Toast, Popover, DropdownMenu, Sonner) which
-all portal into `document.body`. Hiding only `#root` would leak any open
-tooltip/toast/dialog into the print output. Picked the broader rule:
-
-```css
-body > *:not(.print-export-root) { display: none !important; }
-```
-
-### `.editor-page-sheet` cleanup
-
-`.editor-page-sheet` is used on-screen (`WritingEditor.tsx:341`) and queried
-by `src/lib/editor-extensions/pagination.ts:82`. The class must stay. Only
-the `@media print` rule that re-styled it for printing was removed — the
-live editor tree is hidden during print now, so those overrides are dead
-code.
-
-## Files changed
-
-- `src/index.css` — replaced legacy ancestor-override print block with the
-  `.print-export-root` rules; removed the now-redundant `.editor-page-sheet`
-  `@media print` block.
-- `src/components/WritingEditor.tsx` — rewrote `handleExportPDF` to build
-  and tear down the print container, sanitize `document.title` for the
-  PDF filename, and clean up via `afterprint` + timeout fallback.
-
-## Verification checklist
-
-- [ ] Paste ≥ 5 pages of mixed content (paragraphs, multiple `h2`/`h3`
-      headings, bulleted and numbered lists) into the editor.
-- [ ] Click Export → PDF; confirm the print preview shows all pages, not
-      just page 1.
-- [ ] Confirm no heading is orphaned at the bottom of a page; paragraphs
-      and list items aren't split mid-block where avoidable.
-- [ ] Cancel/print, confirm the app UI is fully restored (no leftover
-      hidden container, title reverted).
-- [ ] Trigger print while a tooltip and/or toast is visible; confirm they
-      don't appear in the printed pages.
-- [ ] Re-test DOCX export — unchanged code path, should still work.
-- [ ] Confirm the print preview's filename is the sanitized project name.
+## Verification
+- Trigger each action (Fix grammar, Rewrite, Simplify, Expand, Translate, Propose); confirm the result phase shows only Accept and Reject.
+- Accept replaces the selection as before; Reject closes the panel and (for Propose) logs the rejection.
+- Streaming phase no longer shows a disabled Modify placeholder.
+- No TypeScript errors from the removed `"modify"` phase or unused imports.
