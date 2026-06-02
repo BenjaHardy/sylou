@@ -160,8 +160,8 @@ export class ProvenanceTracker {
    *   - Partial coverage       → set null (the field is a block-level claim,
    *                              truncating would fabricate it)
    *
-   * Uncovered ranges fall back to `typed` (matching getDominantSource line
-   * 175) and log a console.debug, since gaps should not occur normally.
+   * Uncovered ranges fall back to `typed` and log a console.debug,
+   * since gaps should not occur normally.
    */
   getSegmentSlice(from: number, to: number, text: string): ProvenanceSlice {
     const totalLength = Math.max(0, to - from);
@@ -219,36 +219,6 @@ export class ProvenanceTracker {
     this._internalClipboard = slice;
   }
 
-  /**
-   * Returns the dominant provenance source for a given character range.
-   */
-  getDominantSource(from: number, to: number): SegmentSource {
-    if (from >= to) return "typed";
-
-    const coverage = new Map<SegmentSource, number>();
-
-    for (const seg of this.segments) {
-      if (seg.end <= from || seg.start >= to) continue;
-      const overlapStart = Math.max(seg.start, from);
-      const overlapEnd = Math.min(seg.end, to);
-      const len = overlapEnd - overlapStart;
-      if (len > 0) {
-        coverage.set(seg.source, (coverage.get(seg.source) ?? 0) + len);
-      }
-    }
-
-    if (coverage.size === 0) return "typed";
-
-    let best: SegmentSource = "typed";
-    let bestLen = 0;
-    for (const [source, len] of coverage) {
-      if (len > bestLen) {
-        best = source;
-        bestLen = len;
-      }
-    }
-    return best;
-  }
 
   /**
    * Returns a human-readable source breakdown string for a given character range.
