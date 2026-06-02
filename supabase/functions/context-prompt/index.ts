@@ -1539,13 +1539,14 @@ When citing information from web search results, always include the source URL i
       const userPromptContent = `[Ask] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\nQuestion: ${instruction}`;
 
       const { data: promptMsg } = await supabase.from("chat_messages").insert({
-        thread_id, role: "user", content: userPromptContent, source_type: "ask_prompt", flow_flag: "normal", concise_mode: conciseMode,
+        thread_id, role: "user", content: userPromptContent, source_type: "ask_prompt", flow_flag: "normal", concise_mode: conciseMode, tutor_mode: tutorMode,
       }).select().single();
       if (promptMsg) insertedMessages.push(promptMsg);
 
       if (summaryUpdate !== "No update needed.") {
-        // writing_summary intentionally omits concise_mode (defaults to false):
-        // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER.
+        // writing_summary intentionally omits concise_mode and tutor_mode (defaults to false):
+        // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER
+        // nor the tutor-mode system prompt.
         const { data: summaryMsg } = await supabase.from("chat_messages").insert({
           thread_id, role: "assistant", content: summaryUpdate, source_type: "writing_summary", flow_flag: "not_assessed",
         }).select().single();
@@ -1553,7 +1554,7 @@ When citing information from web search results, always include the source URL i
       }
 
       const { data: responseMsg } = await supabase.from("chat_messages").insert({
-        thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: chatModel, concise_mode: conciseMode,
+        thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: chatModel, concise_mode: conciseMode, tutor_mode: tutorMode,
       }).select().single();
       if (responseMsg) insertedMessages.push(responseMsg);
 
