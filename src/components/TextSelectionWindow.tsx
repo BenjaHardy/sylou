@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, Loader2, Check, Pencil, XCircle, Send } from "lucide-react";
+import { X, Loader2, Check, XCircle, Send } from "lucide-react";
 import type { ChatMessage } from "@/hooks/useChatMessages";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,7 +18,7 @@ type ActionId =
   | "propose";
 
 
-type Phase = "actions" | "loading" | "streaming" | "result" | "input" | "modify";
+type Phase = "actions" | "loading" | "streaming" | "result" | "input";
 
 interface Props {
   selectedText: string;
@@ -120,7 +120,7 @@ export function TextSelectionWindow({
   const [proposedText, setProposedText] = useState("");
   const [streamingText, setStreamingText] = useState("");
   const [inputText, setInputText] = useState("");
-  const [editableText, setEditableText] = useState("");
+  
   const [currentActionId, setCurrentActionId] = useState<string | null>(null);
   const [loadingStage, setLoadingStage] = useState<"reviewing" | "reading_documents" | "searching_web" | "preparing">("reviewing");
   // For propose confirm flow
@@ -522,49 +522,6 @@ export function TextSelectionWindow({
     onClose();
   };
 
-  const handleAcceptModified = async () => {
-    if (pendingSummaryUpdate !== null) {
-      try {
-        const { data, error } = await supabase.functions.invoke("context-prompt", {
-          body: {
-            confirm: true,
-            modified: true,
-            action_id: currentActionId,
-            summary_update: pendingSummaryUpdate,
-            thread_id: threadId,
-            project_id: projectId,
-            selected_text: selectedText,
-            instruction: pendingInstruction,
-            ai_response: editableText,
-            concise_mode: conciseMode ?? false,
-            ...(pendingSourceBreakdown ? { selected_text_source: pendingSourceBreakdown } : {}),
-            ...(pendingDocumentsReferenced && pendingDocumentsReferenced.length > 0 ? { documents_referenced: pendingDocumentsReferenced } : {}),
-            ...(pendingWebSearchesPerformed && pendingWebSearchesPerformed.length > 0 ? { web_searches_performed: pendingWebSearchesPerformed } : {}),
-          },
-        });
-        if (error) {
-          console.error("Confirm modified error:", error);
-          toast.error("Failed to log proposal to chat.");
-          onChatRefresh?.();
-        } else {
-          const msgs = data?.inserted_messages ?? [];
-          if (msgs.length > 0) {
-            onAskComplete(msgs);
-          } else {
-            onChatRefresh?.();
-          }
-        }
-      } catch (err) {
-        console.error("Failed to confirm modified propose:", err);
-        toast.error("Failed to log proposal to chat.");
-        onChatRefresh?.();
-      }
-    } else if (currentActionId) {
-      updateOutcome(currentActionId, "modified");
-    }
-    onAccept(editableText);
-    onClose();
-  };
 
   const handleReject = async () => {
     if (pendingSummaryUpdate !== null) {
@@ -694,10 +651,6 @@ export function TextSelectionWindow({
                 <Check className="h-3.5 w-3.5" />
                 Accept
               </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled>
-                <Pencil className="h-3.5 w-3.5" />
-                Modify
-              </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-destructive" disabled>
                 <XCircle className="h-3.5 w-3.5" />
                 Reject
@@ -735,18 +688,6 @@ export function TextSelectionWindow({
               </Button>
               <Button
                 size="sm"
-                variant="outline"
-                className="h-7 text-xs gap-1"
-                onClick={() => {
-                  setEditableText(proposedText);
-                  setPhase("modify");
-                }}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                Modify
-              </Button>
-              <Button
-                size="sm"
                 variant="ghost"
                 className="h-7 text-xs gap-1 text-destructive hover:text-destructive"
                 onClick={handleReject}
@@ -758,47 +699,6 @@ export function TextSelectionWindow({
           </div>
         )}
 
-        {/* Modify phase */}
-        {phase === "modify" && (
-          <div className="space-y-3">
-            <div className="space-y-2 text-xs">
-              <div>
-                <span className="font-semibold text-muted-foreground">Original:</span>
-                <p className="mt-0.5 p-2 rounded-md bg-muted text-foreground leading-relaxed max-h-20 overflow-y-auto">
-                  {selectedText.slice(0, 200)}
-                  {selectedText.length > 200 && "…"}
-                </p>
-              </div>
-              <div>
-                <span className="font-semibold text-muted-foreground">Edit proposal:</span>
-                <Textarea
-                  value={editableText}
-                  onChange={(e) => setEditableText(e.target.value)}
-                  className="mt-0.5 text-xs min-h-[60px] resize-none"
-                  autoFocus
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                className="h-7 text-xs gap-1"
-                onClick={handleAcceptModified}
-              >
-                <Check className="h-3.5 w-3.5" />
-                Accept
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs"
-                onClick={() => setPhase("result")}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        )}
 
         {/* Input phase (Ask / Propose / Translate) */}
         {phase === "input" && (
