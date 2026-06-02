@@ -144,10 +144,6 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
             segments: slice.segments,
             totalLength: slice.totalLength,
           });
-          console.debug("[provenance] dragstart: slice signal set", {
-            totalLength: slice.totalLength,
-            segments: slice.segments.length,
-          });
           return false;
         },
         drop: (_view, event) => {
