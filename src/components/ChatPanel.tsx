@@ -254,9 +254,16 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   const { settings: userSettings } = useUserSettings();
   const { bookmarks, createBookmark, updateBookmark, deleteBookmark, getBookmarkForMessage } = useBookmarks(projectId);
   const [input, setInput] = useState("");
-  const [localWebSearchEnabled, setLocalWebSearchEnabled] = useState(false);
-  const webSearchEnabled = webSearchEnabledProp ?? localWebSearchEnabled;
-  const setWebSearchEnabled = onWebSearchEnabledChange ?? setLocalWebSearchEnabled;
+  // User preference (what they've toggled). Distinct from instance capability
+  // (whether web search is configured on this deployment at all). Preserve
+  // this preference even when capability is off — that way, an operator
+  // adding BRAVE_SEARCH_API_KEY back later restores the user's prior toggle.
+  const [localUserWantsWebSearch, setLocalUserWantsWebSearch] = useState(false);
+  const userWantsWebSearch = webSearchEnabledProp ?? localUserWantsWebSearch;
+  const setUserWantsWebSearch = onWebSearchEnabledChange ?? setLocalUserWantsWebSearch;
+  const { webSearchEnabled: webSearchConfigured } = useInstanceConfig();
+  // Effective state: send to backend & paint as active only when both true.
+  const webSearchActive = userWantsWebSearch && webSearchConfigured;
   const [tipDismissed, setTipDismissed] = useState(false);
   const [showBookmarkList, setShowBookmarkList] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -382,7 +389,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
 
   const handleSend = () => {
     if (!input.trim() || sending) return;
-    sendMessage(input, conciseMode, webSearchEnabled);
+    sendMessage(input, conciseMode, webSearchActive);
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   };
