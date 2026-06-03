@@ -17,6 +17,7 @@ import { format } from "date-fns";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { MODEL_LABELS } from "@/lib/models";
+import { useInstanceConfig } from "@/hooks/useInstanceConfig";
 
 interface Props {
   projectId: string;
@@ -578,20 +579,43 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <button
-                  onClick={() => setWebSearchEnabled((v) => !v)}
-                  className={`h-7 w-7 shrink-0 flex items-center justify-center rounded-md transition-colors ${
-                    webSearchEnabled
-                      ? "text-primary bg-primary/10"
-                      : "text-muted-foreground/40 hover:text-muted-foreground"
-                  }`}
-                  aria-label="Toggle web search"
-                >
-                  <Globe className="h-3.5 w-3.5" />
-                </button>
+                {webSearchConfigured ? (
+                  <button
+                    onClick={() => setUserWantsWebSearch((v) => !v)}
+                    className={`h-7 w-7 shrink-0 flex items-center justify-center rounded-md transition-colors ${
+                      webSearchActive
+                        ? "text-primary bg-primary/10"
+                        : "text-muted-foreground/40 hover:text-muted-foreground"
+                    }`}
+                    aria-label="Toggle web search"
+                  >
+                    <Globe className="h-3.5 w-3.5" />
+                  </button>
+                ) : (
+                  // Radix TooltipTrigger asChild does not forward pointer
+                  // events to natively-disabled buttons. Wrap in a span so
+                  // hover/focus still reach the tooltip.
+                  <span tabIndex={0} className="inline-flex">
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      aria-label="Web search not configured"
+                      className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md text-muted-foreground/40 opacity-40 cursor-not-allowed pointer-events-none"
+                    >
+                      <Globe className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                )}
               </TooltipTrigger>
               <TooltipContent side="top">
-                <span>{webSearchEnabled ? "Web search enabled" : "Enable web search"}</span>
+                <span>
+                  {webSearchConfigured
+                    ? webSearchActive
+                      ? "Web search enabled"
+                      : "Enable web search"
+                    : "Web search is not configured on this instance. Ask the operator to set the BRAVE_SEARCH_API_KEY environment variable to enable it."}
+                </span>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
