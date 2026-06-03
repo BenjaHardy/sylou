@@ -19,7 +19,7 @@ import { TextSelectionWindow } from "@/components/TextSelectionWindow";
 import { Loader2, Activity } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+
 import { exportWritingAsDocx } from "@/lib/export-docx";
 import { exportProjectAsJson } from "@/lib/export-json";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
@@ -43,7 +43,7 @@ interface Props {
 }
 
 export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, onFlushProvenance, conciseMode, onEditorContent, chatSetMessages, webSearchEnabled }: Props & { onEditorContent?: (html: string) => void }) {
-  const { user } = useAuth();
+  
   const { content, loading, saveState, updateContent, isDirty, manualSave, flushSave: flushWritingContent } = useWritingContent(projectId);
   const { getTracker, initWithContentLength, scheduleSave, flushSave: flushProvenance, provenanceLoaded } = useProvenanceTracker(projectId);
   const [initialSet, setInitialSet] = useState(false);
