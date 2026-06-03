@@ -17,6 +17,7 @@ import { format } from "date-fns";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { MODEL_LABELS } from "@/lib/models";
+import { useInstanceConfig } from "@/hooks/useInstanceConfig";
 
 interface Props {
   projectId: string;
@@ -254,9 +255,16 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   const { settings: userSettings } = useUserSettings();
   const { bookmarks, createBookmark, updateBookmark, deleteBookmark, getBookmarkForMessage } = useBookmarks(projectId);
   const [input, setInput] = useState("");
-  const [localWebSearchEnabled, setLocalWebSearchEnabled] = useState(false);
-  const webSearchEnabled = webSearchEnabledProp ?? localWebSearchEnabled;
-  const setWebSearchEnabled = onWebSearchEnabledChange ?? setLocalWebSearchEnabled;
+  // User preference (what they've toggled). Distinct from instance capability
+  // (whether web search is configured on this deployment at all). Preserve
+  // this preference even when capability is off — that way, an operator
+  // adding BRAVE_SEARCH_API_KEY back later restores the user's prior toggle.
+  const [localUserWantsWebSearch, setLocalUserWantsWebSearch] = useState(false);
+  const userWantsWebSearch = webSearchEnabledProp ?? localUserWantsWebSearch;
+  const setUserWantsWebSearch = onWebSearchEnabledChange ?? setLocalUserWantsWebSearch;
+  const { webSearchEnabled: webSearchConfigured } = useInstanceConfig();
+  // Effective state: send to backend & paint as active only when both true.
+  const webSearchActive = userWantsWebSearch && webSearchConfigured;
   const [tipDismissed, setTipDismissed] = useState(false);
   const [showBookmarkList, setShowBookmarkList] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -382,7 +390,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
 
   const handleSend = () => {
     if (!input.trim() || sending) return;
-    sendMessage(input, conciseMode, webSearchEnabled);
+    sendMessage(input, conciseMode, webSearchActive);
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   };
@@ -571,20 +579,43 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <button
-                  onClick={() => setWebSearchEnabled((v) => !v)}
-                  className={`h-7 w-7 shrink-0 flex items-center justify-center rounded-md transition-colors ${
-                    webSearchEnabled
-                      ? "text-primary bg-primary/10"
-                      : "text-muted-foreground/40 hover:text-muted-foreground"
-                  }`}
-                  aria-label="Toggle web search"
-                >
-                  <Globe className="h-3.5 w-3.5" />
-                </button>
+                {webSearchConfigured ? (
+                  <button
+                    onClick={() => setUserWantsWebSearch((v) => !v)}
+                    className={`h-7 w-7 shrink-0 flex items-center justify-center rounded-md transition-colors ${
+                      webSearchActive
+                        ? "text-primary bg-primary/10"
+                        : "text-muted-foreground/40 hover:text-muted-foreground"
+                    }`}
+                    aria-label="Toggle web search"
+                  >
+                    <Globe className="h-3.5 w-3.5" />
+                  </button>
+                ) : (
+                  // Radix TooltipTrigger asChild does not forward pointer
+                  // events to natively-disabled buttons. Wrap in a span so
+                  // hover/focus still reach the tooltip.
+                  <span tabIndex={0} className="inline-flex">
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      aria-label="Web search not configured"
+                      className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md text-muted-foreground/40 opacity-40 cursor-not-allowed pointer-events-none"
+                    >
+                      <Globe className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                )}
               </TooltipTrigger>
               <TooltipContent side="top">
-                <span>{webSearchEnabled ? "Web search enabled" : "Enable web search"}</span>
+                <span>
+                  {webSearchConfigured
+                    ? webSearchActive
+                      ? "Web search enabled"
+                      : "Enable web search"
+                    : "Web search is not configured on this instance. Ask the operator to set the BRAVE_SEARCH_API_KEY environment variable to enable it."}
+                </span>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
