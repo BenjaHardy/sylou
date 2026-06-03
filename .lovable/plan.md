@@ -1,24 +1,38 @@
 ## Goal
-Remove the "Modify" option entirely from the AI text-selection window. After this change, every action (Propose, Fix grammar, Rewrite, Simplify, Expand, Translate, Ask) will only offer Accept / Reject on its result. Accept and Reject behaviour is unchanged.
 
-## Changes — `src/components/TextSelectionWindow.tsx`
+Change the default behavior of `PUBLIC_SITE_URL` in `src/lib/site.ts` so that, when `VITE_PUBLIC_SITE_URL` is not set, it falls back to `window.location.origin` instead of the hardcoded `"https://sylou.eu"`.
 
-1. **Streaming phase UI** (lines ~692–705): remove the disabled "Modify" `<Button>` from the placeholder action row.
-2. **Result phase UI** (lines ~736–747): remove the "Modify" `<Button>` that switches to the modify phase.
-3. **Modify phase block** (lines ~761–801): delete the entire `{phase === "modify" && (...)}` JSX block.
-4. **Type `Phase`** (line 21): drop the `"modify"` literal from the union.
-5. **Dead code cleanup**:
-   - Remove `editableText` state and its `useState`.
-   - Remove `handleAcceptModified` callback (lines ~525–567).
-   - Remove the unused `Pencil` import from `lucide-react` (line 2).
-6. **Comment update** in `src/lib/provenance-tracker.ts` line 21: change `(Accept/Modify)` to `(Accept/Reject)` to keep documentation accurate.
+## Why
 
-## Not changed
-- `handleAccept` and `handleReject` are untouched — Accept/Reject paths for both predefined editor actions and Propose continue to work exactly as before.
-- Backend (`context-prompt`, `editor-action`) is untouched. The `outcome: "modified"` value in `ai_editor_actions` becomes unreachable from the UI but the column/values are left as-is for historical records.
+The current default points to the maintainer's domain. A self-hoster who forgets to set `VITE_PUBLIC_SITE_URL` generates shared FLOW report links that redirect to the maintainer's instance rather than their own. Using `window.location.origin` as the runtime default eliminates this footgun.
 
-## Verification
-- Trigger each action (Fix grammar, Rewrite, Simplify, Expand, Translate, Propose); confirm the result phase shows only Accept and Reject.
-- Accept replaces the selection as before; Reject closes the panel and (for Propose) logs the rejection.
-- Streaming phase no longer shows a disabled Modify placeholder.
-- No TypeScript errors from the removed `"modify"` phase or unused imports.
+## Changes
+
+### `src/lib/site.ts`
+
+Replace the current export:
+
+```ts
+export const PUBLIC_SITE_URL =
+  (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined)?.replace(/\/$/, "") ||
+  "https://sylou.eu";
+```
+
+With:
+
+```ts
+export const PUBLIC_SITE_URL =
+  (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined)?.replace(/\/$/, "") ||
+  (typeof window !== "undefined" ? window.location.origin : "");
+```
+
+## Behavior
+
+- `VITE_PUBLIC_SITE_URL` set and non-empty → use the env var (preserves reverse-proxy and custom-domain overrides).
+- `VITE_PUBLIC_SITE_URL` not set, running in browser → use `window.location.origin`.
+- `VITE_PUBLIC_SITE_URL` not set, running in non-browser context (SSR, tests) → empty string (no crash, no misleading fallback).
+
+## Out of scope
+
+- No changes to `FlowReportView.tsx` or any other caller — the default change is sufficient.
+- `VITE_PUBLIC_SITE_URL` remains a valid override; no env var is removed.
