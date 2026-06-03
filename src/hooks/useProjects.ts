@@ -22,23 +22,10 @@ export function useProjects() {
   });
 }
 
-export function useProfile() {
-  const { user } = useAuth();
+// useProfile() was removed when the tier system was dropped. Profile fields
+// the UI still reads (email, budget) come from UserSettingsContext.
 
-  return useQuery({
-    queryKey: ["profile", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("subscription_tier")
-        .eq("id", user!.id)
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user,
-  });
-}
+
 
 export function useCreateProject() {
   const queryClient = useQueryClient();

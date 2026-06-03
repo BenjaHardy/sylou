@@ -22,9 +22,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { HelpCircle } from "lucide-react";
-import { useCreateProject, useProjects, useProfile } from "@/hooks/useProjects";
+import { useCreateProject } from "@/hooks/useProjects";
 import { toast } from "@/hooks/use-toast";
 
 const LANGUAGES = [
@@ -32,10 +31,10 @@ const LANGUAGES = [
 ];
 
 const TEMPLATES = [
-  { value: "general", label: "General", desc: "A blank canvas for any type of writing.", proOnly: false },
-  { value: "academic", label: "Academic", desc: "Structured for essays, papers, and research.", proOnly: true },
-  { value: "creative", label: "Creative", desc: "Optimised for fiction, poetry, and storytelling.", proOnly: true },
-  { value: "professional", label: "Professional", desc: "Tailored for reports, emails, and business docs.", proOnly: true },
+  { value: "general", label: "General", desc: "A blank canvas for any type of writing." },
+  { value: "academic", label: "Academic", desc: "Structured for essays, papers, and research." },
+  { value: "creative", label: "Creative", desc: "Optimised for fiction, poetry, and storytelling." },
+  { value: "professional", label: "Professional", desc: "Tailored for reports, emails, and business docs." },
 ];
 
 interface Props {
@@ -51,12 +50,6 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
   const [tutorMode, setTutorMode] = useState(false);
 
   const createProject = useCreateProject();
-  const { data: projects } = useProjects();
-  const { data: profile } = useProfile();
-
-  const isFree = profile?.subscription_tier === "free";
-  const isProOrAbove = !["free", "starter"].includes(profile?.subscription_tier ?? "free");
-  const atLimit = isFree && (projects?.length ?? 0) >= 1;
 
   const reset = () => {
     setName("");
@@ -67,15 +60,6 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
 
   const handleCreate = async () => {
     if (!name.trim()) return;
-
-    if (atLimit) {
-      toast({
-        title: "Free tier limit",
-        description: "Free accounts are limited to 1 project. Delete your existing project or upgrade to create more.",
-        variant: "destructive",
-      });
-      return;
-    }
 
     try {
       const project = await createProject.mutateAsync({
@@ -104,114 +88,92 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
           <DialogTitle>New Project</DialogTitle>
         </DialogHeader>
 
-        {atLimit ? (
-          <div className="py-4 space-y-2">
-            <p className="text-sm text-foreground font-medium">Free tier limit reached</p>
-            <p className="text-sm text-muted-foreground">
-              Free accounts can have at most 1 project. Delete your existing project or upgrade your plan to create more.
-            </p>
+        <div className="space-y-4 py-2">
+          {/* Name */}
+          <div className="space-y-1.5">
+            <Label htmlFor="project-name">Project name</Label>
+            <Input
+              id="project-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="My writing project"
+              autoFocus
+            />
           </div>
-        ) : (
-          <div className="space-y-4 py-2">
-            {/* Name */}
-            <div className="space-y-1.5">
-              <Label htmlFor="project-name">Project name</Label>
-              <Input
-                id="project-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="My writing project"
-                autoFocus
-              />
-            </div>
 
-            {/* Language */}
-            <div className="space-y-1.5">
-              <Label>Language</Label>
-              <Select value={language} onValueChange={setLanguage}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {LANGUAGES.map((l) => (
-                    <SelectItem key={l} value={l}>{l}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Language */}
+          <div className="space-y-1.5">
+            <Label>Language</Label>
+            <Select value={language} onValueChange={setLanguage}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LANGUAGES.map((l) => (
+                  <SelectItem key={l} value={l}>{l}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-            {/* Template */}
-            <div className="space-y-2">
-              <Label>Template</Label>
-              <div className="grid gap-2">
-                {TEMPLATES.map((t) => {
-                  const locked = t.proOnly && !isProOrAbove;
-                  return (
-                    <label
-                      key={t.value}
-                      className={`flex items-start gap-3 p-3 rounded-md border transition-colors ${
-                        locked
-                          ? "opacity-50 cursor-not-allowed border-border"
-                          : template === t.value
-                            ? "border-primary bg-primary/5 cursor-pointer"
-                            : "border-border hover:bg-muted/50 cursor-pointer"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="template"
-                        value={t.value}
-                        checked={template === t.value}
-                        onChange={() => !locked && setTemplate(t.value)}
-                        disabled={locked}
-                        className="mt-0.5 accent-primary"
-                      />
-                      <div>
-                        <span className="text-sm font-medium text-foreground">
-                          {t.label}
-                          {locked && (
-                            <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0">Pro</Badge>
-                          )}
-                        </span>
-                        <p className="text-xs text-muted-foreground">{t.desc}</p>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Tutor mode */}
-            <div className="flex items-center justify-between rounded-md border border-border p-3">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="tutor-mode" className="cursor-pointer">Tutor Mode</Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[240px] text-xs">
-                    In Tutor Mode, the AI guides your learning through questions rather than giving direct answers. This cannot be changed after project creation.
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <Switch
-                id="tutor-mode"
-                checked={tutorMode}
-                onCheckedChange={setTutorMode}
-              />
+          {/* Template */}
+          <div className="space-y-2">
+            <Label>Template</Label>
+            <div className="grid gap-2">
+              {TEMPLATES.map((t) => (
+                <label
+                  key={t.value}
+                  className={`flex items-start gap-3 p-3 rounded-md border transition-colors cursor-pointer ${
+                    template === t.value
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:bg-muted/50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="template"
+                    value={t.value}
+                    checked={template === t.value}
+                    onChange={() => setTemplate(t.value)}
+                    className="mt-0.5 accent-primary"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-foreground">{t.label}</span>
+                    <p className="text-xs text-muted-foreground">{t.desc}</p>
+                  </div>
+                </label>
+              ))}
             </div>
           </div>
-        )}
+
+          {/* Tutor mode */}
+          <div className="flex items-center justify-between rounded-md border border-border p-3">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="tutor-mode" className="cursor-pointer">Tutor Mode</Label>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[240px] text-xs">
+                  In Tutor Mode, the AI guides your learning through questions rather than giving direct answers. This cannot be changed after project creation.
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <Switch
+              id="tutor-mode"
+              checked={tutorMode}
+              onCheckedChange={setTutorMode}
+            />
+          </div>
+        </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => { reset(); onOpenChange(false); }}>
             Cancel
           </Button>
-          {!atLimit && (
-            <Button onClick={handleCreate} disabled={!name.trim() || createProject.isPending}>
-              {createProject.isPending ? "Creating…" : "Create Project"}
-            </Button>
-          )}
+          <Button onClick={handleCreate} disabled={!name.trim() || createProject.isPending}>
+            {createProject.isPending ? "Creating…" : "Create Project"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
