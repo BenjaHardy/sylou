@@ -1,6 +1,8 @@
 // Canonical public base URL for user-facing share links.
-// Always points to the production domain so links work for non-logged-in viewers,
-// regardless of whether the app is opened via the Lovable preview/editor.
+// Prefer VITE_PUBLIC_SITE_URL when set (useful when the public origin differs
+// from the deployed origin, e.g. reverse proxies). Otherwise fall back to the
+// current browser origin so self-hosted instances generate share links that
+// point to their own domain rather than the upstream maintainer's.
 export const PUBLIC_SITE_URL =
   (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined)?.replace(/\/$/, "") ||
-  "https://sylou.eu";
+  (typeof window !== "undefined" ? window.location.origin : "");
