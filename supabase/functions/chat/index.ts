@@ -607,7 +607,7 @@ When citing information from web search results, always include the source URL i
                     done: true,
                     user_message: insertedUser,
                     assistant_message: insertedAssistant,
-                    budget_remaining: profile.monthly_token_budget - newTotal,
+                    budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
                   })
                 );
               } catch (err) {
@@ -848,7 +848,7 @@ When citing information from web search results, always include the source URL i
                     done: true,
                     user_message: insertedUser,
                     assistant_message: insertedAssistant,
-                    budget_remaining: profile.monthly_token_budget - newTotal,
+                    budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
                   })
                 );
               } catch { /* client gone */ }
@@ -1005,7 +1005,7 @@ When citing information from web search results, always include the source URL i
                   done: true,
                   user_message: insertedUser,
                   assistant_message: insertedAssistant,
-                  budget_remaining: profile.monthly_token_budget - newTotal,
+                  budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
                 })
               );
             } catch { /* client gone */ }
@@ -1125,7 +1125,7 @@ When citing information from web search results, always include the source URL i
     return jsonResponse({
       reply: assistantText,
       tokens_used: estimatedTokens,
-      budget_remaining: profile.monthly_token_budget - newTotal,
+      budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
       user_message: insertedUser,
       assistant_message: insertedAssistant,
     });

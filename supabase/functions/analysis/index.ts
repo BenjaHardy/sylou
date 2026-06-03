@@ -886,10 +886,12 @@ ${writePillarNotice}`;
     const charEst = Math.ceil(fullPromptText.length / 4) * 1.1;
     const wordEst = fullPromptText.split(/\s+/).length * 1.3;
     const estimated = Math.ceil(Math.max(charEst, wordEst));
-    const budgetRemaining =
-      profile.monthly_token_budget - profile.tokens_used_this_period;
+    const budgetRemaining: number | null =
+      profile.monthly_token_budget === null
+        ? null
+        : profile.monthly_token_budget - profile.tokens_used_this_period;
 
-    if (budgetRemaining < estimated + 2000) {
+    if (budgetRemaining !== null && budgetRemaining < estimated + 2000) {
       return jsonResponse(
         {
           error: `Insufficient token budget for FLOW analysis`,
@@ -1054,7 +1056,10 @@ ${writePillarNotice}`;
       Math.ceil(JSON.stringify(flowResult).length / 4);
     const totalTokens = inputTokens + outputTokens;
 
-    const budgetRatio = profile.tokens_used_this_period / profile.monthly_token_budget;
+    // NULL budget = no limit set, so no pressure — ratio 0 acts as headroom.
+    const budgetRatio = profile.monthly_token_budget === null
+      ? 0
+      : profile.tokens_used_this_period / profile.monthly_token_budget;
     const tokenStatus = budgetRatio >= 1.0 ? "over" : budgetRatio >= 0.8 ? "near" : "ok";
 
     const flowMeta: Record<string, unknown> = {
@@ -1167,7 +1172,7 @@ ${writePillarNotice}`;
     return jsonResponse({
       report,
       tokens_used: totalTokens,
-      budget_remaining: budgetRemaining - totalTokens,
+      budget_remaining: budgetRemaining === null ? null : budgetRemaining - totalTokens,
     });
   } catch (err) {
     console.error("Analysis function error:", err);

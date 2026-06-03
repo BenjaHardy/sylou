@@ -337,7 +337,7 @@ Deno.serve(async (req) => {
                       done: true,
                       result: proposedText,
                       action_id: actionRow?.id ?? null,
-                      budget_remaining: profile.monthly_token_budget - newTotal,
+                      budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
                     })}\n\n`
                   )
                 );
@@ -457,7 +457,7 @@ Deno.serve(async (req) => {
       proposed_text: proposedText,
       action_id: actionRow?.id ?? null,
       tokens_used: estimatedTokens,
-      budget_remaining: profile.monthly_token_budget - newTotal,
+      budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
     });
   } catch (err) {
     console.error("Editor action error:", err);

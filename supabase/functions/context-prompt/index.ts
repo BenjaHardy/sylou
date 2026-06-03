@@ -988,7 +988,7 @@ When citing information from web search results, always include the source URL i
           amount: totalTokens,
         });
 
-        const budgetRemaining = profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
+        const budgetRemaining: number | null = profile.monthly_token_budget === null ? null : profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
 
         const insertedMessages: unknown[] = [];
 
@@ -1453,7 +1453,7 @@ When citing information from web search results, always include the source URL i
 
       await supabase.rpc("increment_tokens_used", { user_uuid: user.id, amount: totalTokens });
 
-      const budgetRemaining = profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
+      const budgetRemaining: number | null = profile.monthly_token_budget === null ? null : profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
 
       const insertedMessages = [];
       if (action_type === "ask") {
@@ -1546,7 +1546,7 @@ When citing information from web search results, always include the source URL i
 
     await supabase.rpc("increment_tokens_used", { user_uuid: user.id, amount: totalTokens });
 
-    const budgetRemaining = profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
+    const budgetRemaining: number | null = profile.monthly_token_budget === null ? null : profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
 
     const insertedMessages = [];
     if (action_type === "ask") {
