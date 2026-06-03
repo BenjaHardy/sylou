@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.share-report]
 verify_jwt = false
+
+[functions.config]
+verify_jwt = false

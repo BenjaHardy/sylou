@@ -400,8 +400,14 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       systemPrompt += favBlock;
     }
 
+    // Gate web search on both user toggle AND BRAVE_SEARCH_API_KEY presence.
+    // If unconfigured, never advertise the capability to the LLM — an empty
+    // result set reads as "the web has nothing" rather than "not configured".
+    const braveConfigured = !!Deno.env.get("BRAVE_SEARCH_API_KEY");
+    const webSearchActive = webSearchEnabled && braveConfigured;
+
     // Append web search instructions to system prompt
-    if (webSearchEnabled) {
+    if (webSearchActive) {
       const docsContext = (hasNonFavDocs || favourites.length > 0)
         ? " or in the imported documents"
         : "";
@@ -450,10 +456,10 @@ When citing information from web search results, always include the source URL i
     const webSearchesPerformed: string[] = [];
 
     // --- Build tools array ---
-    const hasTools = hasDocuments || webSearchEnabled;
+    const hasTools = hasDocuments || webSearchActive;
     const tools: Record<string, unknown>[] = [];
     if (hasDocuments) tools.push(buildDocumentTool());
-    if (webSearchEnabled) tools.push(buildWebSearchTool());
+    if (webSearchActive) tools.push(buildWebSearchTool());
 
     // =========================================================
     // STREAMING PATH — with tool-use support
