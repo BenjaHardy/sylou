@@ -365,56 +365,44 @@ export type Database = {
       }
       profiles: {
         Row: {
-          billing_period_start: string | null
           created_at: string
           default_concise_mode: boolean
           display_name: string | null
           email: string
           flow_nudges_enabled: boolean | null
           id: string
-          monthly_token_budget: number
+          monthly_token_budget: number | null
           preferred_chat_model: string | null
           preferred_flow_model: string
           preferred_language: string | null
-          stripe_customer_id: string | null
-          stripe_subscription_id: string | null
-          subscription_tier: string
           tokens_used_this_period: number
           updated_at: string
         }
         Insert: {
-          billing_period_start?: string | null
           created_at?: string
           default_concise_mode?: boolean
           display_name?: string | null
           email: string
           flow_nudges_enabled?: boolean | null
           id: string
-          monthly_token_budget?: number
+          monthly_token_budget?: number | null
           preferred_chat_model?: string | null
           preferred_flow_model?: string
           preferred_language?: string | null
-          stripe_customer_id?: string | null
-          stripe_subscription_id?: string | null
-          subscription_tier?: string
           tokens_used_this_period?: number
           updated_at?: string
         }
         Update: {
-          billing_period_start?: string | null
           created_at?: string
           default_concise_mode?: boolean
           display_name?: string | null
           email?: string
           flow_nudges_enabled?: boolean | null
           id?: string
-          monthly_token_budget?: number
+          monthly_token_budget?: number | null
           preferred_chat_model?: string | null
           preferred_flow_model?: string
           preferred_language?: string | null
-          stripe_customer_id?: string | null
-          stripe_subscription_id?: string | null
-          subscription_tier?: string
           tokens_used_this_period?: number
           updated_at?: string
         }

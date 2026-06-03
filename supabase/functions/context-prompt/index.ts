@@ -1,6 +1,21 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, normaliseResponse, extractProviderError } from "./_llm.ts";
 
+// Budget helper. Intentionally duplicated across the four edge functions
+// (chat, context-prompt, editor-action, analysis) — Supabase edge function
+// isolation prevents importing a shared module without a build step.
+// A NULL monthly_token_budget means "no limit" (operator hasn't set one).
+function isOverBudget(profile: {
+  monthly_token_budget: number | null;
+  tokens_used_this_period: number;
+}): boolean {
+  return (
+    profile.monthly_token_budget !== null &&
+    profile.tokens_used_this_period >= profile.monthly_token_budget
+  );
+}
+
+
 // Service-role client for ai_editor_actions (bypasses RLS)
 function getAdminClient() {
   const url = Deno.env.get("SUPABASE_URL")!;
@@ -498,7 +513,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Profile not found" }, 404);
     }
 
-    if (profile.tokens_used_this_period >= profile.monthly_token_budget) {
+    if (isOverBudget(profile)) {
       return jsonResponse({ error: "Monthly token budget exceeded" }, 403);
     }
 
@@ -973,7 +988,7 @@ When citing information from web search results, always include the source URL i
           amount: totalTokens,
         });
 
-        const budgetRemaining = profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
+        const budgetRemaining: number | null = profile.monthly_token_budget === null ? null : profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
 
         const insertedMessages: unknown[] = [];
 
@@ -1438,7 +1453,7 @@ When citing information from web search results, always include the source URL i
 
       await supabase.rpc("increment_tokens_used", { user_uuid: user.id, amount: totalTokens });
 
-      const budgetRemaining = profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
+      const budgetRemaining: number | null = profile.monthly_token_budget === null ? null : profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
 
       const insertedMessages = [];
       if (action_type === "ask") {
@@ -1531,7 +1546,7 @@ When citing information from web search results, always include the source URL i
 
     await supabase.rpc("increment_tokens_used", { user_uuid: user.id, amount: totalTokens });
 
-    const budgetRemaining = profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
+    const budgetRemaining: number | null = profile.monthly_token_budget === null ? null : profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
 
     const insertedMessages = [];
     if (action_type === "ask") {
