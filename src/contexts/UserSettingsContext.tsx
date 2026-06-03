@@ -17,7 +17,11 @@ export interface UserSettings {
   preferred_flow_model: string;
   default_concise_mode: boolean;
   email: string;
-  subscription_tier: string;
+  // Read-only budget fields. Operators set monthly_token_budget per user via
+  // SQL; users can't modify these (RLS freezes both columns). A null budget
+  // means "no limit" — enforced server-side in edge function pre-flight checks.
+  tokens_used_this_period: number;
+  monthly_token_budget: number | null;
 }
 
 const DEFAULTS: UserSettings = {
@@ -27,7 +31,8 @@ const DEFAULTS: UserSettings = {
   preferred_flow_model: DEFAULT_FLOW_MODEL,
   default_concise_mode: false,
   email: "",
-  subscription_tier: "free",
+  tokens_used_this_period: 0,
+  monthly_token_budget: null,
 };
 
 interface UserSettingsContextType {
@@ -56,7 +61,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     const { data } = await supabase
       .from("profiles")
       .select(
-        "display_name, preferred_language, preferred_chat_model, preferred_flow_model, default_concise_mode, email, subscription_tier",
+        "display_name, preferred_language, preferred_chat_model, preferred_flow_model, default_concise_mode, email, tokens_used_this_period, monthly_token_budget",
       )
       .eq("id", user.id)
       .maybeSingle();
@@ -70,7 +75,10 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
         default_concise_mode:
           (data as { default_concise_mode?: boolean }).default_concise_mode ?? false,
         email: data.email ?? user.email ?? "",
-        subscription_tier: data.subscription_tier ?? "free",
+        tokens_used_this_period:
+          (data as { tokens_used_this_period?: number }).tokens_used_this_period ?? 0,
+        monthly_token_budget:
+          (data as { monthly_token_budget?: number | null }).monthly_token_budget ?? null,
       });
     }
     setLoading(false);
@@ -95,6 +103,8 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
         dbPatch.preferred_flow_model = patch.preferred_flow_model;
       if (patch.default_concise_mode !== undefined)
         dbPatch.default_concise_mode = patch.default_concise_mode;
+      // tokens_used_this_period and monthly_token_budget are intentionally
+      // not writable from the client (frozen by RLS).
       if (Object.keys(dbPatch).length === 0) return;
       const { error } = await supabase.from("profiles").update(dbPatch).eq("id", user.id);
       if (error) {

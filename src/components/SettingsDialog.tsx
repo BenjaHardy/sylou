@@ -214,10 +214,15 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
             </div>
             <div className="space-y-2">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                Subscription
+                Token usage
               </Label>
-              <p className="text-sm capitalize">{settings.subscription_tier}</p>
+              <p className="text-sm tabular-nums">
+                {settings.monthly_token_budget === null
+                  ? `${settings.tokens_used_this_period.toLocaleString()} — no limit set`
+                  : `${settings.tokens_used_this_period.toLocaleString()} / ${settings.monthly_token_budget.toLocaleString()} this period`}
+              </p>
             </div>
+
             <div className="border-t pt-4">
               <Button
                 variant="outline"

@@ -19,7 +19,7 @@ import {
   Undo2, Redo2,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Search, X, ChevronDown, Palette,
-  FileDown, Lock, FileText,
+  FileDown, FileText,
 } from "lucide-react";
 
 interface Props {
@@ -27,10 +27,10 @@ interface Props {
   onExportPDF?: () => void;
   onExportDOCX?: () => void;
   onExportJSON?: () => void;
-  subscriptionTier?: string;
   pageView?: boolean;
   onTogglePageView?: () => void;
 }
+
 
 const FONT_SIZES = ["10", "12", "14", "16", "18", "20", "24", "28", "32"];
 
@@ -172,8 +172,8 @@ function FontColorPicker({ editor }: { editor: Editor }) {
   );
 }
 
-export function EditorToolbar({ editor, onExportPDF, onExportDOCX, onExportJSON, subscriptionTier = "free", pageView = false, onTogglePageView }: Props) {
-  const isFree = subscriptionTier === "free";
+export function EditorToolbar({ editor, onExportPDF, onExportDOCX, onExportJSON, pageView = false, onTogglePageView }: Props) {
+
   const [findOpen, setFindOpen] = useState(false);
   const [findText, setFindText] = useState("");
   const [replaceText, setReplaceText] = useState("");
@@ -390,14 +390,13 @@ export function EditorToolbar({ editor, onExportPDF, onExportDOCX, onExportJSON,
             <DropdownMenuItem onClick={onExportPDF}>
               Export Writing as PDF
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onExportDOCX} className="flex items-center gap-2">
+            <DropdownMenuItem onClick={onExportDOCX}>
               Export Writing as DOCX
-              {isFree && <Lock size={12} className="text-muted-foreground" />}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onExportJSON} className="flex items-center gap-2">
+            <DropdownMenuItem onClick={onExportJSON}>
               Export Project as JSON
-              {isFree && <Lock size={12} className="text-muted-foreground" />}
             </DropdownMenuItem>
+
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
