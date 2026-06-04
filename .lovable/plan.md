@@ -1,38 +1,69 @@
 ## Goal
 
-Change the default behavior of `PUBLIC_SITE_URL` in `src/lib/site.ts` so that, when `VITE_PUBLIC_SITE_URL` is not set, it falls back to `window.location.origin` instead of the hardcoded `"https://sylou.eu"`.
+Add two diagnostic logs so we can see exactly what's being sent to Claude and exactly what Claude returns, before committing to a structural fix.
 
-## Why
+## Context
 
-The current default points to the maintainer's domain. A self-hoster who forgets to set `VITE_PUBLIC_SITE_URL` generates shared FLOW report links that redirect to the maintainer's instance rather than their own. Using `window.location.origin` as the runtime default eliminates this footgun.
+The previous diagnostic log confirmed schema drift (not truncation). The pillars are coming back flattened. Before changing the schema, prompt, or fallback logic, we need to verify:
+
+1. The `input_schema` actually transmitted to Claude is the one we expect (no accidental mutation, no `$ref` artefacts after JSON serialization through `toAnthropicBody`).
+2. The raw `tool_use.input` object Claude returns, so we can confirm the flattening shape rather than infer it from key names.
 
 ## Changes
 
-### `src/lib/site.ts`
+All in `supabase/functions/analysis/index.ts`.
 
-Replace the current export:
+### 1. Log the transmitted tool schema (once, just before the Claude call)
 
-```ts
-export const PUBLIC_SITE_URL =
-  (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined)?.replace(/\/$/, "") ||
-  "https://sylou.eu";
-```
-
-With:
+Just before the `await callLLM(...)` call in the analysis flow, add:
 
 ```ts
-export const PUBLIC_SITE_URL =
-  (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined)?.replace(/\/$/, "") ||
-  (typeof window !== "undefined" ? window.location.origin : "");
+if (providerFor(flowModel) === "anthropic") {
+  console.log("FLOW tool schema sent to Claude", {
+    model: flowModel,
+    tool_name: SUBMIT_FLOW_TOOL.name,
+    input_schema: JSON.stringify(SUBMIT_FLOW_TOOL.input_schema),
+  });
+}
 ```
 
-## Behavior
+Stringifying ensures the full nested structure is preserved in the log (Supabase log viewer otherwise truncates deep objects).
 
-- `VITE_PUBLIC_SITE_URL` set and non-empty → use the env var (preserves reverse-proxy and custom-domain overrides).
-- `VITE_PUBLIC_SITE_URL` not set, running in browser → use `window.location.origin`.
-- `VITE_PUBLIC_SITE_URL` not set, running in non-browser context (SSR, tests) → empty string (no crash, no misleading fallback).
+Gated on `anthropic` so Mistral runs stay quiet.
+
+### 2. Log the full raw tool input from Claude (only on schema failure)
+
+Inside the existing `if (validPillarCount < 3 || !hasSummary) { ... }` block (around line 997–1016), add one more line alongside the current diagnostic:
+
+```ts
+console.error("FLOW raw tool input (full)", {
+  model: flowModel,
+  raw_tool_input: JSON.stringify(flowResult),
+});
+```
+
+Logged as a separate entry to keep the existing structured log clean and to make it easy to copy-paste.
+
+Kept inside the failure branch — no extra logging on success, no PII risk on Mistral or successful Claude runs.
+
+## What this will tell us
+
+- If `input_schema` in the log shows the four pillars as proper nested `{ type: "object", properties: { reasoning, evidence, score, narrative } }` objects → schema is fine, Claude is the problem → fix path (b) or (c).
+- If `input_schema` shows anything collapsed, `$ref`'d, or otherwise ambiguous → fix path (a), restructure the schema.
+- The `raw_tool_input` will confirm exactly which fields got promoted/flattened (e.g. whether `evidence/score/narrative` belong to `find` only, or are an averaged single set across all pillars).
+
+## How to retrieve the logs
+
+After this ships, on sylou.eu:
+
+1. Trigger the same failing FLOW analysis with Claude Sonnet 4.6.
+2. Open Supabase → Edge Functions → `analysis` → Logs.
+3. Look for two entries from the same invocation:
+   - `FLOW tool schema sent to Claude` (level: log)
+   - `FLOW raw tool input (full)` (level: error)
+4. Paste both back here.
 
 ## Out of scope
 
-- No changes to `FlowReportView.tsx` or any other caller — the default change is sufficient.
-- `VITE_PUBLIC_SITE_URL` remains a valid override; no env var is removed.
+- No schema changes, no prompt changes, no retry logic yet. Diagnose first, fix in the next round.
+- No frontend changes.

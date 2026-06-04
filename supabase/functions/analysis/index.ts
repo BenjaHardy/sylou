@@ -122,7 +122,9 @@ Half-point scores (e.g. 2.5, 3.5) are permitted and encouraged when the evidence
 
 # RESPONSE FORMAT
 
-Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.`;
+Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.
+
+Each of \`find\`, \`lead\`, \`organize\`, and \`write\` MUST be a nested JSON object of the shape \`{ "reasoning": "...", "evidence": ["...", "..."], "score": 3.5, "narrative": "..." }\`. Do not return any pillar as a string. Do not promote \`reasoning\`, \`evidence\`, \`score\`, or \`narrative\` to the top level. Do not use XML or \`<parameter>\` tags.`;
 
 // ---------------------------------------------------------------------------
 // Creative FLOW Prompt — for creative template projects
@@ -172,24 +174,37 @@ Half-point scores (e.g. 2.5, 3.5) are permitted and encouraged when the evidence
 
 # RESPONSE FORMAT
 
-Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.`;
+Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.
+
+Each of \`find\`, \`lead\`, \`organize\`, and \`write\` MUST be a nested JSON object of the shape \`{ "reasoning": "...", "evidence": ["...", "..."], "score": 3.5, "narrative": "..." }\`. Do not return any pillar as a string. Do not promote \`reasoning\`, \`evidence\`, \`score\`, or \`narrative\` to the top level. Do not use XML or \`<parameter>\` tags.`;
 
 // ---------------------------------------------------------------------------
 // Tool schema
 // ---------------------------------------------------------------------------
 const pillarSchema = {
   type: "object" as const,
+  additionalProperties: false,
   required: ["reasoning", "evidence", "score", "narrative"],
   properties: {
     reasoning: { type: "string" as const, description: "Chain-of-thought reasoning before scoring" },
     evidence: {
       type: "array" as const,
+      description: "2–4 short quotes or concrete references from the project supporting the assessment.",
       items: { type: "string" as const },
       minItems: 2,
       maxItems: 4,
     },
-    score: { type: ["number", "null"] as const, minimum: 0, maximum: 5 },
-    narrative: { type: "string" as const },
+    score: {
+      description: "Half-point score from 0.0 to 5.0, or null if insufficient evidence.",
+      anyOf: [
+        { type: "number" as const, minimum: 0, maximum: 5 },
+        { type: "null" as const },
+      ],
+    },
+    narrative: {
+      type: "string" as const,
+      description: "Brief user-facing narrative explaining the assessment for this pillar.",
+    },
   },
 };
 
@@ -198,6 +213,7 @@ const SUBMIT_FLOW_TOOL = {
   description: "Submit the structured FLOW analysis results",
   input_schema: {
     type: "object" as const,
+    additionalProperties: false,
     required: ["summary", "find", "lead", "organize", "write", "key_user_contributions"],
     properties: {
       summary: { type: "string" as const, description: "Overall summary paragraph" },
@@ -210,6 +226,7 @@ const SUBMIT_FLOW_TOOL = {
         description: "3–5 specific, concrete user contributions that meaningfully shaped the final work.",
         items: {
           type: "object" as const,
+          additionalProperties: false,
           required: ["contribution", "evidence", "why_it_matters"],
           properties: {
             contribution: {
@@ -924,6 +941,15 @@ ${writePillarNotice}`;
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 
+    if (provider === "anthropic") {
+      console.log("FLOW tool schema sent to Claude", {
+        model: flowModel,
+        tool_name: SUBMIT_FLOW_TOOL.name,
+        input_schema: JSON.stringify(SUBMIT_FLOW_TOOL.input_schema),
+      });
+    }
+
+
     const llmRes = await callLLM({
       model: flowModel,
       max_tokens: 8192,
@@ -995,10 +1021,28 @@ ${writePillarNotice}`;
     const validPillarCount = pillarValidity.filter(Boolean).length;
     const hasSummary = !!flowResult.summary && typeof flowResult.summary === "string";
     if (validPillarCount < 3 || !hasSummary) {
+      // Diagnostic: capture shape + stop reason to disambiguate truncation vs schema drift.
+      // No payload content / no PII — only key names, types, and counters.
+      const pillarShape: Record<string, string> = {};
+      for (const k of ["summary", "find", "lead", "organize", "write"] as const) {
+        const v = (flowResult as Record<string, unknown>)[k];
+        pillarShape[k] = v === undefined ? "undefined" : v === null ? "null" : Array.isArray(v) ? "array" : typeof v;
+      }
       console.error("FLOW schema validation failed", {
         model: flowModel,
         validPillarCount,
         hasSummary,
+        stop_reason: rawData?.stop_reason ?? rawData?.choices?.[0]?.finish_reason ?? null,
+        input_tokens: normalised.usage?.input_tokens ?? null,
+        output_tokens: normalised.usage?.output_tokens ?? null,
+        tool_call_present: !!toolCall,
+        tool_argument_keys: Object.keys(flowResult ?? {}),
+        pillar_shape: pillarShape,
+        summary_len: typeof flowResult?.summary === "string" ? (flowResult.summary as string).length : 0,
+      });
+      console.error("FLOW raw tool input (full)", {
+        model: flowModel,
+        raw_tool_input: JSON.stringify(flowResult),
       });
       // Log token usage for transparency, but flag as schema_invalid and skip insert
       try {
