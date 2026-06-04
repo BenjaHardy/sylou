@@ -74,6 +74,7 @@ export function toAnthropicBody(opts: {
   tools?: LLMTool[];
   stream?: boolean;
   forceTool?: string;
+  disableParallelToolUse?: boolean;
 }): Record<string, unknown> {
   let system = "";
   const msgs: Array<Record<string, unknown>> = [];
@@ -131,7 +132,11 @@ export function toAnthropicBody(opts: {
       input_schema: t.function.parameters,
     }));
     if (opts.forceTool) {
-      body.tool_choice = { type: "tool", name: opts.forceTool };
+      body.tool_choice = {
+        type: "tool",
+        name: opts.forceTool,
+        ...(opts.disableParallelToolUse ? { disable_parallel_tool_use: true } : {}),
+      };
     }
   }
   return body;
@@ -256,6 +261,7 @@ export async function callLLM(opts: {
   tools?: LLMTool[];
   stream?: boolean;
   forceTool?: string;
+  disableParallelToolUse?: boolean;
 }): Promise<Response> {
   const provider = providerFor(opts.model);
   const key = Deno.env.get(envKeyFor(provider));
