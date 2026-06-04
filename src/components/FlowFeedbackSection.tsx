@@ -50,7 +50,9 @@ export function FlowFeedbackSection({ type, existingFeedback, onSubmit }: Props)
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {PILLARS.map((p) => {
-            const band = getBandForScore(existingFeedback[p.key] ?? null);
+            const score = existingFeedback[p.key] ?? null;
+            const band = getBandForScore(score);
+            const isNA = score === null;
             return (
               <div key={p.key} className="flex items-center justify-between gap-2 rounded-md bg-background/60 px-3 py-2">
                 <span className="text-xs text-muted-foreground">{p.label}</span>
@@ -62,7 +64,7 @@ export function FlowFeedbackSection({ type, existingFeedback, onSubmit }: Props)
                       : { backgroundColor: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }
                   }
                 >
-                  {band ? band.label : "—"}
+                  {band ? band.label : isNA ? "Not applicable" : "—"}
                 </span>
               </div>
             );
