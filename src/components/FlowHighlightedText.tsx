@@ -60,6 +60,14 @@ const BLOCK_TAGS = new Set([
   "DIV", "HR", "TABLE", "TR", "TD", "TH",
 ]);
 
+/* HTML void elements — cannot have children or dangerouslySetInnerHTML.
+ * Treated as atomic leaf nodes (size 1 in ProseMirror positions). */
+const VOID_TAGS = new Set([
+  "AREA", "BASE", "BR", "COL", "EMBED", "HR", "IMG",
+  "INPUT", "LINK", "META", "SOURCE", "TRACK", "WBR",
+]);
+
+
 /**
  * Recursively walk a DOM tree, tracking TipTap-compatible positions.
  */
@@ -130,7 +138,47 @@ function walkNode(
   if (node.nodeType === Node.ELEMENT_NODE) {
     const el = node as Element;
     const tagName = el.tagName;
-    const isBlock = BLOCK_TAGS.has(tagName);
+    const isVoid = VOID_TAGS.has(tagName);
+    const isBlock = !isVoid && BLOCK_TAGS.has(tagName);
+
+    // Void elements (hr, br, img, ...) are atomic leaf nodes in ProseMirror,
+    // contributing exactly 1 position. They cannot have children, so we render
+    // them self-closing. If the position falls inside a provenance segment,
+    // wrap in a styled span (the wrapper, not the void, carries the highlight).
+    if (isVoid) {
+      const seg = findSegmentAt(segments, currentPos);
+      const Tag = tagName.toLowerCase() as keyof JSX.IntrinsicElements;
+      const className =
+        tagName === "HR" ? "my-3 border-border" :
+        tagName === "BR" ? "" :
+        "inline-block";
+      const voidEl = <Tag key={`${keyPrefix}-void`} className={className || undefined} />;
+
+      if (seg) {
+        const style = WRITE_COLORS[seg.source];
+        const pct = totalTextLen > 0 ? ((1 / totalTextLen) * 100).toFixed(1) : "0";
+        results.push(
+          <TooltipProvider key={`${keyPrefix}-void-wrap`} delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className={`${style.bg} rounded-sm`}>{voidEl}</span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs max-w-xs">
+                <p className="font-semibold">{style.label}</p>
+                <p className="text-muted-foreground">{pct}% of total text</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      } else {
+        results.push(voidEl);
+      }
+
+      currentPos += 1;
+      return { nodes: results, pos: currentPos, textLen: 0 };
+    }
+
+
 
     if (isBlock) currentPos += 1;
 
