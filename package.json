@@ -71,6 +71,7 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.577.0",
     "next-themes": "^0.3.0",
+    "prosemirror-markdown": "^1.13.4",
     "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
