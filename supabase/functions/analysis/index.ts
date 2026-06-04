@@ -924,6 +924,15 @@ ${writePillarNotice}`;
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 
+    if (provider === "anthropic") {
+      console.log("FLOW tool schema sent to Claude", {
+        model: flowModel,
+        tool_name: SUBMIT_FLOW_TOOL.name,
+        input_schema: JSON.stringify(SUBMIT_FLOW_TOOL.input_schema),
+      });
+    }
+
+
     const llmRes = await callLLM({
       model: flowModel,
       max_tokens: 8192,
@@ -1013,6 +1022,10 @@ ${writePillarNotice}`;
         tool_argument_keys: Object.keys(flowResult ?? {}),
         pillar_shape: pillarShape,
         summary_len: typeof flowResult?.summary === "string" ? (flowResult.summary as string).length : 0,
+      });
+      console.error("FLOW raw tool input (full)", {
+        model: flowModel,
+        raw_tool_input: JSON.stringify(flowResult),
       });
       // Log token usage for transparency, but flag as schema_invalid and skip insert
       try {
