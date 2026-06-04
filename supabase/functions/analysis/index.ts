@@ -1023,6 +1023,10 @@ ${writePillarNotice}`;
         pillar_shape: pillarShape,
         summary_len: typeof flowResult?.summary === "string" ? (flowResult.summary as string).length : 0,
       });
+      console.error("FLOW raw tool input (full)", {
+        model: flowModel,
+        raw_tool_input: JSON.stringify(flowResult),
+      });
       // Log token usage for transparency, but flag as schema_invalid and skip insert
       try {
         await supabase.from("token_usage").insert({
