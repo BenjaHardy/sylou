@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import type { ChatMessage } from "@/hooks/useChatMessages";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -23,7 +23,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { exportWritingAsDocx } from "@/lib/export-docx";
 import { exportProjectAsJson } from "@/lib/export-json";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
-import { buildEditorMarkdownParser, parseMarkdownToFragment } from "@/lib/markdown-to-pm";
 
 interface Props {
   projectId: string;
@@ -294,43 +293,14 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     setAiPanelOpen(true);
   }, [editor]);
 
-  // Markdown parser bound to the editor's actual schema (StarterKit + extensions).
-  // Rebuilt only when the editor instance changes (effectively once per mount).
-  const markdownParser = useMemo(
-    () => (editor ? buildEditorMarkdownParser(editor.schema) : null),
-    [editor],
-  );
-
   const handleAcceptProposal = useCallback(
     (replacementText: string) => {
       if (!editor) return;
       const tracker = getTracker();
       tracker.setPendingSignal({ source: "ai_editor", originalText: null });
-
-      // Parse markdown → ProseMirror JSON fragment so headings, lists, bold,
-      // etc. become real nodes/marks instead of literal characters inside
-      // <p> nodes (which previously broke Claude's FLOW schema parsing).
-      const fragment = markdownParser
-        ? parseMarkdownToFragment(markdownParser, replacementText)
-        : null;
-
-      try {
-        if (fragment) {
-          editor.chain().focus().insertContent(fragment).run();
-        } else {
-          editor.chain().focus().insertContent(replacementText).run();
-        }
-      } catch (err) {
-        console.warn(
-          "Editor rejected parsed AI fragment (likely an unsupported node type from prosemirror-markdown). " +
-            "Falling back to raw text insertion. The inserted content may contain literal markdown characters " +
-            "that could affect FLOW analysis with Claude.",
-          err,
-        );
-        editor.chain().focus().insertContent(replacementText).run();
-      }
+      editor.chain().focus().insertContent(replacementText).run();
     },
-    [editor, getTracker, markdownParser]
+    [editor, getTracker]
   );
 
   const handleAskComplete = useCallback((messages: ChatMessage[]) => {
