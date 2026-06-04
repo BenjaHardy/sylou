@@ -924,6 +924,15 @@ ${writePillarNotice}`;
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 
+    if (provider === "anthropic") {
+      console.log("FLOW tool schema sent to Claude", {
+        model: flowModel,
+        tool_name: SUBMIT_FLOW_TOOL.name,
+        input_schema: JSON.stringify(SUBMIT_FLOW_TOOL.input_schema),
+      });
+    }
+
+
     const llmRes = await callLLM({
       model: flowModel,
       max_tokens: 8192,
