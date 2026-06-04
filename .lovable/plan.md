@@ -1,35 +1,59 @@
-## Goal
+## Objective
+Add a "Not applicable" option to the band selector used in both pre-analysis (`FlowFeedbackSection`) and post-analysis (`FlowUserAssessmentSection`) self-assessment flows, so users can indicate a pillar is irrelevant to their project.
 
-Prevent Claude from emitting multiple `tool_use` blocks in a single response for the FLOW analysis call, which is a likely cause of the intermittent schema-validation failures.
+## Background
 
-## Change
+Currently the self-assessment UI offers six FLOW bands (AI-led through Human-authored) for each pillar. The internal `FlowFeedback` type stores `number` scores. The user wants a seventh "Not applicable" option. Since `null` is already the representation for "no score / insufficient evidence" in downstream components (radar chart, profile computation), using `null` for "Not applicable" is the cleanest approach.
 
-Scope the fix to `supabase/functions/analysis/` only. Do not touch `chat/`, `editor-action/`, or `context-prompt/` copies of `_llm.ts` — chat in particular may legitimately want parallel tool use.
+## Changes
 
-### 1. `supabase/functions/analysis/_llm.ts`
-
-Add an optional `disableParallelToolUse?: boolean` to both `toAnthropicBody` and `callLLM` opts. In `toAnthropicBody`, when `tool_choice` is set, include `disable_parallel_tool_use: true` when the flag is on:
-
-```ts
-body.tool_choice = {
-  type: "tool",
-  name: opts.forceTool,
-  ...(opts.disableParallelToolUse ? { disable_parallel_tool_use: true } : {}),
-};
+### 1. Type system — `src/hooks/useFlowAnalysis.ts`
+Change `FlowFeedback` from `Record<string, number>` to `Record<string, number | null>`:
 ```
+find: number | null;
+lead: number | null;
+organize: number | null;
+write: number | null;
+```
+The JSONB database columns already accept `null` values.
 
-Thread the flag through `callLLM` → `toAnthropicBody`. OpenAI-shape path is unaffected (Mistral/DeepSeek don't use this).
+### 2. BandSelector — `src/components/flow-report/BandSelector.tsx`
+- Add a "Not applicable" chip after the six FLOW band chips.
+- Style: muted gray/neutral appearance, distinct from the colored band chips.
+- Clicking it calls `onChange(null)`.
+- The `onChange` prop type changes from `(score: number) => void` to `(score: number | null) => void`.
 
-### 2. `supabase/functions/analysis/index.ts`
+### 3. Pre-analysis feedback — `src/components/FlowFeedbackSection.tsx`
+- Update `values` state type to `FlowFeedback` (now with nullable scores).
+- Read-only view: when a score is `null`, render the chip as "Not applicable" instead of "—".
 
-At the single `callLLM` call (line ~978) that forces `SUBMIT_FLOW_TOOL`, pass `disableParallelToolUse: true` alongside the existing `forceTool`.
+### 4. Post-analysis assessment — `src/components/FlowUserAssessmentSection.tsx`
+- Update `scores` state type to match the new `FlowFeedback`.
+- Read-only view: when a score is `null`, render "Not applicable".
 
-## Why this is safe
+### 5. Display components
 
-- Only the Anthropic branch and only when `tool_choice` is already a forced tool.
-- Anthropic ignores unknown fields silently for non-supporting models, but `claude-sonnet-4-*` supports this per the linked docs.
-- No frontend, schema, or DB changes.
+**`src/components/flow-report/SelfAssessmentDisplay.tsx`**
+- In `BandChip`, render `null` user scores as "Not applicable" instead of falling through to `getBandLabel` (which returns "Insufficient evidence" — an AI-assessment concept, not a user choice).
+
+**`src/components/flow-report/FlowRadarChart.tsx`**
+- Already handles `null` scores (renders at radius 0 with dashed markers). No changes needed.
+
+**`src/lib/flow-work-profiles.ts`**
+- `getProfileCode` already treats `null` as `0` (`scores.find ?? 0`), which maps to "-" in the 4-char code. This is acceptable: a "Not applicable" pillar is treated as "not a human-led pillar" for profile purposes.
+
+### 6. Type-safety sweep
+- Verify all call sites of `BandSelector` compile after the `onChange` signature change.
+- Verify `extractFeedbackScores` and `extractUserAssessment` in `shared-utils.ts` handle the new nullable shape correctly.
+
+## Out of scope
+- No database migration needed (JSONB already supports null).
+- No edge function changes needed.
+- No changes to AI analysis scoring (those scores remain `number | null` as they already were).
 
 ## Verification
-
-After deploy, trigger a FLOW analysis run; confirm Claude returns exactly one `tool_use` block (visible via the existing raw-response logging added earlier). The intermittent multi-block failure mode should be eliminated.
+1. Trigger a FLOW analysis on a fresh project.
+2. In the pre-analysis self-assessment, select "Not applicable" for one or more pillars and submit.
+3. Confirm the read-only view shows "Not applicable" for those pillars.
+4. Confirm the radar chart renders the user polygon with those points at the center (radius 0).
+5. Check the post-analysis self-assessment also offers the "Not applicable" option.
