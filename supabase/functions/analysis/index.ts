@@ -179,17 +179,28 @@ Respond ONLY by calling the submit_flow_analysis tool with the required paramete
 // ---------------------------------------------------------------------------
 const pillarSchema = {
   type: "object" as const,
+  additionalProperties: false,
   required: ["reasoning", "evidence", "score", "narrative"],
   properties: {
     reasoning: { type: "string" as const, description: "Chain-of-thought reasoning before scoring" },
     evidence: {
       type: "array" as const,
+      description: "2–4 short quotes or concrete references from the project supporting the assessment.",
       items: { type: "string" as const },
       minItems: 2,
       maxItems: 4,
     },
-    score: { type: ["number", "null"] as const, minimum: 0, maximum: 5 },
-    narrative: { type: "string" as const },
+    score: {
+      description: "Half-point score from 0.0 to 5.0, or null if insufficient evidence.",
+      anyOf: [
+        { type: "number" as const, minimum: 0, maximum: 5 },
+        { type: "null" as const },
+      ],
+    },
+    narrative: {
+      type: "string" as const,
+      description: "Brief user-facing narrative explaining the assessment for this pillar.",
+    },
   },
 };
 
@@ -198,6 +209,7 @@ const SUBMIT_FLOW_TOOL = {
   description: "Submit the structured FLOW analysis results",
   input_schema: {
     type: "object" as const,
+    additionalProperties: false,
     required: ["summary", "find", "lead", "organize", "write", "key_user_contributions"],
     properties: {
       summary: { type: "string" as const, description: "Overall summary paragraph" },
@@ -210,6 +222,7 @@ const SUBMIT_FLOW_TOOL = {
         description: "3–5 specific, concrete user contributions that meaningfully shaped the final work.",
         items: {
           type: "object" as const,
+          additionalProperties: false,
           required: ["contribution", "evidence", "why_it_matters"],
           properties: {
             contribution: {
