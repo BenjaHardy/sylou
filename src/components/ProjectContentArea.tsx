@@ -10,6 +10,7 @@ import { ChatPanel } from "@/components/ChatPanel";
 import { ProjectActivityBar } from "@/components/ProjectActivityBar";
 import { FlowReportView } from "@/components/FlowReportView";
 import { FlowHighlightedText } from "@/components/FlowHighlightedText";
+import { ProvenanceErrorBoundary } from "@/components/ProvenanceErrorBoundary";
 import { FlowConfirmDialog } from "@/components/FlowConfirmDialog";
 import { FlowTokenWarningDialog } from "@/components/FlowTokenWarningDialog";
 import { FlowReanalyzeDialog } from "@/components/FlowReanalyzeDialog";
@@ -493,12 +494,14 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
                         Refresh
                       </Button>
                     </div>
-                    <FlowHighlightedText
-                      key={provenanceKey}
-                      segments={provenanceTracker.getSegments()}
-                      writingContent={editorHtml}
-                      onClose={() => setShowLiveProvenance(false)}
-                    />
+                    <ProvenanceErrorBoundary onRetry={() => setProvenanceKey((k) => k + 1)}>
+                      <FlowHighlightedText
+                        key={provenanceKey}
+                        segments={provenanceTracker.getSegments()}
+                        writingContent={editorHtml}
+                        onClose={() => setShowLiveProvenance(false)}
+                      />
+                    </ProvenanceErrorBoundary>
                   </div>
                 )}
                 <div className="h-7 border-t border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))] print:hidden">

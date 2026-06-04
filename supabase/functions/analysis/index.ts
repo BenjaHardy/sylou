@@ -949,16 +949,15 @@ ${writePillarNotice}`;
       });
     }
 
-
-    const llmRes = await callLLM({
+    const llmArgs = {
       model: flowModel,
       max_tokens: 8192,
       messages: [
-        { role: "system", content: systemPromptTemplate },
-        { role: "user", content: userPrompt },
+        { role: "system" as const, content: systemPromptTemplate },
+        { role: "user" as const, content: userPrompt },
       ],
       tools: [{
-        type: "function",
+        type: "function" as const,
         function: {
           name: SUBMIT_FLOW_TOOL.name,
           description: SUBMIT_FLOW_TOOL.description,
@@ -966,7 +965,17 @@ ${writePillarNotice}`;
         },
       }],
       forceTool: SUBMIT_FLOW_TOOL.name,
+    };
+
+    // Diagnostic: full prompt as sent to the LLM (system + user + tools).
+    // Stringified so Supabase log viewer doesn't truncate nested objects.
+    console.log("FLOW prompt sent", {
+      model: flowModel,
+      provider,
+      request_body: JSON.stringify(llmArgs),
     });
+
+    const llmRes = await callLLM(llmArgs);
 
     if (!llmRes.ok) {
       const errText = await llmRes.text();
@@ -978,6 +987,15 @@ ${writePillarNotice}`;
     }
 
     const rawData = await llmRes.json();
+
+    // Diagnostic: full raw response from the provider, including stop_reason,
+    // content blocks, tool blocks, and usage.
+    console.log("FLOW raw response", {
+      model: flowModel,
+      stop_reason: rawData?.stop_reason ?? rawData?.choices?.[0]?.finish_reason ?? null,
+      raw_response: JSON.stringify(rawData),
+    });
+
     const normalised = normaliseResponse(provider, rawData);
     const toolCall = normalised.toolCalls.find((tc) => tc.name === SUBMIT_FLOW_TOOL.name);
 
