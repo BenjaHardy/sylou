@@ -10,6 +10,7 @@ import { ChatPanel } from "@/components/ChatPanel";
 import { ProjectActivityBar } from "@/components/ProjectActivityBar";
 import { FlowReportView } from "@/components/FlowReportView";
 import { FlowHighlightedText } from "@/components/FlowHighlightedText";
+import { ProvenanceErrorBoundary } from "@/components/ProvenanceErrorBoundary";
 import { FlowConfirmDialog } from "@/components/FlowConfirmDialog";
 import { FlowTokenWarningDialog } from "@/components/FlowTokenWarningDialog";
 import { FlowReanalyzeDialog } from "@/components/FlowReanalyzeDialog";
