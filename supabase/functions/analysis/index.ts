@@ -995,10 +995,24 @@ ${writePillarNotice}`;
     const validPillarCount = pillarValidity.filter(Boolean).length;
     const hasSummary = !!flowResult.summary && typeof flowResult.summary === "string";
     if (validPillarCount < 3 || !hasSummary) {
+      // Diagnostic: capture shape + stop reason to disambiguate truncation vs schema drift.
+      // No payload content / no PII — only key names, types, and counters.
+      const pillarShape: Record<string, string> = {};
+      for (const k of ["summary", "find", "lead", "organize", "write"] as const) {
+        const v = (flowResult as Record<string, unknown>)[k];
+        pillarShape[k] = v === undefined ? "undefined" : v === null ? "null" : Array.isArray(v) ? "array" : typeof v;
+      }
       console.error("FLOW schema validation failed", {
         model: flowModel,
         validPillarCount,
         hasSummary,
+        stop_reason: rawData?.stop_reason ?? rawData?.choices?.[0]?.finish_reason ?? null,
+        input_tokens: normalised.usage?.input_tokens ?? null,
+        output_tokens: normalised.usage?.output_tokens ?? null,
+        tool_call_present: !!toolCall,
+        tool_argument_keys: Object.keys(flowResult ?? {}),
+        pillar_shape: pillarShape,
+        summary_len: typeof flowResult?.summary === "string" ? (flowResult.summary as string).length : 0,
       });
       // Log token usage for transparency, but flag as schema_invalid and skip insert
       try {
