@@ -33,10 +33,10 @@ export interface MetricsSnapshot {
 }
 
 export interface FlowFeedback {
-  find: number;
-  lead: number;
-  organize: number;
-  write: number;
+  find: number | null;
+  lead: number | null;
+  organize: number | null;
+  write: number | null;
 }
 
 export interface FlowUserAssessment {
