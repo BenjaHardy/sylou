@@ -60,6 +60,14 @@ const BLOCK_TAGS = new Set([
   "DIV", "HR", "TABLE", "TR", "TD", "TH",
 ]);
 
+/* HTML void elements — cannot have children or dangerouslySetInnerHTML.
+ * Treated as atomic leaf nodes (size 1 in ProseMirror positions). */
+const VOID_TAGS = new Set([
+  "AREA", "BASE", "BR", "COL", "EMBED", "HR", "IMG",
+  "INPUT", "LINK", "META", "SOURCE", "TRACK", "WBR",
+]);
+
+
 /**
  * Recursively walk a DOM tree, tracking TipTap-compatible positions.
  */
