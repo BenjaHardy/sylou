@@ -128,6 +128,8 @@ export function TextSelectionWindow({
   const [pendingInstruction, setPendingInstruction] = useState<string>("");
   const [pendingSourceBreakdown, setPendingSourceBreakdown] = useState<string | null>(null);
   const [pendingDocumentsReferenced, setPendingDocumentsReferenced] = useState<string[] | null>(null);
+  const [accepting, setAccepting] = useState(false);
+  const acceptingRef = useRef(false);
   const [pendingWebSearchesPerformed, setPendingWebSearchesPerformed] = useState<string[] | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -479,47 +481,55 @@ export function TextSelectionWindow({
   };
 
   const handleAccept = async () => {
-    // For propose actions with pending summary, confirm (works with or without action_id)
-    if (pendingSummaryUpdate !== null) {
-      try {
-        const { data, error } = await supabase.functions.invoke("context-prompt", {
-          body: {
-            confirm: true,
-            action_id: currentActionId,
-            summary_update: pendingSummaryUpdate,
-            thread_id: threadId,
-            project_id: projectId,
-            selected_text: selectedText,
-            instruction: pendingInstruction,
-            ai_response: proposedText,
-            concise_mode: conciseMode ?? false,
-            ...(pendingSourceBreakdown ? { selected_text_source: pendingSourceBreakdown } : {}),
-            ...(pendingDocumentsReferenced && pendingDocumentsReferenced.length > 0 ? { documents_referenced: pendingDocumentsReferenced } : {}),
-            ...(pendingWebSearchesPerformed && pendingWebSearchesPerformed.length > 0 ? { web_searches_performed: pendingWebSearchesPerformed } : {}),
-          },
-        });
-        if (error) {
-          console.error("Confirm error:", error);
+    if (acceptingRef.current) return;
+    acceptingRef.current = true;
+    setAccepting(true);
+    try {
+      // For propose actions with pending summary, confirm (works with or without action_id)
+      if (pendingSummaryUpdate !== null) {
+        try {
+          const { data, error } = await supabase.functions.invoke("context-prompt", {
+            body: {
+              confirm: true,
+              action_id: currentActionId,
+              summary_update: pendingSummaryUpdate,
+              thread_id: threadId,
+              project_id: projectId,
+              selected_text: selectedText,
+              instruction: pendingInstruction,
+              ai_response: proposedText,
+              concise_mode: conciseMode ?? false,
+              ...(pendingSourceBreakdown ? { selected_text_source: pendingSourceBreakdown } : {}),
+              ...(pendingDocumentsReferenced && pendingDocumentsReferenced.length > 0 ? { documents_referenced: pendingDocumentsReferenced } : {}),
+              ...(pendingWebSearchesPerformed && pendingWebSearchesPerformed.length > 0 ? { web_searches_performed: pendingWebSearchesPerformed } : {}),
+            },
+          });
+          if (error) {
+            console.error("Confirm error:", error);
+            toast.error("Failed to log proposal to chat.");
+            onChatRefresh?.();
+          } else {
+            const msgs = data?.inserted_messages ?? [];
+            if (msgs.length > 0) {
+              onAskComplete(msgs);
+            } else {
+              onChatRefresh?.();
+            }
+          }
+        } catch (err) {
+          console.error("Failed to confirm propose:", err);
           toast.error("Failed to log proposal to chat.");
           onChatRefresh?.();
-        } else {
-          const msgs = data?.inserted_messages ?? [];
-          if (msgs.length > 0) {
-            onAskComplete(msgs);
-          } else {
-            onChatRefresh?.();
-          }
         }
-      } catch (err) {
-        console.error("Failed to confirm propose:", err);
-        toast.error("Failed to log proposal to chat.");
-        onChatRefresh?.();
+      } else if (currentActionId) {
+        updateOutcome(currentActionId, "accepted");
       }
-    } else if (currentActionId) {
-      updateOutcome(currentActionId, "accepted");
+      onAccept(proposedText);
+      onClose();
+    } finally {
+      acceptingRef.current = false;
+      setAccepting(false);
     }
-    onAccept(proposedText);
-    onClose();
   };
 
 
@@ -682,15 +692,26 @@ export function TextSelectionWindow({
                 size="sm"
                 className="h-7 text-xs gap-1"
                 onClick={handleAccept}
+                disabled={accepting}
               >
-                <Check className="h-3.5 w-3.5" />
-                Accept
+                {accepting ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Inserting…
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    Accept
+                  </>
+                )}
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
                 className="h-7 text-xs gap-1 text-destructive hover:text-destructive"
                 onClick={handleReject}
+                disabled={accepting}
               >
                 <XCircle className="h-3.5 w-3.5" />
                 Reject
