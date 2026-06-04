@@ -132,7 +132,11 @@ export function toAnthropicBody(opts: {
       input_schema: t.function.parameters,
     }));
     if (opts.forceTool) {
-      body.tool_choice = { type: "tool", name: opts.forceTool };
+      body.tool_choice = {
+        type: "tool",
+        name: opts.forceTool,
+        ...(opts.disableParallelToolUse ? { disable_parallel_tool_use: true } : {}),
+      };
     }
   }
   return body;
