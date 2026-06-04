@@ -183,4 +183,43 @@ describe("ProvenanceTracker slice paste round-trip", () => {
     expect(newOnes).toHaveLength(1);
     expect(newOnes[0]).toMatchObject({ source: "ai_editor", original_text: "GENERATED" });
   });
+
+  it("covers an AI multi-node insertion (heading + paragraph w/ bold mark + list) as one contiguous ai_editor region", () => {
+    // Simulates what handleAcceptProposal does after parsing markdown like:
+    //
+    //   # Heading
+    //   A paragraph with **bold text** inside.
+    //   - list item
+    //   - another item
+    //
+    // into a ProseMirror fragment and inserting it at the end of the doc.
+    // The insertion arrives as a SINGLE transaction whose positional length
+    // includes block-boundary tokens (h1 open/close, p open/close, ul/li
+    // tokens) on top of the text characters and the inline bold mark.
+    //
+    // The tracker should attribute the entire inserted region — text inside
+    // the marked range included — to ai_editor without leaving typed gaps.
+    const tracker = new ProvenanceTracker();
+    seed(tracker, [{ start: 0, end: 50, source: "typed", original_text: null }]);
+
+    tracker.setPendingSignal({ source: "ai_editor", originalText: null });
+
+    // ~120 positions: ~85 chars of visible text + ~35 positions of block
+    // wrappers across heading, paragraph, bulletList, and 2 listItems.
+    const tx = makeInsertionTx({ oldSize: 50, at: 50, insertLen: 120, insertText: "x".repeat(120) });
+    tracker.applyTransaction(tx);
+
+    const segs = tracker.getSegments();
+    const inserted = segs.filter(s => s.start >= 50);
+
+    // Single ai_editor segment spanning the whole inserted region — no
+    // typed gaps inside (marks are inline within nodes, not separate
+    // segments at the provenance layer).
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0]).toMatchObject({ start: 50, end: 170, source: "ai_editor" });
+
+    // No typed gap inside [50, 170)
+    const gapInside = segs.find(s => s.source === "typed" && s.start >= 50 && s.start < 170);
+    expect(gapInside).toBeUndefined();
+  });
 });

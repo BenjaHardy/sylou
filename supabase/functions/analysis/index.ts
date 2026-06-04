@@ -122,7 +122,9 @@ Half-point scores (e.g. 2.5, 3.5) are permitted and encouraged when the evidence
 
 # RESPONSE FORMAT
 
-Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.`;
+Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.
+
+Each of \`find\`, \`lead\`, \`organize\`, and \`write\` MUST be a nested JSON object of the shape \`{ "reasoning": "...", "evidence": ["...", "..."], "score": 3.5, "narrative": "..." }\`. Do not return any pillar as a string. Do not promote \`reasoning\`, \`evidence\`, \`score\`, or \`narrative\` to the top level. Do not use XML or \`<parameter>\` tags.`;
 
 // ---------------------------------------------------------------------------
 // Creative FLOW Prompt — for creative template projects
@@ -172,24 +174,37 @@ Half-point scores (e.g. 2.5, 3.5) are permitted and encouraged when the evidence
 
 # RESPONSE FORMAT
 
-Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.`;
+Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.
+
+Each of \`find\`, \`lead\`, \`organize\`, and \`write\` MUST be a nested JSON object of the shape \`{ "reasoning": "...", "evidence": ["...", "..."], "score": 3.5, "narrative": "..." }\`. Do not return any pillar as a string. Do not promote \`reasoning\`, \`evidence\`, \`score\`, or \`narrative\` to the top level. Do not use XML or \`<parameter>\` tags.`;
 
 // ---------------------------------------------------------------------------
 // Tool schema
 // ---------------------------------------------------------------------------
 const pillarSchema = {
   type: "object" as const,
+  additionalProperties: false,
   required: ["reasoning", "evidence", "score", "narrative"],
   properties: {
     reasoning: { type: "string" as const, description: "Chain-of-thought reasoning before scoring" },
     evidence: {
       type: "array" as const,
+      description: "2–4 short quotes or concrete references from the project supporting the assessment.",
       items: { type: "string" as const },
       minItems: 2,
       maxItems: 4,
     },
-    score: { type: ["number", "null"] as const, minimum: 0, maximum: 5 },
-    narrative: { type: "string" as const },
+    score: {
+      description: "Half-point score from 0.0 to 5.0, or null if insufficient evidence.",
+      anyOf: [
+        { type: "number" as const, minimum: 0, maximum: 5 },
+        { type: "null" as const },
+      ],
+    },
+    narrative: {
+      type: "string" as const,
+      description: "Brief user-facing narrative explaining the assessment for this pillar.",
+    },
   },
 };
 
@@ -198,6 +213,7 @@ const SUBMIT_FLOW_TOOL = {
   description: "Submit the structured FLOW analysis results",
   input_schema: {
     type: "object" as const,
+    additionalProperties: false,
     required: ["summary", "find", "lead", "organize", "write", "key_user_contributions"],
     properties: {
       summary: { type: "string" as const, description: "Overall summary paragraph" },
@@ -210,6 +226,7 @@ const SUBMIT_FLOW_TOOL = {
         description: "3–5 specific, concrete user contributions that meaningfully shaped the final work.",
         items: {
           type: "object" as const,
+          additionalProperties: false,
           required: ["contribution", "evidence", "why_it_matters"],
           properties: {
             contribution: {
