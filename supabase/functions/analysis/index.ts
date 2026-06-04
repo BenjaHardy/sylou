@@ -965,6 +965,7 @@ ${writePillarNotice}`;
         },
       }],
       forceTool: SUBMIT_FLOW_TOOL.name,
+      disableParallelToolUse: true,
     };
 
     // Diagnostic: full prompt as sent to the LLM (system + user + tools).
