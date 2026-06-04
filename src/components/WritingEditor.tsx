@@ -301,33 +301,41 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     [editor],
   );
 
+  const isInsertingRef = useRef(false);
+
   const handleAcceptProposal = useCallback(
     (replacementText: string) => {
       if (!editor) return;
-      const tracker = getTracker();
-      tracker.setPendingSignal({ source: "ai_editor", originalText: null });
-
-      // Parse markdown → ProseMirror JSON fragment so headings, lists, bold,
-      // etc. become real nodes/marks instead of literal characters inside
-      // <p> nodes (which previously broke Claude's FLOW schema parsing).
-      const fragment = markdownParser
-        ? parseMarkdownToFragment(markdownParser, replacementText)
-        : null;
-
+      if (isInsertingRef.current) return;
+      isInsertingRef.current = true;
       try {
-        if (fragment) {
-          editor.chain().focus().insertContent(fragment).run();
-        } else {
+        const tracker = getTracker();
+        tracker.setPendingSignal({ source: "ai_editor", originalText: null });
+
+        // Parse markdown → ProseMirror JSON fragment so headings, lists, bold,
+        // etc. become real nodes/marks instead of literal characters inside
+        // <p> nodes (which previously broke Claude's FLOW schema parsing).
+        const fragment = markdownParser
+          ? parseMarkdownToFragment(markdownParser, replacementText)
+          : null;
+
+        try {
+          if (fragment) {
+            editor.chain().focus().insertContent(fragment).run();
+          } else {
+            editor.chain().focus().insertContent(replacementText).run();
+          }
+        } catch (err) {
+          console.warn(
+            "Editor rejected parsed AI fragment (likely an unsupported node type from prosemirror-markdown). " +
+              "Falling back to raw text insertion. The inserted content may contain literal markdown characters " +
+              "that could affect FLOW analysis with Claude.",
+            err,
+          );
           editor.chain().focus().insertContent(replacementText).run();
         }
-      } catch (err) {
-        console.warn(
-          "Editor rejected parsed AI fragment (likely an unsupported node type from prosemirror-markdown). " +
-            "Falling back to raw text insertion. The inserted content may contain literal markdown characters " +
-            "that could affect FLOW analysis with Claude.",
-          err,
-        );
-        editor.chain().focus().insertContent(replacementText).run();
+      } finally {
+        isInsertingRef.current = false;
       }
     },
     [editor, getTracker, markdownParser]
