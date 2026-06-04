@@ -261,6 +261,7 @@ export async function callLLM(opts: {
   tools?: LLMTool[];
   stream?: boolean;
   forceTool?: string;
+  disableParallelToolUse?: boolean;
 }): Promise<Response> {
   const provider = providerFor(opts.model);
   const key = Deno.env.get(envKeyFor(provider));
