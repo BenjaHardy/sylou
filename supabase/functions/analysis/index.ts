@@ -122,7 +122,9 @@ Half-point scores (e.g. 2.5, 3.5) are permitted and encouraged when the evidence
 
 # RESPONSE FORMAT
 
-Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.`;
+Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.
+
+Each of \`find\`, \`lead\`, \`organize\`, and \`write\` MUST be a nested JSON object of the shape \`{ "reasoning": "...", "evidence": ["...", "..."], "score": 3.5, "narrative": "..." }\`. Do not return any pillar as a string. Do not promote \`reasoning\`, \`evidence\`, \`score\`, or \`narrative\` to the top level. Do not use XML or \`<parameter>\` tags.`;
 
 // ---------------------------------------------------------------------------
 // Creative FLOW Prompt — for creative template projects
@@ -172,7 +174,9 @@ Half-point scores (e.g. 2.5, 3.5) are permitted and encouraged when the evidence
 
 # RESPONSE FORMAT
 
-Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.`;
+Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.
+
+Each of \`find\`, \`lead\`, \`organize\`, and \`write\` MUST be a nested JSON object of the shape \`{ "reasoning": "...", "evidence": ["...", "..."], "score": 3.5, "narrative": "..." }\`. Do not return any pillar as a string. Do not promote \`reasoning\`, \`evidence\`, \`score\`, or \`narrative\` to the top level. Do not use XML or \`<parameter>\` tags.`;
 
 // ---------------------------------------------------------------------------
 // Tool schema
