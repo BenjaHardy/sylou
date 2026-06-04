@@ -74,6 +74,7 @@ export function toAnthropicBody(opts: {
   tools?: LLMTool[];
   stream?: boolean;
   forceTool?: string;
+  disableParallelToolUse?: boolean;
 }): Record<string, unknown> {
   let system = "";
   const msgs: Array<Record<string, unknown>> = [];
