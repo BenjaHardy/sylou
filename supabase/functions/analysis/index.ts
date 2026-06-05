@@ -77,7 +77,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // ---------------------------------------------------------------------------
 // FLOW Prompt v1.2 – full text from Sylou_FLOW_Prompt.docx
 // ---------------------------------------------------------------------------
-const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a writing project. Your task is to assess how a human user collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework).
+const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a writing project. Your task is to assess how an external third-party human user collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework).
 
 # INSTRUCTIONS
 
@@ -89,7 +89,7 @@ const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI coll
 6. Write a brief narrative for each pillar explaining the assessment in language accessible to the user.
 7. Write an overall summary of the human-AI collaboration. Where applicable, highlight (i) significant user contributions and (ii) areas where the human-AI collaboration provided significant added value in a way that empowered the user and their work; if none, specify there are none.
 8. Identify **3–5 key user contributions**. These are specific, concrete moments where the user's thinking, judgment, knowledge, or creativity meaningfully shaped the final work. If there are genuinely fewer than 3 clear user contributions, return whatever is well-supported by evidence. Do not fabricate contributions to reach 3.
-9. Be honest and independent. Each pillar, the overall summary, your analysis need to accurately reflect the truth. Do not favour user over AI or reciprocally. Independency and honesty are critical.
+9. Be independent. Each pillar, the overall summary, your analysis need to accurately reflect the truth. Do not favour user over AI or reciprocally. Independency and honesty are critical and actually sought after by the external third-party user.
 
 # FLOW PILLAR DEFINITIONS
 
@@ -130,7 +130,7 @@ Each of \`find\`, \`lead\`, \`organize\`, and \`write\` MUST be a nested JSON ob
 // ---------------------------------------------------------------------------
 // Creative FLOW Prompt — for creative template projects
 // ---------------------------------------------------------------------------
-const CREATIVE_FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a creative writing project. Your task is to assess how a human user collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework).
+const CREATIVE_FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a creative writing project. Your task is to assess how an external third-party human user (occasionally simply referred to as "the user") collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework).
 
 # INSTRUCTIONS
 
@@ -142,7 +142,7 @@ const CREATIVE_FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating huma
 6. Write a brief narrative for each pillar explaining the assessment in language accessible to the user.
 7. Write an overall summary of the human-AI collaboration. Where applicable, highlight (i) significant user contributions and (ii) areas where the human-AI collaboration provided significant added value in a way that empowered the user and their work; if none, specify there are none.
 8. Identify **3–5 key user contributions**. These are specific, concrete moments where the user's thinking, judgment, knowledge, or creativity meaningfully shaped the final work. If there are genuinely fewer than 3 clear user contributions, return whatever is well-supported by evidence. Do not fabricate contributions to reach 3.
-9. Be honest and independent. Each pillar, the overall summary, your analysis need to accurately reflect the truth. Do not favour user over AI or reciprocally. Independency and honesty are critical.
+9. Be independent. Each pillar, the overall summary, your analysis need to accurately reflect the truth. Do not favour user over AI or reciprocally. Independency and honesty are critical and actually sought after by the external third-party user.
 
 # FLOW PILLAR DEFINITIONS
 
@@ -826,8 +826,8 @@ Character-count breakdown by provenance type:
     // Build the prompt WITHOUT imported documents first to measure baseline
     const basePromptParts = [
       `# LANGUAGE\n\nRespond entirely in ${project.language}. All summaries, analyses, evidence items, reasoning, and narratives must be written in ${project.language}. Only JSON structure and field names remain in English.`,
-      `# WRITING CONTENT (PROVENANCE-ANNOTATED)\n\nThe writing content below is annotated with provenance tags indicating the origin of each text segment. Use these annotations to inform your assessment, particularly for the Write pillar:\n\n- [t] = typed by the user (original user writing, including text copied from the user's own chat messages)\n- [cc] = copied from AI assistant chat messages (AI-originated text)\n- [ce] = copied from an external source (neither user nor AI contribution; pay attention not to wrongly attribute to user)\n- [ai] = AI-generated text accepted from the text selection window (the user selected text in their editor and requested an AI rewrite, expansion, simplification, or proposal, then accepted the result)\n\n${annotatedWriting}\n\n${provenanceSection}`,
-      `# CHAT HISTORY\n\nThe following chat messages are from all project threads, merged in chronological order. Each message is prefixed with a timestamp and thread label.\n\nSome messages originate from the text selection window, a feature that allows the user to select text in their editor and either ask the AI a question about it (Ask) or request the AI to propose a rewritten version (Propose). These messages are flagged with their source type below.\n\nWriting summaries are marked "[NOT ASSESSED]" — they provide context for the subsequent discussion but should not be scored as either party's contribution, because they are AI-generated condensations of the writing and creative tools data at that point in time that may include contributions from any party. Consider the whole chat log and other contents to properly identify the respective contributions of each party, noting that new ideas or contributions appearing for the first time in a writing summary and not found in earlier chat messages would normally be user contributions unless copied from external sources.\n\n${chatHistoryStr}`,
+      `# WRITING CONTENT (PROVENANCE-ANNOTATED)\n\nThe writing content below is annotated with provenance tags indicating the origin of each text segment. Use these annotations to inform your assessment, particularly for the Write pillar:\n\n- [t] = typed by the external third-party user (original user writing, including text copied from the user's own chat messages)\n- [cc] = copied from AI assistant chat messages (AI-originated text)\n- [ce] = copied from an external source (neither user nor AI contribution; pay attention not to wrongly attribute to user)\n- [ai] = AI-generated text accepted from the text selection window (the user selected text in their editor and requested an AI rewrite, expansion, simplification, or proposal, then accepted the result)\n\n${annotatedWriting}\n\n${provenanceSection}`,
+      `# CHAT HISTORY\n\nThe following chat messages between the AI and the external third-party user are from all project threads, merged in chronological order. Each message is prefixed with a timestamp and thread label.\n\nSome messages originate from the text selection window, a feature that allows the user to select text in their editor and either ask the AI a question about it (Ask) or request the AI to propose a rewritten version (Propose). These messages are flagged with their source type below.\n\nWriting summaries are marked "[NOT ASSESSED]" — they provide context for the subsequent discussion but should not be scored as either party's contribution, because they are AI-generated condensations of the writing and creative tools data at that point in time that may include contributions from any party. Consider the whole chat log and other contents to properly identify the respective contributions of each party, noting that new ideas or contributions appearing for the first time in a writing summary and not found in earlier chat messages would normally be user contributions unless copied from external sources.\n\n${chatHistoryStr}`,
     ];
     const baseChars = FLOW_PROMPT_TEMPLATE.length + basePromptParts.join("\n\n").length;
 
@@ -875,7 +875,7 @@ Character-count breakdown by provenance type:
     // --- Build creative tools section (if applicable) ---
     let creativeToolsSection = "";
     if (isCreativeProject && creativeDataRes.data && creativeDataRes.data.length > 0) {
-      creativeToolsSection = `\n\n# === CREATIVE TOOLS CONTENT ===\n\nThe following content comes from the creative tools accessible by the user to help develop key story elements: world-building notes, character diagram, timeline. This content is critical for assessing the L – Lead pillar (directly) and O – Organize pillar (indirectly).\n\n${formatCreativeDataForAnalysis(creativeDataRes.data as any)}`;
+      creativeToolsSection = `\n\n# === CREATIVE TOOLS CONTENT ===\n\nThe following content comes from the creative tools accessible by the external third-party user to help develop key story elements: world-building notes, character diagram, timeline. This content is critical for assessing the L – Lead pillar (directly) and O – Organize pillar (indirectly).\n\n${formatCreativeDataForAnalysis(creativeDataRes.data as any)}`;
     }
 
     // --- Build full prompt ---
@@ -889,7 +889,7 @@ Character-count breakdown by provenance type:
 
 # === IMPORTED DOCUMENTS ===
 
-The following documents were imported by the user as reference material. They are neither user nor AI contributions. If the writing closely mirrors imported document content, note this in your analysis but do not score it as AI contribution.
+The following documents were imported by the external third-party user as reference material. They are neither user nor AI contributions. If the writing closely mirrors imported document content, note this in your analysis but do not score it as AI contribution.
 
 ${importedDocsSection}
 
