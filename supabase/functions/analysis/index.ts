@@ -75,7 +75,7 @@ const GENERATOR_INFO = {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ---------------------------------------------------------------------------
-// FLOW Prompt v1.2 – full text from Sylou_FLOW_Prompt.docx
+// FLOW Prompt v1.2 – read transparency.md for guidance and calibration notes
 // ---------------------------------------------------------------------------
 const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a writing project. Your task is to assess how an external third-party human user (occasionally simply referred to as "the user") collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework).
 
@@ -111,12 +111,12 @@ To ensure consistent scoring, use the following reference points. These apply gl
 
 | Score | Label | Description |
 |-------|-------|-------------|
-| 5.0 | Only Human | The user produced this aspect of the work entirely independently. The AI was not involved, or the user explicitly disregarded AI contributions for this pillar. |
-| 4.0 | Largely Human | The user originated the core content for this pillar (e.g. key ideas, overall structure, or prose). The AI provided minor support such as factual checks, light suggestions, or small refinements, but the user's contribution clearly dominates. |
-| 3.0 | More Human | The user drove the direction and made the key decisions, but the AI made notable contributions that shaped the outcome. For example, the AI suggested a framework that the user substantially adapted, or the AI drafted a passage that the user significantly rewrote. |
-| 2.0 | More AI | The AI produced the bulk of the material for this pillar, but the user made meaningful modifications, selections, or editorial decisions. The user engaged with the AI output rather than accepting it passively. |
-| 1.0 | Largely AI | The AI generated nearly all of the content for this pillar. The user's contribution was limited to minor edits, superficial changes, or simple acceptance of AI output. |
-| 0.0 | No human contribution detected | No evidence of human contribution for this pillar. The AI produced all relevant content and the user did not engage with, modify, or build upon it. |
+| 5.0 | Human-authored | The user produced this aspect of the work entirely independently. The AI was not involved, or the user explicitly disregarded AI contributions for this pillar. |
+| 4.0 | Human-led | The user originated the core content for this pillar (e.g. key ideas, overall structure, or prose). The AI provided minor support such as factual checks, light suggestions, or small refinements, but the user's contribution clearly dominates. |
+| 3.0 | Human-led, AI-assisted | The user drove the direction and made the key decisions for this pillar, but the AI played a supporting role and made notable contributions that shaped the outcome. For example, the AI suggested a framework that the user substantially adapted, or the AI drafted a passage that the user significantly rewrote. |
+| 2.0 | Collaborative | Genuine two-way collaboration for this pillar. Both the AI and the user contributed substantively: reshaping, recombining, redirecting, and adding their own judgment, so the result reflects both parties, with neither clearly dominating. |
+| 1.0 | AI-led, human-refined | The AI generated most of the content for this pillar. The user refined it with minor edits, lightly reworking or reordering parts, and loosely steering across iterations. The substance and overall direction remained the AI's, and the user did not reshape or co-author the material. |
+| 0.0 | AI-led | No evidence of meaningful human contribution for this pillar. Beyond basic, idea-free instructions and acceptance of the AI's output, the user did not originate, question, develop, or build upon the content in any way that shaped the result. |
 | null | Insufficient evidence | There is not enough data to assess this pillar. This applies when the writing or chat history is too sparse to evaluate a particular pillar, or when the pillar is not applicable to the work produced. Use this instead of defaulting to 0. |
 
 Half-point scores (e.g. 2.5, 3.5) are permitted and encouraged when the evidence falls between two reference points.
@@ -164,12 +164,12 @@ To ensure consistent scoring, use the following reference points. These apply gl
 
 | Score | Label | Description |
 |-------|-------|-------------|
-| 5.0 | Only Human | The user produced this aspect of the work entirely independently. The AI was not involved, or the user explicitly disregarded AI contributions for this pillar. |
-| 4.0 | Largely Human | The user originated the core content for this pillar (e.g. key ideas, overall structure, or prose). The AI provided minor support such as factual checks, light suggestions, or small refinements, but the user's contribution clearly dominates. |
-| 3.0 | More Human | The user drove the direction and made the key decisions, but the AI made notable contributions that shaped the outcome. For example, the AI suggested a framework that the user substantially adapted, or the AI drafted a passage that the user significantly rewrote. |
-| 2.0 | More AI | The AI produced the bulk of the material for this pillar, but the user made meaningful modifications, selections, or editorial decisions. The user engaged with the AI output rather than accepting it passively. |
-| 1.0 | Largely AI | The AI generated nearly all of the content for this pillar. The user's contribution was limited to minor edits, superficial changes, or simple acceptance of AI output. |
-| 0.0 | No human contribution detected | No evidence of human contribution for this pillar. The AI produced all relevant content and the user did not engage with, modify, or build upon it. |
+| 5.0 | Human-authored | The user produced this aspect of the work entirely independently. The AI was not involved, or the user explicitly disregarded AI contributions for this pillar. |
+| 4.0 | Human-led | The user originated the core content for this pillar (e.g. key ideas, overall structure, or prose). The AI provided minor support such as factual checks, light suggestions, or small refinements, but the user's contribution clearly dominates. |
+| 3.0 | Human-led, AI-assisted | The user drove the direction and made the key decisions for this pillar, but the AI played a supporting role and made notable contributions that shaped the outcome. For example, the AI suggested a framework that the user substantially adapted, or the AI drafted a passage that the user significantly rewrote. |
+| 2.0 | Collaborative | Genuine two-way collaboration for this pillar. Both the AI and the user contributed substantively: reshaping, recombining, redirecting, and adding their own judgment, so the result reflects both parties, with neither clearly dominating. |
+| 1.0 | AI-led, human-refined | The AI generated most of the content for this pillar. The user refined it with minor edits, lightly reworking or reordering parts, and loosely steering across iterations. The substance and overall direction remained the AI's, and the user did not reshape or co-author the material. |
+| 0.0 | AI-led | No evidence of meaningful human contribution for this pillar. Beyond basic, idea-free instructions and acceptance of the AI's output, the user did not originate, question, develop, or build upon the content in any way that shaped the result. |
 | null | Insufficient evidence | There is not enough data to assess this pillar. This applies when the writing or chat history is too sparse to evaluate a particular pillar, or when the pillar is not applicable to the work produced. Use this instead of defaulting to 0. |
 
 Half-point scores (e.g. 2.5, 3.5) are permitted and encouraged when the evidence falls between two reference points.
