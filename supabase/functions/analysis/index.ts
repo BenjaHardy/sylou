@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, normaliseResponse, extractProviderError, envKeyFor } from "./_llm.ts";
+import { repairToolOutput } from "./_repair.ts";
 
 // Budget helper. Intentionally duplicated across the four edge functions
 // (chat, context-prompt, editor-action, analysis) — Supabase edge function
@@ -951,7 +952,7 @@ ${writePillarNotice}`;
       });
     }
 
-    const llmArgs = {
+    const baseLlmArgs = {
       model: flowModel,
       max_tokens: 8192,
       messages: [
@@ -970,115 +971,198 @@ ${writePillarNotice}`;
       disableParallelToolUse: true,
     };
 
-    // Diagnostic: full prompt as sent to the LLM (system + user + tools).
-    // Stringified so Supabase log viewer doesn't truncate nested objects.
-    console.log("FLOW prompt sent", {
-      model: flowModel,
-      provider,
-      request_body: JSON.stringify(llmArgs),
-    });
+    // ============================================================
+    // WORKAROUND (see _repair.ts): Claude's tool_use output is
+    // occasionally malformed (stringified-JSON pillars or schema
+    // drift). We (1) repair stringified pillars in-place, then
+    // (2) on validation failure, retry the call ONCE with a small
+    // prompt nudge to shift Claude's sampling path. Repair alone
+    // does NOT trigger a retry — retry only fires when validation
+    // still fails after repair.
+    // Remove or simplify this block if Anthropic stabilizes
+    // tool_use output and the [FLOW repair]/[FLOW retry] log lines
+    // stop appearing in production.
+    // ============================================================
+    type AttemptOk = {
+      ok: true;
+      flowResult: Record<string, unknown>;
+      usage: { input_tokens?: number; output_tokens?: number };
+    };
+    type AttemptFail = {
+      ok: false;
+      errorResponse: Response;
+      usage: { input_tokens?: number; output_tokens?: number };
+    };
 
-    const llmRes = await callLLM(llmArgs);
+    const attemptFlowCall = async (attempt: 1 | 2): Promise<AttemptOk | AttemptFail> => {
+      const llmArgs = attempt === 1
+        ? baseLlmArgs
+        : {
+            ...baseLlmArgs,
+            messages: [
+              { role: "system" as const, content: systemPromptTemplate },
+              {
+                role: "user" as const,
+                content:
+                  userPrompt +
+                  "\n\nPlease ensure each pillar (find, lead, organize, write) is returned as a nested JSON object, not as a stringified JSON value.",
+              },
+            ],
+          };
 
-    if (!llmRes.ok) {
-      const errText = await llmRes.text();
-      console.error("LLM API error:", llmRes.status, errText);
-      return jsonResponse(
-        { error: extractProviderError(provider, llmRes.status, errText) },
-        502
-      );
-    }
+      console.log("FLOW prompt sent", {
+        model: flowModel,
+        provider,
+        attempt,
+        request_body: JSON.stringify(llmArgs),
+      });
 
-    const rawData = await llmRes.json();
+      const llmRes = await callLLM(llmArgs);
 
-    // Diagnostic: full raw response from the provider, including stop_reason,
-    // content blocks, tool blocks, and usage.
-    console.log("FLOW raw response", {
-      model: flowModel,
-      stop_reason: rawData?.stop_reason ?? rawData?.choices?.[0]?.finish_reason ?? null,
-      raw_response: JSON.stringify(rawData),
-    });
+      if (!llmRes.ok) {
+        const errText = await llmRes.text();
+        console.error("LLM API error:", llmRes.status, errText);
+        return {
+          ok: false,
+          usage: {},
+          errorResponse: jsonResponse(
+            { error: extractProviderError(provider, llmRes.status, errText) },
+            502,
+          ),
+        };
+      }
 
-    const normalised = normaliseResponse(provider, rawData);
-    const toolCall = normalised.toolCalls.find((tc) => tc.name === SUBMIT_FLOW_TOOL.name);
+      const rawData = await llmRes.json();
 
-    if (!toolCall?.arguments) {
-      console.error(
-        "No tool_use block found in response:",
-        JSON.stringify(rawData)
-      );
-      return jsonResponse(
-        { error: "AI analysis returned unexpected format. Please try again." },
-        502
-      );
-    }
+      console.log("FLOW raw response", {
+        model: flowModel,
+        attempt,
+        stop_reason: rawData?.stop_reason ?? rawData?.choices?.[0]?.finish_reason ?? null,
+        raw_response: JSON.stringify(rawData),
+      });
 
-    // Keep downstream variable names for minimal churn.
-    const anthropicData = {
-      usage: {
+      const normalised = normaliseResponse(provider, rawData);
+      const toolCall = normalised.toolCalls.find((tc) => tc.name === SUBMIT_FLOW_TOOL.name);
+      const usage = {
         input_tokens: normalised.usage?.input_tokens,
         output_tokens: normalised.usage?.output_tokens,
-      },
-    };
-    const flowResult = toolCall.arguments;
+      };
 
-    // Validate all required pillars are structured objects
-    const defaultPillar = { reasoning: "Insufficient data", evidence: [], score: null, narrative: "Could not be assessed." };
-    function isValidPillar(p: unknown): boolean {
-      return (
-        typeof p === "object" && p !== null &&
-        "reasoning" in p && "evidence" in p &&
-        Array.isArray((p as Record<string, unknown>).evidence) && "narrative" in p
-      );
-    }
-
-    // Strict schema guardrail — reject if too many pillars are malformed (likely a bad model response)
-    const pillarValidity = [
-      isValidPillar(flowResult.find),
-      isValidPillar(flowResult.lead),
-      isValidPillar(flowResult.organize),
-      isValidPillar(flowResult.write),
-    ];
-    const validPillarCount = pillarValidity.filter(Boolean).length;
-    const hasSummary = !!flowResult.summary && typeof flowResult.summary === "string";
-    if (validPillarCount < 3 || !hasSummary) {
-      // Diagnostic: capture shape + stop reason to disambiguate truncation vs schema drift.
-      // No payload content / no PII — only key names, types, and counters.
-      const pillarShape: Record<string, string> = {};
-      for (const k of ["summary", "find", "lead", "organize", "write"] as const) {
-        const v = (flowResult as Record<string, unknown>)[k];
-        pillarShape[k] = v === undefined ? "undefined" : v === null ? "null" : Array.isArray(v) ? "array" : typeof v;
+      if (!toolCall?.arguments) {
+        console.error("No tool_use block found in response:", JSON.stringify(rawData));
+        return {
+          ok: false,
+          usage,
+          errorResponse: jsonResponse(
+            { error: "AI analysis returned unexpected format. Please try again." },
+            502,
+          ),
+        };
       }
-      console.error("FLOW schema validation failed", {
-        model: flowModel,
-        validPillarCount,
-        hasSummary,
-        stop_reason: rawData?.stop_reason ?? rawData?.choices?.[0]?.finish_reason ?? null,
-        input_tokens: normalised.usage?.input_tokens ?? null,
-        output_tokens: normalised.usage?.output_tokens ?? null,
-        tool_call_present: !!toolCall,
-        tool_argument_keys: Object.keys(flowResult ?? {}),
-        pillar_shape: pillarShape,
-        summary_len: typeof flowResult?.summary === "string" ? (flowResult.summary as string).length : 0,
-      });
-      console.error("FLOW raw tool input (full)", {
-        model: flowModel,
-        raw_tool_input: JSON.stringify(flowResult),
-      });
-      // Log token usage for transparency, but flag as schema_invalid and skip insert
+
+      // Normalize stringified-JSON pillars BEFORE validation.
+      const flowResult = repairToolOutput(toolCall.arguments) as Record<string, unknown>;
+
+      function isValidPillar(p: unknown): boolean {
+        return (
+          typeof p === "object" && p !== null &&
+          "reasoning" in p && "evidence" in p &&
+          Array.isArray((p as Record<string, unknown>).evidence) && "narrative" in p
+        );
+      }
+
+      const pillarValidity = [
+        isValidPillar(flowResult.find),
+        isValidPillar(flowResult.lead),
+        isValidPillar(flowResult.organize),
+        isValidPillar(flowResult.write),
+      ];
+      const validPillarCount = pillarValidity.filter(Boolean).length;
+      const hasSummary = !!flowResult.summary && typeof flowResult.summary === "string";
+
+      if (validPillarCount < 3 || !hasSummary) {
+        const pillarShape: Record<string, string> = {};
+        for (const k of ["summary", "find", "lead", "organize", "write"] as const) {
+          const v = (flowResult as Record<string, unknown>)[k];
+          pillarShape[k] = v === undefined ? "undefined" : v === null ? "null" : Array.isArray(v) ? "array" : typeof v;
+        }
+        console.error("FLOW schema validation failed", {
+          model: flowModel,
+          attempt,
+          validPillarCount,
+          hasSummary,
+          stop_reason: rawData?.stop_reason ?? rawData?.choices?.[0]?.finish_reason ?? null,
+          input_tokens: usage.input_tokens ?? null,
+          output_tokens: usage.output_tokens ?? null,
+          tool_call_present: !!toolCall,
+          tool_argument_keys: Object.keys(flowResult ?? {}),
+          pillar_shape: pillarShape,
+          summary_len: typeof flowResult?.summary === "string" ? (flowResult.summary as string).length : 0,
+        });
+        console.error("FLOW raw tool input (full)", {
+          model: flowModel,
+          attempt,
+          raw_tool_input: JSON.stringify(flowResult),
+        });
+        return {
+          ok: false,
+          usage,
+          errorResponse: jsonResponse(
+            { error: "Analysis could not be completed with this model — try Claude Sonnet 4.6." },
+            502,
+          ),
+        };
+      }
+
+      return { ok: true, flowResult, usage };
+    };
+
+    // Attempt 1 — original prompt, with repair applied.
+    let attemptResult = await attemptFlowCall(1);
+
+    // Attempt 2 — only if attempt 1 failed validation AFTER repair.
+    if (!attemptResult.ok) {
+      // Log token usage for the failed first attempt.
       try {
         await supabase.from("token_usage").insert({
           user_id: user.id,
           project_id: projectId,
           function_name: "analysis:schema_invalid",
           model_used: flowModel,
-          input_tokens: anthropicData?.usage?.input_tokens ?? 0,
-          output_tokens: anthropicData?.usage?.output_tokens ?? 0,
+          input_tokens: attemptResult.usage.input_tokens ?? 0,
+          output_tokens: attemptResult.usage.output_tokens ?? 0,
         });
       } catch (_) { /* ignore */ }
-      return jsonResponse(
-        { error: "Analysis could not be completed with this model — try Claude Sonnet 4.6." },
-        502
+
+      console.log("[FLOW retry] attempt 1 failed schema validation, retrying");
+      attemptResult = await attemptFlowCall(2);
+
+      if (!attemptResult.ok) {
+        console.log("[FLOW retry] attempt 2 also failed, returning 502");
+        try {
+          await supabase.from("token_usage").insert({
+            user_id: user.id,
+            project_id: projectId,
+            function_name: "analysis:schema_invalid",
+            model_used: flowModel,
+            input_tokens: attemptResult.usage.input_tokens ?? 0,
+            output_tokens: attemptResult.usage.output_tokens ?? 0,
+          });
+        } catch (_) { /* ignore */ }
+        return attemptResult.errorResponse;
+      }
+
+      console.log("[FLOW retry] attempt 2 succeeded");
+    }
+
+    const flowResult = attemptResult.flowResult as Record<string, any>;
+    const anthropicData = { usage: attemptResult.usage };
+    const defaultPillar = { reasoning: "Insufficient data", evidence: [], score: null, narrative: "Could not be assessed." };
+    function isValidPillar(p: unknown): boolean {
+      return (
+        typeof p === "object" && p !== null &&
+        "reasoning" in p && "evidence" in p &&
+        Array.isArray((p as Record<string, unknown>).evidence) && "narrative" in p
       );
     }
 
