@@ -77,7 +77,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // ---------------------------------------------------------------------------
 // FLOW Prompt v1.2 – full text from Sylou_FLOW_Prompt.docx
 // ---------------------------------------------------------------------------
-const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a writing project. Your task is to assess how an external third-party human user collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework).
+const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a writing project. Your task is to assess how an external third-party human user (occasionally simply referred to as "the user") collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework).
 
 # INSTRUCTIONS
 
