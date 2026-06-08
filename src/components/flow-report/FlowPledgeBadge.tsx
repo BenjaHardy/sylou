@@ -52,8 +52,9 @@ const QR_Y = Math.round((BADGE_H - QR_SIZE) / 2);
 const PILLAR_KEYS = ["find", "lead", "organize", "write"] as const;
 const PILLAR_LABELS = ["F", "L", "O", "W"];
 // Radar placed in the left area, avoiding QR on the right.
+// CY shifted down from 104 → 116 to leave room for the subtitle below the headline.
 const RADAR_CX = 122;
-const RADAR_CY = 104;
+const RADAR_CY = 116;
 const RADAR_R = 38;
 
 function formatOriginLine(gi: BadgeGeneratorInfo | null | undefined): string | null {
