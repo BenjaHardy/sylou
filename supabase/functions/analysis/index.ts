@@ -192,6 +192,7 @@ Each of \`find\`, \`lead\`, \`organize\`, and \`write\` must be a nested JSON ob
 - \`narrative\`: string
 Example structure for a single pillar:
 { "reasoning": "...", "evidence": ["...", "..."], "score": 3.5, "narrative": "..." }
+`;
 
 // ---------------------------------------------------------------------------
 // Tool schema
