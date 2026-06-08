@@ -74,6 +74,7 @@ export function toAnthropicBody(opts: {
   tools?: LLMTool[];
   stream?: boolean;
   forceTool?: string;
+  temperature?: number;
 }): Record<string, unknown> {
   let system = "";
   const msgs: Array<Record<string, unknown>> = [];
@@ -124,6 +125,10 @@ export function toAnthropicBody(opts: {
     messages: msgs,
   };
   if (opts.stream) body.stream = true;
+  if (opts.temperature !== undefined) {
+    // Anthropic API caps temperature at 1.0; clamp defensively.
+    body.temperature = Math.min(1.0, Math.max(0.0, opts.temperature));
+  }
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools.map((t) => ({
       name: t.function.name,
@@ -149,6 +154,7 @@ export function toOpenAIBody(opts: {
   tools?: LLMTool[];
   stream?: boolean;
   tool_choice?: "auto" | "none";
+  temperature?: number;
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: opts.model,
@@ -160,6 +166,7 @@ export function toOpenAIBody(opts: {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? "auto";
   }
+  if (opts.temperature !== undefined) body.temperature = opts.temperature;
   return body;
 }
 
@@ -256,6 +263,7 @@ export async function callLLM(opts: {
   tools?: LLMTool[];
   stream?: boolean;
   forceTool?: string;
+  temperature?: number;
 }): Promise<Response> {
   const provider = providerFor(opts.model);
   const key = Deno.env.get(envKeyFor(provider));
