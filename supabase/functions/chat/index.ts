@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, normaliseResponse, extractProviderError } from "./_llm.ts";
+import { CHAT_TEMPERATURE, resolveTemperature } from "./_temperatures.ts";
 
 // Budget helper. Intentionally duplicated across the four edge functions
 // (chat, context-prompt, editor-action, analysis) — Supabase edge function
@@ -273,6 +274,8 @@ Deno.serve(async (req) => {
     const requestedModel: string | undefined = body.model;
     const chatModel: string =
       requestedModel || profile.preferred_chat_model || "mistral-large-latest";
+    const temperature = resolveTemperature(CHAT_TEMPERATURE, chatModel);
+
 
     if (!threadId || !message) {
       return jsonResponse({ error: "thread_id and message are required" }, 400);
@@ -511,6 +514,7 @@ When citing information from web search results, always include the source URL i
           max_tokens: 2000,
           tools,
           tool_choice: "auto",
+          temperature,
         };
 
         const call1Res = await callLLM(call1Body);
@@ -698,6 +702,7 @@ When citing information from web search results, always include the source URL i
                       messages: toolMessages as any,
                       max_tokens: 2000,
                       tools: tools as any,
+                      temperature,
                     });
 
                   if (!nextRes.ok) {
@@ -729,6 +734,7 @@ When citing information from web search results, always include the source URL i
                   messages: toolMessages,
                   max_tokens: 2000,
                   stream: true,
+                  temperature,
                 });
 
               if (!call2Res.ok) {
@@ -873,6 +879,7 @@ When citing information from web search results, always include the source URL i
           messages: llmMessages,
           max_tokens: 2000,
           stream: true,
+          temperature,
         });
 
       if (!llmRes.ok) {
@@ -1038,6 +1045,7 @@ When citing information from web search results, always include the source URL i
         model: chatModel,
         messages: llmMessages,
         max_tokens: 2000,
+        temperature,
       });
 
     if (!llmRes.ok) {
