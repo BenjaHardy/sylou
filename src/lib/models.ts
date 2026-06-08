@@ -16,6 +16,10 @@ export interface ModelInfo {
   contextLimit: number;
   /** Marked for the UI to flag less-mature models. */
   isExperimental?: boolean;
+  /** True when the model ID is a rolling alias that always resolves to the
+   *  provider's current latest version (e.g. `mistral-large-latest`,
+   *  `deepseek-chat`). Pinned version IDs leave this undefined. */
+  isRollingLatest?: boolean;
   /** Optional one-line note shown beneath the row. */
   note?: string;
 }
@@ -27,6 +31,7 @@ export const MODELS: ModelInfo[] = [
     provider: "mistral",
     pricing: { input: 2.0, output: 6.0 },
     contextLimit: 256_000,
+    isRollingLatest: true,
   },
   {
     id: "claude-sonnet-4-6",
@@ -50,6 +55,7 @@ export const MODELS: ModelInfo[] = [
     pricing: { input: 0.14, output: 0.28 },
     contextLimit: 1_000_000,
     isExperimental: true,
+    isRollingLatest: true,
   },
 ];
 
