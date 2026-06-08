@@ -744,7 +744,7 @@ Deno.serve(async (req) => {
       creativeDataSection,
     );
 
-    const summaryResult = await callChatModel(chatModel, summaryMessages, 1000);
+    const summaryResult = await callChatModel(chatModel, summaryMessages, 1000, temperature);
     const summaryText = summaryResult.text.trim();
 
     // --- 5. Determine summary update ---
@@ -1080,6 +1080,7 @@ When citing information from web search results, always include the source URL i
                 messages: responseMessages as any,
                 max_tokens: 2000,
                 tools: tools as any,
+                temperature,
               });
 
               if (!call2aRes.ok) {
@@ -1185,6 +1186,7 @@ When citing information from web search results, always include the source URL i
                   messages: toolMessages as any,
                   max_tokens: 2000,
                   stream: true,
+                  temperature,
                 });
 
                 if (!call2bRes.ok) {
@@ -1263,6 +1265,7 @@ When citing information from web search results, always include the source URL i
         messages: responseMessages as any,
         max_tokens: 2000,
         stream: true,
+        temperature,
       });
 
       if (!llmRes.ok) {
@@ -1356,6 +1359,7 @@ When citing information from web search results, always include the source URL i
         messages: responseMessages as any,
         max_tokens: 2000,
         tools: tools as any,
+        temperature,
       });
 
       if (!call2aRes.ok) {
@@ -1418,7 +1422,7 @@ When citing information from web search results, always include the source URL i
           }
         }
 
-        const call2bResult = await callChatModel(chatModel, toolMessages as { role: string; content: string }[], 2000);
+        const call2bResult = await callChatModel(chatModel, toolMessages as { role: string; content: string }[], 2000, temperature);
         totalInputChars += call2bResult.inputChars;
         totalOutputChars += call2bResult.outputChars;
         aiResponse = call2bResult.text.trim() || "No response generated.";
@@ -1512,7 +1516,7 @@ When citing information from web search results, always include the source URL i
     }
 
     // ── NO TOOLS — original non-streaming path ──
-    const responseResult = await callChatModel(chatModel, responseMessages, 2000);
+    const responseResult = await callChatModel(chatModel, responseMessages, 2000, temperature);
     const aiResponse = responseResult.text.trim();
 
     const finalInputChars = totalInputChars + responseResult.inputChars;
