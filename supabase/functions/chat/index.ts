@@ -275,6 +275,11 @@ Deno.serve(async (req) => {
     const chatModel: string =
       requestedModel || profile.preferred_chat_model || "mistral-large-latest";
     const temperature = resolveTemperature(CHAT_TEMPERATURE, chatModel);
+    console.log(
+      `[chat] model=${chatModel} provider=${providerFor(chatModel)} source=${
+        requestedModel ? "request" : profile.preferred_chat_model ? "profile" : "default"
+      }`,
+    );
 
 
     if (!threadId || !message) {
