@@ -1237,7 +1237,9 @@ ${writePillarNotice}`;
     let attemptResult = await attemptFlowCall(1);
 
     // Attempt 2 — only if attempt 1 failed validation AFTER repair.
-    if (!attemptResult.ok) {
+    // Skip retry on deterministic failures (refusal, max_tokens) — retrying
+    // them would only burn tokens and mask the underlying signal.
+    if (!attemptResult.ok && !attemptResult.noRetry) {
       // Log token usage for the failed first attempt.
       try {
         await supabase.from("token_usage").insert({
