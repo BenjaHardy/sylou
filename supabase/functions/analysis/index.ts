@@ -1,5 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callLLM, providerFor, normaliseResponse, extractProviderError, envKeyFor } from "../_shared/_llm.ts";
+import {
+  callLLM,
+  providerFor,
+  normaliseResponse,
+  extractProviderError,
+  envKeyFor,
+  StructuredOutputError,
+  STRUCTURED_OUTPUT_REFUSAL,
+  STRUCTURED_OUTPUT_MAX_TOKENS,
+} from "../_shared/_llm.ts";
 import { repairToolOutput } from "../_shared/_repair.ts";
 import { FLOW_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 
