@@ -246,17 +246,6 @@ export function FlowReportView({
     [report, shareIncludeFeedback],
   );
 
-  const openBadgeSourceDialog = () => {
-    setPendingBadgeSource(badgeSource);
-    setShowBadgeSourceDialog(true);
-  };
-
-  const handleConfirmBadgeSource = async () => {
-    setShowBadgeSourceDialog(false);
-    await applyBadgeSource(pendingBadgeSource);
-    await handleShare();
-  };
-
   const handleLoadReplay = useCallback(async () => {
     if (!report) return;
     if (replaySnapshot) return;
