@@ -162,7 +162,7 @@ function drawQrLabel(ctx: CanvasRenderingContext2D) {
 
 function drawRadar(
   ctx: CanvasRenderingContext2D,
-  scores: FlowPledgeBadgeProps["aiScores"],
+  scores: FlowPledgeBadgeProps["scores"],
 ) {
   ctx.strokeStyle = "#e5e7eb";
   ctx.lineWidth = 0.5;
