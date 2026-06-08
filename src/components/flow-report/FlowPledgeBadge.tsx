@@ -83,6 +83,7 @@ function drawCommonChrome(
   certificateId: string,
   logoImg: HTMLImageElement | null,
   generatorInfo: BadgeGeneratorInfo | null | undefined,
+  assessmentSource: FlowPledgeBadgeAssessmentSource,
 ) {
   ctx.fillStyle = "#ffffff";
   ctx.strokeStyle = "#d1d5db";
@@ -110,6 +111,12 @@ function drawCommonChrome(
   ctx.fillStyle = "#3b82f6";
   ctx.font = "bold 13px system-ui, sans-serif";
   ctx.fillText("FLOW Analysed", 12, 64);
+
+  // Subtitle below the headline indicating whose assessment drives this badge.
+  ctx.fillStyle = "#6b7280";
+  ctx.font = "italic 9px system-ui, sans-serif";
+  const subtitle = assessmentSource === "user" ? "Self-assessment" : "AI assessment";
+  ctx.fillText(subtitle, 12, 76);
 
   const originLine = formatOriginLine(generatorInfo);
   const hasThree = originLine !== null;
