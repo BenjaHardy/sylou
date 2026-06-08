@@ -1028,6 +1028,7 @@ ${writePillarNotice}`;
         model: flowModel,
         provider,
         attempt,
+        temperature,
         request_body: JSON.stringify(llmArgs),
       });
 
@@ -1051,6 +1052,7 @@ ${writePillarNotice}`;
       console.log("FLOW raw response", {
         model: flowModel,
         attempt,
+        temperature,
         stop_reason: rawData?.stop_reason ?? rawData?.choices?.[0]?.finish_reason ?? null,
         raw_response: JSON.stringify(rawData),
       });
