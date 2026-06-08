@@ -8,6 +8,7 @@ const LOGO_H = 39;
 const LOGO_W = Math.round((644 / 554) * LOGO_H);
 
 export type FlowPledgeBadgeVariant = "radar" | "profile";
+export type FlowPledgeBadgeAssessmentSource = "ai" | "user";
 
 export interface BadgeGeneratorInfo {
   instance_label?: string;
@@ -18,7 +19,7 @@ export interface BadgeGeneratorInfo {
 }
 
 interface FlowPledgeBadgeProps {
-  aiScores: {
+  scores: {
     find: number | null;
     lead: number | null;
     organize: number | null;
@@ -27,6 +28,9 @@ interface FlowPledgeBadgeProps {
   certificateId: string;
   shareUrl: string;
   variant?: FlowPledgeBadgeVariant;
+  /** Whether scores/profile come from the AI analysis or the user's self-assessment.
+   * Drives the small subtitle rendered under the headline. Defaults to "ai". */
+  assessmentSource?: FlowPledgeBadgeAssessmentSource;
   profile?: {
     code: string;
     name: string;
