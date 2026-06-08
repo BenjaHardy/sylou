@@ -544,7 +544,7 @@ export function FlowReportView({
                       variant="outline"
                       size="sm"
                       className="gap-1.5 text-xs"
-                      onClick={handleShare}
+                      onClick={openBadgeSourceDialog}
                       disabled={sharing}
                     >
                       {sharing ? (
