@@ -55,6 +55,7 @@ export const MODELS: ModelInfo[] = [
     pricing: { input: 0.14, output: 0.28 },
     contextLimit: 1_000_000,
     isExperimental: true,
+    isRollingLatest: true,
   },
 ];
 
