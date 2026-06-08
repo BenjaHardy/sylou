@@ -32,3 +32,4 @@ dist-ssr
 # This project uses npm. Do not commit Bun lockfiles.
 bun.lockb
 bun.lock
+.env 
