@@ -124,12 +124,9 @@ export function FlowReportView({
   const [shareIncludeReport, setShareIncludeReport] = useState<boolean>((report as any)?.share_include_report ?? true);
   const [shareIncludeProfile, setShareIncludeProfile] = useState<boolean>((report as any)?.share_include_profile ?? true);
 
-  // Badge source picker — purely client-side, session-scoped.
-  // The dialog sets the initial value; the toggle above the badges reads/writes
-  // the same state. This is the single source of truth for the badge content.
+  // Badge source — purely client-side, session-scoped. Defaults to "ai";
+  // the toggle above the badges is the sole control to switch to "user".
   const [badgeSource, setBadgeSource] = useState<"ai" | "user">("ai");
-  const [showBadgeSourceDialog, setShowBadgeSourceDialog] = useState(false);
-  const [pendingBadgeSource, setPendingBadgeSource] = useState<"ai" | "user">("ai");
 
   // Replay state
   const [showReplay, setShowReplay] = useState(false);
