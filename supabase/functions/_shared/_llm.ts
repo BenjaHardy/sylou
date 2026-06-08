@@ -1,13 +1,17 @@
 // ============================================================
-// Shared LLM helper — INLINED into each edge function folder.
-// Source of truth: this file. Keep copies identical across:
-//   supabase/functions/chat/_llm.ts
-//   supabase/functions/analysis/_llm.ts
-//   supabase/functions/editor-action/_llm.ts
-//   supabase/functions/context-prompt/_llm.ts
+// Canonical shared LLM helper.
 //
-// NOTE: Supabase edge functions are isolated Deno modules; cross-folder
-// imports under _shared are not reliable. Prefer copy-per-folder.
+// Single source of truth, imported via `../_shared/_llm.ts` by:
+//   supabase/functions/analysis/index.ts
+//   supabase/functions/chat/index.ts
+//   supabase/functions/editor-action/index.ts
+//   supabase/functions/context-prompt/index.ts
+//
+// Provider-agnostic LLM call helper: translates OpenAI-style messages
+// + tools into the right shape per provider (Anthropic / Mistral /
+// DeepSeek), issues the fetch, and normalises non-streaming responses
+// back to OpenAI shape so callers don't branch. Also exposes a
+// streaming-delta extractor and a safe upstream-error formatter.
 // ============================================================
 
 export type ProviderId = "mistral" | "anthropic" | "deepseek";

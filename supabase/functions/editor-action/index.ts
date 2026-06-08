@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callLLM, providerFor, extractProviderError } from "./_llm.ts";
-import { EDITOR_TEMPERATURE, resolveTemperature } from "./_temperatures.ts";
+import { callLLM, providerFor, extractProviderError } from "../_shared/_llm.ts";
+import { EDITOR_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 
 // Budget helper. Intentionally duplicated across the four edge functions
 // (chat, context-prompt, editor-action, analysis) — Supabase edge function

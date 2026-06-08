@@ -1,4 +1,12 @@
 // ============================================================
+// Canonical Claude tool_use repair helper.
+//
+// Single source of truth, imported via `../_shared/_repair.ts` by:
+//   supabase/functions/analysis/index.ts
+//
+// (Not used by chat/, editor-action/, or context-prompt/ — those
+// don't drive Claude tool_use responses through schema validation.)
+//
 // WORKAROUND: Claude's tool_use occasionally returns pillar
 // fields as stringified JSON instead of nested objects. This
 // layer normalizes the response before schema validation runs.

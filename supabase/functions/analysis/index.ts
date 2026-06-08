@@ -1,13 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callLLM, providerFor, normaliseResponse, extractProviderError, envKeyFor } from "./_llm.ts";
-import { repairToolOutput } from "./_repair.ts";
-import { FLOW_TEMPERATURE, resolveTemperature } from "./_temperatures.ts";
-// _shared/ cross-folder import probe — single use, deploy-time validator.
-// If this deploys + the function runs, _shared/ imports are viable and the
-// follow-up consolidation PR can land. If it fails, the deploy error is the
-// artifact worth filing with Supabase.
-import { sharedImportProbe } from "../_shared/test_import.ts";
-console.log("[shared-import-probe]", sharedImportProbe());
+import { callLLM, providerFor, normaliseResponse, extractProviderError, envKeyFor } from "../_shared/_llm.ts";
+import { repairToolOutput } from "../_shared/_repair.ts";
+import { FLOW_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 
 // Budget helper. Intentionally duplicated across the four edge functions
 // (chat, context-prompt, editor-action, analysis) — Supabase edge function

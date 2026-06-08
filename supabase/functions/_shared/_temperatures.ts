@@ -1,11 +1,11 @@
 // ============================================================
-// Per-function × per-model temperature tables — INLINED into
-// each edge function folder. Source of truth: this file.
-// Keep copies byte-identical across:
-//   supabase/functions/chat/_temperatures.ts
-//   supabase/functions/analysis/_temperatures.ts
-//   supabase/functions/editor-action/_temperatures.ts
-//   supabase/functions/context-prompt/_temperatures.ts
+// Canonical per-function × per-model temperature tables.
+//
+// Single source of truth, imported via `../_shared/_temperatures.ts` by:
+//   supabase/functions/analysis/index.ts      (FLOW_TEMPERATURE)
+//   supabase/functions/chat/index.ts          (CHAT_TEMPERATURE)
+//   supabase/functions/editor-action/index.ts (EDITOR_TEMPERATURE)
+//   supabase/functions/context-prompt/index.ts (CONTEXT_TEMPERATURE)
 //
 // Anthropic temperature constraints (migration guide):
 //   https://platform.claude.com/docs/en/about-claude/models/migration-guide
