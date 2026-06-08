@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, normaliseResponse, extractProviderError } from "./_llm.ts";
+import { CONTEXT_TEMPERATURE, resolveTemperature } from "./_temperatures.ts";
 
 // Budget helper. Intentionally duplicated across the four edge functions
 // (chat, context-prompt, editor-action, analysis) — Supabase edge function
@@ -232,11 +233,13 @@ async function callChatModel(
   model: string,
   messages: { role: string; content: string }[],
   maxTokens = 2000,
+  temperature?: number,
 ): Promise<{ text: string; inputChars: number; outputChars: number }> {
   const res = await callLLM({
     model,
     messages: messages as any,
     max_tokens: maxTokens,
+    temperature,
   });
 
   if (!res.ok) {
@@ -522,6 +525,7 @@ Deno.serve(async (req) => {
     const chatModel: string =
       requestedModel || profile.preferred_chat_model || "mistral-large-latest";
     const provider = providerFor(chatModel);
+    const temperature = resolveTemperature(CONTEXT_TEMPERATURE, chatModel);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
     if (!Deno.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
@@ -740,7 +744,7 @@ Deno.serve(async (req) => {
       creativeDataSection,
     );
 
-    const summaryResult = await callChatModel(chatModel, summaryMessages, 1000);
+    const summaryResult = await callChatModel(chatModel, summaryMessages, 1000, temperature);
     const summaryText = summaryResult.text.trim();
 
     // --- 5. Determine summary update ---
@@ -1076,6 +1080,7 @@ When citing information from web search results, always include the source URL i
                 messages: responseMessages as any,
                 max_tokens: 2000,
                 tools: tools as any,
+                temperature,
               });
 
               if (!call2aRes.ok) {
@@ -1181,6 +1186,7 @@ When citing information from web search results, always include the source URL i
                   messages: toolMessages as any,
                   max_tokens: 2000,
                   stream: true,
+                  temperature,
                 });
 
                 if (!call2bRes.ok) {
@@ -1259,6 +1265,7 @@ When citing information from web search results, always include the source URL i
         messages: responseMessages as any,
         max_tokens: 2000,
         stream: true,
+        temperature,
       });
 
       if (!llmRes.ok) {
@@ -1352,6 +1359,7 @@ When citing information from web search results, always include the source URL i
         messages: responseMessages as any,
         max_tokens: 2000,
         tools: tools as any,
+        temperature,
       });
 
       if (!call2aRes.ok) {
@@ -1414,7 +1422,7 @@ When citing information from web search results, always include the source URL i
           }
         }
 
-        const call2bResult = await callChatModel(chatModel, toolMessages as { role: string; content: string }[], 2000);
+        const call2bResult = await callChatModel(chatModel, toolMessages as { role: string; content: string }[], 2000, temperature);
         totalInputChars += call2bResult.inputChars;
         totalOutputChars += call2bResult.outputChars;
         aiResponse = call2bResult.text.trim() || "No response generated.";
@@ -1508,7 +1516,7 @@ When citing information from web search results, always include the source URL i
     }
 
     // ── NO TOOLS — original non-streaming path ──
-    const responseResult = await callChatModel(chatModel, responseMessages, 2000);
+    const responseResult = await callChatModel(chatModel, responseMessages, 2000, temperature);
     const aiResponse = responseResult.text.trim();
 
     const finalInputChars = totalInputChars + responseResult.inputChars;
