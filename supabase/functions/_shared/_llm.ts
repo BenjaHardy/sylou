@@ -79,6 +79,7 @@ export function toAnthropicBody(opts: {
   stream?: boolean;
   forceTool?: string;
   temperature?: number;
+  json_schema?: { name: string; schema: Record<string, unknown> };
 }): Record<string, unknown> {
   let system = "";
   const msgs: Array<Record<string, unknown>> = [];
@@ -133,7 +134,19 @@ export function toAnthropicBody(opts: {
     // Anthropic API caps temperature at 1.0; clamp defensively.
     body.temperature = Math.min(1.0, Math.max(0.0, opts.temperature));
   }
-  if (opts.tools && opts.tools.length > 0) {
+  // Structured Outputs (JSON outputs) — GA on Sonnet 4.6 / Opus 4.7+ on the
+  // Claude API; no beta header required. When set, we do NOT also send
+  // tools/tool_choice. The JSON is returned as a text block in
+  // response.content[0].text and is schema-validated server-side.
+  if (opts.json_schema) {
+    body.output_config = {
+      format: {
+        type: "json_schema",
+        name: opts.json_schema.name,
+        schema: opts.json_schema.schema,
+      },
+    };
+  } else if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools.map((t) => ({
       name: t.function.name,
       description: t.function.description,
@@ -184,7 +197,30 @@ export interface NormalisedResponse {
   usage?: { input_tokens?: number; output_tokens?: number };
 }
 
-export function normaliseResponse(provider: ProviderId, raw: any): NormalisedResponse {
+/**
+ * Tagged error codes the Anthropic Structured-Outputs path can throw via
+ * normaliseResponse, so callers can route them through their existing
+ * error/retry pipelines without string-matching.
+ */
+export const STRUCTURED_OUTPUT_REFUSAL = "STRUCTURED_OUTPUT_REFUSAL";
+export const STRUCTURED_OUTPUT_PARSE_FAIL = "STRUCTURED_OUTPUT_PARSE_FAIL";
+export const STRUCTURED_OUTPUT_MAX_TOKENS = "STRUCTURED_OUTPUT_MAX_TOKENS";
+
+export class StructuredOutputError extends Error {
+  code: string;
+  raw?: unknown;
+  constructor(code: string, message: string, raw?: unknown) {
+    super(message);
+    this.code = code;
+    this.raw = raw;
+  }
+}
+
+export function normaliseResponse(
+  provider: ProviderId,
+  raw: any,
+  opts?: { structuredOutputName?: string },
+): NormalisedResponse {
   if (provider === "anthropic") {
     const blocks: any[] = raw?.content ?? [];
     let text = "";
@@ -200,6 +236,50 @@ export function normaliseResponse(provider: ProviderId, raw: any): NormalisedRes
           function: { name: b.name, arguments: JSON.stringify(b.input ?? {}) },
         });
       }
+    }
+    // Structured Outputs path: caller asked for JSON conforming to a schema.
+    // Synthesize a tool-call shape so downstream code reads `toolCalls[0].arguments`
+    // exactly as it did for tool_use. Refusals / max_tokens / parse failures
+    // throw a tagged StructuredOutputError so callers can branch deterministically.
+    if (opts?.structuredOutputName) {
+      const stopReason = raw?.stop_reason ?? null;
+      if (stopReason === "refusal") {
+        throw new StructuredOutputError(
+          STRUCTURED_OUTPUT_REFUSAL,
+          "Claude declined to produce a structured output for this request.",
+          raw,
+        );
+      }
+      if (stopReason === "max_tokens") {
+        throw new StructuredOutputError(
+          STRUCTURED_OUTPUT_MAX_TOKENS,
+          "Structured output was truncated by max_tokens.",
+          raw,
+        );
+      }
+      const trimmed = text.trim();
+      if (!trimmed) {
+        throw new StructuredOutputError(
+          STRUCTURED_OUTPUT_PARSE_FAIL,
+          "Structured Outputs returned no text block.",
+          raw,
+        );
+      }
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch (e) {
+        throw new StructuredOutputError(
+          STRUCTURED_OUTPUT_PARSE_FAIL,
+          `Structured Outputs text was not valid JSON: ${(e as Error).message}`,
+          raw,
+        );
+      }
+      toolCalls.push({
+        id: "structured-output",
+        name: opts.structuredOutputName,
+        arguments: parsed,
+      });
     }
     return {
       text,
@@ -268,6 +348,7 @@ export async function callLLM(opts: {
   stream?: boolean;
   forceTool?: string;
   temperature?: number;
+  json_schema?: { name: string; schema: Record<string, unknown> };
 }): Promise<Response> {
   const provider = providerFor(opts.model);
   const key = Deno.env.get(envKeyFor(provider));

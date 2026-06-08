@@ -1,5 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callLLM, providerFor, normaliseResponse, extractProviderError, envKeyFor } from "../_shared/_llm.ts";
+import {
+  callLLM,
+  providerFor,
+  normaliseResponse,
+  extractProviderError,
+  envKeyFor,
+  StructuredOutputError,
+  STRUCTURED_OUTPUT_REFUSAL,
+  STRUCTURED_OUTPUT_MAX_TOKENS,
+} from "../_shared/_llm.ts";
 import { repairToolOutput } from "../_shared/_repair.ts";
 import { FLOW_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 
@@ -971,25 +980,47 @@ ${writePillarNotice}`;
     // call, no risk of mid-request drift if the table is edited.
     const temperature = resolveTemperature(FLOW_TEMPERATURE, flowModel);
 
-    const baseLlmArgs = {
-      model: flowModel,
-      max_tokens: 8192,
-      messages: [
-        { role: "system" as const, content: systemPromptTemplate },
-        { role: "user" as const, content: userPrompt },
-      ],
-      tools: [{
-        type: "function" as const,
-        function: {
-          name: SUBMIT_FLOW_TOOL.name,
-          description: SUBMIT_FLOW_TOOL.description,
-          parameters: SUBMIT_FLOW_TOOL.input_schema,
-        },
-      }],
-      forceTool: SUBMIT_FLOW_TOOL.name,
-      disableParallelToolUse: true,
-      temperature,
-    };
+    // Anthropic Sonnet 4.6 / Opus 4.7+ support Structured Outputs (GA, no
+    // beta header). This is the proper fix for the stringified-pillar bug:
+    // the JSON object is returned in response.content[0].text and is
+    // schema-validated server-side. We branch only the request shape — the
+    // synthesized tool-call wrapper in normaliseResponse keeps downstream
+    // code identical to the tool_use path.
+    const useStructuredOutputs = provider === "anthropic";
+
+    const baseLlmArgs = useStructuredOutputs
+      ? {
+          model: flowModel,
+          max_tokens: 8192,
+          messages: [
+            { role: "system" as const, content: systemPromptTemplate },
+            { role: "user" as const, content: userPrompt },
+          ],
+          json_schema: {
+            name: SUBMIT_FLOW_TOOL.name,
+            schema: SUBMIT_FLOW_TOOL.input_schema as Record<string, unknown>,
+          },
+          temperature,
+        }
+      : {
+          model: flowModel,
+          max_tokens: 8192,
+          messages: [
+            { role: "system" as const, content: systemPromptTemplate },
+            { role: "user" as const, content: userPrompt },
+          ],
+          tools: [{
+            type: "function" as const,
+            function: {
+              name: SUBMIT_FLOW_TOOL.name,
+              description: SUBMIT_FLOW_TOOL.description,
+              parameters: SUBMIT_FLOW_TOOL.input_schema,
+            },
+          }],
+          forceTool: SUBMIT_FLOW_TOOL.name,
+          disableParallelToolUse: true,
+          temperature,
+        };
 
     // ============================================================
     // WORKAROUND (see _repair.ts): Claude's tool_use output is
@@ -1012,6 +1043,7 @@ ${writePillarNotice}`;
       ok: false;
       errorResponse: Response;
       usage: { input_tokens?: number; output_tokens?: number };
+      noRetry?: boolean;
     };
 
     const attemptFlowCall = async (attempt: 1 | 2): Promise<AttemptOk | AttemptFail> => {
@@ -1063,7 +1095,69 @@ ${writePillarNotice}`;
         raw_response: JSON.stringify(rawData),
       });
 
-      const normalised = normaliseResponse(provider, rawData);
+      let normalised;
+      try {
+        normalised = normaliseResponse(
+          provider,
+          rawData,
+          useStructuredOutputs
+            ? { structuredOutputName: SUBMIT_FLOW_TOOL.name }
+            : undefined,
+        );
+      } catch (e) {
+        if (e instanceof StructuredOutputError) {
+          // Full server-side log for operator investigation.
+          console.error("[FLOW structured-output error]", {
+            code: e.code,
+            message: e.message,
+            model: flowModel,
+            project_id: projectId,
+            attempt,
+            stop_reason: rawData?.stop_reason ?? null,
+            raw_response: JSON.stringify(rawData),
+          });
+
+          if (e.code === STRUCTURED_OUTPUT_REFUSAL) {
+            // No retry — refusals are deterministic for the same content;
+            // retrying would just spend more tokens and mask the refusal.
+            return {
+              ok: false,
+              usage: { input_tokens: rawData?.usage?.input_tokens, output_tokens: rawData?.usage?.output_tokens },
+              noRetry: true,
+              errorResponse: jsonResponse(
+                {
+                  error:
+                    "The AI declined to analyze this content. Try switching to a different model in Settings, or contact the operator if this persists.",
+                },
+                502,
+              ),
+            };
+          }
+          if (e.code === STRUCTURED_OUTPUT_MAX_TOKENS) {
+            return {
+              ok: false,
+              usage: { input_tokens: rawData?.usage?.input_tokens, output_tokens: rawData?.usage?.output_tokens },
+              noRetry: true,
+              errorResponse: jsonResponse(
+                { error: "Analysis output was truncated. Please try again or use a smaller project." },
+                502,
+              ),
+            };
+          }
+          // STRUCTURED_OUTPUT_PARSE_FAIL → fall through to existing retry path.
+        } else {
+          throw e;
+        }
+        return {
+          ok: false,
+          usage: { input_tokens: rawData?.usage?.input_tokens, output_tokens: rawData?.usage?.output_tokens },
+          errorResponse: jsonResponse(
+            { error: "AI analysis returned unexpected format. Please try again." },
+            502,
+          ),
+        };
+      }
+
       const toolCall = normalised.toolCalls.find((tc) => tc.name === SUBMIT_FLOW_TOOL.name);
       const usage = {
         input_tokens: normalised.usage?.input_tokens,
@@ -1143,7 +1237,9 @@ ${writePillarNotice}`;
     let attemptResult = await attemptFlowCall(1);
 
     // Attempt 2 — only if attempt 1 failed validation AFTER repair.
-    if (!attemptResult.ok) {
+    // Skip retry on deterministic failures (refusal, max_tokens) — retrying
+    // them would only burn tokens and mask the underlying signal.
+    if (!attemptResult.ok && !attemptResult.noRetry) {
       // Log token usage for the failed first attempt.
       try {
         await supabase.from("token_usage").insert({
@@ -1175,6 +1271,9 @@ ${writePillarNotice}`;
       }
 
       console.log("[FLOW retry] attempt 2 succeeded");
+    } else if (!attemptResult.ok) {
+      // noRetry path (refusal / max_tokens) — return the prepared error.
+      return attemptResult.errorResponse;
     }
 
     const flowResult = attemptResult.flowResult as Record<string, any>;
