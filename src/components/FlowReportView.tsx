@@ -897,5 +897,83 @@ export function FlowReportView({
         </div>
       </ScrollArea>
     </div>
+
+    {/* Badge source picker — opens before the share link is generated. */}
+    <Dialog open={showBadgeSourceDialog} onOpenChange={setShowBadgeSourceDialog}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Choose what your badge shows</DialogTitle>
+          <DialogDescription>
+            Pick which assessment drives the two downloadable FLOW badges.
+          </DialogDescription>
+        </DialogHeader>
+
+        <RadioGroup
+          value={pendingBadgeSource}
+          onValueChange={(v) => setPendingBadgeSource(v as "ai" | "user")}
+          className="space-y-2 py-2"
+        >
+          <div className="flex items-start gap-2">
+            <RadioGroupItem value="ai" id="badge-src-ai" className="mt-0.5" />
+            <Label htmlFor="badge-src-ai" className="font-normal cursor-pointer leading-snug">
+              <span className="font-medium">Badge showing AI analysis</span>
+              <span className="block text-xs text-muted-foreground">
+                Scores and profile come from the FLOW report.
+              </span>
+            </Label>
+          </div>
+
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className={`flex items-start gap-2 ${
+                    !hasUserBadgeScores ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  <RadioGroupItem
+                    value="user"
+                    id="badge-src-user"
+                    disabled={!hasUserBadgeScores}
+                    className="mt-0.5"
+                  />
+                  <Label
+                    htmlFor="badge-src-user"
+                    className={`font-normal leading-snug ${
+                      hasUserBadgeScores ? "cursor-pointer" : "cursor-not-allowed"
+                    }`}
+                  >
+                    <span className="font-medium">Badge showing your analysis</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Uses your post-analysis self-assessment if available, otherwise your pre-analysis one.
+                    </span>
+                  </Label>
+                </div>
+              </TooltipTrigger>
+              {!hasUserBadgeScores && (
+                <TooltipContent side="top">
+                  Available only after you fill in a self-assessment.
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+        </RadioGroup>
+
+        <p className="text-[11px] text-muted-foreground italic leading-relaxed">
+          This only affects how the downloadable badges look. The shared report
+          itself can still include both assessments if you enable that option after.
+        </p>
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={() => setShowBadgeSourceDialog(false)}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={handleConfirmBadgeSource} disabled={sharing}>
+            {sharing ? <Loader2 className="h-3 w-3 animate-spin" /> : "Generate"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
