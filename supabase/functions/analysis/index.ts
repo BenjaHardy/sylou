@@ -1095,7 +1095,69 @@ ${writePillarNotice}`;
         raw_response: JSON.stringify(rawData),
       });
 
-      const normalised = normaliseResponse(provider, rawData);
+      let normalised;
+      try {
+        normalised = normaliseResponse(
+          provider,
+          rawData,
+          useStructuredOutputs
+            ? { structuredOutputName: SUBMIT_FLOW_TOOL.name }
+            : undefined,
+        );
+      } catch (e) {
+        if (e instanceof StructuredOutputError) {
+          // Full server-side log for operator investigation.
+          console.error("[FLOW structured-output error]", {
+            code: e.code,
+            message: e.message,
+            model: flowModel,
+            project_id: projectId,
+            attempt,
+            stop_reason: rawData?.stop_reason ?? null,
+            raw_response: JSON.stringify(rawData),
+          });
+
+          if (e.code === STRUCTURED_OUTPUT_REFUSAL) {
+            // No retry — refusals are deterministic for the same content;
+            // retrying would just spend more tokens and mask the refusal.
+            return {
+              ok: false,
+              usage: { input_tokens: rawData?.usage?.input_tokens, output_tokens: rawData?.usage?.output_tokens },
+              noRetry: true,
+              errorResponse: jsonResponse(
+                {
+                  error:
+                    "The AI declined to analyze this content. Try switching to a different model in Settings, or contact the operator if this persists.",
+                },
+                502,
+              ),
+            };
+          }
+          if (e.code === STRUCTURED_OUTPUT_MAX_TOKENS) {
+            return {
+              ok: false,
+              usage: { input_tokens: rawData?.usage?.input_tokens, output_tokens: rawData?.usage?.output_tokens },
+              noRetry: true,
+              errorResponse: jsonResponse(
+                { error: "Analysis output was truncated. Please try again or use a smaller project." },
+                502,
+              ),
+            };
+          }
+          // STRUCTURED_OUTPUT_PARSE_FAIL → fall through to existing retry path.
+        } else {
+          throw e;
+        }
+        return {
+          ok: false,
+          usage: { input_tokens: rawData?.usage?.input_tokens, output_tokens: rawData?.usage?.output_tokens },
+          errorResponse: jsonResponse(
+            { error: "AI analysis returned unexpected format. Please try again." },
+            502,
+          ),
+        };
+      }
+
       const toolCall = normalised.toolCalls.find((tc) => tc.name === SUBMIT_FLOW_TOOL.name);
       const usage = {
         input_tokens: normalised.usage?.input_tokens,
