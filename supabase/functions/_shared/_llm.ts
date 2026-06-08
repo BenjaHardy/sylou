@@ -79,6 +79,7 @@ export function toAnthropicBody(opts: {
   stream?: boolean;
   forceTool?: string;
   temperature?: number;
+  json_schema?: { name: string; schema: Record<string, unknown> };
 }): Record<string, unknown> {
   let system = "";
   const msgs: Array<Record<string, unknown>> = [];
@@ -133,7 +134,19 @@ export function toAnthropicBody(opts: {
     // Anthropic API caps temperature at 1.0; clamp defensively.
     body.temperature = Math.min(1.0, Math.max(0.0, opts.temperature));
   }
-  if (opts.tools && opts.tools.length > 0) {
+  // Structured Outputs (JSON outputs) — GA on Sonnet 4.6 / Opus 4.7+ on the
+  // Claude API; no beta header required. When set, we do NOT also send
+  // tools/tool_choice. The JSON is returned as a text block in
+  // response.content[0].text and is schema-validated server-side.
+  if (opts.json_schema) {
+    body.output_config = {
+      format: {
+        type: "json_schema",
+        name: opts.json_schema.name,
+        schema: opts.json_schema.schema,
+      },
+    };
+  } else if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools.map((t) => ({
       name: t.function.name,
       description: t.function.description,
