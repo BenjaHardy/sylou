@@ -19,6 +19,13 @@ export interface FlowMeta {
   imported_documents_mode?: "full_text" | "summaries" | "excluded" | "none";
   imported_documents_count?: number;
   imported_documents_total_chars?: number;
+  /**
+   * Temperature actually sent to the LLM for this analysis.
+   * `null` = the provider controls it (e.g. Claude Opus 4.7+ rejects any
+   * non-default value with HTTP 400, so we omit the field).
+   * A number = we explicitly requested that value (typically 0.0 for FLOW).
+   */
+  temperature_used?: number | null;
 }
 
 export interface MetricsSnapshot {

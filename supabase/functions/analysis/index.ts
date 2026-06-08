@@ -1235,8 +1235,12 @@ ${writePillarNotice}`;
       similarity_pct: similarityPct,
       write_score_capped: similarityPct >= 35,
       imported_documents_mode: importedDocsMode,
-      imported_documents_count: importedDocs.length,
+      imported_documents_count: importedDocsTotalChars > 0 ? importedDocs.length : importedDocs.length,
       imported_documents_total_chars: importedDocsTotalChars,
+      // `null` means the provider controls the temperature (e.g. Opus 4.7+
+      // which 400s on any non-default value); a number means we explicitly
+      // requested that value. Surfaced in the FLOW report disclosure line.
+      temperature_used: temperature ?? null,
       ...(isCreativeProject ? { template: "creative" } : {}),
     };
 
