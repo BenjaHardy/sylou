@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, extractProviderError } from "./_llm.ts";
+import { EDITOR_TEMPERATURE, resolveTemperature } from "./_temperatures.ts";
 
 // Budget helper. Intentionally duplicated across the four edge functions
 // (chat, context-prompt, editor-action, analysis) — Supabase edge function
@@ -209,6 +210,7 @@ Deno.serve(async (req) => {
     const chatModel: string =
       requestedModel || profile.preferred_chat_model || "mistral-large-latest";
     const provider = providerFor(chatModel);
+    const temperature = resolveTemperature(EDITOR_TEMPERATURE, chatModel);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
     if (!Deno.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
@@ -225,6 +227,7 @@ Deno.serve(async (req) => {
         messages: llmMessages as any,
         max_tokens: 1000,
         stream: true,
+        temperature,
       });
 
       if (!llmRes.ok) {
@@ -384,6 +387,7 @@ Deno.serve(async (req) => {
       model: chatModel,
       messages: llmMessages as any,
       max_tokens: 1000,
+      temperature,
     });
 
     if (!llmRes.ok) {
