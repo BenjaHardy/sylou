@@ -1043,6 +1043,7 @@ ${writePillarNotice}`;
       ok: false;
       errorResponse: Response;
       usage: { input_tokens?: number; output_tokens?: number };
+      noRetry?: boolean;
     };
 
     const attemptFlowCall = async (attempt: 1 | 2): Promise<AttemptOk | AttemptFail> => {
