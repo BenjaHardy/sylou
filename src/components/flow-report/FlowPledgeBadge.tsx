@@ -289,11 +289,11 @@ function draw(
 ) {
   ctx.save();
   ctx.scale(dpr, dpr);
-  drawCommonChrome(ctx, props.certificateId, logoImg, props.generatorInfo);
+  drawCommonChrome(ctx, props.certificateId, logoImg, props.generatorInfo, props.assessmentSource ?? "ai");
   if (props.variant === "profile" && props.profile) {
     drawProfile(ctx, props.profile);
   } else {
-    drawRadar(ctx, props.aiScores);
+    drawRadar(ctx, props.scores);
   }
   if (qrCanvas) {
     ctx.drawImage(qrCanvas, QR_X, QR_Y, QR_SIZE, QR_SIZE);
