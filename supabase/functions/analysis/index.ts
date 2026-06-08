@@ -1,6 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, normaliseResponse, extractProviderError, envKeyFor } from "./_llm.ts";
 import { repairToolOutput } from "./_repair.ts";
+import { FLOW_TEMPERATURE, resolveTemperature } from "./_temperatures.ts";
+// _shared/ cross-folder import probe — single use, deploy-time validator.
+// If this deploys + the function runs, _shared/ imports are viable and the
+// follow-up consolidation PR can land. If it fails, the deploy error is the
+// artifact worth filing with Supabase.
+import { sharedImportProbe } from "../_shared/test_import.ts";
+console.log("[shared-import-probe]", sharedImportProbe());
 
 // Budget helper. Intentionally duplicated across the four edge functions
 // (chat, context-prompt, editor-action, analysis) — Supabase edge function
@@ -952,6 +959,12 @@ ${writePillarNotice}`;
       });
     }
 
+    // Resolve FLOW temperature ONCE per request and bake into baseLlmArgs.
+    // The retry path (attempt === 2 below) spreads baseLlmArgs, so it
+    // inherits the exact same temperature — no second resolveTemperature()
+    // call, no risk of mid-request drift if the table is edited.
+    const temperature = resolveTemperature(FLOW_TEMPERATURE, flowModel);
+
     const baseLlmArgs = {
       model: flowModel,
       max_tokens: 8192,
@@ -969,6 +982,7 @@ ${writePillarNotice}`;
       }],
       forceTool: SUBMIT_FLOW_TOOL.name,
       disableParallelToolUse: true,
+      temperature,
     };
 
     // ============================================================
