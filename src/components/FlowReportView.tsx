@@ -228,6 +228,38 @@ export function FlowReportView({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  /** Apply a badge-source choice. When "user", also forces the
+   * "Include self-assessment" share option ON (server-persisted) since the
+   * badge derives from that data and the viewer needs context.
+   * The same handler powers both the initial dialog and the in-panel toggle. */
+  const applyBadgeSource = useCallback(
+    async (source: "ai" | "user") => {
+      setBadgeSource(source);
+      if (source === "user" && report && !shareIncludeFeedback) {
+        setShareIncludeFeedback(true);
+        try {
+          await supabase.functions.invoke("share-report", {
+            body: { report_id: report.id, action: "toggle", share_include_feedback: true },
+          });
+        } catch (err) {
+          console.error("Failed to force-include self-assessment:", err);
+        }
+      }
+    },
+    [report, shareIncludeFeedback],
+  );
+
+  const openBadgeSourceDialog = () => {
+    setPendingBadgeSource(badgeSource);
+    setShowBadgeSourceDialog(true);
+  };
+
+  const handleConfirmBadgeSource = async () => {
+    setShowBadgeSourceDialog(false);
+    await applyBadgeSource(pendingBadgeSource);
+    await handleShare();
+  };
+
   const handleLoadReplay = useCallback(async () => {
     if (!report) return;
     if (replaySnapshot) return;
