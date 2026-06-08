@@ -980,25 +980,47 @@ ${writePillarNotice}`;
     // call, no risk of mid-request drift if the table is edited.
     const temperature = resolveTemperature(FLOW_TEMPERATURE, flowModel);
 
-    const baseLlmArgs = {
-      model: flowModel,
-      max_tokens: 8192,
-      messages: [
-        { role: "system" as const, content: systemPromptTemplate },
-        { role: "user" as const, content: userPrompt },
-      ],
-      tools: [{
-        type: "function" as const,
-        function: {
-          name: SUBMIT_FLOW_TOOL.name,
-          description: SUBMIT_FLOW_TOOL.description,
-          parameters: SUBMIT_FLOW_TOOL.input_schema,
-        },
-      }],
-      forceTool: SUBMIT_FLOW_TOOL.name,
-      disableParallelToolUse: true,
-      temperature,
-    };
+    // Anthropic Sonnet 4.6 / Opus 4.7+ support Structured Outputs (GA, no
+    // beta header). This is the proper fix for the stringified-pillar bug:
+    // the JSON object is returned in response.content[0].text and is
+    // schema-validated server-side. We branch only the request shape — the
+    // synthesized tool-call wrapper in normaliseResponse keeps downstream
+    // code identical to the tool_use path.
+    const useStructuredOutputs = provider === "anthropic";
+
+    const baseLlmArgs = useStructuredOutputs
+      ? {
+          model: flowModel,
+          max_tokens: 8192,
+          messages: [
+            { role: "system" as const, content: systemPromptTemplate },
+            { role: "user" as const, content: userPrompt },
+          ],
+          json_schema: {
+            name: SUBMIT_FLOW_TOOL.name,
+            schema: SUBMIT_FLOW_TOOL.input_schema as Record<string, unknown>,
+          },
+          temperature,
+        }
+      : {
+          model: flowModel,
+          max_tokens: 8192,
+          messages: [
+            { role: "system" as const, content: systemPromptTemplate },
+            { role: "user" as const, content: userPrompt },
+          ],
+          tools: [{
+            type: "function" as const,
+            function: {
+              name: SUBMIT_FLOW_TOOL.name,
+              description: SUBMIT_FLOW_TOOL.description,
+              parameters: SUBMIT_FLOW_TOOL.input_schema,
+            },
+          }],
+          forceTool: SUBMIT_FLOW_TOOL.name,
+          disableParallelToolUse: true,
+          temperature,
+        };
 
     // ============================================================
     // WORKAROUND (see _repair.ts): Claude's tool_use output is
