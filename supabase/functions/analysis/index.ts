@@ -126,13 +126,14 @@ Half-point scores (e.g. 2.5, 3.5) are permitted and encouraged when the evidence
 # RESPONSE FORMAT
 
 Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.
-Each of `find`, `lead`, `organize`, and `write` must be a nested JSON object with exactly these four fields:
-- `reasoning`: string
-- `evidence`: array of 2-4 strings
-- `score`: number from 0.0 to 5.0 in 0.5 increments, or null
-- `narrative`: string
+Each of \`find\`, \`lead\`, \`organize\`, and \`write\` must be a nested JSON object with exactly these four fields:
+- \`reasoning\`: string
+- \`evidence\`: array of 2-4 strings
+- \`score\`: number from 0.0 to 5.0 in 0.5 increments, or null
+- \`narrative\`: string
 Example structure for a single pillar:
 { "reasoning": "...", "evidence": ["...", "..."], "score": 3.5, "narrative": "..." }
+`;
 
 // ---------------------------------------------------------------------------
 // Creative FLOW Prompt v1.0_080626 — for creative template projects
@@ -184,13 +185,14 @@ Half-point scores (e.g. 2.5, 3.5) are permitted and encouraged when the evidence
 # RESPONSE FORMAT
 
 Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.
-Each of `find`, `lead`, `organize`, and `write` must be a nested JSON object with exactly these four fields:
-- `reasoning`: string
-- `evidence`: array of 2-4 strings
-- `score`: number from 0.0 to 5.0 in 0.5 increments, or null
-- `narrative`: string
+Each of \`find\`, \`lead\`, \`organize\`, and \`write\` must be a nested JSON object with exactly these four fields:
+- \`reasoning\`: string
+- \`evidence\`: array of 2-4 strings
+- \`score\`: number from 0.0 to 5.0 in 0.5 increments, or null
+- \`narrative\`: string
 Example structure for a single pillar:
 { "reasoning": "...", "evidence": ["...", "..."], "score": 3.5, "narrative": "..." }
+`;
 
 // ---------------------------------------------------------------------------
 // Tool schema
