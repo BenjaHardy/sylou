@@ -334,7 +334,7 @@ export function FlowReportView({
   const effectiveBadgeProfile = getFlowProfile(effectiveBadgeScores);
 
   let radarUserFeedback: FlowFeedback | null = null;
-  let radarUserLabel = "User Assessment";
+  let radarUserLabel = "Self-assessment (by user)";
   const greenColor = "hsl(142, 71%, 45%)";
   const orangeColor = "hsl(32, 95%, 55%)";
   let radarUserColor = orangeColor;
@@ -342,20 +342,20 @@ export function FlowReportView({
   if (hasBothFeedback) {
     if (feedbackToggle === "pre") {
       radarUserFeedback = preFeedbackScores;
-      radarUserLabel = "Pre-analysis (user assessment)";
+      radarUserLabel = "Pre-analysis (self-assessment by user)";
       radarUserColor = greenColor;
     } else {
       radarUserFeedback = postFeedbackScores;
-      radarUserLabel = "Post-analysis (user assessment)";
+      radarUserLabel = "Post-analysis (self-assessment by user)";
       radarUserColor = orangeColor;
     }
   } else if (postFeedbackScores) {
     radarUserFeedback = postFeedbackScores;
-    radarUserLabel = "User Assessment";
+    radarUserLabel = "Self-assessment (by user)";
     radarUserColor = orangeColor;
   } else if (preFeedbackScores) {
     radarUserFeedback = preFeedbackScores;
-    radarUserLabel = "User Assessment";
+    radarUserLabel = "Self-assessment (by user)";
     radarUserColor = greenColor;
   }
 
@@ -850,7 +850,7 @@ export function FlowReportView({
                 />
               )}
 
-              {/* User Assessment */}
+              {/* Self-Assessment */}
               <FlowUserAssessmentSection
                 existingAssessment={existingAssessment}
                 onSubmit={onSaveAssessment}
