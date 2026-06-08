@@ -40,7 +40,7 @@ interface FlowPledgeBadgeProps {
 }
 
 const BADGE_W = 320;
-const BADGE_H = 214;
+const BADGE_H = 224; // +10 to fit subtitle under the headline without squeezing the radar
 const BADGE_FOOTER_URL = "Learn more at meetsylou.eu";
 
 const QR_SIZE = 72;
