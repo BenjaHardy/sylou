@@ -291,6 +291,16 @@ export function FlowReportView({
   const postFeedbackScores = extractFeedbackScores(report.user_feedback_post);
   const hasBothFeedback = preFeedbackScores != null && postFeedbackScores != null;
 
+  // Latest self-assessment scores: post if present, otherwise pre.
+  // Null when the user provided neither — disables the "user" badge option.
+  const userBadgeScores: FlowFeedback | null = postFeedbackScores ?? preFeedbackScores;
+  const hasUserBadgeScores = userBadgeScores != null;
+
+  // Scores actually fed to the badges, driven by the single source-of-truth state.
+  const effectiveBadgeScores =
+    badgeSource === "user" && userBadgeScores ? userBadgeScores : flowScores;
+  const effectiveBadgeProfile = getFlowProfile(effectiveBadgeScores);
+
   let radarUserFeedback: FlowFeedback | null = null;
   let radarUserLabel = "User Assessment";
   const greenColor = "hsl(142, 71%, 45%)";
