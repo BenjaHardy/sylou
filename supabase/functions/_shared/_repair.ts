@@ -48,7 +48,10 @@ export function repairToolOutput(
         const parsed = JSON.parse(value);
         if (isPillarObject(parsed)) {
           out[key] = parsed;
-          console.log("[FLOW repair] stringified JSON pillar normalized", { pillar: key });
+          console.warn(
+            "[FLOW repair UNEXPECTED] Structured Outputs returned non-conforming output for pillar",
+            { pillar: key },
+          );
         }
       } catch {
         // Leave the original value alone; validation + retry handle it.
