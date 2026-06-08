@@ -31,6 +31,7 @@ export const MODELS: ModelInfo[] = [
     provider: "mistral",
     pricing: { input: 2.0, output: 6.0 },
     contextLimit: 256_000,
+    isRollingLatest: true,
   },
   {
     id: "claude-sonnet-4-6",
