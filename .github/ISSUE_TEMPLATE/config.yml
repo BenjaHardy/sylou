@@ -1,0 +1,31 @@
+# Configuration for the issue template chooser shown when contributors
+# click "New Issue" on the Sylou repository.
+#
+# This file goes at .github/ISSUE_TEMPLATE/config.yml alongside the
+# individual issue templates.
+
+# Require contributors to pick one of the structured templates rather
+# than opening a blank issue. This keeps issues consistent and easier
+# to triage. Contributors who genuinely need a free-form issue can
+# still use one of the templates and explain in the body.
+blank_issues_enabled: false
+
+# Additional links shown beneath the issue template options. Use these
+# to route conversations that don't belong in the issue tracker to
+# better channels.
+contact_links:
+  - name: Trademark inquiries
+    url: mailto:trademark@sylou.eu
+    about: Questions about using the Sylou name, logo, or FLOW Pledge Badges. See the Trademark Policy for details.
+
+  - name: Security vulnerabilities
+    url: mailto:security@sylou.eu
+    about: Please report security issues privately by email rather than opening a public issue, so they can be addressed before disclosure.
+
+  - name: General questions and discussion
+    url: mailto:contact@sylou.eu
+    about: For broader questions, project conversations, or anything that doesn't fit an issue template.
+
+  - name: Learn more about Sylou
+    url: https://www.meetsylou.eu
+    about: Project overview, documentation, and background on the FLOW methodology.
