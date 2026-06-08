@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, normaliseResponse, extractProviderError } from "./_llm.ts";
+import { CONTEXT_TEMPERATURE, resolveTemperature } from "./_temperatures.ts";
 
 // Budget helper. Intentionally duplicated across the four edge functions
 // (chat, context-prompt, editor-action, analysis) — Supabase edge function
@@ -232,11 +233,13 @@ async function callChatModel(
   model: string,
   messages: { role: string; content: string }[],
   maxTokens = 2000,
+  temperature?: number,
 ): Promise<{ text: string; inputChars: number; outputChars: number }> {
   const res = await callLLM({
     model,
     messages: messages as any,
     max_tokens: maxTokens,
+    temperature,
   });
 
   if (!res.ok) {
@@ -522,6 +525,7 @@ Deno.serve(async (req) => {
     const chatModel: string =
       requestedModel || profile.preferred_chat_model || "mistral-large-latest";
     const provider = providerFor(chatModel);
+    const temperature = resolveTemperature(CONTEXT_TEMPERATURE, chatModel);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
     if (!Deno.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
