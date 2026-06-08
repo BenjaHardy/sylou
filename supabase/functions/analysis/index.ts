@@ -1271,6 +1271,9 @@ ${writePillarNotice}`;
       }
 
       console.log("[FLOW retry] attempt 2 succeeded");
+    } else if (!attemptResult.ok) {
+      // noRetry path (refusal / max_tokens) — return the prepared error.
+      return attemptResult.errorResponse;
     }
 
     const flowResult = attemptResult.flowResult as Record<string, any>;
