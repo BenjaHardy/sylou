@@ -16,6 +16,10 @@ export interface ModelInfo {
   contextLimit: number;
   /** Marked for the UI to flag less-mature models. */
   isExperimental?: boolean;
+  /** True when the model ID is a rolling alias that always resolves to the
+   *  provider's current latest version (e.g. `mistral-large-latest`,
+   *  `deepseek-chat`). Pinned version IDs leave this undefined. */
+  isRollingLatest?: boolean;
   /** Optional one-line note shown beneath the row. */
   note?: string;
 }
