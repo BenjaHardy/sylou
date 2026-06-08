@@ -360,6 +360,7 @@ export function FlowReportView({
   }
 
   return (
+    <>
     <div ref={containerRef} className="flex-1 flex flex-col bg-background h-screen relative overflow-auto">
       {/* Header */}
       <div className="h-12 border-b border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
