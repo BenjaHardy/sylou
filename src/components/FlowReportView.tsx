@@ -621,12 +621,14 @@ export function FlowReportView({
                       The writing snapshot is always included in shared reports so reviewers can see the work that was assessed.
                     </p>
 
-                    {/* Include feedback checkbox */}
+                    {/* Include feedback checkbox — forced ON when badge shows user's assessment */}
                     <div className="flex items-center gap-2">
                       <Checkbox
                         id="share-include-feedback"
                         checked={shareIncludeFeedback}
+                        disabled={badgeSource === "user"}
                         onCheckedChange={async (checked) => {
+                          if (badgeSource === "user") return;
                           const val = checked === true;
                           setShareIncludeFeedback(val);
                           try {
@@ -639,8 +641,14 @@ export function FlowReportView({
                           }
                         }}
                       />
-                      <label htmlFor="share-include-feedback" className="text-xs text-muted-foreground cursor-pointer">
+                      <label
+                        htmlFor="share-include-feedback"
+                        className={`text-xs cursor-pointer ${badgeSource === "user" ? "text-muted-foreground/70" : "text-muted-foreground"}`}
+                      >
                         Include my self-assessment in shared report
+                        {badgeSource === "user" && (
+                          <span className="ml-1 italic">(required while the badge shows your assessment)</span>
+                        )}
                       </label>
                     </div>
 
