@@ -396,7 +396,11 @@ export default function SharedReport() {
             <>
               <div className="text-[10px] text-muted-foreground text-center space-y-0.5">
                 <p>
-                  Model: {MODEL_LABELS[report.model_used] ?? report.model_used} · Generated{" "}
+                  Model: {MODEL_LABELS[report.model_used] ?? report.model_used}
+                  {" "}({report.flow_meta?.temperature_used == null
+                    ? "model-controlled temperature"
+                    : `temperature ${report.flow_meta.temperature_used}`})
+                  {" "}· Generated{" "}
                   {new Date(report.created_at).toLocaleString()}
                 </p>
                 <p>Project: {projectName}</p>
