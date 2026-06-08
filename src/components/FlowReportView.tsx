@@ -691,18 +691,59 @@ export function FlowReportView({
 
 
 
+                    {/* Badge source toggle (session-scoped; shares state with the initial dialog) */}
+                    <div className="flex items-center justify-between gap-2 pt-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Badge source
+                      </span>
+                      <TooltipProvider delayDuration={200}>
+                        <div className="inline-flex rounded-md border border-border overflow-hidden">
+                          <button
+                            type="button"
+                            className={`px-2.5 py-1 text-xs transition-colors ${
+                              badgeSource === "ai"
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-background text-muted-foreground hover:bg-muted"
+                            }`}
+                            onClick={() => applyBadgeSource("ai")}
+                          >
+                            AI assessment
+                          </button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>
+                                <button
+                                  type="button"
+                                  disabled={!hasUserBadgeScores}
+                                  className={`px-2.5 py-1 text-xs transition-colors border-l border-border ${
+                                    badgeSource === "user"
+                                      ? "bg-primary text-primary-foreground"
+                                      : "bg-background text-muted-foreground hover:bg-muted"
+                                  } disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-background`}
+                                  onClick={() => applyBadgeSource("user")}
+                                >
+                                  Self-assessment
+                                </button>
+                              </span>
+                            </TooltipTrigger>
+                            {!hasUserBadgeScores && (
+                              <TooltipContent side="top">
+                                Available only after you fill in a self-assessment.
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </div>
+                      </TooltipProvider>
+                    </div>
+
                     {/* Pledge Badges */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                       <div className="flex flex-col items-center gap-2">
                         <span className="text-xs text-muted-foreground">FLOW Pledge Badge (Radar Chart)</span>
                         <FlowPledgeBadge
                           variant="radar"
-                          aiScores={{
-                            find: report.ai_find?.score ?? null,
-                            lead: report.ai_lead?.score ?? null,
-                            organize: report.ai_organize?.score ?? null,
-                            write: report.ai_write?.score ?? null,
-                          }}
+                          scores={effectiveBadgeScores}
+                          assessmentSource={badgeSource}
                           certificateId={certificateId || ""}
                           shareUrl={shareUrl}
                           generatorInfo={(report as any).generator_info ?? null}
@@ -713,16 +754,12 @@ export function FlowReportView({
                         <FlowPledgeBadge
                           variant="profile"
                           profile={{
-                            code: flowProfile.code,
-                            name: flowProfile.name,
-                            tagline: flowProfile.tagline,
+                            code: effectiveBadgeProfile.code,
+                            name: effectiveBadgeProfile.name,
+                            tagline: effectiveBadgeProfile.tagline,
                           }}
-                          aiScores={{
-                            find: report.ai_find?.score ?? null,
-                            lead: report.ai_lead?.score ?? null,
-                            organize: report.ai_organize?.score ?? null,
-                            write: report.ai_write?.score ?? null,
-                          }}
+                          scores={effectiveBadgeScores}
+                          assessmentSource={badgeSource}
                           certificateId={certificateId || ""}
                           shareUrl={shareUrl}
                           generatorInfo={(report as any).generator_info ?? null}
