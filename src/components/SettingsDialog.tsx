@@ -65,6 +65,9 @@ function ModelOption({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-foreground">{model.label}</span>
+          {model.isRollingLatest && (
+            <span className="text-[11px] text-muted-foreground">· latest version</span>
+          )}
           {model.isExperimental && (
             <Badge variant="outline" className="text-[10px] py-0 h-4 px-1.5">
               experimental
