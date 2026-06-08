@@ -77,7 +77,7 @@ const GENERATOR_INFO = {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ---------------------------------------------------------------------------
-// FLOW Prompt v1.2 – read transparency.md for guidance and calibration notes
+// FLOW Prompt v1.0_080626 – read transparency.md for guidance and calibration notes
 // ---------------------------------------------------------------------------
 const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a writing project. Your task is to assess how an external third-party human user (occasionally simply referred to as "the user") collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework).
 
@@ -126,11 +126,16 @@ Half-point scores (e.g. 2.5, 3.5) are permitted and encouraged when the evidence
 # RESPONSE FORMAT
 
 Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.
-
-Each of \`find\`, \`lead\`, \`organize\`, and \`write\` MUST be a nested JSON object of the shape \`{ "reasoning": "...", "evidence": ["...", "..."], "score": 3.5, "narrative": "..." }\`. Do not return any pillar as a string. Do not promote \`reasoning\`, \`evidence\`, \`score\`, or \`narrative\` to the top level. Do not use XML or \`<parameter>\` tags.`;
+Each of `find`, `lead`, `organize`, and `write` must be a nested JSON object with exactly these four fields:
+- `reasoning`: string
+- `evidence`: array of 2-4 strings
+- `score`: number from 0.0 to 5.0 in 0.5 increments, or null
+- `narrative`: string
+Example structure for a single pillar:
+{ "reasoning": "...", "evidence": ["...", "..."], "score": 3.5, "narrative": "..." }
 
 // ---------------------------------------------------------------------------
-// Creative FLOW Prompt — for creative template projects
+// Creative FLOW Prompt v1.0_080626 — for creative template projects
 // ---------------------------------------------------------------------------
 const CREATIVE_FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a creative writing project. Your task is to assess how an external third-party human user (occasionally simply referred to as "the user") collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework).
 
@@ -179,8 +184,13 @@ Half-point scores (e.g. 2.5, 3.5) are permitted and encouraged when the evidence
 # RESPONSE FORMAT
 
 Respond ONLY by calling the submit_flow_analysis tool with the required parameters. Do not produce any text outside the tool call.
-
-Each of \`find\`, \`lead\`, \`organize\`, and \`write\` MUST be a nested JSON object of the shape \`{ "reasoning": "...", "evidence": ["...", "..."], "score": 3.5, "narrative": "..." }\`. Do not return any pillar as a string. Do not promote \`reasoning\`, \`evidence\`, \`score\`, or \`narrative\` to the top level. Do not use XML or \`<parameter>\` tags.`;
+Each of `find`, `lead`, `organize`, and `write` must be a nested JSON object with exactly these four fields:
+- `reasoning`: string
+- `evidence`: array of 2-4 strings
+- `score`: number from 0.0 to 5.0 in 0.5 increments, or null
+- `narrative`: string
+Example structure for a single pillar:
+{ "reasoning": "...", "evidence": ["...", "..."], "score": 3.5, "narrative": "..." }
 
 // ---------------------------------------------------------------------------
 // Tool schema
