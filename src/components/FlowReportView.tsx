@@ -53,6 +53,17 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { FlowFeedbackSection } from "@/components/FlowFeedbackSection";
 import { FlowUserAssessmentSection } from "@/components/FlowUserAssessmentSection";
 
@@ -112,6 +123,13 @@ export function FlowReportView({
   const [shareIncludeReplay, setShareIncludeReplay] = useState<boolean>((report as any)?.share_include_replay ?? false);
   const [shareIncludeReport, setShareIncludeReport] = useState<boolean>((report as any)?.share_include_report ?? true);
   const [shareIncludeProfile, setShareIncludeProfile] = useState<boolean>((report as any)?.share_include_profile ?? true);
+
+  // Badge source picker — purely client-side, session-scoped.
+  // The dialog sets the initial value; the toggle above the badges reads/writes
+  // the same state. This is the single source of truth for the badge content.
+  const [badgeSource, setBadgeSource] = useState<"ai" | "user">("ai");
+  const [showBadgeSourceDialog, setShowBadgeSourceDialog] = useState(false);
+  const [pendingBadgeSource, setPendingBadgeSource] = useState<"ai" | "user">("ai");
 
   // Replay state
   const [showReplay, setShowReplay] = useState(false);
@@ -210,6 +228,38 @@ export function FlowReportView({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  /** Apply a badge-source choice. When "user", also forces the
+   * "Include self-assessment" share option ON (server-persisted) since the
+   * badge derives from that data and the viewer needs context.
+   * The same handler powers both the initial dialog and the in-panel toggle. */
+  const applyBadgeSource = useCallback(
+    async (source: "ai" | "user") => {
+      setBadgeSource(source);
+      if (source === "user" && report && !shareIncludeFeedback) {
+        setShareIncludeFeedback(true);
+        try {
+          await supabase.functions.invoke("share-report", {
+            body: { report_id: report.id, action: "toggle", share_include_feedback: true },
+          });
+        } catch (err) {
+          console.error("Failed to force-include self-assessment:", err);
+        }
+      }
+    },
+    [report, shareIncludeFeedback],
+  );
+
+  const openBadgeSourceDialog = () => {
+    setPendingBadgeSource(badgeSource);
+    setShowBadgeSourceDialog(true);
+  };
+
+  const handleConfirmBadgeSource = async () => {
+    setShowBadgeSourceDialog(false);
+    await applyBadgeSource(pendingBadgeSource);
+    await handleShare();
+  };
+
   const handleLoadReplay = useCallback(async () => {
     if (!report) return;
     if (replaySnapshot) return;
@@ -273,6 +323,16 @@ export function FlowReportView({
   const postFeedbackScores = extractFeedbackScores(report.user_feedback_post);
   const hasBothFeedback = preFeedbackScores != null && postFeedbackScores != null;
 
+  // Latest self-assessment scores: post if present, otherwise pre.
+  // Null when the user provided neither — disables the "user" badge option.
+  const userBadgeScores: FlowFeedback | null = postFeedbackScores ?? preFeedbackScores;
+  const hasUserBadgeScores = userBadgeScores != null;
+
+  // Scores actually fed to the badges, driven by the single source-of-truth state.
+  const effectiveBadgeScores =
+    badgeSource === "user" && userBadgeScores ? userBadgeScores : flowScores;
+  const effectiveBadgeProfile = getFlowProfile(effectiveBadgeScores);
+
   let radarUserFeedback: FlowFeedback | null = null;
   let radarUserLabel = "User Assessment";
   const greenColor = "hsl(142, 71%, 45%)";
@@ -300,6 +360,7 @@ export function FlowReportView({
   }
 
   return (
+    <>
     <div ref={containerRef} className="flex-1 flex flex-col bg-background h-screen relative overflow-auto">
       {/* Header */}
       <div className="h-12 border-b border-border flex items-center px-4 shrink-0 bg-[hsl(var(--ethos-surface))]">
@@ -484,7 +545,7 @@ export function FlowReportView({
                       variant="outline"
                       size="sm"
                       className="gap-1.5 text-xs"
-                      onClick={handleShare}
+                      onClick={openBadgeSourceDialog}
                       disabled={sharing}
                     >
                       {sharing ? (
@@ -561,12 +622,14 @@ export function FlowReportView({
                       The writing snapshot is always included in shared reports so reviewers can see the work that was assessed.
                     </p>
 
-                    {/* Include feedback checkbox */}
+                    {/* Include feedback checkbox — forced ON when badge shows user's assessment */}
                     <div className="flex items-center gap-2">
                       <Checkbox
                         id="share-include-feedback"
                         checked={shareIncludeFeedback}
+                        disabled={badgeSource === "user"}
                         onCheckedChange={async (checked) => {
+                          if (badgeSource === "user") return;
                           const val = checked === true;
                           setShareIncludeFeedback(val);
                           try {
@@ -579,8 +642,14 @@ export function FlowReportView({
                           }
                         }}
                       />
-                      <label htmlFor="share-include-feedback" className="text-xs text-muted-foreground cursor-pointer">
+                      <label
+                        htmlFor="share-include-feedback"
+                        className={`text-xs cursor-pointer ${badgeSource === "user" ? "text-muted-foreground/70" : "text-muted-foreground"}`}
+                      >
                         Include my self-assessment in shared report
+                        {badgeSource === "user" && (
+                          <span className="ml-1 italic">(required while the badge shows your assessment)</span>
+                        )}
                       </label>
                     </div>
 
@@ -623,18 +692,59 @@ export function FlowReportView({
 
 
 
+                    {/* Badge source toggle (session-scoped; shares state with the initial dialog) */}
+                    <div className="flex items-center justify-between gap-2 pt-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Badge source
+                      </span>
+                      <TooltipProvider delayDuration={200}>
+                        <div className="inline-flex rounded-md border border-border overflow-hidden">
+                          <button
+                            type="button"
+                            className={`px-2.5 py-1 text-xs transition-colors ${
+                              badgeSource === "ai"
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-background text-muted-foreground hover:bg-muted"
+                            }`}
+                            onClick={() => applyBadgeSource("ai")}
+                          >
+                            AI assessment
+                          </button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>
+                                <button
+                                  type="button"
+                                  disabled={!hasUserBadgeScores}
+                                  className={`px-2.5 py-1 text-xs transition-colors border-l border-border ${
+                                    badgeSource === "user"
+                                      ? "bg-primary text-primary-foreground"
+                                      : "bg-background text-muted-foreground hover:bg-muted"
+                                  } disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-background`}
+                                  onClick={() => applyBadgeSource("user")}
+                                >
+                                  Self-assessment
+                                </button>
+                              </span>
+                            </TooltipTrigger>
+                            {!hasUserBadgeScores && (
+                              <TooltipContent side="top">
+                                Available only after you fill in a self-assessment.
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </div>
+                      </TooltipProvider>
+                    </div>
+
                     {/* Pledge Badges */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                       <div className="flex flex-col items-center gap-2">
                         <span className="text-xs text-muted-foreground">FLOW Pledge Badge (Radar Chart)</span>
                         <FlowPledgeBadge
                           variant="radar"
-                          aiScores={{
-                            find: report.ai_find?.score ?? null,
-                            lead: report.ai_lead?.score ?? null,
-                            organize: report.ai_organize?.score ?? null,
-                            write: report.ai_write?.score ?? null,
-                          }}
+                          scores={effectiveBadgeScores}
+                          assessmentSource={badgeSource}
                           certificateId={certificateId || ""}
                           shareUrl={shareUrl}
                           generatorInfo={(report as any).generator_info ?? null}
@@ -645,16 +755,12 @@ export function FlowReportView({
                         <FlowPledgeBadge
                           variant="profile"
                           profile={{
-                            code: flowProfile.code,
-                            name: flowProfile.name,
-                            tagline: flowProfile.tagline,
+                            code: effectiveBadgeProfile.code,
+                            name: effectiveBadgeProfile.name,
+                            tagline: effectiveBadgeProfile.tagline,
                           }}
-                          aiScores={{
-                            find: report.ai_find?.score ?? null,
-                            lead: report.ai_lead?.score ?? null,
-                            organize: report.ai_organize?.score ?? null,
-                            write: report.ai_write?.score ?? null,
-                          }}
+                          scores={effectiveBadgeScores}
+                          assessmentSource={badgeSource}
                           certificateId={certificateId || ""}
                           shareUrl={shareUrl}
                           generatorInfo={(report as any).generator_info ?? null}
@@ -792,5 +898,83 @@ export function FlowReportView({
         </div>
       </ScrollArea>
     </div>
+
+    {/* Badge source picker — opens before the share link is generated. */}
+    <Dialog open={showBadgeSourceDialog} onOpenChange={setShowBadgeSourceDialog}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Choose what your badge shows</DialogTitle>
+          <DialogDescription>
+            Pick which assessment drives the two downloadable FLOW badges.
+          </DialogDescription>
+        </DialogHeader>
+
+        <RadioGroup
+          value={pendingBadgeSource}
+          onValueChange={(v) => setPendingBadgeSource(v as "ai" | "user")}
+          className="space-y-2 py-2"
+        >
+          <div className="flex items-start gap-2">
+            <RadioGroupItem value="ai" id="badge-src-ai" className="mt-0.5" />
+            <Label htmlFor="badge-src-ai" className="font-normal cursor-pointer leading-snug">
+              <span className="font-medium">Badge showing AI analysis</span>
+              <span className="block text-xs text-muted-foreground">
+                Scores and profile come from the FLOW report.
+              </span>
+            </Label>
+          </div>
+
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className={`flex items-start gap-2 ${
+                    !hasUserBadgeScores ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  <RadioGroupItem
+                    value="user"
+                    id="badge-src-user"
+                    disabled={!hasUserBadgeScores}
+                    className="mt-0.5"
+                  />
+                  <Label
+                    htmlFor="badge-src-user"
+                    className={`font-normal leading-snug ${
+                      hasUserBadgeScores ? "cursor-pointer" : "cursor-not-allowed"
+                    }`}
+                  >
+                    <span className="font-medium">Badge showing your analysis</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Uses your post-analysis self-assessment if available, otherwise your pre-analysis one.
+                    </span>
+                  </Label>
+                </div>
+              </TooltipTrigger>
+              {!hasUserBadgeScores && (
+                <TooltipContent side="top">
+                  Available only after you fill in a self-assessment.
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+        </RadioGroup>
+
+        <p className="text-[11px] text-muted-foreground italic leading-relaxed">
+          This only affects how the downloadable badges look. The shared report
+          itself can still include both assessments if you enable that option after.
+        </p>
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={() => setShowBadgeSourceDialog(false)}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={handleConfirmBadgeSource} disabled={sharing}>
+            {sharing ? <Loader2 className="h-3 w-3 animate-spin" /> : "Generate"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

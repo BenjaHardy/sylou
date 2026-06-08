@@ -8,6 +8,7 @@ const LOGO_H = 39;
 const LOGO_W = Math.round((644 / 554) * LOGO_H);
 
 export type FlowPledgeBadgeVariant = "radar" | "profile";
+export type FlowPledgeBadgeAssessmentSource = "ai" | "user";
 
 export interface BadgeGeneratorInfo {
   instance_label?: string;
@@ -18,7 +19,7 @@ export interface BadgeGeneratorInfo {
 }
 
 interface FlowPledgeBadgeProps {
-  aiScores: {
+  scores: {
     find: number | null;
     lead: number | null;
     organize: number | null;
@@ -27,6 +28,9 @@ interface FlowPledgeBadgeProps {
   certificateId: string;
   shareUrl: string;
   variant?: FlowPledgeBadgeVariant;
+  /** Whether scores/profile come from the AI analysis or the user's self-assessment.
+   * Drives the small subtitle rendered under the headline. Defaults to "ai". */
+  assessmentSource?: FlowPledgeBadgeAssessmentSource;
   profile?: {
     code: string;
     name: string;
@@ -48,8 +52,9 @@ const QR_Y = Math.round((BADGE_H - QR_SIZE) / 2);
 const PILLAR_KEYS = ["find", "lead", "organize", "write"] as const;
 const PILLAR_LABELS = ["F", "L", "O", "W"];
 // Radar placed in the left area, avoiding QR on the right.
+// CY shifted down from 104 → 116 to leave room for the subtitle below the headline.
 const RADAR_CX = 122;
-const RADAR_CY = 104;
+const RADAR_CY = 116;
 const RADAR_R = 38;
 
 function formatOriginLine(gi: BadgeGeneratorInfo | null | undefined): string | null {
@@ -78,6 +83,7 @@ function drawCommonChrome(
   certificateId: string,
   logoImg: HTMLImageElement | null,
   generatorInfo: BadgeGeneratorInfo | null | undefined,
+  assessmentSource: FlowPledgeBadgeAssessmentSource,
 ) {
   ctx.fillStyle = "#ffffff";
   ctx.strokeStyle = "#d1d5db";
@@ -105,6 +111,12 @@ function drawCommonChrome(
   ctx.fillStyle = "#3b82f6";
   ctx.font = "bold 13px system-ui, sans-serif";
   ctx.fillText("FLOW Analysed", 12, 64);
+
+  // Subtitle below the headline indicating whose assessment drives this badge.
+  ctx.fillStyle = "#6b7280";
+  ctx.font = "italic 9px system-ui, sans-serif";
+  const subtitle = assessmentSource === "user" ? "Self-assessment" : "AI assessment";
+  ctx.fillText(subtitle, 12, 76);
 
   const originLine = formatOriginLine(generatorInfo);
   const hasThree = originLine !== null;
@@ -150,7 +162,7 @@ function drawQrLabel(ctx: CanvasRenderingContext2D) {
 
 function drawRadar(
   ctx: CanvasRenderingContext2D,
-  scores: FlowPledgeBadgeProps["aiScores"],
+  scores: FlowPledgeBadgeProps["scores"],
 ) {
   ctx.strokeStyle = "#e5e7eb";
   ctx.lineWidth = 0.5;
@@ -277,11 +289,11 @@ function draw(
 ) {
   ctx.save();
   ctx.scale(dpr, dpr);
-  drawCommonChrome(ctx, props.certificateId, logoImg, props.generatorInfo);
+  drawCommonChrome(ctx, props.certificateId, logoImg, props.generatorInfo, props.assessmentSource ?? "ai");
   if (props.variant === "profile" && props.profile) {
     drawProfile(ctx, props.profile);
   } else {
-    drawRadar(ctx, props.aiScores);
+    drawRadar(ctx, props.scores);
   }
   if (qrCanvas) {
     ctx.drawImage(qrCanvas, QR_X, QR_Y, QR_SIZE, QR_SIZE);
