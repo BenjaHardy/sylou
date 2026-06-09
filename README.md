@@ -16,7 +16,7 @@ It's designed for writers, students, educators, researchers, and anyone who care
 
 ## Why Sylou
 
-AI is used more and more to help with writing, yet common AI detection tools don't work reliably, and it's becoming ever more difficult to identify whether AI was used to produce a text and *how* it actually contributed to it. People willing to spend more time and effort on personal work eventually end up penalized.
+What's driving Sylou is the realization that, while AI is used more and more to help with writing, common AI detection tools don't work reliably, so that it's becoming ever more difficult to identify whether AI was used to produce a text and *how* it actually contributed to it. People willing to spend more time and effort on personal work eventually end up penalized.
 
 Sylou flips the problem: if it's becoming ever more difficult to detect whether AI was used in a text, it should however be possible to help users gather evidence and proactively demonstrate how they have used AI. 
 Sylou's whole point is to make human-AI collaboration visible for users willing to show this transparency.
@@ -25,14 +25,14 @@ Sylou analyses human-AI collaboration across four dimensions thanks to a structu
 
 Each dimension is assessed independently, producing a dedicated and sharable FLOW report, as well as a FLOW profile that describes a collaboration style for your work: one of sixteen possible types, inspired by personality-type frameworks.
 
-FLOW describes your writing process and doesn't make any judgment: there is no pass or fail, only a structured analysis of who contributed to what and how. And it exists alongside your own self-evaluation, if provided.
+FLOW describes the writing process and doesn't make any judgment: there is no pass or fail, only a structured analysis of who contributed to what and how. And it exists alongside your own self-evaluation, if provided.
 
 The four FLOW pillars are:
 F — Find: research and critical thinking (research it)
 L — Lead: ideas and opinion (form ideas about it)
 O — Organize: structure and argumentation (structure it)
 W — Write: writing and authorship (write it)
-
+   
 The transparency architecture, covering all the means, whats, whys, hows to achieve this goal, is detailed in a separate and dedicated document: TRANSPARENCY.md.
 
 ---
@@ -40,7 +40,7 @@ The transparency architecture, covering all the means, whats, whys, hows to achi
 ## What's in the box
 
 - **Writing editor** with AI assistance that is context-aware of the work (Ask, Propose, Expand, Simplify, Rephrase, Translate, Fix grammar) and with per-paragraph provenance tracking.
-- **AI chat assistant** with multiple threads per project, document upload capabilities, and integrated web search.
+- **AI chat assistant** that has awareness of the work being written, and with multiple threads per project, document upload capabilities, and integrated web search.
 - **Creative writing tools** aimed for fiction writers: world-building tool, character diagram and timeline.
 - **Other convenience functionalities** such as virtual post-its and chat messages bookmarks.
 - **FLOW analysis** that produces a structured report analysing the four pillars of the FLOW methodology.
@@ -49,6 +49,7 @@ The transparency architecture, covering all the means, whats, whys, hows to achi
 - **Work replay functionality and quantitative data** for futher evidence of the involvement of the user to the work.
 - **Shareable FLOW reports** comprising the above elements, with a public URL, a QR-coded badge, and machine-readable AI-origin markers. 
 - **Tutor mode** that restricts the AI to guidance rather than direct generation (for educational contexts).
+- **Selectable LLM** for both the chat and the FLOW analysis separately, between Mistral, Deepseek and Claude - with adaptive thinking and effort level customizable.
 
 Sylou is built on React + TypeScript on the frontend, Supabase (PostgreSQL + Edge Functions) on the backend, and uses LLMs from Anthropic or Mistral via API.
 
@@ -85,7 +86,7 @@ The whole architecture is designed with transparency in mind, so that relevant i
 
 The result is rendered as a FLOW report, which can be kept private or shared via a public URL.
 
-A more thorough explanation of the transparency mechanisms is in [**docs/transparency.md**](docs/transparency.md).
+A more thorough explanation of the transparency mechanisms, as well as the recommended LLM and settings to use for the FLOW analysis, is in [**docs/transparency.md**](docs/transparency.md).
 
 ---
 
@@ -93,7 +94,7 @@ A more thorough explanation of the transparency mechanisms is in [**docs/transpa
 
 Sylou is open-source software released under [**AGPL-3.0**](LICENSE). The FLOW methodology is published separately under [**CC BY-SA 4.0**](LICENSE-METHODOLOGY). Anyone can inspect the code, modify it, self-host it, or adapt the methodology under the terms of those licenses.
 
-Why two licenses? The code and the methodology are two distinct contributions. AGPL keeps the software open even when run as a network service; CC BY-SA lets the analytical framework spread freely as long as derivatives share back.
+Why two licenses: the code and the methodology are two distinct contributions. AGPL keeps the software open even when run as a network service; CC BY-SA lets the analytical framework spread freely as long as derivatives share back.
 
 The Sylou name and logo, and the FLOW Pledge Badge format, are governed by a separate [**Trademark Policy**](TRADEMARK-POLICY.md). In short: forking and modifying are welcomed (that's open source); using the Sylou name on a substantively modified or competing version isn't.
 
@@ -132,7 +133,7 @@ It's provided as-is, without warranty of any kind. That said, it's used daily by
 
 An offline prototype of Sylou was originally created before the self-hostable online version, using local LLMs that run on the user's computer. Based on initial tests, they do produce reliable FLOW analysis for small to medium-sized works. 
 The key limitation, however, rests with the input token limit, which is directly dependent on the available VRAM, thereby limiting heavily the accessibility of the prototype and making very difficult the analysis of large works of more than just a few pages - unless we introduce summarize-then-analyze steps that may impact the quality of the FLOW methodology output.
-For this reason, it was ultimately disregarded, but if you're interested in an offline version, feel free to raise it with us, and we'll eventually reconsider.
+For this reason, it was ultimately disregarded, but if you're interested in an offline version, feel free to raise it, and we'll eventually reconsider.
 
 ---
 
