@@ -16,7 +16,7 @@ It's designed for writers, students, educators, researchers, and anyone who care
 
 ## Why Sylou
 
-What's driving Sylou is the realization that, while AI is used more and more to help with writing, common AI detection tools don't work reliably, so that it's becoming ever more difficult to identify whether AI was used to produce a text and *how* it actually contributed to it. People willing to spend more time and effort on personal work eventually end up penalized.
+AI is used more and more to help with writing, however common AI detection tools don't work reliably, and it's becoming ever more difficult to identify whether AI was used to produce a text and *how* it actually contributed to it. People willing to spend more time and effort on a personal work eventually end up penalized.
 
 Sylou flips the problem: if it's becoming ever more difficult to detect whether AI was used in a text, it should however be possible to help users gather evidence and proactively demonstrate how they have used AI. 
 Sylou's whole point is to make human-AI collaboration visible for users willing to show this transparency.
@@ -33,7 +33,7 @@ L — Lead: ideas and opinion (form ideas about it)
 O — Organize: structure and argumentation (structure it)
 W — Write: writing and authorship (write it)
    
-The transparency architecture, covering all the means, whats, whys, hows to achieve this goal, is detailed in a separate and dedicated document: TRANSPARENCY.md.
+The transparency architecture, covering all the means, whats, whys, hows to achieve this goal, is detailed in a separate and dedicated document - in case you're interested or plan to contribute: TRANSPARENCY.md.
 
 ---
 
