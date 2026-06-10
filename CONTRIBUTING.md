@@ -168,6 +168,7 @@ If you're submitting feedback through another channel, here's the structure to f
 | **LLM** | Which model generated the assessment (e.g., "Claude Sonnet 4.6", "Mistral Large 2") |
 | **Temperature** | The LLM temperature used when the assessment was made ("Unmodified", or a number)
 | **Project type** | Essay, blog post, research paper, technical writing, fiction, etc. |
+| **FLOW estimated prompt tokens** | As disclosed at the bottom of the FLOW Report |
 | **FLOW pillar(s) affected** | Find / Lead / Organize / Write (one or more) |
 | **Severity** | One-off oddity / systematic pattern / structural issue |
 | **Expected outcome** | What FLOW *should* have produced, in your view |
@@ -187,6 +188,7 @@ A worked example:
 | LLM | Claude Sonnet 4.6 |
 | Temperature | Unmodified |
 | Project type | Academic essay (humanities) |
+| FLOW estimated prompt tokens | 57218 |
 | FLOW pillar(s) affected | Lead, Organize |
 | Severity | Systematic pattern (observed across ~5 essays) |
 | Expected outcome | Lead assessment of "Human-led, AI-assisted" (3.0-3.5) when the user has clearly developed their own argument with AI used only for stress-testing |
@@ -224,10 +226,9 @@ Whatever the feedback, it is important to be careful not to propose calibration 
 ### Surveys and structured studies
 
 The observation template captures specific moments of LLM behavior. 
-The following two ways to contribute could also be of interest - subject to sufficient community interest.
+The following ways to contribute could also be of interest - subject to sufficient community interest.
 
 - **Surveys**: occasional short questionnaires asking about your experience with specific models. These would be published in GitHub Discussions in case of sufficient interest.
-
 - **Structured studies** (hypothetical, also contingent on interest): more rigorous empirical work could be valuable; for example, multiple contributors analyzing projects under controlled conditions to compare qualitative accuracy across models. No such study has been conducted to date, and we have no immediate plans to organize one. 
 However, if community interest emerges and contributors want to participate, propose or run a study, we're open to it. Methodology contributions from completed studies would be incorporated under the CC BY-SA license with attribution.
 
