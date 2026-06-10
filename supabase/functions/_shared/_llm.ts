@@ -164,6 +164,113 @@ function safeJSON(s: string): Record<string, unknown> {
   try { return JSON.parse(s); } catch { return {}; }
 }
 
+/**
+ * Sanitize a JSON Schema for use with Anthropic's Structured Outputs.
+ *
+ * Structured Outputs rejects many standard JSON Schema constraints
+ * (maxItems, minLength, minimum, etc.). Anthropic's official SDKs
+ * strip these client-side; since we build the request body manually,
+ * we replicate that behavior here.
+ *
+ * Stripped constraints are migrated to description text so the model
+ * still receives the information, just without server-side enforcement.
+ *
+ * Uses an allowlist of supported keys: anything not on the list is
+ * stripped preemptively, so future Anthropic schema additions don't
+ * break us. The exception is `minItems`, which is kept iff the value
+ * is 0 or 1 (the only values Anthropic accepts).
+ *
+ * See: https://platform.claude.com/docs/en/build-with-claude/structured-outputs
+ */
+const ANTHROPIC_SCHEMA_ALLOWLIST = new Set([
+  "type", "required", "properties", "items", "additionalProperties",
+  "enum", "const", "description", "anyOf", "oneOf", "allOf", "not",
+  "$ref", "title",
+]);
+
+function formatStrippedHint(key: string, value: unknown): string {
+  switch (key) {
+    case "minItems": return `min ${value} items`;
+    case "maxItems": return `max ${value} items`;
+    case "minLength": return `min ${value} chars`;
+    case "maxLength": return `max ${value} chars`;
+    case "minimum": return `≥ ${value}`;
+    case "maximum": return `≤ ${value}`;
+    case "exclusiveMinimum": return `> ${value}`;
+    case "exclusiveMaximum": return `< ${value}`;
+    case "multipleOf": return `multiple of ${value}`;
+    case "pattern": return `pattern: ${value}`;
+    case "format": return `format: ${value}`;
+    case "uniqueItems": return value ? "unique items" : "";
+    case "default": case "examples": return "";
+    default:
+      try { return `${key}: ${JSON.stringify(value)}`; } catch { return ""; }
+  }
+}
+
+function sanitizeNode(node: unknown): unknown {
+  // Boolean schemas (`true` / `false`) and primitives pass through.
+  if (typeof node !== "object" || node === null) return node;
+  if (Array.isArray(node)) return node.map(sanitizeNode);
+
+  const src = node as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  const stripped: Array<[string, unknown]> = [];
+
+  for (const [k, v] of Object.entries(src)) {
+    if (k === "minItems") {
+      if (v === 0 || v === 1) {
+        out[k] = v;
+      } else {
+        stripped.push([k, v]);
+      }
+      continue;
+    }
+    if (ANTHROPIC_SCHEMA_ALLOWLIST.has(k)) {
+      out[k] = v;
+    } else {
+      stripped.push([k, v]);
+    }
+  }
+
+  // Recurse into structural children.
+  if (out.properties && typeof out.properties === "object" && !Array.isArray(out.properties)) {
+    out.properties = Object.fromEntries(
+      Object.entries(out.properties as Record<string, unknown>)
+        .map(([pk, pv]) => [pk, sanitizeNode(pv)]),
+    );
+  }
+  if ("items" in out) out.items = sanitizeNode(out.items);
+  if ("additionalProperties" in out && typeof out.additionalProperties === "object" && out.additionalProperties !== null) {
+    out.additionalProperties = sanitizeNode(out.additionalProperties);
+  }
+  for (const key of ["anyOf", "oneOf", "allOf"] as const) {
+    if (Array.isArray(out[key])) {
+      out[key] = (out[key] as unknown[]).map(sanitizeNode);
+    }
+  }
+  if ("not" in out) out.not = sanitizeNode(out.not);
+
+  // Collect all stripped constraints, then merge once into description.
+  if (stripped.length > 0) {
+    const hints = stripped
+      .map(([k, v]) => formatStrippedHint(k, v))
+      .filter((s) => s.length > 0)
+      .join(", ");
+    if (hints) {
+      const base = typeof out.description === "string" ? out.description.trim() : "";
+      out.description = base ? `${base} (${hints})` : `(${hints})`;
+    }
+  }
+
+  return out;
+}
+
+export function sanitizeAnthropicSchema<T>(schema: T): T {
+  return sanitizeNode(schema) as T;
+}
+
+
 // Build OpenAI-shape body (used by Mistral & DeepSeek).
 export function toOpenAIBody(opts: {
   model: string;
