@@ -62,7 +62,7 @@ There's no public hosted instance. The `sylou.eu` instance is maintainer-only, s
 Setup is documented in [**docs/setup.md**](docs/setup.md). At a high level, you'll need:
 
 - A Supabase project (free tier works for personal use)
-- API keys for at least one LLM provider (currently works with Anthropic or Mistral; with DeepSeek currently in beta)
+- API keys for at least one LLM provider (currently works with Anthropic or Mistral - with DeepSeek currently in beta -, and with Anthropic's Claude API recommended as the default option to run the FLOW analysis)
 - A few environment variables
 - About 15–30 minutes for first-time setup
 
