@@ -14,7 +14,7 @@ If you get stuck at any step, please [open an issue](https://github.com/[YOUR-RE
 
 **Accounts:**
 - A [Supabase](https://supabase.com) account (free tier works for personal and small-team use)
-- An API key from at least one LLM provider:
+- An API key from at least one LLM provider (Anthropic/Claude provides the more accurate and reliable FLOW analysis results and is therefore recommended as a default option for the FLOW analysis):
   - [Anthropic](https://console.anthropic.com) for Claude models
   - [Mistral](https://console.mistral.ai) for Mistral models
   - [DeepSeek](https://platform.deepseek.com) for DeepSeek models
