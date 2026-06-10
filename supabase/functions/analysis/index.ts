@@ -216,13 +216,10 @@ const pillarSchema = {
       type: "array" as const,
       description: "2–4 short quotes or concrete references from the project supporting the assessment.",
       items: { type: "string" as const },
-      // Anthropic Structured Outputs only allows minItems values of 0 or 1 for
-      // arrays. The prompt already instructs the model to return 2–4 evidence
-      // items, which it reliably honors.
-      // https://platform.claude.com/docs/en/build-with-claude/structured-outputs
-      minItems: 1,
+      minItems: 2,
       maxItems: 4,
     },
+
     score: {
       description: "Half-point score from 0.0 to 5.0, or null if insufficient evidence.",
       anyOf: [
