@@ -270,9 +270,10 @@ In the chat panel on the right, type something like *"Suggest three angles for a
 
 **6. Use Ask or Propose**
 
-In the editor, select a sentence you typed. In the contextual menu, click **Ask** and type a question about the selected text. Confirm a response appears.
+In the editor, select a sentence you typed. In the contextual menu, click **Ask** or **Propose** and type a question about the selected text. Confirm a response appears (Ask -> in the chat; Propose -> in a dedicated window).
+You may also check that the other editor actions are working too, when selecting a sentence: Expand, Simplify, Rephrase, Fix grammar, Translate.
 
-*Verifies: the `context-prompt` edge function is deployed correctly.*
+*Verifies: the `context-prompt` edge function is deployed correctly, the `editor-action` edge function is deployed correctly.*
 
 **7. Try Tutor mode**
 
@@ -282,9 +283,9 @@ In the chat panel header, toggle on **Tutor mode**. Send another message. The re
 
 **8. Test a creative writing tool**
 
-Create a second project, this time choosing the **Creative** template. Write a short paragraph. Select it and use one of the creative writing tools (Expand, Simplify, Rephrase, Translate, or Fix grammar). Confirm output appears.
+Create a second project, this time choosing the **Creative** template. Use one of the creative writing tools (Worldbuilding, Character Diagram, Timeline) in the dedicated tabs. Feel free to try and use Ask, it should have context awareness of the creative tool contents and of the writing contents.
 
-*Verifies: the `editor-action` edge function is deployed correctly and the creative template loads properly.*
+*Verifies: the creative template loads properly.*
 
 **9. Run a FLOW analysis**
 
