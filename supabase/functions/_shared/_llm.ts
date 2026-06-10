@@ -143,10 +143,11 @@ export function toAnthropicBody(opts: {
       format: {
         type: "json_schema",
         name: opts.json_schema.name,
-        schema: opts.json_schema.schema,
+        schema: sanitizeAnthropicSchema(opts.json_schema.schema),
       },
     };
   } else if (opts.tools && opts.tools.length > 0) {
+
     body.tools = opts.tools.map((t) => ({
       name: t.function.name,
       description: t.function.description,
