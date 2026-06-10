@@ -24,6 +24,7 @@ the issue comments. Partial information is better than none.
 | **LLM** | <!-- e.g. Claude Sonnet 4.6, Mistral Large 2 --> |
 | **Temperature** | <!-- e.g. Unmodified, 0.0, 0.5, 1.0, etc. --> |
 | **Project type** | <!-- e.g. academic essay, blog post, research paper, fiction, technical writing --> |
+| **FLOW estimated prompt tokens** | <!-- As disclosed at the bottom of the FLOW Report --> |
 | **FLOW pillar(s) affected** | <!-- one or more of: Find / Lead / Organize / Write --> |
 | **Severity** | <!-- one of: one-off oddity / systematic pattern / structural issue --> |
 | **Expected outcome** | <!-- what FLOW *should* have produced, in your view --> |
