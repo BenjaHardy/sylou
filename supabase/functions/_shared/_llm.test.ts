@@ -106,3 +106,19 @@ Deno.test("unknown future keys are stripped", () => {
   assert(!("someFutureConstraint" in out));
   assert(typeof out.description === "string" && (out.description as string).includes("someFutureConstraint"));
 });
+
+Deno.test("toAnthropicBody: json_schema.name is kept internally but NOT forwarded in format", () => {
+  const body = toAnthropicBody({
+    model: "claude-sonnet-4-6",
+    messages: [{ role: "user", content: "hi" }],
+    max_tokens: 1024,
+    json_schema: {
+      name: "submit_flow_analysis",
+      schema: { type: "object", properties: {} },
+    },
+  });
+  const fmt = (body.output_config as any)?.format;
+  assertEquals(fmt?.type, "json_schema");
+  assert!("schema" in fmt);
+  assert(!("name" in fmt), "name must NOT appear in output_config.format — Anthropic rejects it");
+});
