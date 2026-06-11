@@ -131,7 +131,7 @@ It's provided as-is, without warranty of any kind. That said, it's used daily by
 
 ## Why not an offline version?
 
-An offline prototype of Sylou was originally created before the self-hostable online version, using local LLMs that run on the user's computer. Based on initial tests, they do produce reliable FLOW analysis for small to medium-sized works. 
+An offline prototype of Sylou was originally created before the self-hostable online version, using local LLMs that run on the user's computer. Based on initial tests, they do produce acceptable (but less reliable) FLOW analysis for small to medium-sized works. 
 The key limitation, however, rests with the input token limit, which is directly dependent on the available VRAM, thereby limiting heavily the accessibility of the prototype and making very difficult the analysis of large works of more than just a few pages - unless we introduce summarize-then-analyze steps that may impact the quality of the FLOW methodology output.
 For this reason, it was ultimately disregarded, but if you're interested in an offline version, feel free to raise it, and we'll eventually reconsider.
 
