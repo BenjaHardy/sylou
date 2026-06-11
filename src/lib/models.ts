@@ -39,6 +39,7 @@ export const MODELS: ModelInfo[] = [
     provider: "anthropic",
     pricing: { input: 3.0, output: 15.0 },
     contextLimit: 1_000_000,
+    note: "Recommended for FLOW analysis",
   },
   {
     id: "claude-opus-4-8",
