@@ -214,7 +214,7 @@ The CC BY-SA license means any methodology changes you contribute will be releas
 
 Sylou has been extensively tested by the maintainer with small to medium-sized works, and is being tested with large-scale works. 
 Whatever the size of the your work, structured feedback is always welcome. That is particularly true for very large pieces of work (e.g. novels, doctoral dissertations, etc.) where test cases naturally take a long time to produce. 
-Feedback derived from such tests will guide the development of future dedicated functionalities.
+Feedback derived from such tests will help guide the development of future dedicated functionalities.
 
 ### Note on LLM calibration
 
