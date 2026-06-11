@@ -1,7 +1,7 @@
-// Deno unit tests for sanitizeAnthropicSchema.
+// Deno unit tests for sanitizeAnthropicSchema and toAnthropicBody.
 // Run with: deno test supabase/functions/_shared/_llm.test.ts
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { sanitizeAnthropicSchema } from "./_llm.ts";
+import { sanitizeAnthropicSchema, toAnthropicBody } from "./_llm.ts";
 
 Deno.test("no-op: allowlisted-only schema round-trips structurally identical", () => {
   const input = {
@@ -105,4 +105,20 @@ Deno.test("unknown future keys are stripped", () => {
   }) as Record<string, unknown>;
   assert(!("someFutureConstraint" in out));
   assert(typeof out.description === "string" && (out.description as string).includes("someFutureConstraint"));
+});
+
+Deno.test("toAnthropicBody: json_schema.name is kept internally but NOT forwarded in format", () => {
+  const body = toAnthropicBody({
+    model: "claude-sonnet-4-6",
+    messages: [{ role: "user", content: "hi" }],
+    max_tokens: 1024,
+    json_schema: {
+      name: "submit_flow_analysis",
+      schema: { type: "object", properties: {} },
+    },
+  });
+  const fmt = (body.output_config as any)?.format;
+  assertEquals(fmt?.type, "json_schema");
+  assert!("schema" in fmt);
+  assert(!("name" in fmt), "name must NOT appear in output_config.format — Anthropic rejects it");
 });
