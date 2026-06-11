@@ -129,6 +129,21 @@ It's provided as-is, without warranty of any kind. That said, it's used daily by
 
 ---
 
+## Roadmap
+
+Below are the key functionalities that the maintainer would like to implement post-launch:
+
+-**Lite self-hosted version**: an alternative deployment mode for Sylou that collapses the current three-account setup (Supabase + Vercel + LLM keys) into a single self-contained server runnable on any Node.js-compatible machine. 
+Useful for users who may find the current cloud-services setup overwhelming, want self-sovereignty over their data, or need to deploy in restricted/air-gapped environments.
+-**Dedicated functionalities for very large pieces of work** (novels, doctoral dissertations, etc.): such as multiple FLOW methodology layers combining into a global analysis (being investigated). 
+Sylou has been extensively tested by the maintainer with small to medium-sized works, and is being tested with large-scale works. We plan to transparently share quantitative data of the behavior of the different LLMs and underlying setup (thinking, effort level, etc.) when running FLOW analyses on such large works. 
+Building the appropriate test cases naturally takes time; if you're interested to contribute, don't hesitate to reach out. Feedback derived from such tests will help guide the development of the functionalities. See also [**CONTRIBUTING.md**](CONTRIBUTING.md).
+
+Besides the above, we're of course open to suggestions and feedback. 
+If not done already, feel also free to take a look at our Tally questionnaire, which includes a dedicated question for feedback on possible future functionalities.
+
+---
+
 ## Why not an offline version?
 
 An offline prototype of Sylou was originally created before the self-hostable online version, using local LLMs that run on the user's computer. Based on initial tests, they do produce acceptable (but less reliable) FLOW analysis for small to medium-sized works. 
