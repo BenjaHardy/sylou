@@ -142,7 +142,6 @@ export function toAnthropicBody(opts: {
     body.output_config = {
       format: {
         type: "json_schema",
-        name: opts.json_schema.name,
         schema: sanitizeAnthropicSchema(opts.json_schema.schema),
       },
     };
