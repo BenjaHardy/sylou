@@ -1,7 +1,7 @@
-// Deno unit tests for sanitizeAnthropicSchema.
+// Deno unit tests for sanitizeAnthropicSchema and toAnthropicBody.
 // Run with: deno test supabase/functions/_shared/_llm.test.ts
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { sanitizeAnthropicSchema } from "./_llm.ts";
+import { sanitizeAnthropicSchema, toAnthropicBody } from "./_llm.ts";
 
 Deno.test("no-op: allowlisted-only schema round-trips structurally identical", () => {
   const input = {
