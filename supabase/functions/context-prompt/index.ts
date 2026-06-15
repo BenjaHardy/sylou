@@ -1443,7 +1443,7 @@ When citing information from web search results, always include the source URL i
           }
         }
 
-        const call2bResult = await callChatModel(chatModel, toolMessages as { role: string; content: string }[], 2000, temperature);
+        const call2bResult = await callChatModel(chatModel, toolMessages as { role: string; content: string }[], contextMaxTokens, temperature, thinking, effort);
         totalInputChars += call2bResult.inputChars;
         totalOutputChars += call2bResult.outputChars;
         aiResponse = call2bResult.text.trim() || "No response generated.";
