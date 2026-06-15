@@ -16,6 +16,16 @@
 
 export type ProviderId = "mistral" | "anthropic" | "deepseek";
 
+// Effort taxonomy is provider-specific:
+//   - Anthropic (Claude): "low" | "medium" | "high" | "xhigh"
+//   - Mistral reasoning models (Medium 3.5, Small): "high" | "none"
+// See _shared/_thinking.ts for the canonical types and the per-function
+// tables. We re-declare the literal unions here only to keep _llm.ts
+// free of cross-imports from _thinking.ts (avoids a circular dep risk
+// as both files grow).
+export type ClaudeEffort  = "low" | "medium" | "high" | "xhigh";
+export type MistralEffort = "high" | "none";
+
 export interface LLMTool {
   // OpenAI-style tool definition
   type: "function";
@@ -81,7 +91,7 @@ export function toAnthropicBody(opts: {
   temperature?: number;
   json_schema?: { name: string; schema: Record<string, unknown> };
   thinking?: boolean;
-  effort?: "low" | "medium" | "high" | "xhigh";
+  effort?: ClaudeEffort;
 }): Record<string, unknown> {
   let system = "";
   const msgs: Array<Record<string, unknown>> = [];
@@ -288,6 +298,14 @@ export function sanitizeAnthropicSchema<T>(schema: T): T {
 
 
 // Build OpenAI-shape body (used by Mistral & DeepSeek).
+//
+// `reasoning_effort` is Mistral-only and is rejected with HTTP 422 by
+// non-reasoning Mistral models (e.g. mistral-large-2512) and by every
+// DeepSeek chat model. The caller is responsible for gating: pass
+// `reasoning_effort` ONLY when the model is a Mistral reasoning model
+// AND the desired effort is "high". This is exactly what
+// resolveMistralEffort() in _thinking.ts already guarantees — it
+// returns undefined whenever the field must be omitted.
 export function toOpenAIBody(opts: {
   model: string;
   messages: LLMMessage[];
@@ -296,6 +314,7 @@ export function toOpenAIBody(opts: {
   stream?: boolean;
   tool_choice?: "auto" | "none";
   temperature?: number;
+  reasoning_effort?: MistralEffort;
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: opts.model,
@@ -308,6 +327,13 @@ export function toOpenAIBody(opts: {
     body.tool_choice = opts.tool_choice ?? "auto";
   }
   if (opts.temperature !== undefined) body.temperature = opts.temperature;
+  // Only emit when truthy — never send `reasoning_effort: null` or
+  // `reasoning_effort: "none"` (Mistral treats omission as "no
+  // reasoning" already, and "none" round-trips into our diagnostic
+  // log as noise).
+  if (opts.reasoning_effort && opts.reasoning_effort !== "none") {
+    body.reasoning_effort = opts.reasoning_effort;
+  }
   return body;
 }
 
@@ -479,7 +505,11 @@ export async function callLLM(opts: {
   temperature?: number;
   json_schema?: { name: string; schema: Record<string, unknown> };
   thinking?: boolean;
-  effort?: "low" | "medium" | "high" | "xhigh";
+  effort?: ClaudeEffort;
+  /** Mistral-only; ignored for non-Mistral providers. Pass the result
+   *  of resolveMistralEffort() — it already encodes the allowlist and
+   *  "none" → undefined collapsing, so we just forward it. */
+  mistral_effort?: MistralEffort;
 }): Promise<Response> {
   const provider = providerFor(opts.model);
   const key = Deno.env.get(envKeyFor(provider));
@@ -487,23 +517,31 @@ export async function callLLM(opts: {
   const body =
     provider === "anthropic"
       ? toAnthropicBody({ ...opts })
-      : toOpenAIBody({ ...opts, tool_choice: opts.tools ? "auto" : undefined });
+      : toOpenAIBody({
+          ...opts,
+          tool_choice: opts.tools ? "auto" : undefined,
+          // Anthropic-only `effort` is intentionally NOT forwarded here.
+          reasoning_effort: provider === "mistral" ? opts.mistral_effort : undefined,
+        });
   // Diagnostic: log the top-level keys + reasoning-control fields of the
   // outgoing body. Skipped for streaming requests to avoid log spam on token
   // deltas. Excludes `messages` / `system` / `tools` so the line stays well
-  // under the log truncation limit.
+  // under the log truncation limit. `reasoning_effort` is only included
+  // when actually present in the body — no more `null` noise for Anthropic
+  // calls.
   if (!opts.stream) {
     const b = body as Record<string, unknown>;
     const { messages: _m, system: _s, tools: _t, ...preview } = b;
-    console.log("[callLLM] outbound", JSON.stringify({
+    const logLine: Record<string, unknown> = {
       provider,
       model: opts.model,
       top_level_keys: Object.keys(b),
-      thinking: b.thinking ?? null,
-      output_config: b.output_config ?? null,
-      reasoning_effort: b.reasoning_effort ?? null,
       preview,
-    }));
+    };
+    if (b.thinking !== undefined) logLine.thinking = b.thinking;
+    if (b.output_config !== undefined) logLine.output_config = b.output_config;
+    if (b.reasoning_effort !== undefined) logLine.reasoning_effort = b.reasoning_effort;
+    console.log("[callLLM] outbound", JSON.stringify(logLine));
   }
   return await fetch(endpointFor(provider), {
     method: "POST",

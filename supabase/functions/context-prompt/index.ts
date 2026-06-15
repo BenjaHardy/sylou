@@ -2,9 +2,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, normaliseResponse, extractProviderError } from "../_shared/_llm.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import {
-  CONTEXT_THINKING, CONTEXT_EFFORT,
-  resolveThinking, resolveEffort, resolveMaxTokens,
-  type EffortLevel,
+  CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT,
+  resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
+  type ClaudeEffort, type MistralEffort,
 } from "../_shared/_thinking.ts";
 
 // Budget helper. Intentionally duplicated across the four edge functions
@@ -240,7 +240,8 @@ async function callChatModel(
   maxTokens = 2000,
   temperature?: number,
   thinking?: boolean,
-  effort?: EffortLevel,
+  effort?: ClaudeEffort,
+  mistralEffort?: MistralEffort,
 ): Promise<{ text: string; inputChars: number; outputChars: number }> {
   const res = await callLLM({
     model,
@@ -249,6 +250,7 @@ async function callChatModel(
     temperature,
     thinking,
     effort,
+    mistral_effort: mistralEffort,
   });
 
   if (!res.ok) {
@@ -532,13 +534,14 @@ Deno.serve(async (req) => {
     // Resolve chat model (request override allowed); validate provider key exists.
     const requestedModel: string | undefined = (await req.clone().json().catch(() => ({})))?.model;
     const chatModel: string =
-      requestedModel || profile.preferred_chat_model || "mistral-large-latest";
+      requestedModel || profile.preferred_chat_model || "mistral-large-2512";
     const provider = providerFor(chatModel);
     const temperature = resolveTemperature(CONTEXT_TEMPERATURE, chatModel);
     const thinking = resolveThinking(CONTEXT_THINKING, chatModel);
     const effort = resolveEffort(CONTEXT_EFFORT, chatModel);
-    const contextMaxTokens = resolveMaxTokens(2000, chatModel, thinking);
-    const summaryMaxTokens = resolveMaxTokens(1000, chatModel, thinking);
+    const mistralEffort = resolveMistralEffort(CONTEXT_MISTRAL_EFFORT, chatModel);
+    const contextMaxTokens = resolveMaxTokens(2000, chatModel, thinking, mistralEffort !== undefined);
+    const summaryMaxTokens = resolveMaxTokens(1000, chatModel, thinking, mistralEffort !== undefined);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
     if (!Deno.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
@@ -1096,6 +1099,7 @@ When citing information from web search results, always include the source URL i
                 temperature,
                 thinking,
                 effort,
+                mistral_effort: mistralEffort,
               });
 
               if (!call2aRes.ok) {
@@ -1204,6 +1208,7 @@ When citing information from web search results, always include the source URL i
                   temperature,
                   thinking,
                   effort,
+                  mistral_effort: mistralEffort,
                 });
 
                 if (!call2bRes.ok) {
@@ -1285,6 +1290,7 @@ When citing information from web search results, always include the source URL i
         temperature,
         thinking,
         effort,
+        mistral_effort: mistralEffort,
       });
 
       if (!llmRes.ok) {
@@ -1381,6 +1387,7 @@ When citing information from web search results, always include the source URL i
         temperature,
         thinking,
         effort,
+        mistral_effort: mistralEffort,
       });
 
       if (!call2aRes.ok) {

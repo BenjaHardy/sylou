@@ -12,8 +12,8 @@ import {
 import { repairToolOutput } from "../_shared/_repair.ts";
 import { FLOW_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import {
-  FLOW_THINKING, FLOW_EFFORT,
-  resolveThinking, resolveEffort, resolveMaxTokens,
+  FLOW_THINKING, FLOW_EFFORT, FLOW_MISTRAL_EFFORT,
+  resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 
 // Budget helper. Intentionally duplicated across the four edge functions
@@ -986,7 +986,8 @@ ${writePillarNotice}`;
     const temperature = resolveTemperature(FLOW_TEMPERATURE, flowModel);
     const thinking = resolveThinking(FLOW_THINKING, flowModel);
     const effort = resolveEffort(FLOW_EFFORT, flowModel);
-    const flowMaxTokens = resolveMaxTokens(8192, flowModel, thinking);
+    const mistralEffort = resolveMistralEffort(FLOW_MISTRAL_EFFORT, flowModel);
+    const flowMaxTokens = resolveMaxTokens(8192, flowModel, thinking, mistralEffort !== undefined);
 
     // Anthropic Sonnet 4.6 / Opus 4.7+ support Structured Outputs (GA, no
     // beta header). This is the proper fix for the stringified-pillar bug:
@@ -1030,6 +1031,7 @@ ${writePillarNotice}`;
           forceTool: SUBMIT_FLOW_TOOL.name,
           disableParallelToolUse: true,
           temperature,
+          mistral_effort: mistralEffort,
         };
 
     // ============================================================

@@ -27,11 +27,20 @@
 // applies. Safer than guessing when a new model lands before this
 // table is updated.
 //
+// Every supported Mistral model is listed EXPLICITLY in every table —
+// even when the value matches a value already used for another Mistral
+// model. Rationale:
+//   1. Consistency across Mistral models — no ambiguity about which
+//      is on an explicit value vs the provider default.
+//   2. Future tuning is a three-line edit, not "edit one + add two".
+//   3. Same rationale as explicit Claude effort "high" defaults:
+//      pinned behavior is robust to provider default drift.
+//
 // Per-function intent:
-//   CHAT_TEMPERATURE    — conversational, preserve provider defaults.
-//   EDITOR_TEMPERATURE  — inline editor actions, preserve defaults.
+//   CHAT_TEMPERATURE    — conversational, provider-default-ish (0.7 / 1.0).
+//   EDITOR_TEMPERATURE  — inline editor actions, same shape as CHAT.
 //   CONTEXT_TEMPERATURE — pre-analysis web-search summarization,
-//                         preserve defaults.
+//                         same shape as CHAT.
 //   FLOW_TEMPERATURE    — FLOW analysis, fully deterministic (0.0)
 //                         on every provider that accepts a value,
 //                         to maximize schema compliance and reduce
@@ -52,25 +61,33 @@ const NO_TEMPERATURE_MODELS = new Set<string>([
 ]);
 
 export const CHAT_TEMPERATURE: TemperatureTable = {
-  "mistral-large-latest": 0.7,
+  "mistral-large-2512":   0.7,
+  "mistral-medium-3-5":   0.7,
+  "mistral-small-2603":   0.7,
   "claude-sonnet-4-6":    1.0,
   "deepseek-chat":        1.0,
 };
 
 export const EDITOR_TEMPERATURE: TemperatureTable = {
-  "mistral-large-latest": 0.7,
+  "mistral-large-2512":   0.7,
+  "mistral-medium-3-5":   0.7,
+  "mistral-small-2603":   0.7,
   "claude-sonnet-4-6":    1.0,
   "deepseek-chat":        1.0,
 };
 
 export const CONTEXT_TEMPERATURE: TemperatureTable = {
-  "mistral-large-latest": 0.7,
+  "mistral-large-2512":   0.7,
+  "mistral-medium-3-5":   0.7,
+  "mistral-small-2603":   0.7,
   "claude-sonnet-4-6":    1.0,
   "deepseek-chat":        1.0,
 };
 
 export const FLOW_TEMPERATURE: TemperatureTable = {
-  "mistral-large-latest": 0.0,
+  "mistral-large-2512":   0.0,
+  "mistral-medium-3-5":   0.0,
+  "mistral-small-2603":   0.0,
   "claude-sonnet-4-6":    0.0,
   "deepseek-chat":        0.0,
 };

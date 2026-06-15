@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
               Authorization: `Bearer ${mistralKey}`,
             },
             body: JSON.stringify({
-              model: "mistral-large-latest",
+              model: "mistral-large-2512",
               messages: [
                 { role: "user", content: summaryPrompt },
               ],
@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
               user_id: user.id,
               project_id,
               function_name: "extract-text",
-              model_used: "mistral-large-latest",
+              model_used: "mistral-large-2512",
               input_tokens: inputTokens,
               output_tokens: outputTokens,
             });

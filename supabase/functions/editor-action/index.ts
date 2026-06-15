@@ -2,8 +2,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, extractProviderError } from "../_shared/_llm.ts";
 import { EDITOR_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import {
-  EDITOR_THINKING, EDITOR_EFFORT,
-  resolveThinking, resolveEffort, resolveMaxTokens,
+  EDITOR_THINKING, EDITOR_EFFORT, EDITOR_MISTRAL_EFFORT,
+  resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 
 // Budget helper. Intentionally duplicated across the four edge functions
@@ -212,12 +212,13 @@ Deno.serve(async (req) => {
     // --- Resolve chat model from request body or profile ---
     const requestedModel: string | undefined = (body as { model?: string }).model;
     const chatModel: string =
-      requestedModel || profile.preferred_chat_model || "mistral-large-latest";
+      requestedModel || profile.preferred_chat_model || "mistral-large-2512";
     const provider = providerFor(chatModel);
     const temperature = resolveTemperature(EDITOR_TEMPERATURE, chatModel);
     const thinking = resolveThinking(EDITOR_THINKING, chatModel);
     const effort = resolveEffort(EDITOR_EFFORT, chatModel);
-    const editorMaxTokens = resolveMaxTokens(1000, chatModel, thinking);
+    const mistralEffort = resolveMistralEffort(EDITOR_MISTRAL_EFFORT, chatModel);
+    const editorMaxTokens = resolveMaxTokens(1000, chatModel, thinking, mistralEffort !== undefined);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
     if (!Deno.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
@@ -237,6 +238,7 @@ Deno.serve(async (req) => {
         temperature,
         thinking,
         effort,
+        mistral_effort: mistralEffort,
       });
 
       if (!llmRes.ok) {
@@ -399,6 +401,7 @@ Deno.serve(async (req) => {
       temperature,
       thinking,
       effort,
+      mistral_effort: mistralEffort,
     });
 
     if (!llmRes.ok) {
