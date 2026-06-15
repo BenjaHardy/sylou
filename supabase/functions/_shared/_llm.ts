@@ -80,6 +80,8 @@ export function toAnthropicBody(opts: {
   forceTool?: string;
   temperature?: number;
   json_schema?: { name: string; schema: Record<string, unknown> };
+  thinking?: boolean;
+  effort?: "low" | "medium" | "high" | "xhigh";
 }): Record<string, unknown> {
   let system = "";
   const msgs: Array<Record<string, unknown>> = [];
