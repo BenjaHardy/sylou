@@ -11,6 +11,10 @@ import {
 } from "../_shared/_llm.ts";
 import { repairToolOutput } from "../_shared/_repair.ts";
 import { FLOW_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
+import {
+  FLOW_THINKING, FLOW_EFFORT,
+  resolveThinking, resolveEffort, resolveMaxTokens,
+} from "../_shared/_thinking.ts";
 
 // Budget helper. Intentionally duplicated across the four edge functions
 // (chat, context-prompt, editor-action, analysis) — Supabase edge function
@@ -980,6 +984,9 @@ ${writePillarNotice}`;
     // inherits the exact same temperature — no second resolveTemperature()
     // call, no risk of mid-request drift if the table is edited.
     const temperature = resolveTemperature(FLOW_TEMPERATURE, flowModel);
+    const thinking = resolveThinking(FLOW_THINKING, flowModel);
+    const effort = resolveEffort(FLOW_EFFORT, flowModel);
+    const flowMaxTokens = resolveMaxTokens(8192, flowModel, thinking);
 
     // Anthropic Sonnet 4.6 / Opus 4.7+ support Structured Outputs (GA, no
     // beta header). This is the proper fix for the stringified-pillar bug:
@@ -992,7 +999,7 @@ ${writePillarNotice}`;
     const baseLlmArgs = useStructuredOutputs
       ? {
           model: flowModel,
-          max_tokens: 8192,
+          max_tokens: flowMaxTokens,
           messages: [
             { role: "system" as const, content: systemPromptTemplate },
             { role: "user" as const, content: userPrompt },
@@ -1002,10 +1009,12 @@ ${writePillarNotice}`;
             schema: SUBMIT_FLOW_TOOL.input_schema as Record<string, unknown>,
           },
           temperature,
+          thinking,
+          effort,
         }
       : {
           model: flowModel,
-          max_tokens: 8192,
+          max_tokens: flowMaxTokens,
           messages: [
             { role: "system" as const, content: systemPromptTemplate },
             { role: "user" as const, content: userPrompt },

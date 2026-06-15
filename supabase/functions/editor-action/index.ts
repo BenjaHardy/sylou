@@ -1,6 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, extractProviderError } from "../_shared/_llm.ts";
 import { EDITOR_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
+import {
+  EDITOR_THINKING, EDITOR_EFFORT,
+  resolveThinking, resolveEffort, resolveMaxTokens,
+} from "../_shared/_thinking.ts";
 
 // Budget helper. Intentionally duplicated across the four edge functions
 // (chat, context-prompt, editor-action, analysis) — Supabase edge function
@@ -211,6 +215,9 @@ Deno.serve(async (req) => {
       requestedModel || profile.preferred_chat_model || "mistral-large-latest";
     const provider = providerFor(chatModel);
     const temperature = resolveTemperature(EDITOR_TEMPERATURE, chatModel);
+    const thinking = resolveThinking(EDITOR_THINKING, chatModel);
+    const effort = resolveEffort(EDITOR_EFFORT, chatModel);
+    const editorMaxTokens = resolveMaxTokens(1000, chatModel, thinking);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
     if (!Deno.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
@@ -225,9 +232,11 @@ Deno.serve(async (req) => {
       const llmRes = await callLLM({
         model: chatModel,
         messages: llmMessages as any,
-        max_tokens: 1000,
+        max_tokens: editorMaxTokens,
         stream: true,
         temperature,
+        thinking,
+        effort,
       });
 
       if (!llmRes.ok) {
@@ -386,8 +395,10 @@ Deno.serve(async (req) => {
     const llmRes = await callLLM({
       model: chatModel,
       messages: llmMessages as any,
-      max_tokens: 1000,
+      max_tokens: editorMaxTokens,
       temperature,
+      thinking,
+      effort,
     });
 
     if (!llmRes.ok) {

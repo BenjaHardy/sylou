@@ -1,6 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, normaliseResponse, extractProviderError } from "../_shared/_llm.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
+import {
+  CHAT_THINKING, CHAT_EFFORT,
+  resolveThinking, resolveEffort, resolveMaxTokens,
+} from "../_shared/_thinking.ts";
 
 // Budget helper. Intentionally duplicated across the four edge functions
 // (chat, context-prompt, editor-action, analysis) — Supabase edge function
@@ -275,6 +279,9 @@ Deno.serve(async (req) => {
     const chatModel: string =
       requestedModel || profile.preferred_chat_model || "mistral-large-latest";
     const temperature = resolveTemperature(CHAT_TEMPERATURE, chatModel);
+    const thinking = resolveThinking(CHAT_THINKING, chatModel);
+    const effort = resolveEffort(CHAT_EFFORT, chatModel);
+    const chatMaxTokens = resolveMaxTokens(2000, chatModel, thinking);
     console.log(
       `[chat] model=${chatModel} provider=${providerFor(chatModel)} source=${
         requestedModel ? "request" : profile.preferred_chat_model ? "profile" : "default"
@@ -516,11 +523,14 @@ When citing information from web search results, always include the source URL i
         const call1Body: Record<string, unknown> = {
           model: chatModel,
           messages: llmMessages,
-          max_tokens: 2000,
+          max_tokens: chatMaxTokens,
           tools,
           tool_choice: "auto",
           temperature,
+          thinking,
+          effort,
         };
+
 
         const call1Res = await callLLM(call1Body);
 
@@ -705,9 +715,11 @@ When citing information from web search results, always include the source URL i
                   const nextRes = await callLLM({
                       model: chatModel,
                       messages: toolMessages as any,
-                      max_tokens: 2000,
+                      max_tokens: chatMaxTokens,
                       tools: tools as any,
                       temperature,
+                      thinking,
+                      effort,
                     });
 
                   if (!nextRes.ok) {
@@ -737,9 +749,11 @@ When citing information from web search results, always include the source URL i
               const call2Res = await callLLM({
                   model: chatModel,
                   messages: toolMessages,
-                  max_tokens: 2000,
+                  max_tokens: chatMaxTokens,
                   stream: true,
                   temperature,
+                  thinking,
+                  effort,
                 });
 
               if (!call2Res.ok) {
@@ -882,9 +896,11 @@ When citing information from web search results, always include the source URL i
       const llmRes = await callLLM({
           model: chatModel,
           messages: llmMessages,
-          max_tokens: 2000,
+          max_tokens: chatMaxTokens,
           stream: true,
           temperature,
+          thinking,
+          effort,
         });
 
       if (!llmRes.ok) {
@@ -1049,8 +1065,10 @@ When citing information from web search results, always include the source URL i
     const llmRes = await callLLM({
         model: chatModel,
         messages: llmMessages,
-        max_tokens: 2000,
+        max_tokens: chatMaxTokens,
         temperature,
+        thinking,
+        effort,
       });
 
     if (!llmRes.ok) {

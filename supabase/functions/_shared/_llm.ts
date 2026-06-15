@@ -80,6 +80,8 @@ export function toAnthropicBody(opts: {
   forceTool?: string;
   temperature?: number;
   json_schema?: { name: string; schema: Record<string, unknown> };
+  thinking?: boolean;
+  effort?: "low" | "medium" | "high" | "xhigh";
 }): Record<string, unknown> {
   let system = "";
   const msgs: Array<Record<string, unknown>> = [];
@@ -134,19 +136,34 @@ export function toAnthropicBody(opts: {
     // Anthropic API caps temperature at 1.0; clamp defensively.
     body.temperature = Math.min(1.0, Math.max(0.0, opts.temperature));
   }
+  // Adaptive thinking — opt-in on Sonnet 4.6 / Opus 4.7+. The model
+  // decides when and how much to think on each request. Thinking
+  // blocks come back inside content[] alongside text/tool_use and
+  // are silently dropped by normaliseResponse (which filters by
+  // block.type). See _thinking.ts for per-function defaults.
+  if (opts.thinking) {
+    body.thinking = { type: "adaptive" };
+  }
   // Structured Outputs (JSON outputs) — GA on Sonnet 4.6 / Opus 4.7+ on the
   // Claude API; no beta header required. When set, we do NOT also send
   // tools/tool_choice. The JSON is returned as a text block in
   // response.content[0].text and is schema-validated server-side.
+  // `output_config` carries both `format` (structured outputs) and
+  // `effort` (reasoning depth), so we assemble it once.
+  const outputConfig: Record<string, unknown> = {};
   if (opts.json_schema) {
-    body.output_config = {
-      format: {
-        type: "json_schema",
-        schema: sanitizeAnthropicSchema(opts.json_schema.schema),
-      },
+    outputConfig.format = {
+      type: "json_schema",
+      schema: sanitizeAnthropicSchema(opts.json_schema.schema),
     };
-  } else if (opts.tools && opts.tools.length > 0) {
-
+  }
+  if (opts.effort) {
+    outputConfig.effort = opts.effort;
+  }
+  if (Object.keys(outputConfig).length > 0) {
+    body.output_config = outputConfig;
+  }
+  if (!opts.json_schema && opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools.map((t) => ({
       name: t.function.name,
       description: t.function.description,
@@ -333,6 +350,11 @@ export function normaliseResponse(
     let text = "";
     const toolCalls: NormalisedResponse["toolCalls"] = [];
     const oaToolCalls: NonNullable<LLMMessage["tool_calls"]> = [];
+    // INVARIANT: iterate content[] and accumulate ONLY blocks where
+    // type === "text" (and tool_use). Adaptive thinking can place a
+    // `thinking` or `redacted_thinking` block at index 0, so we MUST
+    // NOT shortcut to `content[0].text` — that would surface chain
+    // of thought to users and break Structured Outputs JSON parsing.
     for (const b of blocks) {
       if (b.type === "text") text += b.text ?? "";
       if (b.type === "tool_use") {
@@ -456,6 +478,8 @@ export async function callLLM(opts: {
   forceTool?: string;
   temperature?: number;
   json_schema?: { name: string; schema: Record<string, unknown> };
+  thinking?: boolean;
+  effort?: "low" | "medium" | "high" | "xhigh";
 }): Promise<Response> {
   const provider = providerFor(opts.model);
   const key = Deno.env.get(envKeyFor(provider));

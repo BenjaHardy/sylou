@@ -1,6 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, normaliseResponse, extractProviderError } from "../_shared/_llm.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
+import {
+  CONTEXT_THINKING, CONTEXT_EFFORT,
+  resolveThinking, resolveEffort, resolveMaxTokens,
+  type EffortLevel,
+} from "../_shared/_thinking.ts";
 
 // Budget helper. Intentionally duplicated across the four edge functions
 // (chat, context-prompt, editor-action, analysis) — Supabase edge function
@@ -234,12 +239,16 @@ async function callChatModel(
   messages: { role: string; content: string }[],
   maxTokens = 2000,
   temperature?: number,
+  thinking?: boolean,
+  effort?: EffortLevel,
 ): Promise<{ text: string; inputChars: number; outputChars: number }> {
   const res = await callLLM({
     model,
     messages: messages as any,
     max_tokens: maxTokens,
     temperature,
+    thinking,
+    effort,
   });
 
   if (!res.ok) {
@@ -526,6 +535,10 @@ Deno.serve(async (req) => {
       requestedModel || profile.preferred_chat_model || "mistral-large-latest";
     const provider = providerFor(chatModel);
     const temperature = resolveTemperature(CONTEXT_TEMPERATURE, chatModel);
+    const thinking = resolveThinking(CONTEXT_THINKING, chatModel);
+    const effort = resolveEffort(CONTEXT_EFFORT, chatModel);
+    const contextMaxTokens = resolveMaxTokens(2000, chatModel, thinking);
+    const summaryMaxTokens = resolveMaxTokens(1000, chatModel, thinking);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
     if (!Deno.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
@@ -744,7 +757,7 @@ Deno.serve(async (req) => {
       creativeDataSection,
     );
 
-    const summaryResult = await callChatModel(chatModel, summaryMessages, 1000, temperature);
+    const summaryResult = await callChatModel(chatModel, summaryMessages, summaryMaxTokens, temperature, thinking, effort);
     const summaryText = summaryResult.text.trim();
 
     // --- 5. Determine summary update ---
@@ -1078,9 +1091,11 @@ When citing information from web search results, always include the source URL i
               const call2aRes = await callLLM({
                 model: chatModel,
                 messages: responseMessages as any,
-                max_tokens: 2000,
+                max_tokens: contextMaxTokens,
                 tools: tools as any,
                 temperature,
+                thinking,
+                effort,
               });
 
               if (!call2aRes.ok) {
@@ -1184,9 +1199,11 @@ When citing information from web search results, always include the source URL i
                 const call2bRes = await callLLM({
                   model: chatModel,
                   messages: toolMessages as any,
-                  max_tokens: 2000,
+                  max_tokens: contextMaxTokens,
                   stream: true,
                   temperature,
+                  thinking,
+                  effort,
                 });
 
                 if (!call2bRes.ok) {
@@ -1263,9 +1280,11 @@ When citing information from web search results, always include the source URL i
       const llmRes = await callLLM({
         model: chatModel,
         messages: responseMessages as any,
-        max_tokens: 2000,
+        max_tokens: contextMaxTokens,
         stream: true,
         temperature,
+        thinking,
+        effort,
       });
 
       if (!llmRes.ok) {
@@ -1357,9 +1376,11 @@ When citing information from web search results, always include the source URL i
       const call2aRes = await callLLM({
         model: chatModel,
         messages: responseMessages as any,
-        max_tokens: 2000,
+        max_tokens: contextMaxTokens,
         tools: tools as any,
         temperature,
+        thinking,
+        effort,
       });
 
       if (!call2aRes.ok) {
@@ -1422,7 +1443,7 @@ When citing information from web search results, always include the source URL i
           }
         }
 
-        const call2bResult = await callChatModel(chatModel, toolMessages as { role: string; content: string }[], 2000, temperature);
+        const call2bResult = await callChatModel(chatModel, toolMessages as { role: string; content: string }[], contextMaxTokens, temperature, thinking, effort);
         totalInputChars += call2bResult.inputChars;
         totalOutputChars += call2bResult.outputChars;
         aiResponse = call2bResult.text.trim() || "No response generated.";
@@ -1516,7 +1537,7 @@ When citing information from web search results, always include the source URL i
     }
 
     // ── NO TOOLS — original non-streaming path ──
-    const responseResult = await callChatModel(chatModel, responseMessages, 2000, temperature);
+    const responseResult = await callChatModel(chatModel, responseMessages, contextMaxTokens, temperature, thinking, effort);
     const aiResponse = responseResult.text.trim();
 
     const finalInputChars = totalInputChars + responseResult.inputChars;
