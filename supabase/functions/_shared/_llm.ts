@@ -136,19 +136,34 @@ export function toAnthropicBody(opts: {
     // Anthropic API caps temperature at 1.0; clamp defensively.
     body.temperature = Math.min(1.0, Math.max(0.0, opts.temperature));
   }
+  // Adaptive thinking — opt-in on Sonnet 4.6 / Opus 4.7+. The model
+  // decides when and how much to think on each request. Thinking
+  // blocks come back inside content[] alongside text/tool_use and
+  // are silently dropped by normaliseResponse (which filters by
+  // block.type). See _thinking.ts for per-function defaults.
+  if (opts.thinking) {
+    body.thinking = { type: "adaptive" };
+  }
   // Structured Outputs (JSON outputs) — GA on Sonnet 4.6 / Opus 4.7+ on the
   // Claude API; no beta header required. When set, we do NOT also send
   // tools/tool_choice. The JSON is returned as a text block in
   // response.content[0].text and is schema-validated server-side.
+  // `output_config` carries both `format` (structured outputs) and
+  // `effort` (reasoning depth), so we assemble it once.
+  const outputConfig: Record<string, unknown> = {};
   if (opts.json_schema) {
-    body.output_config = {
-      format: {
-        type: "json_schema",
-        schema: sanitizeAnthropicSchema(opts.json_schema.schema),
-      },
+    outputConfig.format = {
+      type: "json_schema",
+      schema: sanitizeAnthropicSchema(opts.json_schema.schema),
     };
-  } else if (opts.tools && opts.tools.length > 0) {
-
+  }
+  if (opts.effort) {
+    outputConfig.effort = opts.effort;
+  }
+  if (Object.keys(outputConfig).length > 0) {
+    body.output_config = outputConfig;
+  }
+  if (!opts.json_schema && opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools.map((t) => ({
       name: t.function.name,
       description: t.function.description,
