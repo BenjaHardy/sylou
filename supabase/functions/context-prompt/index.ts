@@ -239,12 +239,16 @@ async function callChatModel(
   messages: { role: string; content: string }[],
   maxTokens = 2000,
   temperature?: number,
+  thinking?: boolean,
+  effort?: EffortLevel,
 ): Promise<{ text: string; inputChars: number; outputChars: number }> {
   const res = await callLLM({
     model,
     messages: messages as any,
     max_tokens: maxTokens,
     temperature,
+    thinking,
+    effort,
   });
 
   if (!res.ok) {
