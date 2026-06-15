@@ -534,7 +534,7 @@ Deno.serve(async (req) => {
     // Resolve chat model (request override allowed); validate provider key exists.
     const requestedModel: string | undefined = (await req.clone().json().catch(() => ({})))?.model;
     const chatModel: string =
-      requestedModel || profile.preferred_chat_model || "mistral-large-2512";
+      requestedModel || profile.preferred_chat_model || "mistral-medium-3-5";
     const provider = providerFor(chatModel);
     const temperature = resolveTemperature(CONTEXT_TEMPERATURE, chatModel);
     const thinking = resolveThinking(CONTEXT_THINKING, chatModel);

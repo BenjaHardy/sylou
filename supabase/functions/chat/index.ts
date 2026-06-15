@@ -277,7 +277,7 @@ Deno.serve(async (req) => {
     const webSearchEnabled: boolean = body.web_search_enabled ?? false;
     const requestedModel: string | undefined = body.model;
     const chatModel: string =
-      requestedModel || profile.preferred_chat_model || "mistral-large-2512";
+      requestedModel || profile.preferred_chat_model || "mistral-medium-3-5";
     const temperature = resolveTemperature(CHAT_TEMPERATURE, chatModel);
     const thinking = resolveThinking(CHAT_THINKING, chatModel);
     const effort = resolveEffort(CHAT_EFFORT, chatModel);
