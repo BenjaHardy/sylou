@@ -2,8 +2,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, normaliseResponse, extractProviderError } from "../_shared/_llm.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import {
-  CHAT_THINKING, CHAT_EFFORT,
-  resolveThinking, resolveEffort, resolveMaxTokens,
+  CHAT_THINKING, CHAT_EFFORT, CHAT_MISTRAL_EFFORT,
+  resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 
 // Budget helper. Intentionally duplicated across the four edge functions
@@ -277,11 +277,12 @@ Deno.serve(async (req) => {
     const webSearchEnabled: boolean = body.web_search_enabled ?? false;
     const requestedModel: string | undefined = body.model;
     const chatModel: string =
-      requestedModel || profile.preferred_chat_model || "mistral-large-latest";
+      requestedModel || profile.preferred_chat_model || "mistral-large-2512";
     const temperature = resolveTemperature(CHAT_TEMPERATURE, chatModel);
     const thinking = resolveThinking(CHAT_THINKING, chatModel);
     const effort = resolveEffort(CHAT_EFFORT, chatModel);
-    const chatMaxTokens = resolveMaxTokens(2000, chatModel, thinking);
+    const mistralEffort = resolveMistralEffort(CHAT_MISTRAL_EFFORT, chatModel);
+    const chatMaxTokens = resolveMaxTokens(2000, chatModel, thinking, mistralEffort !== undefined);
     console.log(
       `[chat] model=${chatModel} provider=${providerFor(chatModel)} source=${
         requestedModel ? "request" : profile.preferred_chat_model ? "profile" : "default"
@@ -529,6 +530,7 @@ When citing information from web search results, always include the source URL i
           temperature,
           thinking,
           effort,
+          mistral_effort: mistralEffort,
         };
 
 
@@ -720,6 +722,7 @@ When citing information from web search results, always include the source URL i
                       temperature,
                       thinking,
                       effort,
+                      mistral_effort: mistralEffort,
                     });
 
                   if (!nextRes.ok) {
@@ -754,6 +757,7 @@ When citing information from web search results, always include the source URL i
                   temperature,
                   thinking,
                   effort,
+                  mistral_effort: mistralEffort,
                 });
 
               if (!call2Res.ok) {
@@ -901,6 +905,7 @@ When citing information from web search results, always include the source URL i
           temperature,
           thinking,
           effort,
+          mistral_effort: mistralEffort,
         });
 
       if (!llmRes.ok) {
@@ -1069,6 +1074,7 @@ When citing information from web search results, always include the source URL i
         temperature,
         thinking,
         effort,
+        mistral_effort: mistralEffort,
       });
 
     if (!llmRes.ok) {
