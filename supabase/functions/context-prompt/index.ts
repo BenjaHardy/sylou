@@ -1199,9 +1199,11 @@ When citing information from web search results, always include the source URL i
                 const call2bRes = await callLLM({
                   model: chatModel,
                   messages: toolMessages as any,
-                  max_tokens: 2000,
+                  max_tokens: contextMaxTokens,
                   stream: true,
                   temperature,
+                  thinking,
+                  effort,
                 });
 
                 if (!call2bRes.ok) {
