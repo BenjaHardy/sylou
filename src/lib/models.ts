@@ -10,15 +10,17 @@ export interface ModelInfo {
   id: string;
   label: string;
   provider: ModelProvider;
-  /** Indicative provider price per 1M tokens, USD. April 2026. */
+  /** Indicative provider price per 1M tokens, USD. June 2026. */
   pricing: { input: number; output: number };
   /** Maximum context window in tokens. */
   contextLimit: number;
   /** Marked for the UI to flag less-mature models. */
   isExperimental?: boolean;
   /** True when the model ID is a rolling alias that always resolves to the
-   *  provider's current latest version (e.g. `mistral-large-latest`,
-   *  `deepseek-chat`). Pinned version IDs leave this undefined. */
+   *  provider's current latest version (e.g. `deepseek-chat`). Pinned
+   *  version IDs leave this undefined — we now pin every Mistral model
+   *  by dated alias (e.g. `mistral-large-2512`) so version bumps are
+   *  deliberate (test → update → redeploy) rather than auto-applied. */
   isRollingLatest?: boolean;
   /** Optional one-line note shown beneath the row. */
   note?: string;
@@ -26,12 +28,28 @@ export interface ModelInfo {
 
 export const MODELS: ModelInfo[] = [
   {
-    id: "mistral-large-latest",
-    label: "Mistral Large",
+    id: "mistral-small-2603",
+    label: "Mistral Small 4",
     provider: "mistral",
-    pricing: { input: 2.0, output: 6.0 },
+    pricing: { input: 0.15, output: 0.60 },
     contextLimit: 256_000,
-    isRollingLatest: true,
+    isExperimental: true,
+    note: "Reasoning model — fastest Mistral tier",
+  },
+  {
+    id: "mistral-medium-3-5",
+    label: "Mistral Medium 3.5",
+    provider: "mistral",
+    pricing: { input: 1.50, output: 7.50 },
+    contextLimit: 256_000,
+    note: "Reasoning model",
+  },
+  {
+    id: "mistral-large-2512",
+    label: "Mistral Large 3",
+    provider: "mistral",
+    pricing: { input: 0.50, output: 1.50 },
+    contextLimit: 256_000,
   },
   {
     id: "claude-sonnet-4-6",
@@ -68,9 +86,11 @@ export const MODEL_LABELS: Record<string, string> = MODELS.reduce(
   {
     // Legacy IDs — kept so historical chat_messages.model_used /
     // flow_reports.model_used rows still render a friendly label.
-    "mistral-large-3": "Mistral Large",
-    "deepseek-v4-flash": "DeepSeek Chat",
-    "claude-opus-4-7": "Claude Opus 4.7",
+    "mistral-large-3":       "Mistral Large",
+    "mistral-large-latest":  "Mistral Large",
+    "mistral-small-latest":  "Mistral Small",
+    "deepseek-v4-flash":     "DeepSeek Chat",
+    "claude-opus-4-7":       "Claude Opus 4.7",
   } as Record<string, string>,
 );
 
@@ -78,5 +98,5 @@ export function getModel(id: string): ModelInfo | undefined {
   return MODELS.find((m) => m.id === id);
 }
 
-export const DEFAULT_CHAT_MODEL = "mistral-large-latest";
+export const DEFAULT_CHAT_MODEL = "mistral-large-2512";
 export const DEFAULT_FLOW_MODEL = "claude-sonnet-4-6";
