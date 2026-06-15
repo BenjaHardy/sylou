@@ -478,6 +478,8 @@ export async function callLLM(opts: {
   forceTool?: string;
   temperature?: number;
   json_schema?: { name: string; schema: Record<string, unknown> };
+  thinking?: boolean;
+  effort?: "low" | "medium" | "high" | "xhigh";
 }): Promise<Response> {
   const provider = providerFor(opts.model);
   const key = Deno.env.get(envKeyFor(provider));
