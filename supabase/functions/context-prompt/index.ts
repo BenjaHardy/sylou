@@ -1099,6 +1099,7 @@ When citing information from web search results, always include the source URL i
                 temperature,
                 thinking,
                 effort,
+                mistral_effort: mistralEffort,
               });
 
               if (!call2aRes.ok) {
@@ -1207,6 +1208,7 @@ When citing information from web search results, always include the source URL i
                   temperature,
                   thinking,
                   effort,
+                  mistral_effort: mistralEffort,
                 });
 
                 if (!call2bRes.ok) {
@@ -1288,6 +1290,7 @@ When citing information from web search results, always include the source URL i
         temperature,
         thinking,
         effort,
+        mistral_effort: mistralEffort,
       });
 
       if (!llmRes.ok) {
@@ -1384,6 +1387,7 @@ When citing information from web search results, always include the source URL i
         temperature,
         thinking,
         effort,
+        mistral_effort: mistralEffort,
       });
 
       if (!call2aRes.ok) {
