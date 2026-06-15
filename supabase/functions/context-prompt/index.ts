@@ -1537,7 +1537,7 @@ When citing information from web search results, always include the source URL i
     }
 
     // ── NO TOOLS — original non-streaming path ──
-    const responseResult = await callChatModel(chatModel, responseMessages, 2000, temperature);
+    const responseResult = await callChatModel(chatModel, responseMessages, contextMaxTokens, temperature, thinking, effort);
     const aiResponse = responseResult.text.trim();
 
     const finalInputChars = totalInputChars + responseResult.inputChars;
