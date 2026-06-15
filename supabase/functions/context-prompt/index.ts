@@ -757,7 +757,7 @@ Deno.serve(async (req) => {
       creativeDataSection,
     );
 
-    const summaryResult = await callChatModel(chatModel, summaryMessages, 1000, temperature);
+    const summaryResult = await callChatModel(chatModel, summaryMessages, summaryMaxTokens, temperature, thinking, effort);
     const summaryText = summaryResult.text.trim();
 
     // --- 5. Determine summary update ---
