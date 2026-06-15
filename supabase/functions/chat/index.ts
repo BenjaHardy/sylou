@@ -279,6 +279,9 @@ Deno.serve(async (req) => {
     const chatModel: string =
       requestedModel || profile.preferred_chat_model || "mistral-large-latest";
     const temperature = resolveTemperature(CHAT_TEMPERATURE, chatModel);
+    const thinking = resolveThinking(CHAT_THINKING, chatModel);
+    const effort = resolveEffort(CHAT_EFFORT, chatModel);
+    const chatMaxTokens = resolveMaxTokens(2000, chatModel, thinking);
     console.log(
       `[chat] model=${chatModel} provider=${providerFor(chatModel)} source=${
         requestedModel ? "request" : profile.preferred_chat_model ? "profile" : "default"
