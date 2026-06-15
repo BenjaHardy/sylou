@@ -535,6 +535,10 @@ Deno.serve(async (req) => {
       requestedModel || profile.preferred_chat_model || "mistral-large-latest";
     const provider = providerFor(chatModel);
     const temperature = resolveTemperature(CONTEXT_TEMPERATURE, chatModel);
+    const thinking = resolveThinking(CONTEXT_THINKING, chatModel);
+    const effort = resolveEffort(CONTEXT_EFFORT, chatModel);
+    const contextMaxTokens = resolveMaxTokens(2000, chatModel, thinking);
+    const summaryMaxTokens = resolveMaxTokens(1000, chatModel, thinking);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
     if (!Deno.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
