@@ -523,11 +523,14 @@ When citing information from web search results, always include the source URL i
         const call1Body: Record<string, unknown> = {
           model: chatModel,
           messages: llmMessages,
-          max_tokens: 2000,
+          max_tokens: chatMaxTokens,
           tools,
           tool_choice: "auto",
           temperature,
+          thinking,
+          effort,
         };
+
 
         const call1Res = await callLLM(call1Body);
 
