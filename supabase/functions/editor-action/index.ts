@@ -395,8 +395,10 @@ Deno.serve(async (req) => {
     const llmRes = await callLLM({
       model: chatModel,
       messages: llmMessages as any,
-      max_tokens: 1000,
+      max_tokens: editorMaxTokens,
       temperature,
+      thinking,
+      effort,
     });
 
     if (!llmRes.ok) {
