@@ -9,6 +9,7 @@
 
 Sylou is a text editor that helps you write with AI assistance and analyses your collaboration with AI using a standardized framework that looks into the processes of writing: where ideas came from, what got structured by whom, how the prose itself was shaped, etc.
 Instead of detecting whether AI was used, Sylou tracks *how* you and AI worked together and assesses the respective contributions of each, producing visual and shareable reports along the way.
+It is open-source software designed for self-managed deployment on Supabase and Vercel (or alternatives) using your own accounts. You bring the cloud accounts, the LLM API keys, and the domain; Sylou provides the application code.
 
 It's designed for writers, students, educators, researchers, and anyone who cares about AI-use transparency and is looking to proactively demonstrate how they have used AI, in a clear, visual and insightful way.
 
@@ -133,9 +134,6 @@ It's provided as-is, without warranty of any kind. That said, it's used daily by
 
 Below are the key functionalities that the maintainer would like to implement post-launch:
 
-- **Lite self-hosted version**: an alternative deployment mode for Sylou that collapses the current three-account setup (Supabase + Vercel + LLM keys) into a single self-contained server runnable on any Node.js-compatible machine. 
-Useful for users who may find the current cloud-services setup overwhelming, want self-sovereignty over their data, or need to deploy in restricted/air-gapped environments.
-
 - **Dedicated functionalities for very large pieces of work** (novels, doctoral dissertations, etc.): such as multiple FLOW methodology layers combining into a global analysis (being investigated). 
 Sylou has been extensively tested by the maintainer with small to medium-sized works, and is being tested with large-scale works. We plan to transparently share quantitative data of the behavior of the different LLMs and underlying setup (thinking, effort level, etc.) when running FLOW analyses on such large works. 
 Building the appropriate test cases naturally takes time; if you're interested to contribute, don't hesitate to reach out. Feedback derived from such tests will help guide the development of the functionalities. See also [**CONTRIBUTING.md**](CONTRIBUTING.md).
@@ -147,9 +145,10 @@ If not done already, feel also free to take a look at our Tally questionnaire, w
 
 ## Why not an offline version?
 
-An offline prototype of Sylou was originally created before the self-hostable online version, using local LLMs that run on the user's computer. Based on initial tests, they do produce acceptable (but less reliable) FLOW analysis for small to medium-sized works. 
+An offline prototype of Sylou was originally created, using local LLMs that run on the user's computer. Based on initial tests, they do produce acceptable (but less reliable) FLOW analysis for small to medium-sized works. 
 The key limitation, however, rests with the input token limit, which is directly dependent on the available VRAM, thereby limiting heavily the accessibility of the prototype and making very difficult the analysis of large works of more than just a few pages - unless we introduce summarize-then-analyze steps that may impact the quality of the FLOW methodology output.
-For this reason, as well as the loss of URL-based shared reports functionalities, it was ultimately disregarded, but if you're interested in an offline version, feel free to raise it, and we'll eventually reconsider.
+For this reason, as well as the loss of URL-based shared reports functionalities, it was ultimately disregarded. 
+If you're interested in an offline version, or in a self-hostable version, feel free to raise it, and we'll eventually consider it.
 
 ---
 
