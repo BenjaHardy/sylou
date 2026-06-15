@@ -1,53 +1,57 @@
-## Problem
+# Diagnostic: confirm `thinking` + `effort` actually reach Anthropic
 
-Claude FLOW analysis fails with HTTP 400:
-`output_config.format.schema: For 'array' type, 'minItems' values other than 0 or 1 are not supported (got: [2, 5])`
+## Goal
 
-Anthropic's Structured Outputs only permits `minItems` values of `0` or `1`. Our `pillarSchema.evidence` array uses `minItems: 2`, which the API rejects.
+Prove (or disprove) that `thinking: { type: "adaptive" }` and `output_config.effort: "high"` are present in the outgoing Anthropic request body for FLOW on Opus 4.8. Existing logs truncate inside `messages`, so the top-level keys are invisible.
 
-## Grep results
+## Change
 
-```
-supabase/functions/analysis/index.ts:219:      minItems: 2,   ← offender
-supabase/functions/analysis/index.ts:271:      minItems: 0,   ← compliant
-```
+Single file: `supabase/functions/_shared/_llm.ts`, inside `callLLM` (around line 487), immediately after the body is assembled and before `fetch`:
 
-Only one offending occurrence. Because `pillarSchema` is reused by `find`/`lead`/`organize`/`write`, fixing it once resolves all four pillars (the API error message `[2, 5]` reflects the schema referenced four times).
-
-Note: `maxItems` values (4 and 5) are unaffected — only `minItems` carries the 0/1 limit.
-
-## Fix
-
-In `supabase/functions/analysis/index.ts`, line 219, change `minItems: 2` to `minItems: 1` on the evidence array, and add an inline comment pointing at the Anthropic Structured Outputs docs so future schema edits don't reintroduce the issue.
-
-```diff
-       evidence: {
-         type: "array" as const,
-         description: "2–4 short quotes or concrete references from the project supporting the assessment.",
-         items: { type: "string" as const },
--        minItems: 2,
-+        // Anthropic Structured Outputs only allows minItems 0 or 1 for arrays.
-+        // The prompt already instructs the model to return 2–4 evidence items.
-+        // https://platform.claude.com/docs/en/build-with-claude/structured-outputs
-+        minItems: 1,
-         maxItems: 4,
-       },
+```ts
+// Diagnostic: log the top-level keys + the reasoning-control fields
+// of the outgoing body. Skipped for streaming requests to avoid log
+// spam on token deltas. Excludes `messages` / `system` / `tools` so
+// the line stays well under the 8KB log truncation limit.
+if (!opts.stream) {
+  const { messages: _m, system: _s, tools: _t, ...preview } = body as Record<string, unknown>;
+  console.log("[callLLM] outbound", {
+    provider,
+    model: opts.model,
+    top_level_keys: Object.keys(body),
+    thinking: (body as any).thinking ?? null,
+    output_config: (body as any).output_config ?? null,
+    reasoning_effort: (body as any).reasoning_effort ?? null,
+    preview,
+  });
+}
 ```
 
-The prompt text in both `FLOW_PROMPT_TEMPLATE` and `CREATIVE_FLOW_PROMPT_TEMPLATE` already specifies "2-4 evidence items" (lines 97, 140, 156, 199), so behavior should remain unchanged in practice. If a future run returns only 1 evidence item, the existing retry/repair pipeline absorbs it; we can add a post-validation check later if it ever fires.
+This affects all four edge functions that use `callLLM` (analysis, chat, editor-action, context-prompt) but only for non-streaming calls. FLOW analysis is always non-streaming, so the next FLOW run will emit one diagnostic line per attempt.
 
-## Deploy + verify
+## How you verify
 
-1. Deploy `analysis` edge function.
-2. Run one Claude Sonnet 4.6 FLOW analysis on a real project.
-3. Confirm:
-   - No 400 from Anthropic
-   - `StructuredOutputError` not thrown
-   - `[FLOW repair UNEXPECTED]` still silent
-   - Evidence arrays contain 2–4 items as instructed
+1. Wait for deploy.
+2. Run one FLOW analysis on Opus 4.8.
+3. Open Edge Function logs → `analysis` → search `[callLLM] outbound`.
+4. Expected line:
+   ```
+   { provider: "anthropic", model: "claude-opus-4-8",
+     top_level_keys: ["model","max_tokens","system","messages","temperature","output_config"],
+     thinking: { type: "adaptive" },
+     output_config: { format: {...}, effort: "high" }, ... }
+   ```
+5. Interpretation:
+   - **Both present** → wiring is correct; the absence of thinking blocks in the previous response was Opus's adaptive decision (no bug, just dynamic).
+   - **`thinking: null`** → bug in the path between `resolveThinking` and `toAnthropicBody`. We'll trace from there.
+   - **`output_config.effort` missing** → same kind of bug for effort.
+   - **Line doesn't appear at all** → the deployed analysis function is stale / didn't pick up the build. Forces redeploy investigation.
 
 ## Out of scope
 
-- No changes to Mistral path (unaffected).
-- No changes to `_llm.ts`, `_repair.ts`, or retry layer.
-- The previously-parked Anthropic thinking/effort work stays parked.
+- The parked Mistral Medium 3.5 / Small reasoning work — explicitly held per your message.
+- Any behavior change. This is log-only; no functional impact.
+
+## Rollback
+
+Trivial — delete the inserted block. Safe to leave in indefinitely (one short log line per non-streaming call).

@@ -488,12 +488,30 @@ export async function callLLM(opts: {
     provider === "anthropic"
       ? toAnthropicBody({ ...opts })
       : toOpenAIBody({ ...opts, tool_choice: opts.tools ? "auto" : undefined });
+  // Diagnostic: log the top-level keys + reasoning-control fields of the
+  // outgoing body. Skipped for streaming requests to avoid log spam on token
+  // deltas. Excludes `messages` / `system` / `tools` so the line stays well
+  // under the log truncation limit.
+  if (!opts.stream) {
+    const b = body as Record<string, unknown>;
+    const { messages: _m, system: _s, tools: _t, ...preview } = b;
+    console.log("[callLLM] outbound", JSON.stringify({
+      provider,
+      model: opts.model,
+      top_level_keys: Object.keys(b),
+      thinking: b.thinking ?? null,
+      output_config: b.output_config ?? null,
+      reasoning_effort: b.reasoning_effort ?? null,
+      preview,
+    }));
+  }
   return await fetch(endpointFor(provider), {
     method: "POST",
     headers: authHeadersFor(provider, key),
     body: JSON.stringify(body),
   });
 }
+
 
 // Extract a safe, user-friendly error message from an upstream provider error
 // body. Only surfaces `error.message` (string), truncated, to avoid leaking
