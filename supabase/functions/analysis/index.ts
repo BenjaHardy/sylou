@@ -963,7 +963,7 @@ ${writePillarNotice}`;
     const flowModel: string =
       (reqBody.model as string | undefined) ||
       (prefRow as { preferred_flow_model?: string } | null)?.preferred_flow_model ||
-      "claude-sonnet-4-6";
+      "mistral-medium-3-5";
 
     // --- Call LLM with tool use (provider-agnostic) ---
     const provider = providerFor(flowModel);

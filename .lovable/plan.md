@@ -1,67 +1,90 @@
-# Mistral reasoning + model pinning + effort cleanup
+Switch the default chat **and** FLOW model to **Mistral Medium 3.5**. No data backfill (single-user project). Verification queries cover all four tables to confirm no stale `mistral-large-latest` / `mistral-large-3` strings remain anywhere.
 
-Shipped together as a single deploy.
+## A. Schema migration (column defaults)
 
-## What changed
+Single migration:
 
-### `_thinking.ts`
-- `EffortLevel` renamed to `ClaudeEffort` (legacy alias retained for any out-of-tree imports).
-- New `MistralEffort = "high" | "none"`.
-- New `MISTRAL_REASONING_MODELS = { "mistral-medium-3-5", "mistral-small-2603" }` allowlist.
-- Four new per-function tables: `FLOW_MISTRAL_EFFORT`, `CHAT_MISTRAL_EFFORT`, `EDITOR_MISTRAL_EFFORT`, `CONTEXT_MISTRAL_EFFORT`.
-  - FLOW: both reasoning models at `"high"` (determinism wins).
-  - CHAT: Medium 3.5 `"high"`, Small `"none"` (latency).
-  - EDITOR: both `"none"`.
-  - CONTEXT: Medium 3.5 `"high"`, Small `"none"`.
-- `resolveMistralEffort()`: returns `undefined` for non-reasoning models OR when value is `"none"`. Callers that get `undefined` must omit the field — sending `reasoning_effort` to `mistral-large-2512` is a hard HTTP 422.
-- `resolveMaxTokens` extended with `mistralEffortOn` flag so Mistral reasoning calls get the same headroom (4000 chat, 16000 FLOW) as Claude+thinking.
+```sql
+ALTER TABLE public.profiles
+  ALTER COLUMN preferred_chat_model SET DEFAULT 'mistral-medium-3-5';
 
-### `_llm.ts`
-- `toAnthropicBody.effort` typed as `ClaudeEffort`.
-- `toOpenAIBody` gains `reasoning_effort?: MistralEffort`; emitted only when truthy and `!== "none"`.
-- `callLLM` gains `mistral_effort?: MistralEffort`; passed through to `toOpenAIBody` only when provider is Mistral.
-- Diagnostic `[callLLM] outbound` log no longer emits `reasoning_effort: null` for Anthropic — the field is included only when actually present in the body.
+ALTER TABLE public.profiles
+  ALTER COLUMN preferred_flow_model SET DEFAULT 'mistral-medium-3-5';
+```
 
-### `_temperatures.ts`
-- All `"mistral-large-latest"` keys renamed to `"mistral-large-2512"`.
-- All three Mistral models are now EXPLICIT in every table:
-  - CHAT / EDITOR / CONTEXT: Large, Medium 3.5, Small all at `0.7`.
-  - FLOW: Large, Medium 3.5, Small all at `0.0`.
+(Will confirm via `supabase--read_query` that `preferred_flow_model` exists and is the correct column name before running.)
 
-### `src/lib/models.ts`
-- Replaced `mistral-large-latest` → `mistral-large-2512` (label "Mistral Large 3", pricing $0.50 / $1.50).
-- Added `mistral-medium-3-5` ($1.50 / $7.50) and `mistral-small-2603` ($0.15 / $0.60).
-- `isRollingLatest` dropped from all three (every Mistral model now pinned by dated alias).
-- `DEFAULT_CHAT_MODEL` → `"mistral-large-2512"`.
-- `MODEL_LABELS` now carries legacy aliases for `mistral-large-latest` and `mistral-small-latest` so historical rows still render a label.
+## B. Data migration
 
-### Edge functions (wire-up)
-- `analysis/`, `chat/`, `editor-action/`, `context-prompt/` all compute `mistralEffort = resolveMistralEffort(...)` next to the existing `effort = resolveEffort(...)` line, pass it via `mistral_effort:` into every `callLLM` site, and update `resolveMaxTokens` with the new `mistralEffort !== undefined` flag.
-- `context-prompt`'s `callChatModel` helper gained a trailing `mistralEffort?: MistralEffort` arg; all three call sites updated.
-- Hardcoded fallback `|| "mistral-large-latest"` replaced with `|| "mistral-large-2512"` in chat / editor-action / context-prompt.
-- `extract-text` summarizer model pinned to `mistral-large-2512`.
-- `estimateTokens.ts` context-limit map gains entries for all three new IDs (256k each).
+**Skipped** — single user, will manually re-pick models in Settings if desired.
 
-## Out of scope
+## C. Code changes
 
-- DB migration to rewrite `profiles.preferred_chat_model = 'mistral-large-latest'` rows or change the column default. Existing rows fall through to the hardcoded `"mistral-large-2512"` fallback in each function and render correctly via `MODEL_LABELS`. New users get the column default (`mistral-large-latest`), which immediately falls back to the pinned ID at request time.
-- Mistral Large 3 (`mistral-large-2512`) is NOT in `MISTRAL_REASONING_MODELS` and never sends `reasoning_effort`.
+**`src/lib/models.ts`** — two-line flip:
 
-## Verification matrix (post-deploy)
+```ts
+export const DEFAULT_CHAT_MODEL = "mistral-medium-3-5";   // was "mistral-large-2512"
+export const DEFAULT_FLOW_MODEL = "mistral-medium-3-5";   // was "claude-sonnet-4-6"
+```
 
-| Function | Model | `temperature` | `reasoning_effort` | `thinking` |
-|---|---|---|---|---|
-| FLOW | `mistral-large-2512` | `0` | absent | absent |
-| FLOW | `mistral-medium-3-5` | `0` | `"high"` | absent |
-| FLOW | `mistral-small-2603` | `0` | `"high"` | absent |
-| FLOW | `claude-opus-4-8` | absent | absent | `{type:"adaptive"}` + `output_config.effort:"high"` |
-| Chat | `mistral-large-2512` | `0.7` | absent | absent |
-| Chat | `mistral-medium-3-5` | `0.7` | `"high"` | absent |
-| Chat | `mistral-small-2603` | `0.7` | absent | absent |
+**Edge-function fallback chains** — flip hardcoded `|| "mistral-large-2512"` to `|| "mistral-medium-3-5"` in:
+- `supabase/functions/chat/index.ts`
+- `supabase/functions/editor-action/index.ts`
+- `supabase/functions/context-prompt/index.ts`
+- `supabase/functions/analysis/index.ts` (FLOW fallback)
 
-Inspect via Edge Function logs → search `[callLLM] outbound`.
+This keeps NULL-`preferred_*_model` rows resolving to the same model as fresh signups.
+
+**`.lovable/plan.md`** — append a short note recording the default flip.
+
+## D. UI
+
+No change. `SettingsDialog` already lists Medium 3.5 in both pickers.
+
+## Verification after deploy
+
+### 1. Schema check
+```sql
+SELECT column_name, column_default
+FROM   information_schema.columns
+WHERE  table_schema = 'public'
+  AND  table_name   = 'profiles'
+  AND  column_name IN ('preferred_chat_model', 'preferred_flow_model');
+```
+Expect both defaults = `'mistral-medium-3-5'::text`.
+
+### 2. Completeness check — no `mistral-large-latest` / `mistral-large-3` strings remain across the four user-facing tables. Run each:
+```sql
+SELECT preferred_chat_model, COUNT(*) FROM profiles
+ WHERE preferred_chat_model LIKE 'mistral-large%' GROUP BY 1;
+
+SELECT preferred_flow_model, COUNT(*) FROM profiles
+ WHERE preferred_flow_model LIKE 'mistral-large%' GROUP BY 1;
+
+SELECT model_used, COUNT(*) FROM chat_messages
+ WHERE model_used LIKE 'mistral-large%' GROUP BY 1;
+
+SELECT model_used, COUNT(*) FROM flow_reports
+ WHERE model_used LIKE 'mistral-large%' GROUP BY 1;
+
+SELECT model_used, COUNT(*) FROM token_usage
+ WHERE model_used LIKE 'mistral-large%' GROUP BY 1;
+```
+
+Expected outcomes:
+- `profiles.preferred_chat_model` / `preferred_flow_model`: zero rows, or only `mistral-large-2512` rows if you've deliberately picked Large 3 in Settings. Any `mistral-large-latest` or `mistral-large-3` row = the schema default never got applied — investigate.
+- `chat_messages` / `flow_reports` / `token_usage`: any `mistral-large%` rows here are **historical** (logs of what the model actually was at message time) and intentionally preserved. Not a bug — `MODEL_LABELS` renders friendly labels for the legacy IDs. The query is a completeness check on the migration tooling, not a regression signal for these three tables.
+
+### 3. Runtime check
+- Fresh chat call → `[callLLM] outbound` log shows `model: "mistral-medium-3-5"`, `temperature: 0.7`, `reasoning_effort: "high"`.
+- Fresh FLOW run → `[callLLM] outbound` shows `model: "mistral-medium-3-5"`, `temperature: 0`, `reasoning_effort: "high"`, no `thinking` field (not Claude).
 
 ## Rollback
 
-- Latency on FLOW Mistral Medium 3.5 > 100s avg → flip `FLOW_MISTRAL_EFFORT["mistral-medium-3-5"]` to `"none"`.
-- Any HTTP 422 on Large 3 → confirm `MISTRAL_REASONING_MODELS` doesn't contain it (it should not).
+- `ALTER TABLE public.profiles ALTER COLUMN preferred_chat_model SET DEFAULT 'mistral-large-2512';`
+- `ALTER TABLE public.profiles ALTER COLUMN preferred_flow_model SET DEFAULT 'claude-sonnet-4-6';`
+- Revert `DEFAULT_CHAT_MODEL` / `DEFAULT_FLOW_MODEL` constants and the four edge-function fallback strings.
+
+## Risk note
+
+FLOW on Medium 3.5 with `reasoning_effort: "high"` is the new default analysis path. If you later observe FLOW runs >100 s avg or quality regressions vs Claude Sonnet 4.6, flip `DEFAULT_FLOW_MODEL` back to `"claude-sonnet-4-6"` (and the analysis fallback string) — your Mistral bias-test results will be the deciding signal here.
