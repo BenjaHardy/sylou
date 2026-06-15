@@ -350,6 +350,11 @@ export function normaliseResponse(
     let text = "";
     const toolCalls: NormalisedResponse["toolCalls"] = [];
     const oaToolCalls: NonNullable<LLMMessage["tool_calls"]> = [];
+    // INVARIANT: iterate content[] and accumulate ONLY blocks where
+    // type === "text" (and tool_use). Adaptive thinking can place a
+    // `thinking` or `redacted_thinking` block at index 0, so we MUST
+    // NOT shortcut to `content[0].text` — that would surface chain
+    // of thought to users and break Structured Outputs JSON parsing.
     for (const b of blocks) {
       if (b.type === "text") text += b.text ?? "";
       if (b.type === "tool_use") {
