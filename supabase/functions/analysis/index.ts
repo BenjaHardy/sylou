@@ -11,6 +11,10 @@ import {
 } from "../_shared/_llm.ts";
 import { repairToolOutput } from "../_shared/_repair.ts";
 import { FLOW_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
+import {
+  FLOW_THINKING, FLOW_EFFORT,
+  resolveThinking, resolveEffort, resolveMaxTokens,
+} from "../_shared/_thinking.ts";
 
 // Budget helper. Intentionally duplicated across the four edge functions
 // (chat, context-prompt, editor-action, analysis) — Supabase edge function
