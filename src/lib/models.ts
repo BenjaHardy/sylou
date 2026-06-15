@@ -98,5 +98,5 @@ export function getModel(id: string): ModelInfo | undefined {
   return MODELS.find((m) => m.id === id);
 }
 
-export const DEFAULT_CHAT_MODEL = "mistral-large-2512";
-export const DEFAULT_FLOW_MODEL = "claude-sonnet-4-6";
+export const DEFAULT_CHAT_MODEL = "mistral-medium-3-5";
+export const DEFAULT_FLOW_MODEL = "mistral-medium-3-5";
