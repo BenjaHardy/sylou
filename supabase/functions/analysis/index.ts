@@ -1031,6 +1031,7 @@ ${writePillarNotice}`;
           forceTool: SUBMIT_FLOW_TOOL.name,
           disableParallelToolUse: true,
           temperature,
+          mistral_effort: mistralEffort,
         };
 
     // ============================================================
