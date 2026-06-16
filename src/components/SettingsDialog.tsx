@@ -115,7 +115,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
           {/* MODELS TAB */}
           <TabsContent value="models" className="space-y-5 mt-4">
             <div>
-              <Label className="text-sm font-medium">Chat model</Label>
+              <Label className="text-sm font-semibold text-primary">Chat model</Label>
               <p className="text-xs text-muted-foreground mb-2">
                 Used for the chat panel and the editor's Ask / Propose actions.
               </p>
@@ -132,7 +132,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
             </div>
 
             <div>
-              <Label className="text-sm font-medium">FLOW analysis model</Label>
+              <Label className="text-sm font-semibold text-primary">FLOW analysis model</Label>
               <p className="text-xs text-muted-foreground mb-2">
                 Used when running a FLOW report on your project.
               </p>
