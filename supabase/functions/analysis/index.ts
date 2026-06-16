@@ -12,7 +12,7 @@ import {
 import { repairToolOutput } from "../_shared/_repair.ts";
 import { FLOW_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import {
-  FLOW_THINKING, FLOW_EFFORT, FLOW_MISTRAL_EFFORT,
+  FLOW_THINKING, FLOW_EFFORT, FLOW_MISTRAL_EFFORT, MISTRAL_REASONING_MODELS,
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 
