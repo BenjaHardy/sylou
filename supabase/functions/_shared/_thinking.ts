@@ -99,7 +99,7 @@ export const CONTEXT_EFFORT: EffortTable = { "claude-sonnet-4-6": "high", "claud
 // Mistral reasoning effort — only models in MISTRAL_REASONING_MODELS
 // are eligible. Determinism wins for FLOW; chat-style functions prefer
 // Small at "none" for latency.
-export const FLOW_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "high" };
+export const FLOW_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "high" };
 export const CHAT_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "none" };
 export const EDITOR_MISTRAL_EFFORT:  MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "none" };
 export const CONTEXT_MISTRAL_EFFORT: MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "none" };
