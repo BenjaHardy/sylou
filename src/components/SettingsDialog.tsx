@@ -150,9 +150,8 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
 
             <p className="text-[11px] text-muted-foreground italic border-t pt-3">
               Indicative provider rates as of June 2026 — shown for transparency.
-              Your actual usage is metered against your Sylou token budget, not
-              billed per-token at these rates. Switching models takes effect on
-              your next prompt; in-flight requests finish on the previous model.
+              Switching models takes effect on your next prompt; in-flight
+              requests finish on the previous model.
             </p>
             <p className="text-[11px] text-muted-foreground italic">
               See the Model Configuration Reference on GitHub for details on
