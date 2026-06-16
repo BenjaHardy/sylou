@@ -760,7 +760,7 @@ Deno.serve(async (req) => {
       creativeDataSection,
     );
 
-    const summaryResult = await callChatModel(chatModel, summaryMessages, summaryMaxTokens, temperature, thinking, effort);
+    const summaryResult = await callChatModel(chatModel, summaryMessages, summaryMaxTokens, temperature, thinking, effort, mistralEffort);
     const summaryText = summaryResult.text.trim();
 
     // --- 5. Determine summary update ---
@@ -1450,7 +1450,7 @@ When citing information from web search results, always include the source URL i
           }
         }
 
-        const call2bResult = await callChatModel(chatModel, toolMessages as { role: string; content: string }[], contextMaxTokens, temperature, thinking, effort);
+        const call2bResult = await callChatModel(chatModel, toolMessages as { role: string; content: string }[], contextMaxTokens, temperature, thinking, effort, mistralEffort);
         totalInputChars += call2bResult.inputChars;
         totalOutputChars += call2bResult.outputChars;
         aiResponse = call2bResult.text.trim() || "No response generated.";
@@ -1544,7 +1544,7 @@ When citing information from web search results, always include the source URL i
     }
 
     // ── NO TOOLS — original non-streaming path ──
-    const responseResult = await callChatModel(chatModel, responseMessages, contextMaxTokens, temperature, thinking, effort);
+    const responseResult = await callChatModel(chatModel, responseMessages, contextMaxTokens, temperature, thinking, effort, mistralEffort);
     const aiResponse = responseResult.text.trim();
 
     const finalInputChars = totalInputChars + responseResult.inputChars;
