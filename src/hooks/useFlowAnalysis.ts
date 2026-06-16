@@ -26,6 +26,15 @@ export interface FlowMeta {
    * A number = we explicitly requested that value (typically 0.0 for FLOW).
    */
   temperature_used?: number | null;
+  /**
+   * Reasoning disclosure (provider-agnostic). All three fields are
+   * `undefined` on legacy reports written before disclosure shipped.
+   * `null` on current reports means the field does not apply to this
+   * provider (e.g. `reasoning_thinking` is `null` for Mistral).
+   */
+  reasoning_provider?: string | null;
+  reasoning_thinking?: boolean | null;
+  reasoning_effort?: string | null;
 }
 
 export interface MetricsSnapshot {
