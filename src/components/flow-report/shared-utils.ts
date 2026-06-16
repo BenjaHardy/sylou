@@ -8,8 +8,50 @@ import type {
   FlowFeedback,
   FlowUserAssessment,
   FlowReport,
+  FlowMeta,
 } from "@/hooks/useFlowAnalysis";
 import { getBandForScore, getBandLabel } from "@/lib/flowBands";
+
+/**
+ * Formats the reasoning/thinking/effort disclosure segment appended after
+ * the temperature parenthetical in the FLOW report footer.
+ *
+ * Returns a leading-comma fragment (e.g. ", thinking on, effort high")
+ * or "" when there is nothing meaningful to disclose. See the truth table
+ * in .lovable/plan.md / docs for every combination.
+ *
+ * Defensive: tolerates legacy reports (fields undefined), partial data
+ * (one field present, the other null), empty strings, and unknown future
+ * providers (falls back to Mistral-style `reasoning_effort {value}`).
+ */
+export function formatReasoningDisclosure(meta: FlowMeta | null | undefined): string {
+  if (!meta) return "";
+  const provider = meta.reasoning_provider;
+  if (!provider) return "";
+
+  const effort = typeof meta.reasoning_effort === "string" && meta.reasoning_effort.length > 0
+    ? meta.reasoning_effort
+    : null;
+
+  if (provider === "anthropic") {
+    const parts: string[] = [];
+    if (typeof meta.reasoning_thinking === "boolean") {
+      parts.push(`thinking ${meta.reasoning_thinking ? "on" : "off"}`);
+    }
+    if (effort) {
+      parts.push(`effort ${effort}`);
+    }
+    return parts.length === 0 ? "" : `, ${parts.join(", ")}`;
+  }
+
+  // Mistral, or any unknown future provider: render the effort value if
+  // present (reasoning_thinking is intentionally ignored — Mistral has no
+  // adaptive thinking toggle). Unknown providers degrade gracefully.
+  if (effort) return `, reasoning_effort ${effort}`;
+  return "";
+}
+
+
 
 /**
  * Returns the user-facing band label for a score. Numbers are never shown.

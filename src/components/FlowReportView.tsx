@@ -64,7 +64,7 @@ import { FlowInfoSection } from "@/components/flow-report/FlowInfoSection";
 import { FlowReportFooter } from "@/components/flow-report/FlowReportFooter";
 import { TokenUsageSection } from "@/components/flow-report/TokenUsageSection";
 import { ProjectActivitySection } from "@/components/flow-report/ProjectActivitySection";
-import { extractUserAssessment, extractFeedbackScores } from "@/components/flow-report/shared-utils";
+import { extractUserAssessment, extractFeedbackScores, formatReasoningDisclosure } from "@/components/flow-report/shared-utils";
 import FlowWorkProfile from "@/components/FlowWorkProfile";
 import { ProfileTabContent } from "@/components/flow-report/ProfileTabContent";
 import { WritingSnapshotTab } from "@/components/flow-report/WritingSnapshotTab";
@@ -431,7 +431,7 @@ export function FlowReportView({
                   Model: {MODEL_LABELS[report.model_used] ?? report.model_used}
                   {" "}({report.flow_meta?.temperature_used == null
                     ? "model-controlled temperature"
-                    : `temperature ${report.flow_meta.temperature_used}`})
+                    : `temperature ${report.flow_meta.temperature_used}`}{formatReasoningDisclosure(report.flow_meta)})
                   {" "}· Generated{" "}
                   {new Date(report.created_at).toLocaleString()}
                 </p>
@@ -858,7 +858,7 @@ export function FlowReportView({
                   Model: {MODEL_LABELS[report.model_used] ?? report.model_used}
                   {" "}({report.flow_meta?.temperature_used == null
                     ? "model-controlled temperature"
-                    : `temperature ${report.flow_meta.temperature_used}`})
+                    : `temperature ${report.flow_meta.temperature_used}`}{formatReasoningDisclosure(report.flow_meta)})
                   {" "}· Generated{" "}
                   {new Date(report.created_at).toLocaleString()}
                 </p>

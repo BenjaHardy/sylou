@@ -1,90 +1,73 @@
-Switch the default chat **and** FLOW model to **Mistral Medium 3.5**. No data backfill (single-user project). Verification queries cover all four tables to confirm no stale `mistral-large-latest` / `mistral-large-3` strings remain anywhere.
+## Goal
 
-## A. Schema migration (column defaults)
+Disclose the reasoning/thinking/effort settings alongside the existing temperature line at the bottom of FLOW reports (owner view, shared view, exports).
 
-Single migration:
+## Storage shape (provider-agnostic)
 
-```sql
-ALTER TABLE public.profiles
-  ALTER COLUMN preferred_chat_model SET DEFAULT 'mistral-medium-3-5';
+Three new optional fields on `flow_meta`:
 
-ALTER TABLE public.profiles
-  ALTER COLUMN preferred_flow_model SET DEFAULT 'mistral-medium-3-5';
-```
+- `reasoning_provider: string | null` — e.g. `"anthropic"`, `"mistral"`. `null` when the model has no reasoning controls (DeepSeek, non-reasoning Mistral).
+- `reasoning_thinking: boolean | null` — adaptive thinking on/off. `null` when not applicable to the provider.
+- `reasoning_effort: string | null` — loosely typed `string` so new provider enum values don't force a schema change. `null` when not applicable.
 
-(Will confirm via `supabase--read_query` that `preferred_flow_model` exists and is the correct column name before running.)
+Legacy reports lack all three fields → helper returns `""` and the existing temperature line renders unchanged.
 
-## B. Data migration
+## Changes
 
-**Skipped** — single user, will manually re-pick models in Settings if desired.
+### 1. Edge function — populate the fields
 
-## C. Code changes
+`supabase/functions/analysis/index.ts`, in the `flow_meta` literal (~line 1360):
 
-**`src/lib/models.ts`** — two-line flip:
+- Claude: `reasoning_provider: "anthropic"`, `reasoning_thinking: thinking`, `reasoning_effort: effort ?? null`.
+- Mistral reasoning model (`mistralEffort !== undefined`): `reasoning_provider: "mistral"`, `reasoning_thinking: null`, `reasoning_effort: mistralEffort`.
+- Otherwise: all three `null`.
 
-```ts
-export const DEFAULT_CHAT_MODEL = "mistral-medium-3-5";   // was "mistral-large-2512"
-export const DEFAULT_FLOW_MODEL = "mistral-medium-3-5";   // was "claude-sonnet-4-6"
-```
+### 2. Type — `FlowMeta` in `src/hooks/useFlowAnalysis.ts`
 
-**Edge-function fallback chains** — flip hardcoded `|| "mistral-large-2512"` to `|| "mistral-medium-3-5"` in:
-- `supabase/functions/chat/index.ts`
-- `supabase/functions/editor-action/index.ts`
-- `supabase/functions/context-prompt/index.ts`
-- `supabase/functions/analysis/index.ts` (FLOW fallback)
+Add the three optional fields with JSDoc explaining provider-agnostic semantics and that `undefined` (vs. `null`) signals a legacy pre-disclosure report.
 
-This keeps NULL-`preferred_*_model` rows resolving to the same model as fresh signups.
+### 3. Shared helper — `formatReasoningDisclosure(meta)` in `src/components/flow-report/shared-utils.ts`
 
-**`.lovable/plan.md`** — append a short note recording the default flip.
+Returns a leading-comma fragment (e.g. `", thinking on, effort high"`) or `""`. Exhaustive truth table for the helper — defensive against every combination:
 
-## D. UI
+| `reasoning_provider` | `reasoning_thinking` | `reasoning_effort` | Output |
+|---|---|---|---|
+| `undefined` (legacy) | — | — | `""` |
+| `null` | — | — | `""` |
+| `"anthropic"` | `true` | `"high"` (any string) | `", thinking on, effort high"` |
+| `"anthropic"` | `false` | `"high"` (any string) | `", thinking off, effort high"` |
+| `"anthropic"` | `true` | `null` | `", thinking on"` |
+| `"anthropic"` | `false` | `null` | `", thinking off"` |
+| `"anthropic"` | `null` | `"high"` (any string) | `", effort high"` |
+| `"anthropic"` | `null` | `null` | `""` |
+| `"mistral"` | — | `"high"`/`"none"`/any string | `", reasoning_effort high"` |
+| `"mistral"` | — | `null` | `""` |
+| any other string (future provider) | — | `"x"` | `", reasoning_effort x"` (effort-only fallback) |
+| any other string | — | `null` | `""` |
 
-No change. `SettingsDialog` already lists Medium 3.5 in both pickers.
+Rules in prose:
+- Legacy or fully-null reasoning metadata → empty string (no segment, no stray comma).
+- Anthropic: emit `thinking {on|off}` only if `reasoning_thinking` is a boolean; emit `effort {value}` only if `reasoning_effort` is a non-empty string; join with `, ` and prepend `, ` to the whole segment; if both pieces are absent → empty string.
+- Mistral: emit `reasoning_effort {value}` only if `reasoning_effort` is a non-empty string; `reasoning_thinking` is intentionally ignored even if set.
+- Unknown provider with an effort value → fall back to the Mistral-style `reasoning_effort {value}` rendering so future providers degrade gracefully without a code change.
+- Empty-string `reasoning_effort` is treated the same as `null` (defensive).
 
-## Verification after deploy
+A small inline unit test alongside the helper (vitest, same folder pattern as existing tests) covers each row of the table.
 
-### 1. Schema check
-```sql
-SELECT column_name, column_default
-FROM   information_schema.columns
-WHERE  table_schema = 'public'
-  AND  table_name   = 'profiles'
-  AND  column_name IN ('preferred_chat_model', 'preferred_flow_model');
-```
-Expect both defaults = `'mistral-medium-3-5'::text`.
+### 4. Display sites
 
-### 2. Completeness check — no `mistral-large-latest` / `mistral-large-3` strings remain across the four user-facing tables. Run each:
-```sql
-SELECT preferred_chat_model, COUNT(*) FROM profiles
- WHERE preferred_chat_model LIKE 'mistral-large%' GROUP BY 1;
+Splice the helper output immediately after the existing temperature parenthetical in:
 
-SELECT preferred_flow_model, COUNT(*) FROM profiles
- WHERE preferred_flow_model LIKE 'mistral-large%' GROUP BY 1;
+- `src/components/FlowReportView.tsx` — both disclosure blocks (~lines 432 and 859).
+- `src/pages/SharedReport.tsx` — disclosure block (~lines 417–423).
+- `src/lib/export-docx.ts` — wherever the model/temperature line is composed.
+- `src/lib/export-json.ts` — verify the full `flow_meta` is serialized without an allowlist; if allowlisted, add the three fields.
+- PDF: inherits from `FlowReportView` via the browser print path — no separate code path.
 
-SELECT model_used, COUNT(*) FROM chat_messages
- WHERE model_used LIKE 'mistral-large%' GROUP BY 1;
+A quick read of `export-docx.ts` and `export-json.ts` happens before editing to confirm exact splice points.
 
-SELECT model_used, COUNT(*) FROM flow_reports
- WHERE model_used LIKE 'mistral-large%' GROUP BY 1;
+## Out of scope
 
-SELECT model_used, COUNT(*) FROM token_usage
- WHERE model_used LIKE 'mistral-large%' GROUP BY 1;
-```
-
-Expected outcomes:
-- `profiles.preferred_chat_model` / `preferred_flow_model`: zero rows, or only `mistral-large-2512` rows if you've deliberately picked Large 3 in Settings. Any `mistral-large-latest` or `mistral-large-3` row = the schema default never got applied — investigate.
-- `chat_messages` / `flow_reports` / `token_usage`: any `mistral-large%` rows here are **historical** (logs of what the model actually was at message time) and intentionally preserved. Not a bug — `MODEL_LABELS` renders friendly labels for the legacy IDs. The query is a completeness check on the migration tooling, not a regression signal for these three tables.
-
-### 3. Runtime check
-- Fresh chat call → `[callLLM] outbound` log shows `model: "mistral-medium-3-5"`, `temperature: 0.7`, `reasoning_effort: "high"`.
-- Fresh FLOW run → `[callLLM] outbound` shows `model: "mistral-medium-3-5"`, `temperature: 0`, `reasoning_effort: "high"`, no `thinking` field (not Claude).
-
-## Rollback
-
-- `ALTER TABLE public.profiles ALTER COLUMN preferred_chat_model SET DEFAULT 'mistral-large-2512';`
-- `ALTER TABLE public.profiles ALTER COLUMN preferred_flow_model SET DEFAULT 'claude-sonnet-4-6';`
-- Revert `DEFAULT_CHAT_MODEL` / `DEFAULT_FLOW_MODEL` constants and the four edge-function fallback strings.
-
-## Risk note
-
-FLOW on Medium 3.5 with `reasoning_effort: "high"` is the new default analysis path. If you later observe FLOW runs >100 s avg or quality regressions vs Claude Sonnet 4.6, flip `DEFAULT_FLOW_MODEL` back to `"claude-sonnet-4-6"` (and the analysis fallback string) — your Mistral bias-test results will be the deciding signal here.
+- No DB migration (`flow_meta` is `jsonb`).
+- No backfill of historical reports.
+- No change to the LLM request itself.

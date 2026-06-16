@@ -1344,6 +1344,22 @@ ${writePillarNotice}`;
       : profile.tokens_used_this_period / profile.monthly_token_budget;
     const tokenStatus = budgetRatio >= 1.0 ? "over" : budgetRatio >= 0.8 ? "near" : "ok";
 
+    // Reasoning disclosure fields (provider-agnostic). All three are `null`
+    // for models without reasoning controls (DeepSeek, non-reasoning Mistral).
+    // The display layer switches on reasoning_provider to format correctly.
+    let reasoningProvider: string | null = null;
+    let reasoningThinking: boolean | null = null;
+    let reasoningEffort: string | null = null;
+    if (provider === "anthropic") {
+      reasoningProvider = "anthropic";
+      reasoningThinking = typeof thinking === "boolean" ? thinking : null;
+      reasoningEffort = effort ?? null;
+    } else if (mistralEffort !== undefined) {
+      reasoningProvider = "mistral";
+      reasoningThinking = null;
+      reasoningEffort = mistralEffort;
+    }
+
     const flowMeta: Record<string, unknown> = {
       estimated_input_tokens: inputTokens,
       context_limit_tokens: contextLimitTokens,
@@ -1358,6 +1374,9 @@ ${writePillarNotice}`;
       // which 400s on any non-default value); a number means we explicitly
       // requested that value. Surfaced in the FLOW report disclosure line.
       temperature_used: temperature ?? null,
+      reasoning_provider: reasoningProvider,
+      reasoning_thinking: reasoningThinking,
+      reasoning_effort: reasoningEffort,
       ...(isCreativeProject ? { template: "creative" } : {}),
     };
 
