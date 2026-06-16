@@ -858,7 +858,7 @@ export function FlowReportView({
                   Model: {MODEL_LABELS[report.model_used] ?? report.model_used}
                   {" "}({report.flow_meta?.temperature_used == null
                     ? "model-controlled temperature"
-                    : `temperature ${report.flow_meta.temperature_used}`})
+                    : `temperature ${report.flow_meta.temperature_used}`}{formatReasoningDisclosure(report.flow_meta)})
                   {" "}· Generated{" "}
                   {new Date(report.created_at).toLocaleString()}
                 </p>
