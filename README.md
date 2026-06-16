@@ -10,8 +10,6 @@
 Sylou is a text editor that helps you write with AI assistance and analyses your collaboration with AI using a standardized framework that looks into the processes of writing: where ideas came from, what got structured by whom, how the prose itself was shaped, etc.
 Instead of detecting whether AI was used, Sylou tracks *how* you and AI worked together and assesses the respective contributions of each, producing visual and shareable reports along the way.
 
-It is open-source software designed for self-managed deployment on Supabase plus a static hosting provider for the frontend (Vercel, Cloudflare, or similar), using your own accounts. You bring the cloud accounts, the LLM API keys, and the domain; Sylou provides the application code.
-
 It's designed for writers, students, educators, researchers, and anyone who cares about AI-use transparency and is looking to proactively demonstrate how they have used AI, in a clear, visual and insightful way.
 
 ---
@@ -59,7 +57,8 @@ Sylou is built on React + TypeScript on the frontend, Supabase (PostgreSQL + Edg
 
 ## Try it
 
-There's no public hosted instance. The `sylou.eu` instance is maintainer-only, sign-ups are disabled. To use Sylou, **self-host your own instance**.
+There's no public hosted instance. The `sylou.eu` instance is maintainer-only, sign-ups are disabled. To use Sylou, **deploy your own instance**.
+It is open-source software designed for self-managed deployment on Supabase plus a static hosting provider for the frontend (Vercel, Cloudflare, or similar), using your own accounts. You bring the cloud accounts, the LLM API keys, and the domain; Sylou provides the application code.
 
 Setup is documented in [**docs/setup.md**](docs/setup.md). At a high level, you'll need:
 
