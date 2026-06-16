@@ -523,6 +523,16 @@ export async function callLLM(opts: {
           // Anthropic-only `effort` is intentionally NOT forwarded here.
           reasoning_effort: provider === "mistral" ? opts.mistral_effort : undefined,
         });
+  // Mistral quirk: `temperature === 0` triggers greedy sampling, and the
+  // API then rejects the request unless `top_p` is exactly 1.0
+  // (HTTP 400, code 3054, "top_p must be 1 when using greedy sampling").
+  // Inject it here so FLOW (which deliberately runs at temperature 0 for
+  // determinism) works on all Mistral models including Medium 3.5.
+  // Scoped to Mistral only: Anthropic uses a different body shape and
+  // DeepSeek doesn't have this constraint.
+  if (provider === "mistral" && (body as Record<string, unknown>).temperature === 0) {
+    (body as Record<string, unknown>).top_p = 1;
+  }
   // Diagnostic: log the top-level keys + reasoning-control fields of the
   // outgoing body. Skipped for streaming requests to avoid log spam on token
   // deltas. Excludes `messages` / `system` / `tools` so the line stays well
@@ -541,6 +551,7 @@ export async function callLLM(opts: {
     if (b.thinking !== undefined) logLine.thinking = b.thinking;
     if (b.output_config !== undefined) logLine.output_config = b.output_config;
     if (b.reasoning_effort !== undefined) logLine.reasoning_effort = b.reasoning_effort;
+    if (b.top_p !== undefined) logLine.top_p = b.top_p;
     console.log("[callLLM] outbound", JSON.stringify(logLine));
   }
   return await fetch(endpointFor(provider), {
