@@ -33,8 +33,6 @@ export const MODELS: ModelInfo[] = [
     provider: "mistral",
     pricing: { input: 0.15, output: 0.60 },
     contextLimit: 256_000,
-    isExperimental: true,
-    note: "Reasoning model — fastest Mistral tier",
   },
   {
     id: "mistral-medium-3-5",
@@ -42,7 +40,7 @@ export const MODELS: ModelInfo[] = [
     provider: "mistral",
     pricing: { input: 1.50, output: 7.50 },
     contextLimit: 256_000,
-    note: "Reasoning model",
+    note: "Recommended for FLOW analysis",
   },
   {
     id: "mistral-large-2512",
@@ -65,7 +63,6 @@ export const MODELS: ModelInfo[] = [
     provider: "anthropic",
     pricing: { input: 5.0, output: 25.0 },
     contextLimit: 1_000_000,
-    note: "Recommended for FLOW analysis",
   },
   {
     id: "deepseek-chat",
