@@ -134,8 +134,12 @@ It's provided as-is, without warranty of any kind. That said, it's used daily by
 
 Below are the key functionalities that the maintainer would like to implement post-launch:
 
+- **FLOW analysis input token optimization** without impacting negatively the outputs and keeping the same transparency. 
+
 - **Dedicated functionalities for very large pieces of work** (novels, doctoral dissertations, etc.): such as multiple FLOW methodology layers combining into a global analysis (being investigated). 
+
 Sylou has been extensively tested by the maintainer with small to medium-sized works, and is being tested with large-scale works. We plan to transparently share quantitative data of the behavior of the different LLMs and underlying setup (thinking, effort level, etc.) when running FLOW analyses on such large works. 
+
 Building the appropriate test cases naturally takes time; if you're interested to contribute, don't hesitate to reach out. Feedback derived from such tests will help guide the development of the functionalities. See also [**CONTRIBUTING.md**](CONTRIBUTING.md).
 
 Besides the above, we're of course open to suggestions and feedback. 
