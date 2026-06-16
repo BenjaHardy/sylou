@@ -1354,10 +1354,16 @@ ${writePillarNotice}`;
       reasoningProvider = "anthropic";
       reasoningThinking = typeof thinking === "boolean" ? thinking : null;
       reasoningEffort = effort ?? null;
-    } else if (mistralEffort !== undefined) {
+    } else if (MISTRAL_REASONING_MODELS.has(flowModel)) {
       reasoningProvider = "mistral";
       reasoningThinking = null;
-      reasoningEffort = mistralEffort;
+      // Raw configured effort for disclosure — diverges from the wire-call
+      // value (mistralEffort, line 989) which resolves "none" to undefined
+      // so the field is omitted from the Mistral API request body.
+      // Fallback to "none" defends against a future model being added to
+      // MISTRAL_REASONING_MODELS without a corresponding FLOW_MISTRAL_EFFORT
+      // entry — silent missing disclosure would be worse than a sane default.
+      reasoningEffort = FLOW_MISTRAL_EFFORT[flowModel] ?? "none";   // "high" | "none"
     }
 
     const flowMeta: Record<string, unknown> = {
