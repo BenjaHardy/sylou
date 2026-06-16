@@ -16,6 +16,7 @@ import {
   PILLAR_KEYS,
   extractUserAssessment,
   extractFeedbackScores,
+  formatReasoningDisclosure,
 } from "@/components/flow-report/shared-utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
