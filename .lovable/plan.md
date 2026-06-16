@@ -1,73 +1,47 @@
-## Goal
+# Fix: Mistral "none" effort missing from FLOW report footer
 
-Disclose the reasoning/thinking/effort settings alongside the existing temperature line at the bottom of FLOW reports (owner view, shared view, exports).
+## Problem
 
-## Storage shape (provider-agnostic)
+For `mistral-medium-3-5` (FLOW default, effort set to `"none"` to avoid connection timeouts), the FLOW report footer shows only temperature — no reasoning disclosure at all. The `flow_meta` for these reports has `reasoning_provider: null, reasoning_thinking: null, reasoning_effort: null`.
 
-Three new optional fields on `flow_meta`:
+## Root cause
 
-- `reasoning_provider: string | null` — e.g. `"anthropic"`, `"mistral"`. `null` when the model has no reasoning controls (DeepSeek, non-reasoning Mistral).
-- `reasoning_thinking: boolean | null` — adaptive thinking on/off. `null` when not applicable to the provider.
-- `reasoning_effort: string | null` — loosely typed `string` so new provider enum values don't force a schema change. `null` when not applicable.
+`resolveMistralEffort` returns `undefined` when the configured value is `"none"` (correct for the wire call — we omit the field from the Mistral API request), but `analysis/index.ts:1360` uses that same value to populate `flow_meta.reasoning_effort`, so `"none"` is silently lost.
 
-Legacy reports lack all three fields → helper returns `""` and the existing temperature line renders unchanged.
+## Fix (one file, one inline expression)
 
-## Changes
+### `supabase/functions/analysis/index.ts`
 
-### 1. Edge function — populate the fields
+Import `MISTRAL_REASONING_MODELS` alongside the existing imports from `_shared/_thinking.ts` (line 15).
 
-`supabase/functions/analysis/index.ts`, in the `flow_meta` literal (~line 1360):
+In the reasoning-disclosure block (lines 1350–1361), change the Mistral branch to read the **raw configured effort** for disclosure:
 
-- Claude: `reasoning_provider: "anthropic"`, `reasoning_thinking: thinking`, `reasoning_effort: effort ?? null`.
-- Mistral reasoning model (`mistralEffort !== undefined`): `reasoning_provider: "mistral"`, `reasoning_thinking: null`, `reasoning_effort: mistralEffort`.
-- Otherwise: all three `null`.
+```ts
+} else if (MISTRAL_REASONING_MODELS.has(flowModel)) {
+  reasoningProvider = "mistral";
+  reasoningThinking = null;
+  reasoningEffort = FLOW_MISTRAL_EFFORT[flowModel] ?? "none";   // "high" | "none"
+}
+```
 
-### 2. Type — `FlowMeta` in `src/hooks/useFlowAnalysis.ts`
+Replace the previous `else if (mistralEffort !== undefined)` condition. The `mistralEffort` variable (line 989) stays unchanged and continues to drive the wire call correctly.
 
-Add the three optional fields with JSDoc explaining provider-agnostic semantics and that `undefined` (vs. `null`) signals a legacy pre-disclosure report.
+Net effect:
+- `mistral-medium-3-5` at `"none"` → `flow_meta` contains `{ reasoning_provider: "mistral", reasoning_thinking: null, reasoning_effort: "none" }` → footer displays `, reasoning_effort none`.
+- `mistral-small-2603` at `"high"` → unchanged, still displays `, reasoning_effort high`.
+- Claude paths unchanged.
+- Mistral API requests still omit `reasoning_effort` when `"none"` (driven by `mistralEffort` variable, untouched).
 
-### 3. Shared helper — `formatReasoningDisclosure(meta)` in `src/components/flow-report/shared-utils.ts`
+## Verification check after implementation
 
-Returns a leading-comma fragment (e.g. `", thinking on, effort high"`) or `""`. Exhaustive truth table for the helper — defensive against every combination:
+Eyeball-confirm in the edited file that:
+- The `mistralEffort` variable (line ~989, drives the wire call) and the new `reasoningEffort` variable (drives `flow_meta`) are clearly separate in the code.
+- No accidental overlap or reuse between them.
 
-| `reasoning_provider` | `reasoning_thinking` | `reasoning_effort` | Output |
-|---|---|---|---|
-| `undefined` (legacy) | — | — | `""` |
-| `null` | — | — | `""` |
-| `"anthropic"` | `true` | `"high"` (any string) | `", thinking on, effort high"` |
-| `"anthropic"` | `false` | `"high"` (any string) | `", thinking off, effort high"` |
-| `"anthropic"` | `true` | `null` | `", thinking on"` |
-| `"anthropic"` | `false` | `null` | `", thinking off"` |
-| `"anthropic"` | `null` | `"high"` (any string) | `", effort high"` |
-| `"anthropic"` | `null` | `null` | `""` |
-| `"mistral"` | — | `"high"`/`"none"`/any string | `", reasoning_effort high"` |
-| `"mistral"` | — | `null` | `""` |
-| any other string (future provider) | — | `"x"` | `", reasoning_effort x"` (effort-only fallback) |
-| any other string | — | `null` | `""` |
+This confirms the "Mistral API requests still omit `reasoning_effort` when `"none"`" claim.
 
-Rules in prose:
-- Legacy or fully-null reasoning metadata → empty string (no segment, no stray comma).
-- Anthropic: emit `thinking {on|off}` only if `reasoning_thinking` is a boolean; emit `effort {value}` only if `reasoning_effort` is a non-empty string; join with `, ` and prepend `, ` to the whole segment; if both pieces are absent → empty string.
-- Mistral: emit `reasoning_effort {value}` only if `reasoning_effort` is a non-empty string; `reasoning_thinking` is intentionally ignored even if set.
-- Unknown provider with an effort value → fall back to the Mistral-style `reasoning_effort {value}` rendering so future providers degrade gracefully without a code change.
-- Empty-string `reasoning_effort` is treated the same as `null` (defensive).
+## Validation
 
-A small inline unit test alongside the helper (vitest, same folder pattern as existing tests) covers each row of the table.
-
-### 4. Display sites
-
-Splice the helper output immediately after the existing temperature parenthetical in:
-
-- `src/components/FlowReportView.tsx` — both disclosure blocks (~lines 432 and 859).
-- `src/pages/SharedReport.tsx` — disclosure block (~lines 417–423).
-- `src/lib/export-docx.ts` — wherever the model/temperature line is composed.
-- `src/lib/export-json.ts` — verify the full `flow_meta` is serialized without an allowlist; if allowlisted, add the three fields.
-- PDF: inherits from `FlowReportView` via the browser print path — no separate code path.
-
-A quick read of `export-docx.ts` and `export-json.ts` happens before editing to confirm exact splice points.
-
-## Out of scope
-
-- No DB migration (`flow_meta` is `jsonb`).
-- No backfill of historical reports.
-- No change to the LLM request itself.
+- No DB migration or client code changes needed.
+- After auto-deploy, trigger a new FLOW analysis with `mistral-medium-3-5`; footer should read `temperature 0, reasoning_effort none`.
+- Old reports remain as-is (legacy `flow_meta`).
