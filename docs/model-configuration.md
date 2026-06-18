@@ -1,0 +1,198 @@
+# Model Configuration Reference
+
+This document tracks how Sylou configures each LLM model across the four edge functions (FLOW analysis, Chat, Editor actions, Context-prompt). It serves as a single source of truth for what's set where, why, and how the models behave in practice.
+
+**When to update this document:**
+
+- A new model is added to `src/lib/models.ts`
+- A temperature, effort, or thinking value is changed in `_temperatures.ts` or `_thinking.ts`
+- Observed model behavior changes (e.g., a model's response quality changes after a provider update)
+
+**Last updated:** June 2026
+
+---
+
+## Quick reference
+
+| Model              | Provider  | Pricing (in/out per 1M) | Context (input token limit) | API ID               |
+| ------------------ | --------- | ----------------------- | --------------------------- | -------------------- |
+| Claude Sonnet 4.6  | Anthropic | $3.00 / $15.00          | 1M                          | `claude-sonnet-4-6`  |
+| Claude Opus 4.8    | Anthropic | $5.00 / $25.00          | 1M                          | `claude-opus-4-8`    |
+| Mistral Large 3    | Mistral   | $0.50 / $1.50           | 256K                        | `mistral-large-2512` |
+| Mistral Medium 3.5 | Mistral   | $1.50 / $7.50           | 256K                        | `mistral-medium-3-5` |
+| Mistral Small 4    | Mistral   | $0.15 / $0.60           | 256K                        | `mistral-small-2603` |
+| DeepSeek Chat      | DeepSeek  | $0.14 / $0.28           | 64K                         | `deepseek-chat`      |
+
+*Pricing as of June 2026; verify against provider pricing pages before publishing.*
+
+---
+
+## Configuration by model × function
+
+### FLOW (analysis)
+
+The most analytically demanding function. All models targeted for determinism (temperature 0) when possible, with reasoning enabled where supported.
+
+| Model              | Temperature                  | Thinking / Effort                                      | max_tokens (output) | Notes                                                                                           |
+| ------------------ | ---------------------------- | ------------------------------------------------------ | ------------------- | ----------------------------------------------------------------------------------------------- |
+| Claude Sonnet 4.6  | 0.0                          | thinking: off, effort: high (matches provider default) | 8192                | Recommended Claude model for FLOW; quality and repeatability.                                          |
+| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high                       | 16000               | Adaptive thinking; consumes more tokens, not recommended except for specific scenarios.         |
+| Mistral Large 3    | 0.0                          | n/a (no reasoning support)                             | 8192                | *Not* recommended, strong inherent bias towards the user.                                       |
+| Mistral Medium 3.5 | 0.0                          | reasoning_effort: off                                  | 8192                | Recommended Mistral model for FLOW; quality and repeatability. |
+| Mistral Small 4    | 0.0                          | reasoning_effort: high                                 | 16000               | *Not* recommended, bias towards the user, poor repeatability.  |
+| DeepSeek Chat      | 0.0                          | n/a                                                    | 8192                | *Not* recommended, bias towards the user, poor repeatability.  |
+
+**Rationale for FLOW settings:**
+
+- max_tokens 16000 for reasoning models: thinking chunks consume output budget; insufficient headroom causes truncation and validation failures.
+- Mistral Medium 3.5 reasoning effort set to off, otherwise analysis risks hitting Supabase connection timeouts.
+- Opus 4.7+ excluded from temperature setting (returns 400 if non-default temperature is sent).
+
+---
+
+### Chat
+
+Conversational responses. Quality matters; reasoning effort calibrated per model tier.
+
+| Model              | Temperature                  | Thinking / Effort                | max_tokens (output) | Notes                                                                 |
+| ------------------ | ---------------------------- | -------------------------------- | ------------------- | --------------------------------------------------------------------- |
+| Claude Sonnet 4.6  | 1.0                          | thinking: off, effort: high      | 2000                | Default chat behavior.                                                |
+| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high | 4000                | Adaptive thinking; raises max_tokens.                                 |
+| Mistral Large 3    | 0.7                          | n/a                              | 2000                | Standard chat.                                                        |
+| Mistral Medium 3.5 | 0.7                          | reasoning_effort: high           | 4000                | Mistral "Quality tier" — reasoning enabled.                           |
+| Mistral Small 4    | 0.7                          | reasoning_effort: none           | 2000                | Mistral "Speed tier" — no thinking chunk; ideal for cheap, fast chat. |
+| DeepSeek Chat      | 0.7                          | n/a                              | 2000                | Standard, cheap chat.                                                 |
+
+**Rationale for Chat settings:**
+
+- Temperature — provider default: 1.0 for Claude Sonnet, 0.7 for Mistral; allows natural variation for conversational warmth.
+- Reasoning effort tier-matched — Medium 3.5 ("quality tier") gets reasoning; Small ("speed tier") doesn't.
+- max_tokens 4000 for reasoning models — same logic as FLOW, smaller bump since chat responses are shorter.
+
+---
+
+### Editor actions (Translate, Fix Grammar, Rewrite, Simplify, Expand)
+
+Inline rewrites and proposals from within the editor. Latency-sensitive.
+
+| Model              | Temperature                  | Thinking / Effort                | max_tokens (output) | Notes                                           |
+| ------------------ | ---------------------------- | -------------------------------- | ------------------- | ----------------------------------------------- |
+| Claude Sonnet 4.6  | 1.0                          | thinking: off, effort: high      | 1000                | Fast inline action.                             |
+| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high | 2500                | Adaptive thinking; raises max_tokens.           |
+| Mistral Large 3    | 0.7                          | n/a                              | 1000                | Standard.                                       |
+| Mistral Medium 3.5 | 0.7                          | reasoning_effort: none           | 1000                | No reasoning — editor actions should be snappy. |
+| Mistral Small 4    | 0.7                          | reasoning_effort: none           | 1000                | Same as Medium for editor.                      |
+| DeepSeek Chat      | 0.7                          | n/a                              | 1000                | Standard.                                       |
+
+**Rationale for Editor settings:**
+
+- Reasoning disabled for Mistral — editor actions are short, latency-sensitive; thinking-chunk overhead isn't justified.
+- Lower max_tokens (1000) — proposals are inherently short.
+
+---
+
+### Context-prompt (work summarization, Ask/Propose actions)
+
+Provides AI features with context grounded in the written work. Used by Ask/Propose and underlying work summaries.
+
+| Model | Temperature | Thinking / Effort | max_tokens (summary) (output) | max_tokens (response) (output) | Notes |
+|---|---|---|---|---|
+| Claude Sonnet 4.6 | 1.0 | thinking: off, effort: high | 1000 | 2000 | Standard. |
+| Claude Opus 4.8 | undefined (model-controlled) | thinking: adaptive, effort: high | 2500 | 4000 | Adaptive thinking. |
+| Mistral Large 3 | 0.7 | n/a | 1000 | 2000 | Standard. |
+| Mistral Medium 3.5 | 0.7 | reasoning_effort: high | 2500 | 4000 | Mistral quality tier — reasoning helps with nuanced AI features. |
+| Mistral Small 4 | 0.7 | reasoning_effort: none | 1000 | 2000 | Mistral speed tier. |
+| DeepSeek Chat | 0.7 | n/a | 1000 | 2000 | Standard. |
+
+**Rationale for Context-prompt settings:**
+
+- Matches Chat defaults — context-prompt powers Ask/Propose user-facing features, so quality posture should align with chat.
+
+---
+
+## Where settings live in code
+
+| Setting                                       | File                                          | Notes                                                                                             |
+| --------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Model registry (which models exist)           | `src/lib/models.ts`                           | Pricing, labels, default chat model.                                                              |
+| Temperature per function × model              | `supabase/functions/_shared/_temperatures.ts` | Four tables: `FLOW_TEMPERATURE`, `CHAT_TEMPERATURE`, `EDITOR_TEMPERATURE`, `CONTEXT_TEMPERATURE`. |
+| Claude thinking + effort per function × model | `supabase/functions/_shared/_thinking.ts`     | Tables: `*_THINKING`, `*_EFFORT`.                                                                 |
+| Mistral reasoning_effort per function × model | `supabase/functions/_shared/_thinking.ts`     | Tables: `*_MISTRAL_EFFORT`.                                                                       |
+| Reasoning-supported Mistral models            | `supabase/functions/_shared/_thinking.ts`     | `MISTRAL_REASONING_MODELS` set.                                                                   |
+| max_tokens base values + raise rules          | `supabase/functions/_shared/_thinking.ts`     | `resolveMaxTokens()` function.                                                                    |
+| Anthropic models without temperature          | `supabase/functions/_shared/_temperatures.ts` | `NO_TEMPERATURE_MODELS` set.                                                                      |
+| Body-level wire format (per provider)         | `supabase/functions/_shared/_llm.ts`          | `toAnthropicBody`, `toOpenAIBody`.                                                                |
+
+---
+
+## Known model-specific constraints
+
+- **Claude Opus 4.7+ family**: Returns 400 if `temperature` is set to any non-default value. Must omit the field entirely via `NO_TEMPERATURE_MODELS`.
+- **Mistral Large 3**: Returns 422 if `reasoning_effort` is set. Field guarded by `MISTRAL_REASONING_MODELS` in `toOpenAIBody`.
+- **Mistral Magistral models**: Reason natively; reject `reasoning_effort` parameter. Not currently in Sylou's registry but worth noting if added.
+- **Anthropic Structured Outputs**: Strips most JSON Schema constraints (`maxItems`, `minLength`, `maximum`, etc.). Schema sanitizer in `_llm.ts` handles this transparently.
+
+---
+
+## Checklist: Adding a New Model to Sylou
+
+1. Register the model in the frontend
+   
+    Add entry to MODELS array in src/lib/models.ts (id, label, provider, pricing, contextLimit, note).
+    Add legacy alias to MODEL_LABELS if this model replaces an existing ID (so historical reports/chat messages still render a friendly label).
+    Update DEFAULT_CHAT_MODEL and/or DEFAULT_FLOW_MODEL in src/lib/models.ts if this model becomes a new default.
+
+2. Register the model in edge functions
+   
+    Update fallback model strings in each edge function that references a default:
+   
+        supabase/functions/chat/index.ts
+        supabase/functions/analysis/index.ts
+        supabase/functions/editor-action/index.ts
+        supabase/functions/context-prompt/index.ts
+   
+    Add temperature entries in supabase/functions/_shared/_temperatures.ts for every function where behavior should differ from the provider default.
+   
+        For FLOW_TEMPERATURE, always use 0.0.
+        For other functions, use the conservative provider default (e.g., 0.7 for Mistral, 1.0 for Claude/DeepSeek).
+        If a model rejects any non-default temperature with HTTP 400, add it to NO_TEMPERATURE_MODELS.
+   
+    Add reasoning/effort entries in supabase/functions/_shared/_thinking.ts if the model supports configurable reasoning:
+   
+        Claude: add to *_THINKING and *_EFFORT tables (Sonnet, Opus).
+        Mistral: add to *_MISTRAL_EFFORT tables and to the MISTRAL_REASONING_MODELS allowlist.
+        DeepSeek: only if using deepseek-reasoner; deepseek-chat has no reasoning toggle.
+   
+    Check NO_TEMPERATURE_MODELS in _temperatures.ts (Anthropic Opus 4.7+ rejects temperature).
+
+3. Adjust token budgets (if needed)
+   
+    Review base max_tokens values in edge function calls. Only change these if the new model has a hard output limit lower than our current bases.
+   
+        resolveMaxTokens() automatically scales headroom when reasoning/thinking is enabled, so base values typically stay the same.
+
+4. Update schema defaults (if this is a new system default)
+   
+    Add a Supabase migration to update column defaults on profiles.preferred_chat_model and/or profiles.preferred_flow_model so new users inherit the new default.
+
+5. Update documentation
+   
+    Add a row to the configuration tables (FLOW, Chat, Editor, Context-prompt) in this document.
+
+6. Verify and test
+   
+    Deploy and inspect [callLLM] outbound logs for a test call. Verify:
+   
+        temperature matches the table value.
+        thinking / effort / reasoning_effort are present and correct.
+        max_tokens is scaled appropriately when reasoning is on.
+        For Mistral at temperature: 0, top_p: 1 is auto-injected (avoids greedy-sampling errors).
+
+---
+
+## References
+
+- Anthropic Claude migration guide: https://platform.claude.com/docs/en/about-claude/models/migration-guide
+- Anthropic Structured Outputs: https://platform.claude.com/docs/en/build-with-claude/structured-outputs
+- Mistral adjustable reasoning: https://docs.mistral.ai/capabilities/reasoning/adjustable
+- Mistral model overview: https://docs.mistral.ai/getting-started/models/models_overview/
