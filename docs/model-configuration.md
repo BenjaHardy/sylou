@@ -96,7 +96,7 @@ Inline rewrites and proposals from within the editor. Latency-sensitive.
 Provides AI features with context grounded in the written work. Used by Ask/Propose and underlying work summaries.
 
 | Model | Temperature | Thinking / Effort | max_tokens (summary) (output) | max_tokens (response) (output) | Notes |
-|---|---|---|---|---|
+|---|---|---|---|---|---|
 | Claude Sonnet 4.6 | 1.0 | thinking: off, effort: high | 1000 | 2000 | Standard. |
 | Claude Opus 4.8 | undefined (model-controlled) | thinking: adaptive, effort: high | 2500 | 4000 | Adaptive thinking. |
 | Mistral Large 3 | 0.7 | n/a | 1000 | 2000 | Standard. |
