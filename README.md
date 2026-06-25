@@ -8,24 +8,19 @@
 **Process-based AI-use transparency - an open-source writing environment that makes human-AI collaboration visible.**
 
 Sylou is a text editor that helps you write with AI assistance and analyses your collaboration with AI using a standardized framework that looks into the processes of writing: where ideas came from, what got structured by whom, how the prose itself was shaped, etc.
-Instead of detecting whether AI was used, Sylou tracks *how* you and AI worked together and assesses the respective contributions of each, producing visual and shareable reports along the way.
+As it's becoming ever more difficult to identify whether AI was used in a text and *how* it was used, with standard detection tools being unreliable, Sylou aims to flip the problem: helping users gather evidence and proactively demonstrate how they have used AI, using a standardized framework that looks into the processes of writing, producing visual and shareable reports along the way.
 
-It's designed for writers, students, educators, researchers, and anyone who cares about AI-use transparency and is looking to proactively demonstrate how they have used AI, in a clear, visual and insightful way.
+Sylou's whole point is to make human-AI collaboration visible for users willing to show this transparency. It's designed for writers, students, educators, researchers, and anyone who cares about AI-use transparency and is looking to proactively demonstrate how they have used AI, in a clear, visual and insightful way.
 
 ---
 
-## Why Sylou
-
-AI is used more and more to help with writing, however common AI detection tools don't work reliably, and it's becoming ever more difficult to identify whether AI was used to produce a text and *how* it actually contributed to it. People willing to spend more time and effort on a personal work eventually end up penalized.
-
-Sylou flips the problem: if it's becoming ever more difficult to detect whether AI was used in a text, it should however be possible to help users gather evidence and proactively demonstrate how they have used AI. 
-Sylou's whole point is to make human-AI collaboration visible for users willing to show this transparency.
+## The FLOW methodology
 
 Sylou analyses human-AI collaboration across four dimensions thanks to a structured analysis framework — FLOW — that maps how AI assistance and human work fit together across the full lifecycle of the writing process.
 
 Each dimension is assessed independently, producing a dedicated and sharable FLOW report, as well as a FLOW profile that describes a collaboration style for your work: one of sixteen possible types, inspired by personality-type frameworks.
 
-FLOW describes the writing process and doesn't make any judgment: there is no pass or fail, only a structured analysis of who contributed to what and how. And it exists alongside your own self-evaluation, if provided.
+FLOW describes the writing process, with no pass or fail, only a structured analysis of who contributed to what and how. And it exists alongside your own self-evaluation, if provided.
 
 The four FLOW pillars are:
 F — Find: research and critical thinking (research it)
@@ -83,15 +78,16 @@ The provenance tags are as follows:
 - `[ce]` — copied from elsewhere
 - `[ai]` — inserted via AI tools (Propose, Expand, Simplify, etc.)
  
-The whole architecture is designed with transparency in mind, so that relevant interactions are logged for the analysis, and to avoid any idea misallocation from the user to the AI. Whenever the AI looks at the contents of the writing to reply to a query, a relevant work summary is produced, timestamped and logged, to ensure that work contents reprised in ensuing feedback and comments from AI are not misallocated as being AI's.
+The whole architecture is designed with transparency in mind, so that relevant interactions are logged for the analysis, and to avoid any idea misallocation from the user to the AI. 
 
 The result is rendered as a FLOW report, which can be kept private or shared via a public URL.
 
-A more thorough explanation of the transparency mechanisms, as well as the recommended LLM and settings to use for the FLOW analysis, is in [**docs/transparency.md**](docs/transparency.md).
+A more thorough explanation of the transparency mechanisms is in [**docs/transparency.md**](docs/transparency.md).
+The recommended LLM and settings to use for the FLOW analysis can be found in [**docs/model-configuration.md**](docs/model-configuration.md).
 
 ---
 
-## Open source, openly developed
+## Open source
 
 Sylou is open-source software released under [**AGPL-3.0**](LICENSE). The FLOW methodology is published separately under [**CC BY-SA 4.0**](LICENSE-METHODOLOGY). Anyone can inspect the code, modify it, self-host it, or adapt the methodology under the terms of those licenses.
 
@@ -144,15 +140,6 @@ Building the appropriate test cases naturally takes time; if you're interested t
 
 Besides the above, we're of course open to suggestions and feedback. 
 If not done already, feel also free to take a look at our Tally questionnaire, which includes a dedicated question for feedback on possible future functionalities.
-
----
-
-## Why not an offline version?
-
-An offline prototype of Sylou was originally created, using local LLMs that run on the user's computer. Based on initial tests, they do produce acceptable (but less reliable) FLOW analysis for small to medium-sized works. 
-The key limitation, however, rests with the input token limit, which is directly dependent on the available VRAM, thereby limiting heavily the accessibility of the prototype and making very difficult the analysis of large works of more than just a few pages - unless we introduce summarize-then-analyze steps that may impact the quality of the FLOW methodology output.
-For this reason, as well as the loss of URL-based shared reports functionalities, it was ultimately disregarded. 
-If you're interested in an offline version, or in a self-hostable version, feel free to raise it, and we'll eventually consider it.
 
 ---
 
