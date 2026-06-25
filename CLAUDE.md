@@ -1,0 +1,189 @@
+# Sylou — project context & conventions
+
+Context and conventions for Sylou, for human contributors and AI coding
+agents (Claude Code auto-loads this file by name). Committed to the repo.
+
+Convention for this file: rules describing **current** behavior are stated
+as present-tense fact; forward-looking rules that are **not yet built** are
+marked `(not yet implemented)` so they're not mistaken for current state.
+
+## 1. What this is
+Sylou is a writing + reflection app built around the FLOW methodology
+(Find / Lead / Organize / Write). Users draft in a TipTap editor, chat
+with an AI assistant, and run FLOW analyses that score their process
+across four pillars (0.0–5.0) and assign one of 16 work-profile codes.
+See `README.md` and `docs/` for product depth.
+
+## 1b. Open source
+Sylou is open-source and dual-licensed: code under AGPL-3.0, FLOW methodology under
+CC BY-SA 4.0. See LICENSE files for details.
+The repo is intended to be public; contributions go through PRs.
+Don't introduce proprietary dependencies or closed-source patterns.
+Apply strict coding standards to avoid future code liabilities for the open-source project.
+
+## 2. Stack
+- React 18, Vite 5, TypeScript 5, Tailwind v3, shadcn/ui
+- React Router, TipTap v2 (custom font-size + pagination extensions)
+- Supabase via Lovable Cloud; Edge Functions in `supabase/functions/`
+- Vitest + Playwright (`playwright-fixture.ts`)
+- LLM providers: Anthropic (Sonnet 4.6, Opus 4.8), Mistral (Large 3,
+  Medium 3.5, Small 4), DeepSeek (deepseek-chat).
+
+Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
+→ `src/components/ProjectContentArea.tsx`.
+
+## 3. Where things live
+(Lists below are representative, not exhaustive.)
+- `src/components/` — feature UI; notable subtrees `flow-report/`, `creative-tools/`, `ui/` (shadcn).
+- `src/hooks/` — data + persistence (`useWritingContent`, `useChatMessages`,
+  `useFlowAnalysis`, `useProvenanceTracker`, `usePostIts`, `useBookmarks`,
+  `useCreativeData`, `useProjects`, `useUserSettings`, `useInstanceConfig`).
+- `src/contexts/` — `AuthContext`, `UserSettingsContext`, `CreativeAIContext`.
+- `src/lib/` — pure utilities: `provenance-tracker.ts`, `flowBands.ts`,
+  `flow-work-profiles.ts`, `flow-profile-paintings.ts`, `export-docx.ts`,
+  `export-json.ts`, `markdown-to-pm.ts`, `tiptap-font-size.ts`,
+  `editor-extensions/pagination.ts`, `sse-stream.ts`, `estimateTokens.ts`.
+- `supabase/functions/_shared/` — `_llm.ts` (provider router), `_repair.ts`,
+  `_temperatures.ts`, `_thinking.ts`.
+- Edge functions (7): `chat`, `analysis`, `editor-action`, `context-prompt`,
+  `extract-text`, `share-report`, `config`.
+
+## 4. Conventions (mirror these; don't drift)
+- **Layout**: root is `h-screen overflow-hidden`; flex parents get
+  `min-h-0`; inactive panels are hidden via `display: none`, never
+  unmounted (state would be lost).
+- **Styling**: only semantic tokens from `src/index.css`. No hardcoded
+  colors in UI (`text-white`, `bg-black`, `bg-[#...]`, inline hex). Light
+  theme, parchment secondary background, primary blue, Silver Lake Blue
+  for FLOW. Theme shadcn via variants, don't fork components.
+  *Intentional exception:* the FLOW band/profile palettes in `flowBands.ts`
+  / `flow-work-profiles.ts` are domain data (an AI→Human gradient), not
+  styling — raw hex there is expected. (A handful of stray inline hex
+  colors in components, e.g. the FLOW button, predate this rule and are
+  audit-cleanup targets, not precedent.)
+- **Persistence**: debounced auto-save; awaited flushes block project
+  navigation; flush functions held in stable refs.
+- **Provenance**: native ProseMirror mapping, bias left (-1) for
+  insertions; pending-signal pattern in `provenance-tracker.ts`.
+- **Transparency logging** (load-bearing — see §7): the evolving
+  `writing_summary_log` is deliberately **withheld from FLOW** (the
+  `analysis` function never reads it). The writing summary reaches FLOW
+  only as a chat message flagged `flow_flag='not_assessed'` (the per-turn
+  delta, never the full summary). `Ask` persists in the same request;
+  `Propose` defers all chat + summary-log writes to the `context-prompt`
+  CONFIRM endpoint, so a rejected proposal mutates neither. Don't collapse
+  these paths.
+- **RLS**: security-definer functions (`owns_project`, `owns_thread`)
+  verify ownership through the profile → project hierarchy; project-child
+  tables gate on `owns_project(project_id)`. There is **no role system
+  today** `(not yet implemented)` — if roles are ever added, put them in a
+  dedicated `user_roles` table, never on profiles or client storage.
+- **Migrations**: every `public` `CREATE TABLE` is followed by
+  `ENABLE ROW LEVEL SECURITY` and per-op policies (`TO authenticated`,
+  USING/WITH CHECK on ownership). Add an explicit `GRANT` only where a
+  non-default role needs access — e.g. `GRANT SELECT … TO anon` on the
+  sanitized `flow_reports_public` view. Tables otherwise rely on the
+  default `authenticated`-role grants + RLS.
+- **Secrets**: Edge functions read secrets via `Deno.env.get("NAME")`;
+  values are injected by the host (Lovable secrets / `supabase secrets
+  set`), never committed. Frontend only reads publishable values via
+  `import.meta.env.VITE_*`; private keys stay server-side.
+
+## 5. AI routing
+- Model registry: `src/lib/models.ts` (id, label, provider, pricing, context limit).
+- Users pick two models in Settings: `preferred_chat_model` and
+  `preferred_flow_model` on `profiles`. Editor-action and context-prompt
+  reuse `preferred_chat_model` — there is no separate per-function picker.
+- **Provider wire format** (`_shared/_llm.ts`): routing is by model-id
+  prefix (`claude-*` → Anthropic, `deepseek-*` → DeepSeek, else Mistral).
+  Two body translators only — `toAnthropicBody` and `toOpenAIBody`;
+  **DeepSeek shares the OpenAI path with Mistral** (no third translator).
+  `normaliseResponse` maps every provider back to OpenAI shape so callers
+  don't branch.
+- **FLOW structured output**: for Anthropic, `analysis` uses **Structured
+  Outputs** (json_schema) plus a repair-then-retry loop (`_repair.ts` fixes
+  Claude's occasional stringified-pillar output; one retry on validation
+  failure). Mistral/DeepSeek use forced tool-calling for the same schema;
+  both converge through `normaliseResponse`.
+- Per-model knobs live in `supabase/functions/_shared/`:
+  - `_temperatures.ts` — `{FLOW,CHAT,EDITOR,CONTEXT}_TEMPERATURE` tables
+    + `NO_TEMPERATURE_MODELS` (Opus 4.7 and 4.8 reject any non-default
+    temperature with HTTP 400 — do NOT generalize to all Claude models).
+  - `_thinking.ts` — `*_THINKING` / `*_EFFORT` (Claude),
+    `*_MISTRAL_EFFORT` + `MISTRAL_REASONING_MODELS` allowlist
+    (Mistral Large 3 returns 422 if `reasoning_effort` is sent),
+    and `resolveMaxTokens()` for thinking-aware budget headroom.
+- **One router bypass**: `extract-text` summarizes imported docs with a
+  hardcoded direct call to Mistral Large (not via `_llm.ts`, ignores the
+  user's model pick) and silently falls back to a 500-char truncation if
+  `MISTRAL_API_KEY` is unset. Every other LLM call goes through `_llm.ts`.
+- See `docs/model-configuration.md` for current values, rationale, and
+  the full "adding a new model" checklist.
+- Provider keys (`ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`)
+  are edge-function env vars.
+- Do not introduce or reintroduce any Sylou-metered "token budget" wording
+  in UI copy. (The `profiles.monthly_token_budget` /
+  `tokens_used_this_period` columns *do* still exist server-side: an
+  operator-only cap, set via SQL, enforced by the `non-budget` RLS freeze +
+  the `increment_tokens_used` security-definer RPC. The SaaS/Stripe columns
+  were dropped; budget defaults to NULL = no cap.)
+- Web search only for current-events queries; always inline source links.
+- Token estimation runs before analysis; a warning modal fires near
+  the context-limit thresholds.
+
+## 6. Commands
+- Tests: `npx vitest run` (or a specific file path).
+- Typecheck: `tsgo` — not `tsc --noEmit`.
+- Git: Claude Code may run git commands when explicitly requested.
+  Default discipline:
+  - Always work on a feature branch named `claude/<short-description>`,
+    never directly on `main`
+  - Create commits with clear messages following conventional commits
+    (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`)
+  - Push branches and let PR auto-creation handle the rest
+  - Never commit without showing the diff first
+  - Never push to `main` directly under any circumstances
+
+## 7. Refactor guardrails (discuss before changing)
+- Streaming lifecycle across `chat/`, `context-prompt/`, `editor-action/`
+  + `_shared/_llm.ts`: all three are SSE proxies that re-emit a
+  `{token}/{phase}/{done}` vocabulary. `callLLM` returns the raw fetch
+  Response and each function owns a **stream-first `ReadableStream`** (kept
+  open until `controller.close()` so the Deno isolate survives long enough
+  to persist). `context-prompt` has the richest phase set
+  (`reviewing`/`reading_documents`/`searching_web`); one client consumer,
+  `src/lib/sse-stream.ts`. Phase events + the budget/`done` payloads are
+  load-bearing for the UI.
+- Transparency logging invariants (see §4): withheld `writing_summary_log`,
+  `not_assessed` summary flagging, Propose-defers-to-CONFIRM.
+- Provenance tracker pending-signal pattern (`src/lib/provenance-tracker.ts`).
+- Editor stable-ref flush pattern in `useWritingContent` / `WritingEditor`.
+  The client **must flush editor + provenance before `runAnalysis`** — the
+  `analysis` function reads writing/provenance from the DB, not the request,
+  so an un-flushed edit would be scored stale.
+- FLOW methodology, FLOW prompt, FLOW scoring (4 pillars, 0.0–5.0) and the
+  16 four-character work-profile codes — product decisions, not
+  implementation details. Profile code = each pillar's score thresholded at
+  ≥3.0 (`flow-work-profiles.ts`); the 6 display bands live in `flowBands.ts`
+  (UI shows the band label, never the raw number).
+
+## 8. Review checklist for PRs
+- No hardcoded colors or one-off CSS overrides in UI (semantic tokens only).
+  Exception: FLOW band/profile palettes are domain data (see §4).
+- No new `public` table without `ENABLE RLS` + per-op policies (add a
+  `GRANT` only if a non-default role like `anon` needs access).
+- No role checks anywhere — there is no role system; don't add ad-hoc ones
+  against profile rows or client storage `(not yet implemented)`.
+- No new backend server code — Edge Functions only.
+- Keep components small; extract hooks rather than growing components.
+  (Known oversized offenders flagged for the refactor audit:
+  `ProjectContentArea.tsx`; `context-prompt/index.ts`, ~1.6k lines.)
+- Confirm debounced-save + flush-on-navigation paths still hold for any
+  new persisted state.
+- Builds are auto-triggered by Vercel on push to main. Don't run
+  `npm run build` / `vite build` manually unless verifying locally.
+- Edge function deployment: manual via `supabase functions deploy`.
+
+## 9. Deeper docs
+- `docs/setup.md`, `docs/model-configuration.md`, `docs/ai-act-position.md`
+- `SECURITY.md`, `CONTRIBUTING.md`, `TRADEMARK-POLICY.md`
