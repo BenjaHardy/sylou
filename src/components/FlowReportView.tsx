@@ -111,8 +111,6 @@ export function FlowReportView({
   const [copied, setCopied] = useState(false);
   const [shareIncludeFeedback, setShareIncludeFeedback] = useState<boolean>(report?.share_include_feedback ?? false);
   const [shareIncludeReplay, setShareIncludeReplay] = useState<boolean>((report as any)?.share_include_replay ?? false);
-  const [shareIncludeReport, setShareIncludeReport] = useState<boolean>((report as any)?.share_include_report ?? true);
-  const [shareIncludeProfile, setShareIncludeProfile] = useState<boolean>((report as any)?.share_include_profile ?? true);
 
   // Badge source — purely client-side, session-scoped. Defaults to "ai";
   // the toggle above the badges is the sole control to switch to "user".
@@ -131,8 +129,6 @@ export function FlowReportView({
       setShareEnabled(report.share_enabled ?? false);
       setShareIncludeFeedback(report.share_include_feedback ?? false);
       setShareIncludeReplay((report as any).share_include_replay ?? false);
-      setShareIncludeReport((report as any).share_include_report ?? true);
-      setShareIncludeProfile((report as any).share_include_profile ?? true);
     }
   }, [report?.id, report?.share_token, report?.share_enabled, report?.certificate_id, report?.share_include_feedback]);
 
@@ -543,56 +539,6 @@ export function FlowReportView({
                         <span className="font-medium text-foreground">FLOW Certificate #{certificateId}</span>
                       </div>
                     )}
-
-                    {/* Sections to include (at least one required) */}
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sections to include</p>
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id="share-include-report"
-                          checked={shareIncludeReport}
-                          onCheckedChange={async (checked) => {
-                            const val = checked === true;
-                            // Prevent unchecking the last selected section
-                            if (!val && !shareIncludeProfile) return;
-                            setShareIncludeReport(val);
-                            try {
-                              await supabase.functions.invoke("share-report", {
-                                body: { report_id: report.id, action: "toggle", share_include_report: val },
-                              });
-                            } catch (err) {
-                              console.error("Failed to update report visibility:", err);
-                              setShareIncludeReport(!val);
-                            }
-                          }}
-                        />
-                        <label htmlFor="share-include-report" className="text-xs text-muted-foreground cursor-pointer">
-                          FLOW Report
-                        </label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id="share-include-profile"
-                          checked={shareIncludeProfile}
-                          onCheckedChange={async (checked) => {
-                            const val = checked === true;
-                            if (!val && !shareIncludeReport) return;
-                            setShareIncludeProfile(val);
-                            try {
-                              await supabase.functions.invoke("share-report", {
-                                body: { report_id: report.id, action: "toggle", share_include_profile: val },
-                              });
-                            } catch (err) {
-                              console.error("Failed to update profile visibility:", err);
-                              setShareIncludeProfile(!val);
-                            }
-                          }}
-                        />
-                        <label htmlFor="share-include-profile" className="text-xs text-muted-foreground cursor-pointer">
-                          FLOW Profile
-                        </label>
-                      </div>
-                    </div>
 
                     <p className="text-[10px] text-muted-foreground italic leading-relaxed">
                       The writing snapshot is always included in shared reports so reviewers can see the work that was assessed.
