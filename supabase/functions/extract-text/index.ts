@@ -1,4 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callLLM, providerFor, normaliseResponse, envKeyFor } from "../_shared/_llm.ts";
+import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 
 // --- CORS allow-list (parsed once at module load) ---
 const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGIN") ?? "")
@@ -150,56 +152,59 @@ Deno.serve(async (req) => {
     if (extractedText.length <= SHORT_TEXT_THRESHOLD) {
       summary = extractedText;
     } else {
-      // Call Mistral for summary
-      const mistralKey = Deno.env.get("MISTRAL_API_KEY");
-      if (!mistralKey) {
-        // Fall back to first 500 chars if no API key
+      // Summarize via the shared LLM router using the user's preferred
+      // chat model. (Previously hard-coded to Mistral Large, which broke
+      // document summaries on deployments without a Mistral key, e.g.
+      // Anthropic-only.) Falls back to a plain-text truncation if the
+      // chosen provider's key is unset or the call fails.
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("preferred_chat_model")
+        .eq("id", user.id)
+        .single();
+      const summaryModel = profile?.preferred_chat_model || "mistral-medium-3-5";
+      const provider = providerFor(summaryModel);
+
+      if (!Deno.env.get(envKeyFor(provider))) {
+        // Chosen provider's key isn't configured — degrade gracefully.
         summary = extractedText.slice(0, SHORT_TEXT_THRESHOLD) + "...";
       } else {
         const textForSummary = extractedText.slice(0, 10000);
         const summaryPrompt = `Summarize the following document in 3-5 sentences. Focus on the main topics, arguments, and conclusions. This summary will be used to help an AI assistant decide whether to read the full document when answering user questions.\n\n${textForSummary}`;
 
         try {
-          const llmRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${mistralKey}`,
-            },
-            body: JSON.stringify({
-              model: "mistral-large-2512",
-              messages: [
-                { role: "user", content: summaryPrompt },
-              ],
-              max_tokens: 500,
-            }),
+          const llmRes = await callLLM({
+            model: summaryModel,
+            messages: [{ role: "user" as const, content: summaryPrompt }],
+            max_tokens: 500,
+            temperature: resolveTemperature(CHAT_TEMPERATURE, summaryModel),
           });
 
           if (llmRes.ok) {
             const llmData = await llmRes.json();
-            summary = llmData.choices?.[0]?.message?.content ?? extractedText.slice(0, SHORT_TEXT_THRESHOLD);
+            const norm = normaliseResponse(provider, llmData);
+            const summaryText = norm.text.trim();
+            summary = summaryText || extractedText.slice(0, SHORT_TEXT_THRESHOLD);
 
-            // Log token usage
-            const inputTokens = Math.ceil(summaryPrompt.length / 4);
-            const outputTokens = Math.ceil(summary.length / 4);
+            // Log token usage (provider-reported when available, else estimated).
+            const inputTokens = norm.usage?.input_tokens ?? Math.ceil(summaryPrompt.length / 4);
+            const outputTokens = norm.usage?.output_tokens ?? Math.ceil(summary.length / 4);
 
             await adminSupabase.from("token_usage").insert({
               user_id: user.id,
               project_id,
               function_name: "extract-text",
-              model_used: "mistral-large-2512",
+              model_used: summaryModel,
               input_tokens: inputTokens,
               output_tokens: outputTokens,
             });
 
-            // Update budget
-            const totalTokens = inputTokens + outputTokens;
             await adminSupabase.rpc("increment_tokens_used", {
               user_uuid: user.id,
-              amount: totalTokens,
+              amount: inputTokens + outputTokens,
             });
           } else {
-            console.error("Mistral summary error:", llmRes.status, await llmRes.text());
+            console.error("Summary LLM error:", llmRes.status, await llmRes.text());
             summary = extractedText.slice(0, SHORT_TEXT_THRESHOLD) + "...";
           }
         } catch (llmErr) {
