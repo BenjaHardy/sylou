@@ -28,7 +28,7 @@ L — Lead: ideas and opinion (form ideas about it)
 O — Organize: structure and argumentation (structure it)
 W — Write: writing and authorship (write it)
    
-The transparency architecture, covering all the means, whats, whys, hows to achieve this goal, is detailed in a separate and dedicated document - in case you're interested or plan to contribute: TRANSPARENCY.md.
+The transparency architecture, covering all the means, whats, whys, hows to achieve this goal, is detailed in a separate and dedicated document - in case you're interested or plan to contribute: [TRANSPARENCY.md](TRANSPARENCY.md).
 
 ---
 
@@ -82,7 +82,7 @@ The whole architecture is designed with transparency in mind, so that relevant i
 
 The result is rendered as a FLOW report, which can be kept private or shared via a public URL.
 
-A more thorough explanation of the transparency mechanisms is in [**docs/transparency.md**](docs/transparency.md).
+A more thorough explanation of the transparency mechanisms is in [**TRANSPARENCY.md**](TRANSPARENCY.md).
 The recommended LLM and settings to use for the FLOW analysis can be found in [**docs/model-configuration.md**](docs/model-configuration.md).
 
 ---
