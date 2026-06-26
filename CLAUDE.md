@@ -186,4 +186,4 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 
 ## 9. Deeper docs
 - `docs/setup.md`, `docs/model-configuration.md`, `docs/ai-act-position.md`
-- `SECURITY.md`, `CONTRIBUTING.md`, `TRADEMARK-POLICY.md`
+- `TRANSPARENCY.md`, `SECURITY.md`, `CONTRIBUTING.md`, `TRADEMARK-POLICY.md`
