@@ -57,19 +57,19 @@ describe("ProvenanceTracker.getSegmentSlice", () => {
   beforeEach(() => { tracker = new ProvenanceTracker(); });
 
   it("returns a single slice when range is fully inside one segment", () => {
-    seed(tracker, [{ start: 0, end: 100, source: "typed", original_text: null }]);
+    seed(tracker, [{ start: 0, end: 100, source: "typed" }]);
     const slice = tracker.getSegmentSlice(10, 30, "hello world");
     expect(slice.totalLength).toBe(20);
     expect(slice.segments).toEqual([
-      { offset: 0, length: 20, source: "typed", original_text: null },
+      { offset: 0, length: 20, source: "typed" },
     ]);
   });
 
   it("returns multiple slices across boundaries", () => {
     seed(tracker, [
-      { start: 0, end: 10, source: "typed", original_text: null },
-      { start: 10, end: 25, source: "ai_editor", original_text: "AI ORIGINAL" },
-      { start: 25, end: 40, source: "external", original_text: "EXT ORIGINAL" },
+      { start: 0, end: 10, source: "typed" },
+      { start: 10, end: 25, source: "ai_editor" },
+      { start: 25, end: 40, source: "external" },
     ]);
     const slice = tracker.getSegmentSlice(5, 35, "x".repeat(30));
     expect(slice.totalLength).toBe(30);
@@ -79,29 +79,11 @@ describe("ProvenanceTracker.getSegmentSlice", () => {
     expect(slice.segments[2]).toMatchObject({ offset: 20, length: 10 });
   });
 
-  it("preserves original_text on full-segment coverage", () => {
-    seed(tracker, [
-      { start: 0, end: 10, source: "typed", original_text: null },
-      { start: 10, end: 25, source: "ai_editor", original_text: "AI ORIGINAL" },
-    ]);
-    const slice = tracker.getSegmentSlice(10, 25, "x".repeat(15));
-    expect(slice.segments[0].original_text).toBe("AI ORIGINAL");
-  });
-
-  it("drops original_text on partial coverage of an AI segment", () => {
-    seed(tracker, [
-      { start: 0, end: 10, source: "ai_editor", original_text: "AI ORIGINAL TEN" },
-    ]);
-    const slice = tracker.getSegmentSlice(2, 8, "x".repeat(6));
-    expect(slice.segments[0].source).toBe("ai_editor");
-    expect(slice.segments[0].original_text).toBeNull();
-  });
-
   it("fills uncovered gaps with typed and emits a console.debug", () => {
     const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
     seed(tracker, [
-      { start: 0, end: 5, source: "ai_editor", original_text: "AI" },
-      { start: 10, end: 15, source: "external", original_text: "EXT" },
+      { start: 0, end: 5, source: "ai_editor" },
+      { start: 10, end: 15, source: "external" },
     ]);
     const slice = tracker.getSegmentSlice(0, 15, "x".repeat(15));
     expect(slice.segments.map(s => ({ src: s.source, off: s.offset, len: s.length }))).toEqual([
@@ -122,9 +104,9 @@ describe("ProvenanceTracker slice paste round-trip", () => {
     const tracker = new ProvenanceTracker();
     // 30-char doc: [t]0..10 [ai]10..25 [ext]25..30
     seed(tracker, [
-      { start: 0, end: 10, source: "typed", original_text: null },
-      { start: 10, end: 25, source: "ai_editor", original_text: "AI ORIGINAL_15" },
-      { start: 25, end: 30, source: "external", original_text: "EXT_5" },
+      { start: 0, end: 10, source: "typed" },
+      { start: 10, end: 25, source: "ai_editor" },
+      { start: 25, end: 30, source: "external" },
     ]);
 
     // Copy chars [5, 28) — spans typed, ai_editor, external (partial on both ends)
@@ -146,20 +128,20 @@ describe("ProvenanceTracker slice paste round-trip", () => {
     const newOnes = segs.filter(s => s.start >= 30);
     expect(newOnes.map(s => s.source)).toEqual(["typed", "ai_editor", "external"]);
     expect(newOnes[0]).toMatchObject({ start: 30, end: 35 });
-    expect(newOnes[1]).toMatchObject({ start: 35, end: 50, original_text: "AI ORIGINAL_15" });
-    expect(newOnes[2]).toMatchObject({ start: 50, end: 53, original_text: null });
+    expect(newOnes[1]).toMatchObject({ start: 35, end: 50 });
+    expect(newOnes[2]).toMatchObject({ start: 50, end: 53 });
   });
 
   it("degrades gracefully on length mismatch (single dominant segment, no throw)", () => {
     const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
     const tracker = new ProvenanceTracker();
-    seed(tracker, [{ start: 0, end: 20, source: "typed", original_text: null }]);
+    seed(tracker, [{ start: 0, end: 20, source: "typed" }]);
 
     tracker.setPendingSignal({
       kind: "slice",
       segments: [
-        { offset: 0, length: 5, source: "typed", original_text: null },
-        { offset: 5, length: 15, source: "ai_editor", original_text: null }, // dominant
+        { offset: 0, length: 5, source: "typed" },
+        { offset: 5, length: 15, source: "ai_editor" }, // dominant
       ],
       totalLength: 20,
     });
@@ -169,19 +151,19 @@ describe("ProvenanceTracker slice paste round-trip", () => {
 
     const newOnes = tracker.getSegments().filter(s => s.start >= 20);
     expect(newOnes).toHaveLength(1);
-    expect(newOnes[0]).toMatchObject({ start: 20, end: 30, source: "ai_editor", original_text: null });
+    expect(newOnes[0]).toMatchObject({ start: 20, end: 30, source: "ai_editor" });
     debugSpy.mockRestore();
   });
 
   it("preserves backward compat for single-kind pending signals", () => {
     const tracker = new ProvenanceTracker();
-    seed(tracker, [{ start: 0, end: 10, source: "typed", original_text: null }]);
-    tracker.setPendingSignal({ source: "ai_editor", originalText: "GENERATED" });
+    seed(tracker, [{ start: 0, end: 10, source: "typed" }]);
+    tracker.setPendingSignal({ source: "ai_editor" });
     const tx = makeInsertionTx({ oldSize: 10, at: 10, insertLen: 9, insertText: "GENERATED" });
     tracker.applyTransaction(tx);
     const newOnes = tracker.getSegments().filter(s => s.start >= 10);
     expect(newOnes).toHaveLength(1);
-    expect(newOnes[0]).toMatchObject({ source: "ai_editor", original_text: "GENERATED" });
+    expect(newOnes[0]).toMatchObject({ source: "ai_editor" });
   });
 
   it("covers an AI multi-node insertion (heading + paragraph w/ bold mark + list) as one contiguous ai_editor region", () => {
@@ -200,9 +182,9 @@ describe("ProvenanceTracker slice paste round-trip", () => {
     // The tracker should attribute the entire inserted region — text inside
     // the marked range included — to ai_editor without leaving typed gaps.
     const tracker = new ProvenanceTracker();
-    seed(tracker, [{ start: 0, end: 50, source: "typed", original_text: null }]);
+    seed(tracker, [{ start: 0, end: 50, source: "typed" }]);
 
-    tracker.setPendingSignal({ source: "ai_editor", originalText: null });
+    tracker.setPendingSignal({ source: "ai_editor" });
 
     // ~120 positions: ~85 chars of visible text + ~35 positions of block
     // wrappers across heading, paragraph, bulletList, and 2 listItems.

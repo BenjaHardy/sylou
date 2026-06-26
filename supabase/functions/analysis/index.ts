@@ -783,7 +783,6 @@ Deno.serve(async (req) => {
         end: number;
         source?: string;
         type?: string;
-        original_text?: string | null;
       }>) ?? [];
 
     // --- Build provenance-annotated writing ---

@@ -28,7 +28,6 @@ export interface ProvenanceSegment {
   start: number;
   end: number;
   source: SegmentSource;
-  original_text: string | null;
 }
 
 const MAX_HISTORY = 100;
@@ -38,7 +37,6 @@ export interface ProvenanceSliceSegment {
   offset: number;
   length: number;
   source: SegmentSource;
-  original_text: string | null;
 }
 
 export interface ProvenanceSlice {
@@ -48,7 +46,7 @@ export interface ProvenanceSlice {
 }
 
 export type PendingSignal =
-  | { kind: "single"; source: SegmentSource; originalText: string | null }
+  | { kind: "single"; source: SegmentSource }
   | { kind: "slice"; segments: ProvenanceSliceSegment[]; totalLength: number };
 
 export class ProvenanceTracker {
@@ -69,7 +67,7 @@ export class ProvenanceTracker {
    * Set before a ProseMirror transaction fires by one of:
    *   - Paste handler:  setPendingSignal({ kind: "slice", ... }) or single
    *   - Drop handler:   setPendingSignal({ kind: "slice", ... })
-   *   - AI accept:      setPendingSignal({ source: "ai_editor", originalText: null })
+   *   - AI accept:      setPendingSignal({ source: "ai_editor" })
    * Consumed (and cleared) by the gap-fill path in applyTransaction.
    */
   private _pendingSignal: PendingSignal | null = null;
@@ -90,7 +88,7 @@ export class ProvenanceTracker {
       // Ensure coverage up to current content length
       this.clampToLength(contentLength);
     } else if (contentLength > 0) {
-      this.segments = [{ start: 0, end: contentLength, source: "typed", original_text: null }];
+      this.segments = [{ start: 0, end: contentLength, source: "typed" }];
     } else {
       this.segments = [];
     }
@@ -104,7 +102,9 @@ export class ProvenanceTracker {
   }
 
   toJSON(): ProvenanceSegment[] {
-    return this.segments.map(s => ({ ...s }));
+    // Explicit projection (not a spread) so any legacy `original_text` key on
+    // segments loaded from older DB rows is dropped on the next save.
+    return this.segments.map(s => ({ start: s.start, end: s.end, source: s.source }));
   }
 
   // ─── Skip Tracking (for programmatic content resets) ─────
@@ -155,11 +155,6 @@ export class ProvenanceTracker {
    * selection. `text` is the ProseMirror textBetween of the same range,
    * stored verbatim for paste-match lookups.
    *
-   * `original_text` policy:
-   *   - Full-segment coverage  → preserve original_text verbatim
-   *   - Partial coverage       → set null (the field is a block-level claim,
-   *                              truncating would fabricate it)
-   *
    * Uncovered ranges fall back to `typed` and log a console.debug,
    * since gaps should not occur normally.
    */
@@ -186,16 +181,13 @@ export class ProvenanceTracker {
           offset: cursor - from,
           length: overlapStart - cursor,
           source: "typed",
-          original_text: null,
         });
       }
 
-      const isFullSegment = overlapStart === seg.start && overlapEnd === seg.end;
       segments.push({
         offset: overlapStart - from,
         length: overlapEnd - overlapStart,
         source: seg.source,
-        original_text: isFullSegment ? seg.original_text : null,
       });
       cursor = overlapEnd;
     }
@@ -208,7 +200,6 @@ export class ProvenanceTracker {
         offset: cursor - from,
         length: to - cursor,
         source: "typed",
-        original_text: null,
       });
     }
     return { text, segments, totalLength };
@@ -302,18 +293,18 @@ export class ProvenanceTracker {
 
   /**
    * Set a pending signal that will classify the next insertion.
-   * Accepts either the legacy `{ source, originalText }` shape (auto-wrapped
-   * as `kind: "single"`) or an explicit discriminated-union signal.
+   * Accepts either the legacy `{ source }` shape (auto-wrapped as
+   * `kind: "single"`) or an explicit discriminated-union signal.
    */
   setPendingSignal(
     signal:
-      | { source: SegmentSource; originalText: string | null }
+      | { source: SegmentSource }
       | PendingSignal,
   ) {
     if ("kind" in signal) {
       this._pendingSignal = signal;
     } else {
-      this._pendingSignal = { kind: "single", source: signal.source, originalText: signal.originalText };
+      this._pendingSignal = { kind: "single", source: signal.source };
     }
   }
 
@@ -396,32 +387,29 @@ export class ProvenanceTracker {
    *   3. Chat clipboard role (assistant → chat_ai, user → chat_user)
    *   4. External (fallback)
    */
-  classifyPaste(pastedText: string): { source: SegmentSource; originalText: string | null } {
+  classifyPaste(pastedText: string): { source: SegmentSource } {
     // 1. Check internal editor clipboard first (supports multiple pastes)
     const internalSource = this.checkInternalClipboard(pastedText);
     if (internalSource) {
-      const originalText = internalSource === "typed" || internalSource === "chat_user"
-        ? null
-        : pastedText;
-      return { source: internalSource, originalText };
+      return { source: internalSource };
     }
 
     // 2. Check AI result text match
     if (this.consumeAiResultText(pastedText)) {
-      return { source: "ai_editor", originalText: pastedText };
+      return { source: "ai_editor" };
     }
 
     // 3. Check chat clipboard role (not consumed — supports multiple pastes)
     const chatRole = this.checkChatClipboardRole();
     if (chatRole === "assistant") {
-      return { source: "chat_ai", originalText: pastedText };
+      return { source: "chat_ai" };
     }
     if (chatRole === "user") {
-      return { source: "chat_user", originalText: null };
+      return { source: "chat_user" };
     }
 
     // 4. External
-    return { source: "external", originalText: pastedText };
+    return { source: "external" };
   }
 
   // ─── Transaction Handling (Mapping-Based) ────────────────
@@ -466,7 +454,6 @@ export class ProvenanceTracker {
           start: newStart,
           end: newEnd,
           source: seg.source,
-          original_text: seg.original_text,
         });
       }
       // If newEnd <= newStart, segment was fully deleted — drop it
@@ -527,7 +514,6 @@ export class ProvenanceTracker {
               start: current.start,
               end: ins.start,
               source: current.source,
-              original_text: current.original_text,
             });
           }
           if (ins.end < current.end) {
@@ -535,7 +521,6 @@ export class ProvenanceTracker {
               start: ins.end,
               end: current.end,
               source: current.source,
-              original_text: current.original_text,
             };
             didSplit = false;
           } else {
@@ -625,7 +610,6 @@ export class ProvenanceTracker {
           start: gapStart + s.offset,
           end: gapStart + s.offset + s.length,
           source: s.source,
-          original_text: s.original_text,
         }));
       }
 
@@ -666,13 +650,11 @@ export class ProvenanceTracker {
             start: gapStart + s.offset,
             end: gapStart + s.offset + s.length,
             source: s.source,
-            original_text: s.original_text,
           }));
           segs.push({
             start: gapStart + signal.totalLength,
             end: gapEnd,
             source: dominant,
-            original_text: null,
           });
           return segs;
         }
@@ -686,7 +668,6 @@ export class ProvenanceTracker {
             start: segStart,
             end: segEnd,
             source: s.source,
-            original_text: s.original_text,
           });
         }
         return segs;
@@ -696,7 +677,7 @@ export class ProvenanceTracker {
         "[ProvenanceTracker] cross-block drag-drop exceeded boundary tolerance: degraded to dominant",
         { gapStart, gapEnd, gapLength, sliceTotal: signal.totalLength, delta, max: MAX_BOUNDARY_DELTA, dominant },
       );
-      return [{ start: gapStart, end: gapEnd, source: dominant, original_text: null }];
+      return [{ start: gapStart, end: gapEnd, source: dominant }];
     }
 
     const classification = this.classifyInsertion(gapText);
@@ -704,24 +685,23 @@ export class ProvenanceTracker {
       start: gapStart,
       end: gapEnd,
       source: classification.source,
-      original_text: classification.originalText,
     }];
   }
 
   /**
    * Classify a gap using only the `single` pending signal (or default).
    * Slice signals are handled upstream by classifyGap.
+   *
+   * (`_text` is retained for call-site symmetry but no longer read — it
+   * previously seeded the now-removed `original_text` field.)
    */
-  private classifyInsertion(text: string): { source: SegmentSource; originalText: string | null } {
+  private classifyInsertion(_text: string): { source: SegmentSource } {
     const signal = this._pendingSignal;
     if (signal?.kind === "single") {
       this._pendingSignal = null;
-      return {
-        source: signal.source,
-        originalText: signal.originalText ?? (signal.source === "ai_editor" ? text : null),
-      };
+      return { source: signal.source };
     }
-    return { source: "typed", originalText: null };
+    return { source: "typed" };
   }
 
   // ─── Segment Operations ──────────────────────────────────
@@ -734,9 +714,6 @@ export class ProvenanceTracker {
       const curr = this.segments[i];
       if (prev.source === curr.source && prev.end === curr.start) {
         prev.end = curr.end;
-        if (prev.original_text != null && curr.original_text != null) {
-          prev.original_text += curr.original_text;
-        }
       } else if (curr.start < curr.end) {
         merged.push(curr);
       }
@@ -756,14 +733,14 @@ export class ProvenanceTracker {
 
     // Ensure coverage to `len`
     if (this.segments.length === 0 && len > 0) {
-      this.segments.push({ start: 0, end: len, source: "typed", original_text: null });
+      this.segments.push({ start: 0, end: len, source: "typed" });
     } else if (this.segments.length > 0) {
       const last = this.segments[this.segments.length - 1];
       if (last.end < len) {
         if (last.source === "typed") {
           last.end = len;
         } else {
-          this.segments.push({ start: last.end, end: len, source: "typed", original_text: null });
+          this.segments.push({ start: last.end, end: len, source: "typed" });
         }
       }
     }
