@@ -160,7 +160,6 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           if (droppedText) {
             tracker.setPendingSignal({
               source: "external",
-              originalText: droppedText,
             });
           }
           // No usable plaintext on the dataTransfer — fall through and let
@@ -310,7 +309,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       isInsertingRef.current = true;
       try {
         const tracker = getTracker();
-        tracker.setPendingSignal({ source: "ai_editor", originalText: null });
+        tracker.setPendingSignal({ source: "ai_editor" });
 
         // Parse markdown → ProseMirror JSON fragment so headings, lists, bold,
         // etc. become real nodes/marks instead of literal characters inside
