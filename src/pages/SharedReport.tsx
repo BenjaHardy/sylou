@@ -77,9 +77,9 @@ export default function SharedReport() {
       }
 
       const row = data as any;
-      // Default to true for backwards compatibility
-      const includeReport = row.share_include_report ?? true;
-      const includeProfile = row.share_include_profile ?? true;
+      // B1: report + profile are always shared (the per-section toggles were removed).
+      const includeReport = true;
+      const includeProfile = true;
       const includeReplay = !!row.share_include_replay;
 
       setReport(data as unknown as FlowReport);
