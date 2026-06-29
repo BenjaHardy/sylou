@@ -559,12 +559,27 @@ Deno.serve(async (req) => {
       const { confirm, action_id, summary_update, modified } = body;
       const adminClient = getAdminClient();
 
+      // --- Ownership gate: CONFIRM returns before the main-path projects
+      // check and uses the RLS-bypassing service-role client, so it must
+      // verify ownership manually. Read via the RLS-scoped `supabase` client —
+      // a row comes back only if the caller owns this project. maybeSingle()
+      // keeps "not owned" a clean null (fail-closed) rather than a PGRST116.
+      const { data: confirmProject } = await supabase
+        .from("projects")
+        .select("id, tutor_mode")
+        .eq("id", project_id)
+        .maybeSingle();
+      if (!confirmProject) {
+        return jsonResponse({ error: "Project not found or not owned by user" }, 404);
+      }
+
       if (action_id) {
         const outcome = !confirm ? "rejected" : modified ? "modified" : "accepted";
         const { error: updateErr } = await adminClient
           .from("ai_editor_actions")
           .update({ outcome })
-          .eq("id", action_id);
+          .eq("id", action_id)
+          .eq("project_id", project_id);
         if (updateErr) console.error("ai_editor_actions outcome update failed:", JSON.stringify(updateErr));
       }
 
@@ -575,6 +590,7 @@ Deno.serve(async (req) => {
             .from("ai_editor_actions")
             .select("ai_response_full")
             .eq("id", action_id)
+            .eq("project_id", project_id)
             .maybeSingle();
           if (fetchErr) console.error("ai_editor_actions fetch failed:", JSON.stringify(fetchErr));
           aiResponseContent = actionRow?.ai_response_full ?? "";
@@ -587,14 +603,9 @@ Deno.serve(async (req) => {
         const webSearchesPerformed: string[] | undefined = body.web_searches_performed;
         const conciseMode: boolean = body.concise_mode ?? false;
 
-        // Resolve tutor_mode from the project (source of truth) so the log
-        // reflects the actual setting at the time of the Propose request.
-        const { data: confirmProject } = await adminClient
-          .from("projects")
-          .select("tutor_mode")
-          .eq("id", project_id)
-          .single();
-        const tutorMode: boolean = confirmProject?.tutor_mode ?? false;
+        // tutor_mode comes from the ownership-gated project read above
+        // (source of truth at the time of the Propose request).
+        const tutorMode: boolean = confirmProject.tutor_mode ?? false;
 
         const insertedMessages = [];
 
