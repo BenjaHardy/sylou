@@ -127,6 +127,12 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   operator-only cap, set via SQL, enforced by the `non-budget` RLS freeze +
   the `increment_tokens_used` security-definer RPC. The SaaS/Stripe columns
   were dropped; budget defaults to NULL = no cap.)
+- No ad-hoc rate-limiting/throttling primitives in app code: per-user request
+  throttling is deferred to a future platform primitive, so security-audit
+  findings recommending one are acknowledged-and-deferred, not built. Cost is
+  bounded by the operator token budget above (resets per calendar month via the
+  `reset_tokens_if_stale` RPC); operators layer on platform protection
+  (Supabase auth rate limits, WAF) — see `docs/setup.md`.
 - Web search only for current-events queries; always inline source links.
 - Token estimation runs before analysis; a warning modal fires near
   the context-limit thresholds.
