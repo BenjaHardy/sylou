@@ -908,8 +908,14 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
       systemPrompt += favBlock;
     }
 
+    // Gate web search on both the user toggle AND BRAVE_SEARCH_API_KEY presence
+    // (mirrors chat/). Without a server-side key the tool can't work, so don't
+    // register it or advertise it to the model.
+    const braveConfigured = !!Deno.env.get("BRAVE_SEARCH_API_KEY");
+    const webSearchActive = webSearchEnabled && braveConfigured;
+
     // Append web search instructions to system prompt
-    if (webSearchEnabled) {
+    if (webSearchActive) {
       const docsContext = (hasNonFavDocs || favourites.length > 0)
         ? " or in the imported documents"
         : "";
@@ -944,10 +950,10 @@ When citing information from web search results, always include the source URL i
     const webSearchesPerformed: string[] = [];
 
     // --- Build tools array ---
-    const hasTools = hasDocuments || webSearchEnabled;
+    const hasTools = hasDocuments || webSearchActive;
     const tools: Record<string, unknown>[] = [];
     if (hasDocuments) tools.push(buildDocumentTool());
-    if (webSearchEnabled) tools.push(buildWebSearchTool());
+    if (webSearchActive) tools.push(buildWebSearchTool());
 
     // All LLM calls (tool-bearing and not) go through callLLM, which handles
     // provider routing + body translation. normaliseResponse uniformly extracts
