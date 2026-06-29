@@ -2,9 +2,9 @@
 
 This guide walks through setting up your own Sylou instance from scratch. The goal is that anyone reasonably comfortable with a terminal and a web browser can complete it in 30–60 minutes the first time.
 
-The guide gives the full manual sequence. A small helper script (`scripts/setup.mjs`) can automate some of the middle steps once you have your secrets ready — it's described in the [Using the setup script](#using-the-setup-script) section near the end. The manual steps remain the authoritative reference, and the script is optional.
+The guide gives the full manual sequence; each step is short and explained as you go.
 
-If you get stuck at any step, please [open an issue](https://github.com/[YOUR-REPO]/issues) — we'd rather know about a setup problem than have someone quietly give up.
+If you get stuck at any step, please [open an issue](https://github.com/BenjaHardy/sylou/issues) — we'd rather know about a setup problem than have someone quietly give up.
 
 ---
 
@@ -48,7 +48,7 @@ See the [Operating your instance](#operating-your-instance) section near the end
 Clone the Sylou repository to your local machine:
 
 ```bash
-git clone https://github.com/[YOUR-REPO]/sylou.git
+git clone https://github.com/BenjaHardy/sylou.git
 cd sylou
 ```
 
@@ -110,7 +110,7 @@ supabase db push
 
 This creates all the tables, indexes, row-level security policies, database functions, and the storage bucket Sylou needs. The command should report each migration as applied; the whole process takes 30–60 seconds.
 
-If you see errors, please [open an issue](https://github.com/[YOUR-REPO]/issues) with the error output — first-run setup should work cleanly and any failure is a bug worth fixing.
+If you see errors, please [open an issue](https://github.com/BenjaHardy/sylou/issues) with the error output — first-run setup should work cleanly and any failure is a bug worth fixing.
 
 ---
 
@@ -172,13 +172,13 @@ The values are masked but the names should all appear.
 
 ## Step 6 — Deploy the edge functions
 
-Sylou has six edge functions that handle chat, FLOW analysis, document import, and other backend work. Deploy them all:
+Sylou has seven edge functions that handle chat, FLOW analysis, document import, and other backend work. Deploy them all:
 
 ```bash
 supabase functions deploy
 ```
 
-This deploys every function defined in the `supabase/functions/` directory. Each function takes 5–15 seconds. Once complete, you should see all six listed as deployed in **Edge Functions** in your Supabase dashboard.
+This deploys every function defined in the `supabase/functions/` directory. Each function takes 5–15 seconds. Once complete, you should see all seven listed as deployed in **Edge Functions** in your Supabase dashboard.
 
 If you can't use the Supabase CLI for any reason, the same functions can be deployed manually via the Supabase dashboard's **Edge Functions** section. Note that dashboard deployment is significantly more fiddly (each function has multiple files, and the JWT verification toggle must be set manually for each — see `supabase/config.toml` for the correct settings). The CLI is strongly recommended.
 
@@ -327,7 +327,7 @@ If you're operating Sylou for others (a class, a team, a community), you can:
 By default, new users have *no token budget* — they can use Sylou without limit. For multi-user deployments where LLM costs matter, you can set per-user budgets via direct SQL in the Supabase SQL editor:
 
 ```sql
--- Set a budget of 1 million tokens per period for a specific user
+-- Set a budget of 1 million tokens per calendar month for a specific user
 UPDATE public.profiles
 SET monthly_token_budget = 1000000
 WHERE email = 'user@example.com';
@@ -336,13 +336,14 @@ WHERE email = 'user@example.com';
 UPDATE public.profiles
 SET monthly_token_budget = 1000000;
 
--- Reset the usage counter (e.g., for a new period)
+-- Manually reset a user's usage counter mid-month (it otherwise resets
+-- automatically at the start of each calendar month)
 UPDATE public.profiles
 SET tokens_used_this_period = 0
 WHERE email = 'user@example.com';
 ```
 
-There is no admin UI for this today. The budget mechanism enforces limits in real time — once a user reaches their budget, further LLM calls return an error until you reset the counter or raise the budget.
+There is no admin UI for this today. The budget mechanism enforces limits in real time — once a user reaches their budget, further LLM calls return HTTP 403 until the start of the next calendar month (when the counter resets automatically), or until you raise the budget or manually reset the counter.
 
 To see usage:
 
@@ -359,6 +360,15 @@ WHERE created_at > now() - interval '30 days'
 GROUP BY user_id, function_name, model_used
 ORDER BY total_tokens DESC;
 ```
+
+### Additional cost & abuse protection
+
+Sylou has no built-in per-user *request* throttle — cost is bounded by the per-user token budget above. For additional protection against cost or abuse, use platform-layer controls:
+
+- **Supabase auth rate limits** (Dashboard → Authentication → Rate Limits) to throttle sign-ups and sign-ins — important if you leave sign-ups open.
+- **A WAF / CDN** (e.g. Cloudflare) in front of your frontend and your Supabase project.
+
+The per-user budget caps an individual's spend; combine it with closed sign-ups (above) or auth rate limits to bound aggregate cost across many users.
 
 ### Updating to new Sylou versions
 
@@ -387,39 +397,6 @@ A few things to be aware of as an operator:
 
 ---
 
-## Using the setup script
-
-A small Node.js script (`scripts/setup.mjs`) can automate steps 3–6 above (linking, database setup, secrets, and function deployment) once you have your secrets ready.
-
-The script:
-- Reads a local `.env` file containing your secrets
-- Runs `supabase link`, `supabase db push`, `supabase secrets set --env-file .env`, and `supabase functions deploy`
-- Prints each command before executing it so you can see what it's doing
-- Never logs secret values, only their names
-- Has no external dependencies (uses only Node built-ins)
-- Stops on the first error
-
-To use it:
-
-1. Complete Steps 1–2 manually (clone the code, install dependencies, create the Supabase project).
-2. Copy `.env.example` to `.env` and fill in your values.
-3. Verify `.env` is listed in `.gitignore` (it is by default, but worth checking).
-4. Run:
-   ```bash
-   node scripts/setup.mjs
-   ```
-   Or for a preview without executing:
-   ```bash
-   node scripts/setup.mjs --dry-run
-   ```
-5. Continue with Step 7 (frontend) and Step 8 (verification) manually.
-
-The script is optional and intentionally minimal. It does exactly what the corresponding manual steps do; if you prefer to follow the guide step by step, that path is fully supported.
-
-**Security note**: the script reads your `.env` file, which contains all your API keys. Never commit `.env` to git. The script's source is in your repository — read it to confirm what it does.
-
----
-
 ## Troubleshooting
 
 A few common issues and their fixes.
@@ -428,7 +405,7 @@ A few common issues and their fixes.
 
 Almost always a CORS misconfiguration. Open your browser's developer tools, look at the Network tab, and find the failed request. Check the response headers for `Access-Control-Allow-Origin` — if it's missing or doesn't match your deployed URL exactly, update `ALLOWED_ORIGIN` to include the correct value (no trailing slash, no path). After updating, the change takes effect on the next request.
 
-**Sign-in works but every backend call returns 402.**
+**Sign-in works but every backend call returns 403.**
 
 You've hit the token budget. Either you're a user with a non-NULL budget that's been exceeded, or there's stale data. Check your profile:
 
@@ -465,7 +442,7 @@ If you encounter something not in this list, please open an issue — the troubl
 
 ## Getting help
 
-- **Setup or deployment questions**: open an issue at [github.com/[YOUR-REPO]/issues](https://github.com/[YOUR-REPO]/issues).
+- **Setup or deployment questions**: open an issue at [github.com/BenjaHardy/sylou/issues](https://github.com/BenjaHardy/sylou/issues).
 - **Security issues**: please report privately per [SECURITY.md](../SECURITY.md), not in a public issue.
 - **General questions**: [contact@sylou.eu](mailto:contact@sylou.eu).
 
