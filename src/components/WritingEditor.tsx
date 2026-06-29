@@ -80,6 +80,40 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     onFlushProvenance?.(stableFlush);
   }, [onFlushProvenance]);
 
+  // Keep a ref of isDirty so the unload handler reads it without re-registering
+  // listeners on every keystroke.
+  const isDirtyRef = useRef(isDirty);
+  useEffect(() => { isDirtyRef.current = isDirty; }, [isDirty]);
+
+  // Best-effort flush + unsaved-changes guard before the page goes away. Saves
+  // are debounced (see useWritingContent), so a hard tab close / refresh within
+  // that window could otherwise drop the tail of unsaved edits. Flush on
+  // tab-hide and on unload; when there are genuinely unsaved changes, also trip
+  // the browser's native prompt — async saves aren't guaranteed to finish during
+  // unload, so the prompt buys time for the flush and warns the user.
+  useEffect(() => {
+    const flushNow = () => {
+      void flushWritingRef.current();
+      void flushProvenanceRef.current();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flushNow();
+    };
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      flushNow();
+      if (isDirtyRef.current) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, []);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
