@@ -698,6 +698,8 @@ Deno.serve(async (req) => {
     }
 
     // --- Fetch profile for budget (needed later) ---
+    // Best-effort monthly budget-window reset (lazy; no-op if already current).
+    await supabase.rpc("reset_tokens_if_stale", { user_uuid: user.id });
     const { data: profile } = await supabase
       .from("profiles")
       .select("tokens_used_this_period, monthly_token_budget")
