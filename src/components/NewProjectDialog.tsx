@@ -72,10 +72,11 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
       reset();
       onOpenChange(false);
       onCreated(project.id);
-    } catch (err: any) {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
       toast({
         title: "Error creating project",
-        description: err.message?.includes("unique") ? "A project with that name already exists." : err.message,
+        description: message.includes("unique") ? "A project with that name already exists." : message,
         variant: "destructive",
       });
     }

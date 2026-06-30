@@ -21,6 +21,20 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
+      // Surfaced as a warning rather than a hard error: the remaining
+      // occurrences are mostly LLM-provider response glue (see _shared/_llm.ts
+      // and the edge functions) and Supabase generated-type workarounds.
+      // Tracked for incremental tightening, not blocking.
+      "@typescript-eslint/no-explicit-any": "warn",
+    },
+  },
+  {
+    // shadcn/ui primitives are vendored as-generated; their empty interface
+    // declarations (e.g. `interface X extends Y {}`) are an upstream
+    // convention we deliberately don't fork.
+    files: ["src/components/ui/**"],
+    rules: {
+      "@typescript-eslint/no-empty-object-type": "off",
     },
   },
 );

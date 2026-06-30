@@ -183,8 +183,11 @@ export function EditorToolbar({ editor, onExportPDF, onExportDOCX, onExportJSON,
 
   const handleFind = () => {
     if (!findText) return;
-    if ((window as any).find) {
-      (window as any).find(findText, false, false, true);
+    const w = window as Window & {
+      find?: (text: string, caseSensitive?: boolean, backwards?: boolean, wrapAround?: boolean) => boolean;
+    };
+    if (w.find) {
+      w.find(findText, false, false, true);
     }
   };
 

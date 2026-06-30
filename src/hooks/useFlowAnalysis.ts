@@ -214,8 +214,8 @@ export function useFlowAnalysis(projectId: string | null) {
       if (data?.report) {
         setReport(data.report as unknown as FlowReport);
       }
-    } catch (e: any) {
-      setError(e.message || "Unexpected error");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unexpected error");
     } finally {
       setLoading(false);
     }
