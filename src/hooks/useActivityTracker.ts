@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesUpdate } from "@/integrations/supabase/types";
 
 const PING_INTERVAL = 30_000; // 30s
 const IDLE_TIMEOUT = 5 * 60 * 1000; // 5 min
@@ -36,16 +37,16 @@ export function useActivityTracker(projectId: string | null) {
       try {
         // Fetch current stats to check clock anomaly & first_activity
         const { data } = await supabase
-          .from("project_stats" as any)
+          .from("project_stats")
           .select("last_activity_at, first_activity_at, total_active_time_seconds, total_writing_time_seconds, clock_anomaly_count")
           .eq("project_id", projectId)
           .single();
 
         if (!data) return;
-        const stats = data as any;
+        const stats = data;
 
         const nowIso = new Date().toISOString();
-        const updates: Record<string, any> = {};
+        const updates: TablesUpdate<"project_stats"> = {};
 
         // Clock anomaly detection
         if (stats.last_activity_at && new Date(nowIso) < new Date(stats.last_activity_at)) {
@@ -65,7 +66,7 @@ export function useActivityTracker(projectId: string | null) {
         }
 
         await supabase
-          .from("project_stats" as any)
+          .from("project_stats")
           .update(updates)
           .eq("project_id", projectId);
       } catch (err) {

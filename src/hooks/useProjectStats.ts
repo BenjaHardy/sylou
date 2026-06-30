@@ -22,11 +22,11 @@ export function useProjectStats(projectId: string | null) {
   const fetchStats = useCallback(async () => {
     if (!projectId) { setStats(null); return; }
     const { data } = await supabase
-      .from("project_stats" as any)
+      .from("project_stats")
       .select("total_active_time_seconds, total_writing_time_seconds, chat_prompt_count_normal, chat_prompt_count_tutor, sanity_check_count")
       .eq("project_id", projectId)
       .single();
-    if (data) setStats(data as any);
+    if (data) setStats(data);
   }, [projectId]);
 
   useEffect(() => {
