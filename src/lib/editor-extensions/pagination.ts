@@ -47,6 +47,9 @@ export const Pagination = Extension.create({
   },
 
   addProseMirrorPlugins() {
+    // The plugin's view() closure below needs the extension instance;
+    // `this` doesn't resolve to it there.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const ext = this;
 
     return [

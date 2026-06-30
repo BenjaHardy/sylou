@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import type { ChatMessage } from "@/hooks/useChatMessages";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
@@ -509,7 +509,7 @@ function ExportEnabledToolbar({
   pageView,
   onTogglePageView,
 }: {
-  editor: any;
+  editor: Editor;
   projectId: string;
   pageView?: boolean;
   onTogglePageView?: () => void;

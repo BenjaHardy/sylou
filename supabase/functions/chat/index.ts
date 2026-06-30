@@ -549,7 +549,7 @@ When citing information from web search results, always include the source URL i
 
         const call1Data = await call1Res.json();
         const norm1 = normaliseResponse(providerFor(chatModel), call1Data);
-        let toolCalls = norm1.toolCalls;
+        const toolCalls = norm1.toolCalls;
 
         // Track tokens from Call #1
         totalInputChars += llmMessages.reduce((s, m) => s + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length), 0);

@@ -1,4 +1,4 @@
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, LevelFormat } from "docx";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, LevelFormat, BorderStyle } from "docx";
 import { saveAs } from "file-saver";
 
 /**
@@ -127,7 +127,7 @@ function nodeToDocx(node: ChildNode): Paragraph[] {
       })];
     case "hr":
       return [new Paragraph({
-        border: { bottom: { style: "single" as any, size: 6, color: "999999", space: 1 } },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "999999", space: 1 } },
         children: [],
       })];
     default:

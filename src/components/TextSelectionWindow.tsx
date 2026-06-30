@@ -215,7 +215,7 @@ export function TextSelectionWindow({
         if (!res.ok) {
           const errText = await res.text();
           let errMsg = "AI action failed. Please try again.";
-          try { errMsg = JSON.parse(errText).error || errMsg; } catch {}
+          try { errMsg = JSON.parse(errText).error || errMsg; } catch { /* keep default errMsg */ }
           toast.error(errMsg);
           setPhase("actions");
           return;
@@ -311,7 +311,7 @@ export function TextSelectionWindow({
         if (!res.ok) {
           const errText = await res.text();
           let errMsg = "AI action failed. Please try again.";
-          try { errMsg = JSON.parse(errText).error || errMsg; } catch {}
+          try { errMsg = JSON.parse(errText).error || errMsg; } catch { /* keep default errMsg */ }
           toast.error(errMsg);
           setPhase("actions");
           return;

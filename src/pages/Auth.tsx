@@ -26,8 +26,8 @@ export default function Auth() {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       navigate("/");
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {
       setSubmitting(false);
     }
