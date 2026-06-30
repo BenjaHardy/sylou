@@ -72,6 +72,20 @@ export interface KeyUserContribution {
   why_it_matters: string;
 }
 
+/**
+ * Origin/provenance metadata stamped onto a report by the generating
+ * instance. Structurally mirrors FlowPledgeBadge's `BadgeGeneratorInfo`
+ * (kept assignable to it so it can pass straight to the badge's
+ * `generatorInfo` prop).
+ */
+export interface GeneratorInfo {
+  instance_label?: string;
+  instance_domain?: string | null;
+  version?: string;
+  commit_hash?: string;
+  is_modified?: boolean;
+}
+
 export interface FlowReport {
   id: string;
   project_id: string;
@@ -97,6 +111,8 @@ export interface FlowReport {
   project_name?: string | null;
   share_include_feedback?: boolean;
   share_include_replay?: boolean;
+  writing_snapshot?: string | null;
+  generator_info?: GeneratorInfo | null;
 }
 
 export interface BudgetError {
