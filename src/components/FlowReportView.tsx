@@ -110,7 +110,7 @@ export function FlowReportView({
   const [shareEnabled, setShareEnabled] = useState<boolean>(report?.share_enabled ?? false);
   const [copied, setCopied] = useState(false);
   const [shareIncludeFeedback, setShareIncludeFeedback] = useState<boolean>(report?.share_include_feedback ?? false);
-  const [shareIncludeReplay, setShareIncludeReplay] = useState<boolean>((report as any)?.share_include_replay ?? false);
+  const [shareIncludeReplay, setShareIncludeReplay] = useState<boolean>(report?.share_include_replay ?? false);
 
   // Badge source — purely client-side, session-scoped. Defaults to "ai";
   // the toggle above the badges is the sole control to switch to "user".
@@ -128,7 +128,7 @@ export function FlowReportView({
       setCertificateId(report.certificate_id ?? null);
       setShareEnabled(report.share_enabled ?? false);
       setShareIncludeFeedback(report.share_include_feedback ?? false);
-      setShareIncludeReplay((report as any).share_include_replay ?? false);
+      setShareIncludeReplay(report.share_include_replay ?? false);
     }
   }, [report?.id, report?.share_token, report?.share_enabled, report?.certificate_id, report?.share_include_feedback]);
 
@@ -283,10 +283,10 @@ export function FlowReportView({
   }
 
   const flowScores = {
-    find: (report.ai_find as any)?.score ?? null,
-    lead: (report.ai_lead as any)?.score ?? null,
-    organize: (report.ai_organize as any)?.score ?? null,
-    write: (report.ai_write as any)?.score ?? null,
+    find: report.ai_find?.score ?? null,
+    lead: report.ai_lead?.score ?? null,
+    organize: report.ai_organize?.score ?? null,
+    write: report.ai_write?.score ?? null,
   };
   const flowProfile = getFlowProfile(flowScores);
 
@@ -441,7 +441,7 @@ export function FlowReportView({
           {activeTab === "writing" && (
             <div key="writing" className="animate-card-flip">
               <WritingSnapshotTab
-                snapshot={(report as any)?.writing_snapshot ?? ""}
+                snapshot={report?.writing_snapshot ?? ""}
                 capturedAt={report?.created_at}
               />
             </div>
@@ -669,7 +669,7 @@ export function FlowReportView({
                           assessmentSource={badgeSource}
                           certificateId={certificateId || ""}
                           shareUrl={shareUrl}
-                          generatorInfo={(report as any).generator_info ?? null}
+                          generatorInfo={report.generator_info ?? null}
                         />
                       </div>
                       <div className="flex flex-col items-center gap-2">
@@ -685,7 +685,7 @@ export function FlowReportView({
                           assessmentSource={badgeSource}
                           certificateId={certificateId || ""}
                           shareUrl={shareUrl}
-                          generatorInfo={(report as any).generator_info ?? null}
+                          generatorInfo={report.generator_info ?? null}
                         />
 
                       </div>
@@ -746,7 +746,7 @@ export function FlowReportView({
               </div>
 
               {/* Key User Contributions */}
-              <KeyUserContributions contributions={(report as any).key_user_contributions} />
+              <KeyUserContributions contributions={report.key_user_contributions} />
 
               {/* View Highlighted Text */}
               {report.provenance_snapshot && report.provenance_snapshot.length > 0 && (

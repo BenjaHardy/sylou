@@ -30,16 +30,6 @@ const AI_GENERATED_SECTIONS = {
 } as const;
 type AiTabKey = keyof typeof AI_GENERATED_SECTIONS;
 
-interface GeneratorInfo {
-  instance_label?: string;
-  instance_domain?: string | null;
-  version?: string;
-  commit_hash?: string;
-  is_modified?: boolean;
-}
-
-
-
 export default function SharedReport() {
   const { token } = useParams<{ token: string }>();
   const [report, setReport] = useState<FlowReport | null>(null);
@@ -187,14 +177,14 @@ export default function SharedReport() {
   }
 
   const flowScores = {
-    find: (report.ai_find as any)?.score ?? null,
-    lead: (report.ai_lead as any)?.score ?? null,
-    organize: (report.ai_organize as any)?.score ?? null,
-    write: (report.ai_write as any)?.score ?? null,
+    find: report.ai_find?.score ?? null,
+    lead: report.ai_lead?.score ?? null,
+    organize: report.ai_organize?.score ?? null,
+    write: report.ai_write?.score ?? null,
   };
 
-  const certificateId = (report as any).certificate_id;
-  const showFeedback = !!(report as any).share_include_feedback;
+  const certificateId = report.certificate_id;
+  const showFeedback = !!report.share_include_feedback;
   const preFeedbackScores: FlowFeedback | null = showFeedback ? (report.user_feedback_pre ?? null) : null;
   const postAssessment = showFeedback ? extractUserAssessment(report.user_feedback_post) : null;
   const postFeedbackScores = showFeedback ? extractFeedbackScores(report.user_feedback_post) : null;
@@ -291,7 +281,7 @@ export default function SharedReport() {
           {activeTab === "writing" && (
             <div key="writing" className="animate-card-flip">
               <WritingSnapshotTab
-                snapshot={(report as any)?.writing_snapshot ?? ""}
+                snapshot={report?.writing_snapshot ?? ""}
                 capturedAt={report?.created_at}
               />
             </div>
@@ -359,7 +349,7 @@ export default function SharedReport() {
                     <ScoreCard
                       key={key}
                       pillarKey={key}
-                      pillar={report[`ai_${key}` as keyof FlowReport] as any}
+                      pillar={report[`ai_${key}`]}
                     />
                   ))}
                 </div>
@@ -373,7 +363,7 @@ export default function SharedReport() {
                 </div>
 
                 {/* Key User Contributions */}
-                <KeyUserContributions contributions={(report as any).key_user_contributions} />
+                <KeyUserContributions contributions={report.key_user_contributions} />
               </section>
 
               {/* User Self-Assessment (read-only) */}
@@ -412,9 +402,7 @@ export default function SharedReport() {
                   <p className="text-xs text-muted-foreground">Certificate: {certificateId}</p>
                 )}
                 {(() => {
-                  const gi =
-                    (report as unknown as { generator_info?: GeneratorInfo | null })
-                      .generator_info ?? null;
+                  const gi = report.generator_info ?? null;
 
 
                   const meetsylouLink = (
