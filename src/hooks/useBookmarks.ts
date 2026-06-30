@@ -20,7 +20,7 @@ export function useBookmarks(projectId: string | null) {
     if (!projectId) return;
     setLoading(true);
     const { data, error } = await supabase
-      .from("chat_bookmarks" as any)
+      .from("chat_bookmarks")
       .select("*")
       .eq("project_id", projectId)
       .order("created_at", { ascending: true });
@@ -54,7 +54,7 @@ export function useBookmarks(projectId: string | null) {
     setBookmarks((prev) => [...prev, optimistic]);
 
     const { data, error } = await supabase
-      .from("chat_bookmarks" as any)
+      .from("chat_bookmarks")
       .insert(newBookmark as any)
       .select()
       .single();
@@ -72,7 +72,7 @@ export function useBookmarks(projectId: string | null) {
       prev.map((b) => (b.id === id ? { ...b, ...updates } : b))
     );
     await supabase
-      .from("chat_bookmarks" as any)
+      .from("chat_bookmarks")
       .update(updates as any)
       .eq("id", id);
   }, []);
@@ -80,7 +80,7 @@ export function useBookmarks(projectId: string | null) {
   const deleteBookmark = useCallback(async (id: string) => {
     setBookmarks((prev) => prev.filter((b) => b.id !== id));
     await supabase
-      .from("chat_bookmarks" as any)
+      .from("chat_bookmarks")
       .delete()
       .eq("id", id);
   }, []);
