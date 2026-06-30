@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 
 export function useCreativeData<T = Record<string, unknown>>(
   projectId: string | null,
@@ -75,7 +76,7 @@ export function useCreativeData<T = Record<string, unknown>>(
           {
             project_id: projectId,
             tool_type: toolType,
-            data: newData as any,
+            data: newData as unknown as Json,
             updated_at: new Date().toISOString(),
           },
           { onConflict: "project_id,tool_type" }

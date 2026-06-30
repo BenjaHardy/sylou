@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesInsert } from "@/integrations/supabase/types";
 
 export interface PostIt {
   id: string;
@@ -33,7 +34,7 @@ export function usePostIts(projectId: string | null) {
   const createPostIt = useCallback(async () => {
     if (!projectId) return;
     const offset = (postIts.length % 8) * 30;
-    const newPostIt: Partial<PostIt> = {
+    const newPostIt: TablesInsert<"post_its"> = {
       project_id: projectId,
       content: "",
       color: "yellow",
@@ -51,7 +52,7 @@ export function usePostIts(projectId: string | null) {
 
     const { data, error } = await supabase
       .from("post_its")
-      .insert([newPostIt as any])
+      .insert([newPostIt])
       .select()
       .single();
     if (data) {
