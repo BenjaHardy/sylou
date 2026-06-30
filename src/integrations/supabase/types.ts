@@ -375,6 +375,7 @@ export type Database = {
           preferred_chat_model: string | null
           preferred_flow_model: string
           preferred_language: string | null
+          token_period_start: string
           tokens_used_this_period: number
           updated_at: string
         }
@@ -389,6 +390,7 @@ export type Database = {
           preferred_chat_model?: string | null
           preferred_flow_model?: string
           preferred_language?: string | null
+          token_period_start?: string
           tokens_used_this_period?: number
           updated_at?: string
         }
@@ -403,6 +405,7 @@ export type Database = {
           preferred_chat_model?: string | null
           preferred_flow_model?: string
           preferred_language?: string | null
+          token_period_start?: string
           tokens_used_this_period?: number
           updated_at?: string
         }
@@ -809,6 +812,7 @@ export type Database = {
       }
       owns_project: { Args: { _project_id: string }; Returns: boolean }
       owns_thread: { Args: { _thread_id: string }; Returns: boolean }
+      reset_tokens_if_stale: { Args: { user_uuid: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
