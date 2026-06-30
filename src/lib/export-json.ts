@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { getBandLabel } from "@/lib/flowBands";
+import type { Json } from "@/integrations/supabase/types";
 
 export async function exportProjectAsJson(projectId: string) {
   const [
@@ -78,10 +79,10 @@ export async function exportProjectAsJson(projectId: string) {
   );
 
   // Enrich flow reports with band labels (descriptive, user-facing)
-  const enrichedFlowReports = (flowRes.data ?? []).map((r: any) => {
-    const enrichPillar = (p: any) =>
-      p && typeof p === "object"
-        ? { ...p, band_label: getBandLabel(p.score ?? null) }
+  const enrichedFlowReports = (flowRes.data ?? []).map((r) => {
+    const enrichPillar = (p: Json): Json =>
+      p && typeof p === "object" && !Array.isArray(p)
+        ? { ...p, band_label: getBandLabel(typeof p.score === "number" ? p.score : null) }
         : p;
     return {
       ...r,

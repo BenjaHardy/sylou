@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { estimateTokens, classifyTokenUsage, type TokenEstimation } from "@/lib/estimateTokens";
+import type { Json } from "@/integrations/supabase/types";
 
 export interface FlowPillar {
   reasoning: string;
@@ -244,8 +245,8 @@ export function useFlowAnalysis(projectId: string | null) {
       const now = new Date().toISOString();
       const update =
         type === "pre"
-          ? { user_feedback_pre: feedback as any, user_feedback_pre_at: now }
-          : { user_feedback_post: feedback as any, user_feedback_post_at: now };
+          ? { user_feedback_pre: feedback as unknown as Json, user_feedback_pre_at: now }
+          : { user_feedback_post: feedback as unknown as Json, user_feedback_post_at: now };
 
       const { error: err } = await supabase
         .from("flow_reports")
@@ -276,7 +277,7 @@ export function useFlowAnalysis(projectId: string | null) {
       const { error: err } = await supabase
         .from("flow_reports")
         .update({
-          user_feedback_post: assessment as any,
+          user_feedback_post: assessment as unknown as Json,
           user_feedback_post_at: now,
         })
         .eq("id", report.id);

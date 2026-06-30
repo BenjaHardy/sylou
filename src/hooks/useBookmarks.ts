@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesInsert } from "@/integrations/supabase/types";
 
 export interface Bookmark {
   id: string;
@@ -36,7 +37,7 @@ export function useBookmarks(projectId: string | null) {
 
   const createBookmark = useCallback(async (threadId: string, messageId: string) => {
     if (!projectId) return;
-    const newBookmark: Partial<Bookmark> = {
+    const newBookmark: TablesInsert<"chat_bookmarks"> = {
       project_id: projectId,
       thread_id: threadId,
       message_id: messageId,
@@ -55,7 +56,7 @@ export function useBookmarks(projectId: string | null) {
 
     const { data, error } = await supabase
       .from("chat_bookmarks")
-      .insert(newBookmark as any)
+      .insert(newBookmark)
       .select()
       .single();
     if (!error && data) {
@@ -73,7 +74,7 @@ export function useBookmarks(projectId: string | null) {
     );
     await supabase
       .from("chat_bookmarks")
-      .update(updates as any)
+      .update(updates)
       .eq("id", id);
   }, []);
 
