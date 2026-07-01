@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callLLM, providerFor, normaliseResponse, extractProviderError } from "../_shared/_llm.ts";
+import { callLLM, providerFor, normaliseResponse, extractProviderError, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import {
   CHAT_THINKING, CHAT_EFFORT, CHAT_MISTRAL_EFFORT,
@@ -131,7 +131,7 @@ function extractToolCalls(
   }));
 }
 
-function buildDocumentTool() {
+function buildDocumentTool(): LLMTool {
   return {
     type: "function",
     function: {
@@ -152,7 +152,7 @@ function buildDocumentTool() {
   };
 }
 
-function buildWebSearchTool() {
+function buildWebSearchTool(): LLMTool {
   return {
     type: "function",
     function: {
@@ -466,10 +466,10 @@ When citing information from web search results, always include the source URL i
       .limit(50);
 
     // --- Build messages array ---
-    const llmMessages: Array<{ role: string; content: string; tool_call_id?: string }> = [
+    const llmMessages: LLMMessage[] = [
       { role: "system", content: systemPrompt },
-      ...(history ?? []).map((m: { role: string; content: string }) => ({
-        role: m.role,
+      ...(history ?? []).map((m: { role: string; content: string }): LLMMessage => ({
+        role: m.role as LLMMessage["role"],
         content: m.content,
       })),
       { role: "user", content: message.trim() },
@@ -490,7 +490,7 @@ When citing information from web search results, always include the source URL i
 
     // --- Build tools array ---
     const hasTools = hasDocuments || webSearchActive;
-    const tools: Record<string, unknown>[] = [];
+    const tools: LLMTool[] = [];
     if (hasDocuments) tools.push(buildDocumentTool());
     if (webSearchActive) tools.push(buildWebSearchTool());
 
@@ -523,7 +523,7 @@ When citing information from web search results, always include the source URL i
         console.log("[stream] tools available, using two-pass flow");
 
         // LLM Call #1: non-streaming with tools
-        const call1Body: Record<string, unknown> = {
+        const call1Body = {
           model: chatModel,
           messages: llmMessages,
           max_tokens: chatMaxTokens,
@@ -655,9 +655,9 @@ When citing information from web search results, always include the source URL i
           async start(controller) {
             try {
               // Build conversation with tool results
-              const toolMessages: Array<Record<string, unknown>> = [
+              const toolMessages: LLMMessage[] = [
                 ...llmMessages,
-                norm1.assistantMessage as unknown as Record<string, unknown>,
+                norm1.assistantMessage,
               ];
 
               // Resolve tool calls iteratively (up to 5 iterations)
@@ -718,9 +718,9 @@ When citing information from web search results, always include the source URL i
                 if (iteration < MAX_ITERATIONS) {
                   const nextRes = await callLLM({
                       model: chatModel,
-                      messages: toolMessages as any,
+                      messages: toolMessages,
                       max_tokens: chatMaxTokens,
-                      tools: tools as any,
+                      tools,
                       temperature,
                       thinking,
                       effort,
@@ -739,7 +739,7 @@ When citing information from web search results, always include the source URL i
                   currentToolCalls = nextNorm.toolCalls;
 
                   if (currentToolCalls.length > 0) {
-                    toolMessages.push(nextNorm.assistantMessage as unknown as Record<string, unknown>);
+                    toolMessages.push(nextNorm.assistantMessage);
                   } else {
                     // No more tool calls — discard any text from intermediate call
                     // and fall through to a proper streaming Call #2

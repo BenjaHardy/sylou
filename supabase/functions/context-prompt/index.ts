@@ -276,12 +276,9 @@ async function callChatModel(
 
 function stripHtmlDeno(html: string): string {
   if (!html) return "";
-  try {
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    return (doc.body.textContent ?? "").replace(/\s+/g, " ").trim();
-  } catch {
-    return html.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
-  }
+  // No DOMParser global in the Deno/Supabase edge runtime (browser-only API),
+  // so a DOM-parse branch throws on every call — regex-strip is what runs.
+  return html.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
 }
 
 function formatCreativeDataForSummary(
@@ -528,6 +525,12 @@ Deno.serve(async (req) => {
     if (profileErr || !profile) {
       return jsonResponse({ error: "Profile not found" }, 404);
     }
+
+    // Past the auth/profile guards above, user & profile are non-null. Capture
+    // them here so nested closures (persistResults) keep the narrowed types —
+    // TS doesn't propagate outer narrowing into inner function scopes.
+    const authedUser = user;
+    const authedProfile = profile;
 
     if (isOverBudget(profile)) {
       return jsonResponse({ error: "Monthly token budget exceeded" }, 403);
@@ -1014,7 +1017,7 @@ When citing information from web search results, always include the source URL i
           .single();
 
         await supabase.from("token_usage").insert({
-          user_id: user.id,
+          user_id: authedUser.id,
           project_id,
           function_name: "context-prompt",
           model_used: chatModel,
@@ -1023,11 +1026,11 @@ When citing information from web search results, always include the source URL i
         });
 
         await supabase.rpc("increment_tokens_used", {
-          user_uuid: user.id,
+          user_uuid: authedUser.id,
           amount: totalTokens,
         });
 
-        const budgetRemaining: number | null = profile.monthly_token_budget === null ? null : profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
+        const budgetRemaining: number | null = authedProfile.monthly_token_budget === null ? null : authedProfile.monthly_token_budget - authedProfile.tokens_used_this_period - totalTokens;
 
         const insertedMessages: unknown[] = [];
 

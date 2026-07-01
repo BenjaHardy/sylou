@@ -552,12 +552,9 @@ function computeSimilarityPct(
 
 function stripHtmlDeno(html: string): string {
   if (!html) return "";
-  try {
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    return (doc.body.textContent ?? "").replace(/\s+/g, " ").trim();
-  } catch {
-    return html.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
-  }
+  // No DOMParser global in the Deno/Supabase edge runtime (browser-only API),
+  // so a DOM-parse branch throws on every call — regex-strip is what runs.
+  return html.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
 }
 
 function formatCreativeDataForAnalysis(
