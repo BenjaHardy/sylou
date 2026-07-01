@@ -119,6 +119,6 @@ Deno.test("toAnthropicBody: json_schema.name is kept internally but NOT forwarde
   });
   const fmt = (body.output_config as any)?.format;
   assertEquals(fmt?.type, "json_schema");
-  assert!("schema" in fmt);
+  assert("schema" in fmt);
   assert(!("name" in fmt), "name must NOT appear in output_config.format — Anthropic rejects it");
 });
