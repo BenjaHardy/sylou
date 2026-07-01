@@ -22,10 +22,10 @@ Don't introduce proprietary dependencies or closed-source patterns.
 Apply strict coding standards to avoid future code liabilities for the open-source project.
 
 ## 2. Stack
-- React 18, Vite 5, TypeScript 5, Tailwind v3, shadcn/ui
+- React 18, Vite 8 (Rolldown), TypeScript 5, Tailwind v3, shadcn/ui
 - React Router, TipTap v2 (custom font-size + pagination extensions)
 - Supabase via Lovable Cloud; Edge Functions in `supabase/functions/`
-- Vitest + Playwright (`playwright-fixture.ts`)
+- Vitest 4 + Playwright (`playwright-fixture.ts`)
 - LLM providers: Anthropic (Sonnet 4.6, Opus 4.8), Mistral (Large 3,
   Medium 3.5, Small 4), DeepSeek (deepseek-chat).
 
