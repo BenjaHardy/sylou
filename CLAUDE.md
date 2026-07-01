@@ -139,7 +139,11 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 
 ## 6. Commands
 - Tests: `npx vitest run` (or a specific file path).
-- Typecheck: `tsgo` — not `tsc --noEmit`.
+- Typecheck (frontend): `tsgo` — not `tsc --noEmit`.
+- Typecheck (edge functions): `cd supabase/functions && deno task check`
+  (needs a local `deno`; config in `supabase/functions/deno.json`). Deploy
+  (`supabase functions deploy`) remains the authoritative gate, but this
+  catches type errors locally first.
 - Git: Claude Code may run git commands when explicitly requested.
   Default discipline:
   - Always work on a feature branch named `claude/<short-description>`,

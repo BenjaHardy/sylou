@@ -1,0 +1,7 @@
+{
+  "nodeModulesDir": "auto",
+  "exclude": ["node_modules"],
+  "tasks": {
+    "check": "deno check **/*.ts"
+  }
+}
