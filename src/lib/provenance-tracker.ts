@@ -501,14 +501,12 @@ export class ProvenanceTracker {
     const splitMapped: ProvenanceSegment[] = [];
     for (const seg of mapped) {
       let current = seg;
-      let didSplit = false;
 
       for (const ins of insertionRanges) {
         if (ins.start >= current.start && ins.end <= current.end && ins.start < ins.end) {
           const shouldSplit = hasSignal || current.source !== "typed";
           if (!shouldSplit) continue;
 
-          didSplit = true;
           if (ins.start > current.start) {
             splitMapped.push({
               start: current.start,
@@ -522,7 +520,6 @@ export class ProvenanceTracker {
               end: current.end,
               source: current.source,
             };
-            didSplit = false;
           } else {
             current = { ...current, start: current.end, end: current.end };
             break;

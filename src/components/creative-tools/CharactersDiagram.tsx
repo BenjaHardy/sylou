@@ -7,16 +7,13 @@ import {
   PointerSensor,
   DragEndEvent,
   DragMoveEvent,
-  useDndMonitor,
 } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Link2, Settings, X, Trash2, Users } from "lucide-react";
 import { RelationshipTypesModal, type RelationshipType } from "./RelationshipTypesModal";

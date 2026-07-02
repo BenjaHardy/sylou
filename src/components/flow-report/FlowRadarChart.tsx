@@ -85,7 +85,6 @@ export function FlowRadarChart({ report, userFeedback, userLabel, userColor }: F
         {[...FLOW_BANDS].reverse().map((band, idxFromOuter) => {
           const bandIdx = FLOW_BANDS.length - 1 - idxFromOuter;
           const outerBoundary = FLOW_ZONE_BOUNDARIES[bandIdx + 1];
-          const radius = (outerBoundary / MAX_SCORE) * R;
           return (
             <polygon
               key={band.label}

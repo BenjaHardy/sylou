@@ -65,7 +65,6 @@ import { FlowReportFooter } from "@/components/flow-report/FlowReportFooter";
 import { TokenUsageSection } from "@/components/flow-report/TokenUsageSection";
 import { ProjectActivitySection } from "@/components/flow-report/ProjectActivitySection";
 import { extractUserAssessment, extractFeedbackScores, formatReasoningDisclosure } from "@/components/flow-report/shared-utils";
-import FlowWorkProfile from "@/components/FlowWorkProfile";
 import { ProfileTabContent } from "@/components/flow-report/ProfileTabContent";
 import { WritingSnapshotTab } from "@/components/flow-report/WritingSnapshotTab";
 import { KeyUserContributions } from "@/components/flow-report/KeyUserContributions";
@@ -117,7 +116,6 @@ export function FlowReportView({
   const [badgeSource, setBadgeSource] = useState<"ai" | "user">("ai");
 
   // Replay state
-  const [showReplay, setShowReplay] = useState(false);
   const [replaySnapshot, setReplaySnapshot] = useState<ReplayEvent[] | null>(null);
   const [loadingReplay, setLoadingReplay] = useState(false);
 
@@ -288,7 +286,6 @@ export function FlowReportView({
     organize: report.ai_organize?.score ?? null,
     write: report.ai_write?.score ?? null,
   };
-  const flowProfile = getFlowProfile(flowScores);
 
   const existingAssessment = extractUserAssessment(report.user_feedback_post);
   const preFeedbackScores = report.user_feedback_pre ?? null;

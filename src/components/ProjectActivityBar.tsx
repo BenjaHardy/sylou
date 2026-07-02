@@ -1,5 +1,5 @@
 import { Clock, Pencil, MessageSquare } from "lucide-react";
-import { useProjectStats, type ProjectStats } from "@/hooks/useProjectStats";
+import { useProjectStats } from "@/hooks/useProjectStats";
 import {
   Tooltip,
   TooltipContent,
