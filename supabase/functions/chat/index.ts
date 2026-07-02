@@ -104,33 +104,6 @@ function extractDeltaText(
   return null;
 }
 
-/**
- * Extract tool calls from a non-streaming LLM response.
- */
-function extractToolCalls(
-  response: Record<string, unknown>
-): Array<{ id: string; name: string; arguments: Record<string, unknown> }> {
-  const choices = response.choices as
-    | Array<{
-        message?: {
-          tool_calls?: Array<{
-            id: string;
-            function: { name: string; arguments: string };
-          }>;
-        };
-      }>
-    | undefined;
-
-  const toolCalls = choices?.[0]?.message?.tool_calls;
-  if (!toolCalls || toolCalls.length === 0) return [];
-
-  return toolCalls.map((tc) => ({
-    id: tc.id,
-    name: tc.function.name,
-    arguments: JSON.parse(tc.function.arguments),
-  }));
-}
-
 function buildDocumentTool(): LLMTool {
   return {
     type: "function",
@@ -441,9 +414,6 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
     // Append web search instructions to system prompt
     if (webSearchActive) {
-      const docsContext = (hasNonFavDocs || favourites.length > 0)
-        ? " or in the imported documents"
-        : "";
       systemPrompt += `\n\n# WEB SEARCH
 
 You have access to a web_search tool. Use it according to these rules:

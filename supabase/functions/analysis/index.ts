@@ -16,21 +16,6 @@ import {
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 
-// Budget helper. Intentionally duplicated across the four edge functions
-// (chat, context-prompt, editor-action, analysis) — Supabase edge function
-// isolation prevents importing a shared module without a build step.
-// A NULL monthly_token_budget means "no limit" (operator hasn't set one).
-function isOverBudget(profile: {
-  monthly_token_budget: number | null;
-  tokens_used_this_period: number;
-}): boolean {
-  return (
-    profile.monthly_token_budget !== null &&
-    profile.tokens_used_this_period >= profile.monthly_token_budget
-  );
-}
-
-
 // --- CORS allow-list (parsed once at module load) ---
 const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGIN") ?? "")
   .split(",")
