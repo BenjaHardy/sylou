@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesUpdate } from "@/integrations/supabase/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { DEFAULT_CHAT_MODEL, DEFAULT_FLOW_MODEL } from "@/lib/models";
 
@@ -93,7 +94,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
       if (!user) return;
       // Optimistic
       setSettings((prev) => ({ ...prev, ...patch }));
-      const dbPatch: Record<string, unknown> = {};
+      const dbPatch: TablesUpdate<"profiles"> = {};
       if (patch.display_name !== undefined) dbPatch.display_name = patch.display_name;
       if (patch.preferred_language !== undefined)
         dbPatch.preferred_language = patch.preferred_language;

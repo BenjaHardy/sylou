@@ -139,7 +139,10 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 
 ## 6. Commands
 - Tests: `npx vitest run` (or a specific file path).
-- Typecheck (frontend): `tsgo` — not `tsc --noEmit`.
+- Typecheck (frontend): `npm run typecheck` (`tsc --noEmit -p tsconfig.app.json`;
+  `strict` is on). NOTE: bare `tsc --noEmit` is a no-op here — the root
+  `tsconfig.json` is solution-style (`files: []`) so it checks **zero** `src/`
+  files; always target the app project.
 - Typecheck (edge functions): `cd supabase/functions && deno task check`
   (needs a local `deno`; config in `supabase/functions/deno.json`). Deploy
   (`supabase functions deploy`) remains the authoritative gate, but this
