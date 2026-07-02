@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, KeyboardEvent, useCallback, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { MessageSquare, Send, Bot, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp, BookmarkIcon, Globe, Paperclip } from "lucide-react";
+import { MessageSquare, Send, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp, BookmarkIcon, Globe, Paperclip } from "lucide-react";
 import sylouShiba from "@/assets/sylou-shiba.png";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
@@ -250,7 +250,7 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
 }
 
 export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigger, injectMessages, onMessagesInjected, provenanceTracker, conciseMode, onConciseModeChange, onSetMessages, onActiveThreadChange, onUploadDocument, documentUploading, webSearchEnabled: webSearchEnabledProp, onWebSearchEnabledChange }: Props) {
-  const { threads, activeThreadId, activeThreadName, setActiveThreadId, createThread, renameThread } = useChatThread(projectId);
+  const { threads, activeThreadId, setActiveThreadId, createThread, renameThread } = useChatThread(projectId);
   const { messages, loading, sending, phase, sendMessage, budgetRemaining, refreshMessages, appendMessages, setMessages } = useChatMessages(activeThreadId);
   const { settings: userSettings } = useUserSettings();
   const { bookmarks, createBookmark, updateBookmark, deleteBookmark, getBookmarkForMessage } = useBookmarks(projectId);

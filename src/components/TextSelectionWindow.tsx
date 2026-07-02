@@ -110,7 +110,6 @@ export function TextSelectionWindow({
   conciseMode,
   selectionFrom,
   selectionTo,
-  appendMessages,
   setMessages,
   webSearchEnabled,
   sourceModule = "editor",
@@ -556,9 +555,6 @@ export function TextSelectionWindow({
 
   const row1 = actions.filter((a) => a.row === 1);
   const row2 = actions.filter((a) => a.row === 2);
-
-  // The text to show in the "Proposed" area during streaming
-  const displayedProposedText = phase === "streaming" ? streamingText : proposedText;
 
   return (
     <div

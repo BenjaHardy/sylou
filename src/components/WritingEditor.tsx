@@ -138,7 +138,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       // NOT validate them — a misnamed key (e.g. `handleCut`) is silently
       // never invoked. Double-check names when adding handlers here.
       handleDOMEvents: {
-        copy: (_view, event) => {
+        copy: (_view, _event) => {
           const ed = editor;
           if (!ed) return false;
           const { from, to } = ed.state.selection;
@@ -150,7 +150,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           }
           return false;
         },
-        cut: (_view, event) => {
+        cut: (_view, _event) => {
           const ed2 = editor;
           if (!ed2) return false;
           const { from, to } = ed2.state.selection;
@@ -166,7 +166,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
         // selection still reflects the drag source). At `drop` the selection
         // has typically moved to the drop target, so reading it there would
         // miss or mis-size the slice and degrade to the dominant source.
-        dragstart: (_view, event) => {
+        dragstart: (_view, _event) => {
           const ed = editor;
           if (!ed) return false;
           const { from, to } = ed.state.selection;

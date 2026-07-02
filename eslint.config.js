@@ -20,7 +20,12 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
-      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": ["error", {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
+        ignoreRestSiblings: true,
+      }],
       // Surfaced as a warning rather than a hard error: the remaining
       // occurrences are mostly LLM-provider response glue (see _shared/_llm.ts
       // and the edge functions) and Supabase generated-type workarounds.
