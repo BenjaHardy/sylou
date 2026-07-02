@@ -1,0 +1,61 @@
+name: CI
+
+# Runs on every pull request and on pushes to main. PRs get fast feedback
+# before review; pushes to main keep the historical "main is green" signal
+# and catch anything that landed directly.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  frontend:
+    name: Lint, typecheck & test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # `npm ci` reads package-lock.json exactly and fails if it is out of sync
+      # with package.json, so the checks run against the same dependency tree
+      # contributors have.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (eslint)
+        run: npm run lint
+
+      - name: Typecheck (tsc, strict)
+        run: npm run typecheck
+
+      - name: Unit tests (vitest)
+        run: npm test
+
+  edge-functions:
+    name: Edge functions typecheck (deno)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      # Mirrors the local `deno task check` (config: supabase/functions/deno.json;
+      # nodeModulesDir=auto resolves the one npm: import for the typecheck).
+      - name: deno check
+        run: deno task check
+        working-directory: supabase/functions
