@@ -84,6 +84,15 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   non-default role needs access — e.g. `GRANT SELECT … TO anon` on the
   sanitized `flow_reports_public` view. Tables otherwise rely on the
   default `authenticated`-role grants + RLS.
+- **SECURITY DEFINER functions**: default to `GRANT EXECUTE TO PUBLIC`, so
+  `REVOKE ALL … FROM PUBLIC` and re-`GRANT EXECUTE` only to the roles that call
+  them (`authenticated` and/or `service_role`); guard the body with
+  `auth.role() <> 'service_role' AND auth.uid() IS DISTINCT FROM <target-user>`
+  (the NULL-safe form blocks `anon`). Trigger/event-trigger functions get no
+  grant (the trigger machinery runs them as owner). *Accepted advisor finding:*
+  `flow_reports_public` is an intentional SECURITY DEFINER **view** — the
+  sanitized public-share surface that replaced a base-table anon policy; dismiss
+  the `security_definer_view` lint rather than switching to `security_invoker`.
 - **Secrets**: Edge functions read secrets via `Deno.env.get("NAME")`;
   values are injected by the host (Lovable secrets / `supabase secrets
   set`), never committed. Frontend only reads publishable values via
