@@ -85,8 +85,10 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   sanitized `flow_reports_public` view. Tables otherwise rely on the
   default `authenticated`-role grants + RLS.
 - **SECURITY DEFINER functions**: default to `GRANT EXECUTE TO PUBLIC`, so
-  `REVOKE ALL … FROM PUBLIC` and re-`GRANT EXECUTE` only to the roles that call
-  them (`authenticated` and/or `service_role`); guard the body with
+  `REVOKE ALL … FROM PUBLIC, anon, authenticated` (Supabase grants the
+  `anon`/`authenticated` API roles EXECUTE **directly** via default privileges,
+  so a `PUBLIC`-only revoke leaves them) and re-`GRANT EXECUTE` only to the roles
+  that call them (`authenticated` and/or `service_role`); guard the body with
   `auth.role() <> 'service_role' AND auth.uid() IS DISTINCT FROM <target-user>`
   (the NULL-safe form blocks `anon`). Trigger/event-trigger functions get no
   grant (the trigger machinery runs them as owner). *Accepted advisor finding:*
