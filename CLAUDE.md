@@ -84,6 +84,17 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   non-default role needs access — e.g. `GRANT SELECT … TO anon` on the
   sanitized `flow_reports_public` view. Tables otherwise rely on the
   default `authenticated`-role grants + RLS.
+- **RLS perf (`auth_rls_initplan`)**: the advisor wants `auth.uid()` wrapped as
+  `(select auth.uid())` so it's evaluated once per statement, not per row. Fine
+  for simple predicates — but do **NOT** apply it to the two `profiles` policies
+  (`Users can view own profile`, `Users can update own profile non-budget`):
+  their budget-freeze `WITH CHECK` runs subqueries that read `profiles` itself,
+  and the `(select …)` form tips Postgres's RLS recursion guard →
+  `42P17 infinite recursion detected in policy for relation "profiles"` on every
+  `profiles` UPDATE (silently breaks the Settings model picker). Those 2 WARNs
+  are **accepted** (profiles is one row per user → negligible cost); see
+  `20260703000000`. The durable fix (column privileges instead of the
+  self-referencing freeze) is a separate tracked item.
 - **SECURITY DEFINER functions**: default to `GRANT EXECUTE TO PUBLIC`, so
   `REVOKE ALL … FROM PUBLIC, anon, authenticated` (Supabase grants the
   `anon`/`authenticated` API roles EXECUTE **directly** via default privileges,
