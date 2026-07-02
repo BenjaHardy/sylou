@@ -366,13 +366,52 @@ export class StructuredOutputError extends Error {
   }
 }
 
+// ── Raw provider-response shapes ──────────────────────────────────────────
+// Minimal, internal (not exported) types that the two normalisers narrow the
+// raw provider JSON to at the boundary. All fields optional — providers vary
+// and the bodies defend with `?.`/defaults. Prefer an `unknown` param + one
+// documented cast here over `any` bleeding through the whole function.
+interface RawContentBlock {
+  type?: string;
+  text?: string;
+  id?: string;
+  name?: string;
+  input?: Record<string, unknown>;
+}
+interface RawToolCall {
+  id?: string;
+  function?: { name?: string; arguments?: string };
+}
+interface RawMessage {
+  content?: unknown;
+  tool_calls?: RawToolCall[];
+}
+interface RawUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+}
+interface RawResponse {
+  content?: RawContentBlock[];
+  stop_reason?: string;
+  choices?: Array<{ message?: RawMessage }>;
+  usage?: RawUsage;
+}
+interface RawStreamChunk {
+  choices?: Array<{ delta?: { content?: unknown } }>;
+  type?: string;
+  delta?: { text?: string };
+}
+
 export function normaliseResponse(
   provider: ProviderId,
-  raw: any,
+  raw: unknown,
   opts?: { structuredOutputName?: string },
 ): NormalisedResponse {
+  const r = raw as RawResponse;
   if (provider === "anthropic") {
-    const blocks: any[] = raw?.content ?? [];
+    const blocks: RawContentBlock[] = r.content ?? [];
     let text = "";
     const toolCalls: NormalisedResponse["toolCalls"] = [];
     const oaToolCalls: NonNullable<LLMMessage["tool_calls"]> = [];
@@ -384,11 +423,11 @@ export function normaliseResponse(
     for (const b of blocks) {
       if (b.type === "text") text += b.text ?? "";
       if (b.type === "tool_use") {
-        toolCalls.push({ id: b.id, name: b.name, arguments: b.input ?? {} });
+        toolCalls.push({ id: b.id ?? "", name: b.name ?? "", arguments: b.input ?? {} });
         oaToolCalls.push({
-          id: b.id,
+          id: b.id ?? "",
           type: "function",
-          function: { name: b.name, arguments: JSON.stringify(b.input ?? {}) },
+          function: { name: b.name ?? "", arguments: JSON.stringify(b.input ?? {}) },
         });
       }
     }
@@ -397,7 +436,7 @@ export function normaliseResponse(
     // exactly as it did for tool_use. Refusals / max_tokens / parse failures
     // throw a tagged StructuredOutputError so callers can branch deterministically.
     if (opts?.structuredOutputName) {
-      const stopReason = raw?.stop_reason ?? null;
+      const stopReason = r.stop_reason ?? null;
       if (stopReason === "refusal") {
         throw new StructuredOutputError(
           STRUCTURED_OUTPUT_REFUSAL,
@@ -444,51 +483,52 @@ export function normaliseResponse(
         content: text,
         ...(oaToolCalls.length ? { tool_calls: oaToolCalls } : {}),
       },
-      usage: raw?.usage
-        ? { input_tokens: raw.usage.input_tokens, output_tokens: raw.usage.output_tokens }
+      usage: r.usage
+        ? { input_tokens: r.usage.input_tokens, output_tokens: r.usage.output_tokens }
         : undefined,
     };
   }
   // OpenAI-shape (Mistral/DeepSeek)
-  const msg = raw?.choices?.[0]?.message ?? {};
+  const msg: RawMessage = r.choices?.[0]?.message ?? {};
   const text = typeof msg.content === "string" ? msg.content : "";
   const toolCalls = Array.isArray(msg.tool_calls)
-    ? msg.tool_calls.map((tc: any) => ({
-        id: tc.id,
-        name: tc.function?.name,
+    ? msg.tool_calls.map((tc) => ({
+        id: tc.id ?? "",
+        name: tc.function?.name ?? "",
         arguments: safeJSON(tc.function?.arguments ?? "{}"),
       }))
     : [];
   return {
     text,
     toolCalls,
-    assistantMessage: msg as LLMMessage,
-    usage: raw?.usage
+    assistantMessage: msg as unknown as LLMMessage,
+    usage: r.usage
       ? {
-          input_tokens: raw.usage.prompt_tokens ?? raw.usage.input_tokens,
-          output_tokens: raw.usage.completion_tokens ?? raw.usage.output_tokens,
+          input_tokens: r.usage.prompt_tokens ?? r.usage.input_tokens,
+          output_tokens: r.usage.completion_tokens ?? r.usage.output_tokens,
         }
       : undefined,
   };
 }
 
 // Extract a single text delta from a streaming SSE chunk JSON, model-agnostic.
-export function extractDeltaText(parsed: any, _provider: ProviderId): string | null {
+export function extractDeltaText(parsed: unknown, _provider: ProviderId): string | null {
+  const p = parsed as RawStreamChunk;
   // OpenAI-shape
-  const choices = parsed?.choices;
+  const choices = p.choices;
   const content = choices?.[0]?.delta?.content;
   if (content) {
     if (typeof content === "string") return content;
     if (Array.isArray(content)) {
-      return content
-        .filter((b: any) => b?.type === "text")
-        .map((b: any) => b.text ?? "")
+      return (content as RawContentBlock[])
+        .filter((b) => b?.type === "text")
+        .map((b) => b.text ?? "")
         .join("");
     }
   }
   // Anthropic-shape
-  if (parsed?.type === "content_block_delta") {
-    const t = parsed?.delta?.text;
+  if (p.type === "content_block_delta") {
+    const t = p.delta?.text;
     if (typeof t === "string") return t;
   }
   return null;
