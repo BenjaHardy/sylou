@@ -581,7 +581,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
               <TooltipTrigger asChild>
                 {webSearchConfigured ? (
                   <button
-                    onClick={() => setUserWantsWebSearch((v) => !v)}
+                    onClick={() => setUserWantsWebSearch(!userWantsWebSearch)}
                     className={`h-7 w-7 shrink-0 flex items-center justify-center rounded-md transition-colors ${
                       webSearchActive
                         ? "text-primary bg-primary/10"
