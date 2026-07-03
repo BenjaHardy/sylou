@@ -17,10 +17,11 @@ export interface ModelInfo {
   /** Marked for the UI to flag less-mature models. */
   isExperimental?: boolean;
   /** True when the model ID is a rolling alias that always resolves to the
-   *  provider's current latest version (e.g. `deepseek-chat`). Pinned
-   *  version IDs leave this undefined — we now pin every Mistral model
-   *  by dated alias (e.g. `mistral-large-2512`) so version bumps are
-   *  deliberate (test → update → redeploy) rather than auto-applied. */
+   *  provider's current latest version. Pinned version IDs leave this
+   *  undefined — every registry model is pinned today (Mistral by dated
+   *  alias, DeepSeek by family id since upstream discontinued the rolling
+   *  `deepseek-chat` alias on 2026-07-24) so version bumps are deliberate
+   *  (test → update → redeploy) rather than auto-applied. */
   isRollingLatest?: boolean;
   /** Optional one-line note shown beneath the row. */
   note?: string;
@@ -65,13 +66,12 @@ export const MODELS: ModelInfo[] = [
     contextLimit: 1_000_000,
   },
   {
-    id: "deepseek-chat",
-    label: "DeepSeek Chat",
+    id: "deepseek-v4-flash",
+    label: "DeepSeek V4 Flash",
     provider: "deepseek",
     pricing: { input: 0.14, output: 0.28 },
     contextLimit: 1_000_000,
     isExperimental: true,
-    isRollingLatest: true,
   },
 ];
 
@@ -86,7 +86,7 @@ export const MODEL_LABELS: Record<string, string> = MODELS.reduce(
     "mistral-large-3":       "Mistral Large",
     "mistral-large-latest":  "Mistral Large",
     "mistral-small-latest":  "Mistral Small",
-    "deepseek-v4-flash":     "DeepSeek Chat",
+    "deepseek-chat":         "DeepSeek Chat",
     "claude-opus-4-7":       "Claude Opus 4.7",
   } as Record<string, string>,
 );

@@ -36,10 +36,12 @@
 //   the value is defined and non-"none".
 //
 // DeepSeek:
-//   `deepseek-chat` has no thinking toggle. DeepSeek's reasoning lives on
-//   the separate `deepseek-reasoner` model, which we do not currently
-//   route to. resolveThinking / resolveEffort / resolveMistralEffort all
-//   return falsy for DeepSeek so the request body is untouched.
+//   `deepseek-v4-flash` (non-thinking mode) has no thinking toggle.
+//   DeepSeek's reasoning lives in v4-flash's separate thinking mode
+//   (exposed as `deepseek-reasoner` until that legacy id's 2026-07-24
+//   discontinuation), which we do not currently route to.
+//   resolveThinking / resolveEffort / resolveMistralEffort all return
+//   falsy for DeepSeek so the request body is untouched.
 //
 // Per-function intent:
 //   FLOW    — schema-bound analysis. Thinking ON for Opus only (Sonnet

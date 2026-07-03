@@ -21,15 +21,15 @@ This document tracks how Sylou configures each LLM model across the four edge fu
 | Mistral Large 3    | Mistral   | $0.50 / $1.50           | 256K                        | `mistral-large-2512` |
 | Mistral Medium 3.5 | Mistral   | $1.50 / $7.50           | 256K                        | `mistral-medium-3-5` |
 | Mistral Small 4    | Mistral   | $0.15 / $0.60           | 256K                        | `mistral-small-2603` |
-| DeepSeek Chat      | DeepSeek  | $0.14 / $0.28           | 1M                          | `deepseek-chat`      |
+| DeepSeek V4 Flash  | DeepSeek  | $0.14 / $0.28           | 1M                          | `deepseek-v4-flash`  |
 
-*Pricing as of June 2026; verify against provider pricing pages before publishing.*
+*Pricing as of July 2026; verify against provider pricing pages before publishing.*
 
-> **DeepSeek model-id transition:** upstream, the legacy `deepseek-chat` id is
-> discontinued on **2026-07-24**; until then it aliases `deepseek-v4-flash`
-> (non-thinking mode — context 1M, max output 384K per DeepSeek's pricing
-> page). Migrating Sylou's registry to the new id is tracked and must land
-> before that date.
+> **DeepSeek model-id note:** Sylou uses the pinned `deepseek-v4-flash` id
+> (non-thinking mode — context 1M, max output 384K). The legacy rolling
+> alias `deepseek-chat`, used until July 2026, is discontinued upstream on
+> **2026-07-24**; stored user preferences were migrated by
+> `20260703150000_deepseek-v4-flash-preferred-models.sql`.
 
 ---
 
@@ -46,7 +46,7 @@ The most analytically demanding function. All models targeted for determinism (t
 | Mistral Large 3    | 0.0                          | n/a (no reasoning support)                             | 8192                | *Not* recommended, strong inherent bias towards the user.                                       |
 | Mistral Medium 3.5 | 0.0                          | reasoning_effort: off                                  | 8192                | Recommended Mistral model for FLOW; quality and repeatability. |
 | Mistral Small 4    | 0.0                          | reasoning_effort: high                                 | 16000               | *Not* recommended, bias towards the user, poor repeatability.  |
-| DeepSeek Chat      | 0.0                          | n/a                                                    | 8192                | *Not* recommended, bias towards the user, poor repeatability.  |
+| DeepSeek V4 Flash  | 0.0                          | n/a                                                    | 8192                | *Not* recommended, bias towards the user, poor repeatability.  |
 
 **Rationale for FLOW settings:**
 
@@ -67,11 +67,11 @@ Conversational responses. Quality matters; reasoning effort calibrated per model
 | Mistral Large 3    | 0.7                          | n/a                              | 2000                | Standard chat.                                                        |
 | Mistral Medium 3.5 | 0.7                          | reasoning_effort: high           | 4000                | Mistral "Quality tier" — reasoning enabled.                           |
 | Mistral Small 4    | 0.7                          | reasoning_effort: none           | 2000                | Mistral "Speed tier" — no thinking chunk; ideal for cheap, fast chat. |
-| DeepSeek Chat      | 1.0                          | n/a                              | 2000                | Standard, cheap chat.                                                 |
+| DeepSeek V4 Flash  | 1.0                          | n/a                              | 2000                | Standard, cheap chat.                                                 |
 
 **Rationale for Chat settings:**
 
-- Temperature — provider default: 1.0 for Claude Sonnet and DeepSeek Chat, 0.7 for Mistral; allows natural variation for conversational warmth.
+- Temperature — provider default: 1.0 for Claude Sonnet and DeepSeek, 0.7 for Mistral; allows natural variation for conversational warmth.
 - Reasoning effort tier-matched — Medium 3.5 ("quality tier") gets reasoning; Small ("speed tier") doesn't.
 - max_tokens 4000 for reasoning models — same logic as FLOW, smaller bump since chat responses are shorter.
 
@@ -88,7 +88,7 @@ Inline rewrites and proposals from within the editor. Latency-sensitive.
 | Mistral Large 3    | 0.7                          | n/a                              | 1000                | Standard.                                       |
 | Mistral Medium 3.5 | 0.7                          | reasoning_effort: none           | 1000                | No reasoning — editor actions should be snappy. |
 | Mistral Small 4    | 0.7                          | reasoning_effort: none           | 1000                | Same as Medium for editor.                      |
-| DeepSeek Chat      | 1.0                          | n/a                              | 1000                | Standard.                                       |
+| DeepSeek V4 Flash  | 1.0                          | n/a                              | 1000                | Standard.                                       |
 
 **Rationale for Editor settings:**
 
@@ -108,7 +108,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 | Mistral Large 3 | 0.7 | n/a | 1000 | 2000 | Standard. |
 | Mistral Medium 3.5 | 0.7 | reasoning_effort: high | 2500 | 4000 | Mistral quality tier — reasoning helps with nuanced AI features. |
 | Mistral Small 4 | 0.7 | reasoning_effort: none | 1000 | 2000 | Mistral speed tier. |
-| DeepSeek Chat | 1.0 | n/a | 1000 | 2000 | Standard. |
+| DeepSeek V4 Flash | 1.0 | n/a | 1000 | 2000 | Standard. |
 
 **Rationale for Context-prompt settings:**
 
@@ -167,7 +167,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
    
         Claude: add to *_THINKING and *_EFFORT tables (Sonnet, Opus).
         Mistral: add to *_MISTRAL_EFFORT tables and to the MISTRAL_REASONING_MODELS allowlist.
-        DeepSeek: only if using deepseek-reasoner; deepseek-chat has no reasoning toggle.
+        DeepSeek: only if routing to v4-flash's thinking mode; deepseek-v4-flash (non-thinking) has no reasoning toggle.
    
     Check NO_TEMPERATURE_MODELS in _temperatures.ts (Anthropic Opus 4.7+ rejects temperature).
 
