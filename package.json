@@ -1,8 +1,14 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "sylou",
+  "description": "Process-based AI-use transparency — an open-source writing environment that makes human-AI collaboration visible.",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.5.0",
+  "license": "AGPL-3.0-only",
+  "repository": "github:BenjaHardy/sylou",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -91,7 +97,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
-    "@playwright/test": "^1.57.0",
     "@tailwindcss/typography": "^0.5.16",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.0.0",

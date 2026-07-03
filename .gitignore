@@ -38,4 +38,6 @@ dist-ssr
 # This project uses npm. Do not commit Bun lockfiles.
 bun.lockb
 bun.lock
-.env 
+
+# Lovable-era scaffolding; the Lovable<->GitHub sync is disconnected.
+.lovable/

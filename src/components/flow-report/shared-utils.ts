@@ -17,8 +17,7 @@ import { getBandForScore, getBandLabel } from "@/lib/flowBands";
  * the temperature parenthetical in the FLOW report footer.
  *
  * Returns a leading-comma fragment (e.g. ", thinking on, effort high")
- * or "" when there is nothing meaningful to disclose. See the truth table
- * in .lovable/plan.md / docs for every combination.
+ * or "" when there is nothing meaningful to disclose.
  *
  * Defensive: tolerates legacy reports (fields undefined), partial data
  * (one field present, the other null), empty strings, and unknown future
