@@ -24,8 +24,8 @@ export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   "mistral-medium-3-5":   256_000,
   "mistral-small-2603":   256_000,
   "mistral-large-3": 256_000,
-  "deepseek-chat": 1_000_000,
   "deepseek-v4-flash": 1_000_000,
+  "deepseek-chat": 1_000_000, // legacy rolling alias (upstream-discontinued 2026-07-24)
   default: 200_000,
 };
 

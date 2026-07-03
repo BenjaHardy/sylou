@@ -27,7 +27,7 @@ Apply strict coding standards to avoid future code liabilities for the open-sour
 - Supabase via Lovable Cloud; Edge Functions in `supabase/functions/`
 - Vitest 4 (frontend units) + `deno test` (edge-function units in `_shared/`)
 - LLM providers: Anthropic (Sonnet 4.6, Opus 4.8), Mistral (Large 3,
-  Medium 3.5, Small 4), DeepSeek (deepseek-chat).
+  Medium 3.5, Small 4), DeepSeek (deepseek-v4-flash).
 
 Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 → `src/components/ProjectContentArea.tsx`.
