@@ -8,7 +8,7 @@ This document tracks how Sylou configures each LLM model across the four edge fu
 - A temperature, effort, or thinking value is changed in `_temperatures.ts` or `_thinking.ts`
 - Observed model behavior changes (e.g., a model's response quality changes after a provider update)
 
-**Last updated:** June 2026
+**Last updated:** July 2026
 
 ---
 
@@ -21,9 +21,15 @@ This document tracks how Sylou configures each LLM model across the four edge fu
 | Mistral Large 3    | Mistral   | $0.50 / $1.50           | 256K                        | `mistral-large-2512` |
 | Mistral Medium 3.5 | Mistral   | $1.50 / $7.50           | 256K                        | `mistral-medium-3-5` |
 | Mistral Small 4    | Mistral   | $0.15 / $0.60           | 256K                        | `mistral-small-2603` |
-| DeepSeek Chat      | DeepSeek  | $0.14 / $0.28           | 64K                         | `deepseek-chat`      |
+| DeepSeek Chat      | DeepSeek  | $0.14 / $0.28           | 1M                          | `deepseek-chat`      |
 
 *Pricing as of June 2026; verify against provider pricing pages before publishing.*
+
+> **DeepSeek model-id transition:** upstream, the legacy `deepseek-chat` id is
+> discontinued on **2026-07-24**; until then it aliases `deepseek-v4-flash`
+> (non-thinking mode — context 1M, max output 384K per DeepSeek's pricing
+> page). Migrating Sylou's registry to the new id is tracked and must land
+> before that date.
 
 ---
 
@@ -61,11 +67,11 @@ Conversational responses. Quality matters; reasoning effort calibrated per model
 | Mistral Large 3    | 0.7                          | n/a                              | 2000                | Standard chat.                                                        |
 | Mistral Medium 3.5 | 0.7                          | reasoning_effort: high           | 4000                | Mistral "Quality tier" — reasoning enabled.                           |
 | Mistral Small 4    | 0.7                          | reasoning_effort: none           | 2000                | Mistral "Speed tier" — no thinking chunk; ideal for cheap, fast chat. |
-| DeepSeek Chat      | 0.7                          | n/a                              | 2000                | Standard, cheap chat.                                                 |
+| DeepSeek Chat      | 1.0                          | n/a                              | 2000                | Standard, cheap chat.                                                 |
 
 **Rationale for Chat settings:**
 
-- Temperature — provider default: 1.0 for Claude Sonnet, 0.7 for Mistral; allows natural variation for conversational warmth.
+- Temperature — provider default: 1.0 for Claude Sonnet and DeepSeek Chat, 0.7 for Mistral; allows natural variation for conversational warmth.
 - Reasoning effort tier-matched — Medium 3.5 ("quality tier") gets reasoning; Small ("speed tier") doesn't.
 - max_tokens 4000 for reasoning models — same logic as FLOW, smaller bump since chat responses are shorter.
 
@@ -82,7 +88,7 @@ Inline rewrites and proposals from within the editor. Latency-sensitive.
 | Mistral Large 3    | 0.7                          | n/a                              | 1000                | Standard.                                       |
 | Mistral Medium 3.5 | 0.7                          | reasoning_effort: none           | 1000                | No reasoning — editor actions should be snappy. |
 | Mistral Small 4    | 0.7                          | reasoning_effort: none           | 1000                | Same as Medium for editor.                      |
-| DeepSeek Chat      | 0.7                          | n/a                              | 1000                | Standard.                                       |
+| DeepSeek Chat      | 1.0                          | n/a                              | 1000                | Standard.                                       |
 
 **Rationale for Editor settings:**
 
@@ -102,7 +108,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 | Mistral Large 3 | 0.7 | n/a | 1000 | 2000 | Standard. |
 | Mistral Medium 3.5 | 0.7 | reasoning_effort: high | 2500 | 4000 | Mistral quality tier — reasoning helps with nuanced AI features. |
 | Mistral Small 4 | 0.7 | reasoning_effort: none | 1000 | 2000 | Mistral speed tier. |
-| DeepSeek Chat | 0.7 | n/a | 1000 | 2000 | Standard. |
+| DeepSeek Chat | 1.0 | n/a | 1000 | 2000 | Standard. |
 
 **Rationale for Context-prompt settings:**
 

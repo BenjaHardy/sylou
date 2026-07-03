@@ -60,7 +60,7 @@ design choices)
 
 ## Checklist
 
-- [ ] My commits are signed off (`git commit -s`) per the [DCO](CONTRIBUTING.md #developer-certificate-of-origin-dco)
+- [ ] My commits are signed off (`git commit -s`) per the [DCO](https://github.com/BenjaHardy/sylou/blob/main/CONTRIBUTING.md#developer-certificate-of-origin-dco)
 - [ ] I have read the contributing guide (CONTRIBUTING.md)
 - [ ] I have assessed and indicated the transparency/provenance impact above
 - [ ] For substantial changes: I discussed the approach in an issue first
