@@ -40,6 +40,12 @@ jobs:
       - name: Unit tests (vitest)
         run: npm test
 
+      # Vercel only builds on push to main (post-merge), so without this step
+      # a PR that breaks the production build (asset imports, CSS, Rolldown
+      # issues tsc can't see) would merge green and then fail the deploy.
+      - name: Build (vite)
+        run: npm run build
+
   edge-functions:
     name: Edge functions typecheck (deno)
     runs-on: ubuntu-latest
@@ -58,4 +64,11 @@ jobs:
       # nodeModulesDir=auto resolves the one npm: import for the typecheck).
       - name: deno check
         run: deno task check
+        working-directory: supabase/functions
+
+      # Unit tests for the shared modules (e.g. _shared/_llm.test.ts —
+      # provider body translation and schema sanitizing). Test files live
+      # next to the code they cover.
+      - name: deno test
+        run: deno task test
         working-directory: supabase/functions
