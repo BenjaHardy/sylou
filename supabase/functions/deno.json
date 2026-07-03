@@ -12,6 +12,7 @@
   },
   "tasks": {
     "check": "deno check **/*.ts",
-    "lint": "deno lint"
+    "lint": "deno lint",
+    "test": "deno test _shared/"
   }
 }
