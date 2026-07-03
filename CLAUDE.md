@@ -25,7 +25,7 @@ Apply strict coding standards to avoid future code liabilities for the open-sour
 - React 18, Vite 8 (Rolldown), TypeScript 5, Tailwind v3, shadcn/ui
 - React Router, TipTap v2 (custom font-size + pagination extensions)
 - Supabase via Lovable Cloud; Edge Functions in `supabase/functions/`
-- Vitest 4 + Playwright (`playwright-fixture.ts`)
+- Vitest 4 (frontend units) + `deno test` (edge-function units in `_shared/`)
 - LLM providers: Anthropic (Sonnet 4.6, Opus 4.8), Mistral (Large 3,
   Medium 3.5, Small 4), DeepSeek (deepseek-chat).
 
@@ -135,10 +135,11 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
     `*_MISTRAL_EFFORT` + `MISTRAL_REASONING_MODELS` allowlist
     (Mistral Large 3 returns 422 if `reasoning_effort` is sent),
     and `resolveMaxTokens()` for thinking-aware budget headroom.
-- **One router bypass**: `extract-text` summarizes imported docs with a
-  hardcoded direct call to Mistral Large (not via `_llm.ts`, ignores the
-  user's model pick) and silently falls back to a 500-char truncation if
-  `MISTRAL_API_KEY` is unset. Every other LLM call goes through `_llm.ts`.
+- **No router bypasses**: every LLM call goes through `_llm.ts`.
+  (`extract-text`'s former hardcoded Mistral call was removed in #10 — it
+  now summarizes with the user's `preferred_chat_model` and silently falls
+  back to a 500-char truncation if that provider's key is unset. It is also
+  the one LLM function without an `isOverBudget` precheck — tracked.)
 - See `docs/model-configuration.md` for current values, rationale, and
   the full "adding a new model" checklist.
 - Provider keys (`ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`)
@@ -220,5 +221,9 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 - Edge function deployment: manual via `supabase functions deploy`.
 
 ## 9. Deeper docs
+- `docs/engineering-standards.md` — distilled coding rules + per-PR
+  Definition-of-Done (give it to AI coding assistants as context; where it
+  disagrees with this file, this file wins)
 - `docs/setup.md`, `docs/model-configuration.md`, `docs/ai-act-position.md`
-- `TRANSPARENCY.md`, `SECURITY.md`, `CONTRIBUTING.md`, `TRADEMARK-POLICY.md`
+- `TRANSPARENCY.md`, `SECURITY.md`, `CONTRIBUTING.md`, `TRADEMARK-POLICY.md`,
+  `LICENSING.md`

@@ -97,19 +97,41 @@ Lastly, if your contribution touches anything related to AI disclosure (the chat
 
 ### Development setup
 
-See [README.md] for the canonical setup instructions. In brief:
+Sylou has no mock backend: to run it locally you need your own (free-tier)
+Supabase project. The full walkthrough is [docs/setup.md](docs/setup.md) —
+it's written for production self-hosting, and local development is the same
+setup minus the frontend host. In brief:
 
-- Frontend: React + TypeScript, run with `npm install && npm run dev`
-- Backend: Supabase (PostgreSQL + Edge Functions). Local development uses the Supabase CLI.
-- Tests: `npm test` for frontend, see `supabase/functions/*/test/` for backend tests.
+1. Create a Supabase project, apply the migrations, set the secrets, and
+   deploy the edge functions per [docs/setup.md](docs/setup.md).
+2. Copy `.env.example` to `.env` and fill in your project's
+   `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`.
+3. Run `npm ci && npm run dev`, and add the local origin Vite prints on
+   startup to your `ALLOWED_ORIGIN` secret so edge-function calls pass CORS.
+
+Before opening a PR, run the same gates CI runs:
+
+- `npm run typecheck` — frontend TypeScript. (Note: bare `tsc --noEmit`
+  checks zero files in this repo — always use the npm script.)
+- `npm run lint`
+- `npm test` — vitest unit tests
+- `cd supabase/functions && deno task check` — edge-function typecheck.
+  Backend unit tests live next to the code (e.g. `_shared/_llm.test.ts`)
+  and run with `deno test`.
 
 If the setup instructions don't work for you, that's itself a bug worth reporting.
 
 ### Code style and structure
 
+- The distilled engineering rules — security, correctness, streaming
+  lifecycle, transparency invariants, and a per-PR checklist — live in
+  [docs/engineering-standards.md](docs/engineering-standards.md). Worth a
+  read before substantial changes, and if you code with an AI assistant,
+  give it that file as context.
 - TypeScript throughout. New code should be properly typed; existing untyped patches are fair game for improvement.
 - File-level conventions: see existing files in the same directory for the pattern. The codebase prefers small, focused files over large ones.
-- Edge Functions cannot share code across function folders (Supabase constraint). Utility functions are copied inline with comments pointing to the canonical version.
+- Edge functions share common code via `supabase/functions/_shared/` (the provider router, temperature/thinking tables, etc.). Don't copy helpers between function folders — some legacy duplication remains, and consolidating it into `_shared/` is a tracked refactor.
+- UI strings are English-only today (there is no i18n framework). If you'd like to work on internationalization, open an issue first — it's a significant architectural choice.
 - Commits should be focused — one logical change per commit where reasonable. Don't worry about getting this perfect; reviewers can ask for a rebase if needed.
 
 ### Pull request process

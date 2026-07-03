@@ -70,7 +70,7 @@ This installs the frontend tooling and shouldn't take more than a minute or two.
 4. Set a strong database password and save it somewhere safe — you won't need it for everyday Sylou operation, but you may need it later for direct database access.
 5. Wait for the project to provision (1–2 minutes).
 
-Once provisioned, take note of two values from the Supabase dashboard:
+Once provisioned, take note of the following values from the Supabase dashboard:
 
 - **Project Reference** — visible in **Settings → General**. Looks like `abcdefghijklmnop`.
 - **Project URL** — visible in **Settings → API**. Looks like `https://abcdefghijklmnop.supabase.co`.
@@ -149,7 +149,7 @@ supabase secrets set ALLOWED_ORIGIN=https://yourdomain.com
 # Instance metadata (shown on shared FLOW reports)
 supabase secrets set SYLOU_INSTANCE_LABEL=self-hosted
 supabase secrets set SYLOU_INSTANCE_DOMAIN=yourdomain.com
-supabase secrets set SYLOU_VERSION=v0.1.0
+supabase secrets set SYLOU_VERSION=v0.5.0
 supabase secrets set SYLOU_COMMIT_HASH=$(git rev-parse --short HEAD)
 ```
 
@@ -198,7 +198,6 @@ The Sylou frontend is a static Vite-built React application. It can be deployed 
    ```
    VITE_SUPABASE_URL=https://YOUR-PROJECT-REF.supabase.co
    VITE_SUPABASE_PUBLISHABLE_KEY=your-anon-key-from-step-2
-   VITE_SUPABASE_PROJECT_ID=YOUR-PROJECT-REF
    ```
 
    `VITE_PUBLIC_SITE_URL` is optional — if unset, the frontend uses the browser's current origin, which is the right default for most deployments. Only set it if you need to override (e.g., a reverse proxy where the public URL differs from the deployed origin).
@@ -379,7 +378,7 @@ When you want to update to a newer Sylou release:
 3. Redeploy the edge functions: `supabase functions deploy`.
 4. Update the version secrets:
    ```bash
-   supabase secrets set SYLOU_VERSION=v0.2.0  # or whatever the new release is
+   supabase secrets set SYLOU_VERSION=v0.6.0  # or whatever the new release is
    supabase secrets set SYLOU_COMMIT_HASH=$(git rev-parse --short HEAD)
    ```
 5. Push the updated code to your frontend host (Vercel/Cloudflare auto-redeploys from GitHub).
@@ -391,7 +390,8 @@ The version and commit hash appear in shared FLOW reports, so keeping them updat
 A few things to be aware of as an operator:
 
 - **AI Act position**: see [docs/ai-act-position.md](ai-act-position.md). If you operate Sylou for users other than yourself, you may have your own obligations under the EU AI Act. The transparency measures shipped with Sylou are designed to support a self-hoster's compliance posture, but cannot substitute for the self-hoster's own responsibilities.
-- **Terms of Use and Privacy Policy**: if you serve other users, you'll likely want both. Template documents are coming to the repo (see [docs/templates/](templates/)); for now, consult your own legal advisor if your deployment scale warrants it.
+- **Terms of Use and Privacy Policy**: if you serve other users, you'll likely want both. Template documents are planned for the repo; for now, consult your own legal advisor if your deployment scale warrants it.
+- **Account deletion / right to erasure**: Sylou has no in-app account-deletion flow yet (it's on the roadmap). As the operator you can fully erase a user today via the Supabase dashboard: delete the user under **Authentication → Users** (the database schema cascades from there), then remove their files under **Storage → imports → `<user-id>/`** (storage objects do not cascade automatically). Factor this into your privacy commitments if you serve other users, especially in the EU.
 - **Trademark**: see [TRADEMARK-POLICY.md](../TRADEMARK-POLICY.md). Self-hosting unmodified Sylou under the Sylou name is welcomed; substantive modifications need a different name.
 - **Backups**: Supabase provides automated backups on paid plans. For a personal or small-team instance, the free tier's recovery options may be limited — verify what's available on your plan before depending on it.
 

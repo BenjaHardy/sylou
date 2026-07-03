@@ -92,6 +92,7 @@ The recommended LLM and settings to use for the FLOW analysis can be found in [*
 Sylou is open-source software released under [**AGPL-3.0**](LICENSE). The FLOW methodology is published separately under [**CC BY-SA 4.0**](LICENSE-METHODOLOGY). Anyone can inspect the code, modify it, self-host it, or adapt the methodology under the terms of those licenses.
 
 Why two licenses: the code and the methodology are two distinct contributions. AGPL keeps the software open even when run as a network service; CC BY-SA lets the analytical framework spread freely as long as derivatives share back.
+A precise mapping of which files fall under which license is in [**LICENSING.md**](LICENSING.md).
 
 The Sylou name and logo, and the FLOW Pledge Badge format, are governed by a separate [**Trademark Policy**](TRADEMARK-POLICY.md). In short: forking and modifying are welcomed (that's open source); using the Sylou name on a substantively modified or competing version isn't.
 

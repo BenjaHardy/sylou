@@ -6,9 +6,9 @@ import {
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 
-// Budget helper. Intentionally duplicated across the four edge functions
-// (chat, context-prompt, editor-action, analysis) — Supabase edge function
-// isolation prevents importing a shared module without a build step.
+// Budget helper. Duplicated across the four LLM edge functions today;
+// consolidating it into _shared/ is a tracked refactor (functions can and
+// do import from ../_shared/, as the imports above show).
 // A NULL monthly_token_budget means "no limit" (operator hasn't set one).
 function isOverBudget(profile: {
   monthly_token_budget: number | null;
