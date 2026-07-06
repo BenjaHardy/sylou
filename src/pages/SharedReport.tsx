@@ -55,9 +55,8 @@ export default function SharedReport() {
       }
 
       const { data, error } = await supabase
-        .from("flow_reports_public")
+        .rpc("get_shared_report", { _token: token })
         .select("id, project_id, project_name, certificate_id, share_token, share_enabled, share_visibility, share_include_feedback, share_include_replay, share_include_report, share_include_profile, model_used, created_at, ai_find, ai_lead, ai_organize, ai_write, ai_summary, key_user_contributions, flow_meta, metrics_snapshot, user_feedback_pre, user_feedback_post, writing_snapshot, generator_info")
-        .eq("share_token", token)
         .maybeSingle();
 
       if (error || !data) {
@@ -93,9 +92,8 @@ export default function SharedReport() {
     setLoadingReplay(true);
     try {
       const { data } = await supabase
-        .from("flow_reports_public")
+        .rpc("get_shared_report", { _token: token })
         .select("replay_snapshot")
-        .eq("share_token", token)
         .maybeSingle();
       if (data?.replay_snapshot) {
         setReplaySnapshot(data.replay_snapshot as unknown as ReplayEvent[]);

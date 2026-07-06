@@ -806,6 +806,10 @@ export type Database = {
       }
     }
     Functions: {
+      get_shared_report: {
+        Args: { _token: string }
+        Returns: Database["public"]["Views"]["flow_reports_public"]["Row"][]
+      }
       increment_tokens_used: {
         Args: { amount: number; user_uuid: string }
         Returns: undefined
