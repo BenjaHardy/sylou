@@ -427,13 +427,18 @@ When in doubt, prefer searching - an unnecessary search is better than an outdat
 When citing information from web search results, always include the source URL inline in your response text (e.g. "According to [Source Title](URL), ..."). This ensures the user can verify and revisit the sources later.`;
     }
 
-    // --- Fetch last 50 messages ---
-    const { data: history } = await supabase
+    // --- Fetch the 50 most recent messages ---
+    // Order descending + limit to get the *newest* 50 (the tail of a long
+    // thread), then reverse back to chronological order for the model.
+    // Ascending + limit would send the oldest 50 and hide recent context
+    // once a thread passes 50 messages. (context-prompt does the same.)
+    const { data: recentHistory } = await supabase
       .from("chat_messages")
       .select("role, content")
       .eq("thread_id", threadId)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(50);
+    const history = (recentHistory ?? []).reverse();
 
     // --- Build messages array ---
     const llmMessages: LLMMessage[] = [
