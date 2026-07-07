@@ -105,7 +105,9 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
       if (patch.default_concise_mode !== undefined)
         dbPatch.default_concise_mode = patch.default_concise_mode;
       // tokens_used_this_period and monthly_token_budget are intentionally
-      // not writable from the client (frozen by RLS).
+      // not writable from the client (frozen via column privileges,
+      // 20260707000000 — a new user-editable column here also needs adding
+      // to that migration's column-level GRANT UPDATE).
       if (Object.keys(dbPatch).length === 0) return;
       const { error } = await supabase.from("profiles").update(dbPatch).eq("id", user.id);
       if (error) {
