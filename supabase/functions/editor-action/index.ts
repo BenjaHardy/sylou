@@ -226,6 +226,9 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
+
     // =========================================================
     // STREAMING PATH
     // =========================================================
@@ -253,9 +256,6 @@ Deno.serve(async (req) => {
       }
 
       console.log("[stream:editor-action] LLM response received, piping");
-
-      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
 
       let fullResponse = "";
       let clientDisconnected = false;
@@ -340,10 +340,10 @@ Deno.serve(async (req) => {
 
             // Update budget
             const newTotal = profile.tokens_used_this_period + estimatedTokens;
-            await adminSupabase
-              .from("profiles")
-              .update({ tokens_used_this_period: newTotal })
-              .eq("id", user.id);
+            await adminSupabase.rpc("increment_tokens_used", {
+              user_uuid: user.id,
+              amount: estimatedTokens,
+            });
 
             if (!clientDisconnected) {
               try {
@@ -468,10 +468,10 @@ Deno.serve(async (req) => {
 
     // --- Update budget ---
     const newTotal = profile.tokens_used_this_period + estimatedTokens;
-    await supabase
-      .from("profiles")
-      .update({ tokens_used_this_period: newTotal })
-      .eq("id", user.id);
+    await adminSupabase.rpc("increment_tokens_used", {
+      user_uuid: user.id,
+      amount: estimatedTokens,
+    });
 
     return jsonResponse({
       proposed_text: proposedText,

@@ -85,16 +85,23 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   sanitized `flow_reports_public` view. Tables otherwise rely on the
   default `authenticated`-role grants + RLS.
 - **RLS perf (`auth_rls_initplan`)**: the advisor wants `auth.uid()` wrapped as
-  `(select auth.uid())` so it's evaluated once per statement, not per row. Fine
-  for simple predicates — but do **NOT** apply it to the two `profiles` policies
-  (`Users can view own profile`, `Users can update own profile non-budget`):
-  their budget-freeze `WITH CHECK` runs subqueries that read `profiles` itself,
-  and the `(select …)` form tips Postgres's RLS recursion guard →
-  `42P17 infinite recursion detected in policy for relation "profiles"` on every
-  `profiles` UPDATE (silently breaks the Settings model picker). Those 2 WARNs
-  are **accepted** (profiles is one row per user → negligible cost); see
-  `20260703000000`. The durable fix (column privileges instead of the
-  self-referencing freeze) is a separate tracked item.
+  `(select auth.uid())` so it's evaluated once per statement, not per row.
+  Applied everywhere, including the two `profiles` policies since
+  `20260707000000` replaced the self-referencing budget-freeze `WITH CHECK`
+  with column privileges. General trap (how the old form bit us — see
+  `20260703000000`): a policy whose USING/WITH CHECK subqueries read its **own
+  table** must keep bare `auth.uid()` — the `(select …)` form tips Postgres's
+  RLS recursion guard → `42P17 infinite recursion detected in policy`. Wrap
+  simple predicates only.
+- **Budget-column freeze (column privileges, not RLS)**: since `20260707000000`
+  `authenticated` holds column-level UPDATE on `profiles` for the preference
+  columns only; the budget columns (`monthly_token_budget`,
+  `tokens_used_this_period`, `token_period_start`) are not user-writable at
+  all. Token accounting goes through the SECURITY DEFINER
+  `increment_tokens_used` RPC (atomic `+ amount`, bypasses column privileges) —
+  **never** write `tokens_used_this_period` via a `.update()`. If Settings
+  ever needs a new user-editable profile column, extend the column-level
+  `GRANT UPDATE`, or the write fails with `42501 permission denied`.
 - **SECURITY DEFINER functions**: default to `GRANT EXECUTE TO PUBLIC`, so
   `REVOKE ALL … FROM PUBLIC, anon, authenticated` (Supabase grants the
   `anon`/`authenticated` API roles EXECUTE **directly** via default privileges,
@@ -147,8 +154,9 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 - Do not introduce or reintroduce any Sylou-metered "token budget" wording
   in UI copy. (The `profiles.monthly_token_budget` /
   `tokens_used_this_period` columns *do* still exist server-side: an
-  operator-only cap, set via SQL, enforced by the `non-budget` RLS freeze +
-  the `increment_tokens_used` security-definer RPC. The SaaS/Stripe columns
+  operator-only cap, set via SQL, enforced by the column-privilege freeze
+  (§4) + the `increment_tokens_used` security-definer RPC — the single write
+  path all edge functions use for token accounting. The SaaS/Stripe columns
   were dropped; budget defaults to NULL = no cap.)
 - No ad-hoc rate-limiting/throttling primitives in app code: per-user request
   throttling is deferred to a future platform primitive, so security-audit

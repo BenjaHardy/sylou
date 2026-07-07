@@ -581,10 +581,10 @@ When citing information from web search results, always include the source URL i
 
                 const estimatedTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
                 const newTotal = profile.tokens_used_this_period + estimatedTokens;
-                await adminSupabase
-                  .from("profiles")
-                  .update({ tokens_used_this_period: newTotal })
-                  .eq("id", user.id);
+                await adminSupabase.rpc("increment_tokens_used", {
+                  user_uuid: user.id,
+                  amount: estimatedTokens,
+                });
 
                 const promptColumn = tutorMode ? "chat_prompt_count_tutor" : "chat_prompt_count_normal";
                 const { data: cs } = await adminSupabase
@@ -843,10 +843,10 @@ When citing information from web search results, always include the source URL i
 
               const estimatedTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
               const newTotal = profile.tokens_used_this_period + estimatedTokens;
-              await adminSupabase
-                .from("profiles")
-                .update({ tokens_used_this_period: newTotal })
-                .eq("id", user.id);
+              await adminSupabase.rpc("increment_tokens_used", {
+                user_uuid: user.id,
+                amount: estimatedTokens,
+              });
 
               try {
                 controller.enqueue(
@@ -1004,10 +1004,10 @@ When citing information from web search results, always include the source URL i
             const estimatedTokens = Math.ceil((inputChars + outputChars) / 4);
             const newTotal = profile.tokens_used_this_period + estimatedTokens;
 
-            await adminSupabase
-              .from("profiles")
-              .update({ tokens_used_this_period: newTotal })
-              .eq("id", user.id);
+            await adminSupabase.rpc("increment_tokens_used", {
+              user_uuid: user.id,
+              amount: estimatedTokens,
+            });
 
             try {
               controller.enqueue(
@@ -1112,10 +1112,10 @@ When citing information from web search results, always include the source URL i
     const newTotal =
       profile.tokens_used_this_period + estimatedTokens;
 
-    await supabase
-      .from("profiles")
-      .update({ tokens_used_this_period: newTotal })
-      .eq("id", user.id);
+    await adminSupabase.rpc("increment_tokens_used", {
+      user_uuid: user.id,
+      amount: estimatedTokens,
+    });
 
     // --- Increment prompt count in project_stats ---
     const promptColumn = tutorMode
