@@ -10,6 +10,7 @@ import {
   STRUCTURED_OUTPUT_MAX_TOKENS,
 } from "../_shared/_llm.ts";
 import { repairToolOutput } from "../_shared/_repair.ts";
+import { annotateWritingWithProvenance, normalizeSource } from "../_shared/_provenance.ts";
 import { FLOW_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import {
   FLOW_THINKING, FLOW_EFFORT, FLOW_MISTRAL_EFFORT, MISTRAL_REASONING_MODELS,
@@ -295,61 +296,9 @@ const SUBMIT_FLOW_TOOL = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function normalizeSource(seg: { source?: string; type?: string }): string {
-  const raw = seg.source ?? seg.type ?? "typed";
-  switch (raw) {
-    case "typed":
-    case "chat_user":
-      return "typed";
-    case "chat_ai":
-      return "copy_chat";
-    case "ai_editor":
-      return "ai";
-    case "external":
-      return "copy_external";
-    // Legacy values that already match the display keys
-    case "copy_chat":
-    case "copy_external":
-    case "ai":
-      return raw;
-    default:
-      return raw;
-  }
-}
-
-function buildProvenanceAnnotatedWriting(
-  content: string,
-  segmentMap: Array<{ start: number; end: number; source?: string; type?: string }>
-): string {
-  if (!segmentMap || segmentMap.length === 0) {
-    return `[t]${content}`;
-  }
-
-  const sorted = [...segmentMap].sort((a, b) => a.start - b.start);
-  let result = "";
-  let cursor = 0;
-
-  for (const seg of sorted) {
-    if (seg.start > cursor) {
-      result += `[t]${content.slice(cursor, seg.start)}`;
-    }
-    const norm = normalizeSource(seg);
-    const tag =
-      norm === "typed" ? "[t]"
-      : norm === "copy_chat" ? "[cc]"
-      : norm === "copy_external" ? "[ce]"
-      : norm === "ai" ? "[ai]"
-      : `[${norm}]`;
-    result += `${tag}${content.slice(seg.start, seg.end)}`;
-    cursor = seg.end;
-  }
-
-  if (cursor < content.length) {
-    result += `[t]${content.slice(cursor)}`;
-  }
-
-  return result;
-}
+// normalizeSource + the provenance annotator live in _shared/_provenance.ts.
+// Segments are ProseMirror positions, NOT HTML string offsets — annotation
+// must go through annotateWritingWithProvenance (position-aware walker).
 
 /**
  * Compute aggregate character-count percentages per provenance type.
@@ -795,8 +744,8 @@ Deno.serve(async (req) => {
         type?: string;
       }>) ?? [];
 
-    // --- Build provenance-annotated writing ---
-    const annotatedWriting = buildProvenanceAnnotatedWriting(
+    // --- Build provenance-annotated writing (position-aware; see _provenance.ts) ---
+    const annotatedWriting = annotateWritingWithProvenance(
       writingContent,
       segmentMap
     );
