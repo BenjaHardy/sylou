@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, normaliseResponse, extractProviderError } from "../_shared/_llm.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
+import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
 import {
   CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT,
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
@@ -507,6 +508,13 @@ Deno.serve(async (req) => {
 
     // Resolve chat model (request override allowed); validate provider key exists.
     const requestedModel: string | undefined = (await req.clone().json().catch(() => ({})))?.model;
+    // Registry allowlist for the request override — see chat/index.ts for rationale.
+    if (requestedModel && !ALLOWED_MODELS.has(requestedModel)) {
+      return jsonResponse(
+        { error: `Unsupported model: ${String(requestedModel).slice(0, 64)}` },
+        400,
+      );
+    }
     const chatModel: string =
       requestedModel || profile.preferred_chat_model || "mistral-medium-3-5";
     const provider = providerFor(chatModel);
@@ -666,6 +674,21 @@ Deno.serve(async (req) => {
         { error: "project_id, thread_id, action_type, selected_text, instruction, and source_module are required" },
         400,
       );
+    }
+    if (typeof selected_text !== "string" || selected_text.length > INPUT_LIMITS.SELECTED_TEXT_CHARS) {
+      return jsonResponse(
+        { error: `Selection is too long (max ${INPUT_LIMITS.SELECTED_TEXT_CHARS.toLocaleString("en-US")} characters)` },
+        400,
+      );
+    }
+    if (typeof instruction !== "string" || instruction.length > INPUT_LIMITS.INSTRUCTION_CHARS) {
+      return jsonResponse(
+        { error: `Instruction is too long (max ${INPUT_LIMITS.INSTRUCTION_CHARS.toLocaleString("en-US")} characters)` },
+        400,
+      );
+    }
+    if (selectedTextSource !== undefined && (typeof selectedTextSource !== "string" || selectedTextSource.length > INPUT_LIMITS.SHORT_FIELD_CHARS)) {
+      return jsonResponse({ error: "Invalid selected_text_source" }, 400);
     }
 
     if (!["ask", "propose"].includes(action_type)) {
