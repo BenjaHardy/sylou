@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { withTimeout } from "@/lib/withTimeout";
 
 interface SaveState {
   status: "idle" | "saving" | "saved" | "error";
@@ -11,6 +12,10 @@ interface SaveState {
 // crash/kill (which beforeunload can't catch) could lose.
 const DEBOUNCE_MS = 3_000;
 const MAX_WAIT_MS = 15_000;
+// Upper bound on a single save's wait. An offline write can hang forever
+// (pending fetch); this backstops the navigator.onLine fast-path so an
+// online-but-unresponsive server can't freeze a flush/switch either.
+const SAVE_TIMEOUT_MS = 10_000;
 
 /**
  * Flush lifecycle:
@@ -108,15 +113,25 @@ export function useWritingContent(projectId: string | null) {
       }
       if (html === lastSavedContent.current) return true;
 
+      // Fail fast when offline: a pending write would otherwise hang the
+      // awaited flush (and the project switch that awaits it) indefinitely.
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        setSaveState({ status: "error" });
+        return false;
+      }
+
       setSaveState({ status: "saving" });
 
-      const { error } = await supabase
-        .from("writing_content")
-        .update({ content: html, updated_at: new Date().toISOString() })
-        .eq("project_id", projectId);
+      const res = await withTimeout(
+        supabase
+          .from("writing_content")
+          .update({ content: html, updated_at: new Date().toISOString() })
+          .eq("project_id", projectId),
+        SAVE_TIMEOUT_MS,
+      );
 
-      if (error) {
-        console.error("Auto-save failed:", error);
+      if (!res || res.error) {
+        console.error("Auto-save failed:", res?.error ?? "timed out");
         setSaveState({ status: "error" });
         return false;
       }

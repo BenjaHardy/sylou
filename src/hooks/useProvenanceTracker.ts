@@ -1,6 +1,10 @@
 import { useRef, useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { ProvenanceTracker, ProvenanceSegment } from "@/lib/provenance-tracker";
+import { withTimeout } from "@/lib/withTimeout";
+
+// Matches useWritingContent's save timeout — see the note there.
+const SAVE_TIMEOUT_MS = 10_000;
 
 /**
  * Hook that manages a ProvenanceTracker instance for a project.
@@ -141,16 +145,24 @@ export function useProvenanceTracker(projectId: string | null) {
     const json = JSON.stringify(trackerRef.current.toJSON());
     if (json === lastSavedJsonRef.current) return true;
 
-    const { error } = await supabase
-      .from("provenance_events")
-      .update({
-        segment_map: JSON.parse(json),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("project_id", projectId);
+    // Fail fast when offline (see useWritingContent) so the flush can't hang.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      return false;
+    }
 
-    if (error) {
-      console.error("Failed to save provenance:", error);
+    const res = await withTimeout(
+      supabase
+        .from("provenance_events")
+        .update({
+          segment_map: JSON.parse(json),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("project_id", projectId),
+      SAVE_TIMEOUT_MS,
+    );
+
+    if (!res || res.error) {
+      console.error("Failed to save provenance:", res?.error ?? "timed out");
       return false;
     }
     lastSavedJsonRef.current = json;
