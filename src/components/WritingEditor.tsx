@@ -37,7 +37,8 @@ interface Props {
   onAskComplete?: (messages: ChatMessage[]) => void;
   onChatRefresh?: () => void;
   onProvenanceTracker?: (tracker: ProvenanceTracker) => void;
-  onFlushProvenance?: (flush: () => Promise<void>) => void;
+  /** Registers the combined writing+provenance flush; resolves false when a write failed. */
+  onFlushProvenance?: (flush: () => Promise<boolean>) => void;
   conciseMode?: boolean;
   chatSetMessages?: (updater: (prev: ChatMessage[]) => ChatMessage[]) => void;
   webSearchEnabled?: boolean;
@@ -74,8 +75,9 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   // Expose a stable flush callback to the parent that always calls the latest versions
   useEffect(() => {
     const stableFlush = async () => {
-      await flushWritingRef.current();
-      await flushProvenanceRef.current();
+      const writingOk = await flushWritingRef.current();
+      const provenanceOk = await flushProvenanceRef.current();
+      return writingOk && provenanceOk;
     };
     onFlushProvenance?.(stableFlush);
   }, [onFlushProvenance]);
@@ -463,9 +465,10 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
               AGPL-3.0
             </a>
           </span>
-          <span>
+          <span className={saveState.status === "error" ? "text-destructive" : undefined}>
             {saveState.status === "saving" && "Saving…"}
             {saveState.status === "saved" && !isDirty && "✓ Saved"}
+            {saveState.status === "error" && "⚠ Save failed"}
           </span>
           {isDirty ? (
             <button

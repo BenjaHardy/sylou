@@ -34,7 +34,8 @@ import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 interface Props {
   project: Project | null;
   onFlowLoadingChange?: (loading: boolean) => void;
-  onFlushRef?: (flush: (() => Promise<void>) | null) => void;
+  /** Registers the project-wide flush; resolves false when the editor/provenance write failed. */
+  onFlushRef?: (flush: (() => Promise<boolean>) | null) => void;
 }
 
 function WelcomeScreen() {
@@ -127,7 +128,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const chatSetMessagesRef = useRef<((updater: (prev: ChatMessage[]) => ChatMessage[]) => void) | null>(null);
   const [provenanceKey, setProvenanceKey] = useState(0);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
-  const flushProvenanceRef = useRef<(() => Promise<void>) | null>(null);
+  const flushProvenanceRef = useRef<(() => Promise<boolean>) | null>(null);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const { markWriting } = useActivityTracker(project?.id ?? null);
@@ -170,8 +171,10 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
       return;
     }
     const flush = async () => {
-      await flushProvenanceRef.current?.();
+      // No editor mounted (?? true) counts as success — nothing to flush.
+      const editorOk = (await flushProvenanceRef.current?.()) ?? true;
       await Promise.all([worldbuilding.flush(), characters.flush(), timeline.flush()]);
+      return editorOk;
     };
     onFlushRef?.(flush);
     return () => onFlushRef?.(null);

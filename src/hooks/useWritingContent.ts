@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface SaveState {
-  status: "idle" | "saving" | "saved";
+  status: "idle" | "saving" | "saved" | "error";
 }
 
 // Auto-save timing. The debounce saves shortly after the user pauses; the
@@ -96,15 +96,17 @@ export function useWritingContent(projectId: string | null) {
     };
   }, [projectId]);
 
+  /** Returns true when the content is persisted (or there was nothing to
+   *  save); false when the DB write failed — callers gate on this. */
   const saveNow = useCallback(
-    async (html: string) => {
-      if (!projectId) return;
+    async (html: string): Promise<boolean> => {
+      if (!projectId) return true;
       // A save resets the maxWait streak; the next edit restarts it.
       if (maxWaitTimer.current) {
         clearTimeout(maxWaitTimer.current);
         maxWaitTimer.current = null;
       }
-      if (html === lastSavedContent.current) return;
+      if (html === lastSavedContent.current) return true;
 
       setSaveState({ status: "saving" });
 
@@ -115,8 +117,8 @@ export function useWritingContent(projectId: string | null) {
 
       if (error) {
         console.error("Auto-save failed:", error);
-        setSaveState({ status: "idle" });
-        return;
+        setSaveState({ status: "error" });
+        return false;
       }
 
       lastSavedContent.current = html;
@@ -133,6 +135,7 @@ export function useWritingContent(projectId: string | null) {
         lastVersionContent.current = html;
         lastVersionTime.current = Date.now();
       }
+      return true;
     },
     [projectId]
   );
@@ -169,15 +172,16 @@ export function useWritingContent(projectId: string | null) {
     saveNow(content);
   }, [isDirty, content, saveNow]);
 
-  /** Immediately flush any pending debounced save. Uses contentRef for latest value. */
-  const flushSave = useCallback(async () => {
+  /** Immediately flush any pending debounced save. Uses contentRef for latest
+   *  value. Resolves false when the write failed (content NOT persisted). */
+  const flushSave = useCallback(async (): Promise<boolean> => {
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current);
       debounceTimer.current = null;
     }
-    if (!projectId) return;
+    if (!projectId) return true;
     // Use ref to always get the latest content, avoiding stale closure
-    await saveNow(contentRef.current);
+    return saveNow(contentRef.current);
   }, [projectId, saveNow]);
 
   return { content, loading, saveState, updateContent, isDirty, manualSave, flushSave };

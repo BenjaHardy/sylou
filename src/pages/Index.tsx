@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { toast } from "sonner";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { ProjectContentArea } from "@/components/ProjectContentArea";
 import { NewProjectDialog } from "@/components/NewProjectDialog";
@@ -12,7 +13,7 @@ export default function Index() {
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [flowLoading, setFlowLoading] = useState(false);
   const { data: projects } = useProjects();
-  const flushRef = useRef<(() => Promise<void>) | null>(null);
+  const flushRef = useRef<(() => Promise<boolean>) | null>(null);
 
   // Reactive onboarding state. Initialized from localStorage on mount and
   // mutated via state when the user acknowledges/dismisses, so the welcome
@@ -41,7 +42,20 @@ export default function Index() {
   const handleSelectProject = useCallback(async (newId: string | null) => {
     if (newId === selectedId) return;
     if (flushRef.current) {
-      await flushRef.current();
+      const flushed = await flushRef.current();
+      if (!flushed) {
+        // The latest changes did NOT reach the DB (e.g. offline). Switching
+        // would discard them with the editor remount — stay put instead.
+        toast.error("Couldn't save your latest changes", {
+          description:
+            "Staying on this project so nothing is lost. Check your connection and try again.",
+          action: {
+            label: "Switch anyway",
+            onClick: () => setSelectedId(newId),
+          },
+        });
+        return;
+      }
     }
     setSelectedId(newId);
   }, [selectedId]);
@@ -62,7 +76,7 @@ export default function Index() {
       <NewProjectDialog
         open={newDialogOpen}
         onOpenChange={setNewDialogOpen}
-        onCreated={(id) => setSelectedId(id)}
+        onCreated={handleSelectProject}
       />
 
       <LegalDisclaimerDialog
