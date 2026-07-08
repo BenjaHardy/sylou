@@ -572,12 +572,18 @@ export async function callLLM(opts: {
   const key = Deno.env.get(envKeyFor(provider));
   if (!key) throw new Error(`Missing API key for ${provider}`);
   // Both translators consume tools/tool_choice/forceTool from the spread and
-  // ignore the other path's knobs, so no per-provider overrides are needed here.
+  // ignore the other path's knobs; only per-provider quirks are gated here.
   const body =
     provider === "anthropic"
       ? toAnthropicBody({ ...opts })
       : toOpenAIBody({
           ...opts,
+          // DeepSeek quirk: deepseek-v4-flash runs in thinking mode, which
+          // rejects a NAMED tool_choice with HTTP 400 "Thinking mode does not
+          // support this tool_choice". Fall back to the plain default ("auto"
+          // when tools are present) — prompt-level compliance, the pre-forcing
+          // behavior. Mistral keeps real named forcing.
+          forceTool: provider === "deepseek" ? undefined : opts.forceTool,
           // Anthropic-only `effort` is intentionally NOT forwarded here.
           reasoning_effort: provider === "mistral" ? opts.mistral_effort : undefined,
         });
