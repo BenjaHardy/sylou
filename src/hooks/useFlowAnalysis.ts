@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { estimateTokens, classifyTokenUsage, type TokenEstimation } from "@/lib/estimateTokens";
+import { useUserSettings } from "@/hooks/useUserSettings";
 import type { Json } from "@/integrations/supabase/types";
 
 export interface FlowPillar {
@@ -124,6 +125,7 @@ export interface BudgetError {
 }
 
 export function useFlowAnalysis(projectId: string | null) {
+  const { settings } = useUserSettings();
   const [preCheck, setPreCheck] = useState<TokenEstimation | null>(null);
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<FlowReport | null>(null);
@@ -193,10 +195,10 @@ export function useFlowAnalysis(projectId: string | null) {
     // Approximate the full prompt (template ~3000 chars + writing + chat + sections)
     const promptApprox = writing + "\n" + chatText + "\n".repeat(3000);
     const estimated = estimateTokens(promptApprox);
-    const result = classifyTokenUsage(estimated, "claude-sonnet-4-6");
+    const result = classifyTokenUsage(estimated, settings.preferred_flow_model);
     setPreCheck(result);
     return result;
-  }, [projectId]);
+  }, [projectId, settings.preferred_flow_model]);
 
   /** Run the actual FLOW analysis via edge function */
   const runAnalysis = useCallback(async () => {
