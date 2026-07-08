@@ -503,7 +503,7 @@ When citing information from web search results, always include the source URL i
           messages: llmMessages,
           max_tokens: chatMaxTokens,
           tools,
-          tool_choice: "auto",
+          tool_choice: "auto" as const,
           temperature,
           thinking,
           effort,

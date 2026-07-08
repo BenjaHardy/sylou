@@ -88,6 +88,7 @@ export function toAnthropicBody(opts: {
   tools?: LLMTool[];
   stream?: boolean;
   forceTool?: string;
+  disableParallelToolUse?: boolean;
   temperature?: number;
   json_schema?: { name: string; schema: Record<string, unknown> };
   thinking?: boolean;
@@ -180,7 +181,11 @@ export function toAnthropicBody(opts: {
       input_schema: t.function.parameters,
     }));
     if (opts.forceTool) {
-      body.tool_choice = { type: "tool", name: opts.forceTool };
+      body.tool_choice = {
+        type: "tool",
+        name: opts.forceTool,
+        ...(opts.disableParallelToolUse ? { disable_parallel_tool_use: true } : {}),
+      };
     }
   }
   return body;
@@ -313,6 +318,7 @@ export function toOpenAIBody(opts: {
   tools?: LLMTool[];
   stream?: boolean;
   tool_choice?: "auto" | "none";
+  forceTool?: string;
   temperature?: number;
   reasoning_effort?: MistralEffort;
 }): Record<string, unknown> {
@@ -324,7 +330,11 @@ export function toOpenAIBody(opts: {
   if (opts.stream) body.stream = true;
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
-    body.tool_choice = opts.tool_choice ?? "auto";
+    // Named forcing (OpenAI form, supported by both Mistral and DeepSeek)
+    // wins over the plain mode; "auto" stays the default with tools present.
+    body.tool_choice = opts.forceTool
+      ? { type: "function", function: { name: opts.forceTool } }
+      : opts.tool_choice ?? "auto";
   }
   if (opts.temperature !== undefined) body.temperature = opts.temperature;
   // Only emit when truthy — never send `reasoning_effort: null` or
@@ -542,6 +552,13 @@ export async function callLLM(opts: {
   tools?: LLMTool[];
   stream?: boolean;
   forceTool?: string;
+  /** With forceTool: on Anthropic, also sends tool_choice.disable_parallel_tool_use
+   *  so exactly one call to the forced tool comes back. The OpenAI path sends no
+   *  equivalent — named forcing already yields a single call there. */
+  disableParallelToolUse?: boolean;
+  /** OpenAI-path plain mode when tools are present and forceTool is not set;
+   *  ignored by the Anthropic path (its default is already auto). */
+  tool_choice?: "auto" | "none";
   temperature?: number;
   json_schema?: { name: string; schema: Record<string, unknown> };
   thinking?: boolean;
@@ -554,12 +571,13 @@ export async function callLLM(opts: {
   const provider = providerFor(opts.model);
   const key = Deno.env.get(envKeyFor(provider));
   if (!key) throw new Error(`Missing API key for ${provider}`);
+  // Both translators consume tools/tool_choice/forceTool from the spread and
+  // ignore the other path's knobs, so no per-provider overrides are needed here.
   const body =
     provider === "anthropic"
       ? toAnthropicBody({ ...opts })
       : toOpenAIBody({
           ...opts,
-          tool_choice: opts.tools ? "auto" : undefined,
           // Anthropic-only `effort` is intentionally NOT forwarded here.
           reasoning_effort: provider === "mistral" ? opts.mistral_effort : undefined,
         });
