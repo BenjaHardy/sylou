@@ -1,3 +1,5 @@
+import { getModel } from "@/lib/models";
+
 /**
  * Estimate the number of tokens for a given text using two methods,
  * returning the maximum for safety.
@@ -12,22 +14,10 @@ export function estimateTokens(text: string): number {
   return Math.ceil(Math.max(charEst, wordEst));
 }
 
-/** Context window sizes for supported models */
-export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
-  "claude-sonnet-4-6": 1_000_000,
-  "claude-opus-4-8": 1_000_000,
-  "claude-opus-4-7": 1_000_000,
-  "claude-3-5-sonnet": 200_000,
-  "claude-3-opus": 200_000,
-  "mistral-large-latest": 256_000,
-  "mistral-large-2512":   256_000,
-  "mistral-medium-3-5":   256_000,
-  "mistral-small-2603":   256_000,
-  "mistral-large-3": 256_000,
-  "deepseek-v4-flash": 1_000_000,
-  "deepseek-chat": 1_000_000, // legacy rolling alias (upstream-discontinued 2026-07-24)
-  default: 200_000,
-};
+/** Context-window fallback when a model id isn't in the registry (e.g. a
+ *  stale legacy preference) — deliberately conservative so an unknown
+ *  model warns early, never late. */
+const DEFAULT_CONTEXT_LIMIT = 200_000;
 
 export type TokenStatus = "ok" | "near" | "over";
 
@@ -39,16 +29,17 @@ export interface TokenEstimation {
 }
 
 /**
- * Classify token usage against context limit.
+ * Classify token usage against the model's context limit, sourced from the
+ * src/lib/models.ts registry (the single source of truth for limits).
  * "ok"   → ratio < 0.80 (safe, proceed automatically)
  * "near" → 0.80 ≤ ratio < 1.0 (warn, user can confirm)
  * "over" → ratio ≥ 1.0 (strong warning about truncation)
  */
 export function classifyTokenUsage(
   estimatedTokens: number,
-  model: string = "claude-sonnet-4-6"
+  model: string
 ): TokenEstimation {
-  const contextLimit = MODEL_CONTEXT_LIMITS[model] ?? MODEL_CONTEXT_LIMITS.default;
+  const contextLimit = getModel(model)?.contextLimit ?? DEFAULT_CONTEXT_LIMIT;
   const ratio = estimatedTokens / contextLimit;
   const status: TokenStatus =
     ratio >= 1.0 ? "over" : ratio >= 0.8 ? "near" : "ok";
