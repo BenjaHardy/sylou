@@ -132,8 +132,12 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 - **FLOW structured output**: for Anthropic, `analysis` uses **Structured
   Outputs** (json_schema) plus a repair-then-retry loop (`_repair.ts` fixes
   Claude's occasional stringified-pillar output; one retry on validation
-  failure). Mistral/DeepSeek use forced tool-calling for the same schema;
-  both converge through `normaliseResponse`.
+  failure). Mistral uses forced tool-calling for the same schema (named
+  `tool_choice`); **DeepSeek falls back to `tool_choice: "auto"`** —
+  deepseek-v4-flash runs in thinking mode, which 400-rejects a named
+  `tool_choice` ("Thinking mode does not support this tool_choice"), so it
+  relies on prompt compliance (`callLLM` gates this per-provider). All
+  converge through `normaliseResponse`.
 - Per-model knobs live in `supabase/functions/_shared/`:
   - `_temperatures.ts` — `{FLOW,CHAT,EDITOR,CONTEXT}_TEMPERATURE` tables
     + `NO_TEMPERATURE_MODELS` (Opus 4.7 and 4.8 reject any non-default
