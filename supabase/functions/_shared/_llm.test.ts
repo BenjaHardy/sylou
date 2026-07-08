@@ -1,7 +1,7 @@
 // Deno unit tests for sanitizeAnthropicSchema and toAnthropicBody.
 // Run with: deno test supabase/functions/_shared/_llm.test.ts
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { sanitizeAnthropicSchema, toAnthropicBody } from "./_llm.ts";
+import { sanitizeAnthropicSchema, toAnthropicBody, toOpenAIBody } from "./_llm.ts";
 
 Deno.test("no-op: allowlisted-only schema round-trips structurally identical", () => {
   const input = {
@@ -121,4 +121,101 @@ Deno.test("toAnthropicBody: json_schema.name is kept internally but NOT forwarde
   assertEquals(fmt?.type, "json_schema");
   assert("schema" in fmt);
   assert(!("name" in fmt), "name must NOT appear in output_config.format — Anthropic rejects it");
+});
+
+// --- tool_choice threading (P2-3): forceTool must reach both provider bodies ---
+
+const SAMPLE_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "submit_flow_report",
+    description: "Submit the FLOW report",
+    parameters: { type: "object", properties: {} },
+  },
+};
+
+Deno.test("toOpenAIBody: forceTool emits the named-function tool_choice object", () => {
+  const body = toOpenAIBody({
+    model: "mistral-large-3",
+    messages: [{ role: "user", content: "hi" }],
+    max_tokens: 100,
+    tools: [SAMPLE_TOOL],
+    forceTool: "submit_flow_report",
+  });
+  assertEquals(body.tool_choice, {
+    type: "function",
+    function: { name: "submit_flow_report" },
+  });
+});
+
+Deno.test("toOpenAIBody: tools without forceTool default to auto", () => {
+  const body = toOpenAIBody({
+    model: "deepseek-v4-flash",
+    messages: [{ role: "user", content: "hi" }],
+    max_tokens: 100,
+    tools: [SAMPLE_TOOL],
+  });
+  assertEquals(body.tool_choice, "auto");
+});
+
+Deno.test("toOpenAIBody: explicit tool_choice is respected when not forcing", () => {
+  const body = toOpenAIBody({
+    model: "mistral-large-3",
+    messages: [{ role: "user", content: "hi" }],
+    max_tokens: 100,
+    tools: [SAMPLE_TOOL],
+    tool_choice: "none",
+  });
+  assertEquals(body.tool_choice, "none");
+});
+
+Deno.test("toOpenAIBody: no tools -> neither tools nor tool_choice in body", () => {
+  const body = toOpenAIBody({
+    model: "mistral-large-3",
+    messages: [{ role: "user", content: "hi" }],
+    max_tokens: 100,
+    forceTool: "submit_flow_report",
+  });
+  assert(!("tools" in body));
+  assert(!("tool_choice" in body));
+});
+
+Deno.test("toAnthropicBody: forceTool + disableParallelToolUse sets the flag", () => {
+  const body = toAnthropicBody({
+    model: "claude-sonnet-4-6",
+    messages: [{ role: "user", content: "hi" }],
+    max_tokens: 100,
+    tools: [SAMPLE_TOOL],
+    forceTool: "submit_flow_report",
+    disableParallelToolUse: true,
+  });
+  assertEquals(body.tool_choice, {
+    type: "tool",
+    name: "submit_flow_report",
+    disable_parallel_tool_use: true,
+  });
+});
+
+Deno.test("toAnthropicBody: forceTool alone omits disable_parallel_tool_use", () => {
+  const body = toAnthropicBody({
+    model: "claude-sonnet-4-6",
+    messages: [{ role: "user", content: "hi" }],
+    max_tokens: 100,
+    tools: [SAMPLE_TOOL],
+    forceTool: "submit_flow_report",
+  });
+  assertEquals(body.tool_choice, { type: "tool", name: "submit_flow_report" });
+});
+
+Deno.test("toAnthropicBody: json_schema path sends no tools/tool_choice even with forceTool", () => {
+  const body = toAnthropicBody({
+    model: "claude-sonnet-4-6",
+    messages: [{ role: "user", content: "hi" }],
+    max_tokens: 100,
+    tools: [SAMPLE_TOOL],
+    forceTool: "submit_flow_report",
+    json_schema: { name: "flow", schema: { type: "object", properties: {} } },
+  });
+  assert(!("tools" in body));
+  assert(!("tool_choice" in body));
 });
