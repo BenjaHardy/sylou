@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, normaliseResponse, extractProviderError, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
+import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
 import {
   CHAT_THINKING, CHAT_EFFORT, CHAT_MISTRAL_EFFORT,
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
@@ -251,6 +252,16 @@ Deno.serve(async (req) => {
     const streamRequested: boolean = body.stream === true;
     const webSearchEnabled: boolean = body.web_search_enabled ?? false;
     const requestedModel: string | undefined = body.model;
+    // Gate the request override against the registry allowlist; an absent/empty
+    // value falls back to the profile preference as before. Without this, any
+    // authed caller could route to arbitrary provider models on the operator's
+    // key (the shipped client never sends `model`).
+    if (requestedModel && !ALLOWED_MODELS.has(requestedModel)) {
+      return jsonResponse(
+        { error: `Unsupported model: ${String(requestedModel).slice(0, 64)}` },
+        400,
+      );
+    }
     const chatModel: string =
       requestedModel || profile.preferred_chat_model || "mistral-medium-3-5";
     const temperature = resolveTemperature(CHAT_TEMPERATURE, chatModel);
@@ -265,8 +276,14 @@ Deno.serve(async (req) => {
     );
 
 
-    if (!threadId || !message) {
+    if (!threadId || !message || typeof message !== "string") {
       return jsonResponse({ error: "thread_id and message are required" }, 400);
+    }
+    if (message.length > INPUT_LIMITS.CHAT_MESSAGE_CHARS) {
+      return jsonResponse(
+        { error: `Message is too long (max ${INPUT_LIMITS.CHAT_MESSAGE_CHARS.toLocaleString("en-US")} characters)` },
+        400,
+      );
     }
 
     // --- Verify thread ownership (RLS handles this) ---

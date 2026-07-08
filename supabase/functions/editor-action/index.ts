@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callLLM, providerFor, extractProviderError } from "../_shared/_llm.ts";
 import { EDITOR_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
+import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
 import {
   EDITOR_THINKING, EDITOR_EFFORT, EDITOR_MISTRAL_EFFORT,
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
@@ -152,11 +153,23 @@ Deno.serve(async (req) => {
     const selectedTextSource: string | undefined = body.selected_text_source;
     const streamRequested: boolean = body.stream === true;
 
-    if (!projectId || !actionType || !selectedText) {
+    if (!projectId || !actionType || !selectedText || typeof selectedText !== "string") {
       return jsonResponse(
         { error: "project_id, action_type, and selected_text are required" },
         400
       );
+    }
+    if (selectedText.length > INPUT_LIMITS.SELECTED_TEXT_CHARS) {
+      return jsonResponse(
+        { error: `Selection is too long (max ${INPUT_LIMITS.SELECTED_TEXT_CHARS.toLocaleString("en-US")} characters)` },
+        400
+      );
+    }
+    if (targetLanguage !== undefined && (typeof targetLanguage !== "string" || targetLanguage.length > INPUT_LIMITS.SHORT_FIELD_CHARS)) {
+      return jsonResponse({ error: "Invalid target_language" }, 400);
+    }
+    if (selectedTextSource !== undefined && (typeof selectedTextSource !== "string" || selectedTextSource.length > INPUT_LIMITS.SHORT_FIELD_CHARS)) {
+      return jsonResponse({ error: "Invalid selected_text_source" }, 400);
     }
 
     const validActions = ["fix_grammar", "rewrite", "simplify", "expand", "translate"];
@@ -213,6 +226,13 @@ Deno.serve(async (req) => {
 
     // --- Resolve chat model from request body or profile ---
     const requestedModel: string | undefined = (body as { model?: string }).model;
+    // Registry allowlist for the request override — see chat/index.ts for rationale.
+    if (requestedModel && !ALLOWED_MODELS.has(requestedModel)) {
+      return jsonResponse(
+        { error: `Unsupported model: ${String(requestedModel).slice(0, 64)}` },
+        400
+      );
+    }
     const chatModel: string =
       requestedModel || profile.preferred_chat_model || "mistral-medium-3-5";
     const provider = providerFor(chatModel);
