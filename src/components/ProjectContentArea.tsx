@@ -462,7 +462,12 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
             {/* Writing tab content — hidden via CSS when creative tab is not writing */}
             <div style={{ display: isCreativeProject && activeCreativeTab !== "writing" ? "none" : undefined }} className="flex flex-col h-full min-h-0">
               <div className="flex flex-col h-full min-h-0">
+                {/* key remounts the editor per project — fresh TipTap instance, fresh
+                    undo history. Without it, setContent lands on the previous
+                    project's undo stack and Ctrl+Z restores (and auto-saves) that
+                    project's doc into this one. */}
                 <WritingEditor
+                  key={project.id}
                   projectId={project.id}
                   tutorMode={project.tutor_mode}
                   threadId={activeThreadId}
