@@ -134,10 +134,12 @@ export function useProvenanceTracker(projectId: string | null) {
     }
   }, []);
 
-  const doSave = useCallback(async () => {
-    if (!projectId) return;
+  /** Returns true when the segment map is persisted (or already current);
+   *  false when the DB write failed — callers gate on this. */
+  const doSave = useCallback(async (): Promise<boolean> => {
+    if (!projectId) return true;
     const json = JSON.stringify(trackerRef.current.toJSON());
-    if (json === lastSavedJsonRef.current) return;
+    if (json === lastSavedJsonRef.current) return true;
 
     const { error } = await supabase
       .from("provenance_events")
@@ -149,9 +151,10 @@ export function useProvenanceTracker(projectId: string | null) {
 
     if (error) {
       console.error("Failed to save provenance:", error);
-    } else {
-      lastSavedJsonRef.current = json;
+      return false;
     }
+    lastSavedJsonRef.current = json;
+    return true;
   }, [projectId]);
 
   /** Save segment map to DB (debounced) */
@@ -161,14 +164,15 @@ export function useProvenanceTracker(projectId: string | null) {
     saveTimerRef.current = setTimeout(() => doSave(), 3000);
   }, [projectId, doSave]);
 
-  /** Immediately flush pending provenance save to DB */
-  const flushSave = useCallback(async () => {
-    if (!projectId) return;
+  /** Immediately flush pending provenance save to DB. Resolves false when
+   *  the write failed (segment map NOT persisted). */
+  const flushSave = useCallback(async (): Promise<boolean> => {
+    if (!projectId) return true;
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
-    await doSave();
+    return doSave();
   }, [projectId, doSave]);
 
   /** Get the tracker instance for direct method calls */
