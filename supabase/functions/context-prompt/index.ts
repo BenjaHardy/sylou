@@ -955,7 +955,7 @@ When citing information from web search results, always include the source URL i
           const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
           const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
 
-          const { data: promptMsg } = await supabase.from("chat_messages").insert({
+          const { data: promptMsg } = await adminClient.from("chat_messages").insert({
             thread_id,
             role: "user",
             content: userPromptContent,
@@ -970,7 +970,7 @@ When citing information from web search results, always include the source URL i
             // writing_summary intentionally omits concise_mode and tutor_mode (defaults to false):
             // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER
             // nor the tutor-mode system prompt.
-            const { data: summaryMsg } = await supabase.from("chat_messages").insert({
+            const { data: summaryMsg } = await adminClient.from("chat_messages").insert({
               thread_id,
               role: "assistant",
               content: summaryUpdate,
@@ -997,17 +997,17 @@ When citing information from web search results, always include the source URL i
             responseRow.web_searches_performed = webSearchesPerformed;
           }
 
-          const { data: responseMsg } = await supabase.from("chat_messages").insert(responseRow).select().single();
+          const { data: responseMsg } = await adminClient.from("chat_messages").insert(responseRow).select().single();
           if (responseMsg) insertedMessages.push(responseMsg);
 
           if (summaryUpdate !== "No update needed.") {
             if (summaryRow) {
-              await supabase
+              await adminClient
                 .from("writing_summary_log")
                 .update({ summary_text: updatedSummary, last_updated_at: new Date().toISOString() })
                 .eq("id", summaryRow.id);
             } else {
-              await supabase.from("writing_summary_log").insert({
+              await adminClient.from("writing_summary_log").insert({
                 project_id,
                 summary_text: updatedSummary,
               });
@@ -1438,7 +1438,7 @@ When citing information from web search results, always include the source URL i
         const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
         const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
 
-        const { data: promptMsg } = await supabase.from("chat_messages").insert({
+        const { data: promptMsg } = await adminClient.from("chat_messages").insert({
           thread_id, role: "user", content: userPromptContent, source_type: isAsk ? "ask_prompt" : "propose_prompt", flow_flag: "normal", concise_mode: conciseMode, tutor_mode: tutorMode,
         }).select().single();
         if (promptMsg) insertedMessages.push(promptMsg);
@@ -1447,7 +1447,7 @@ When citing information from web search results, always include the source URL i
           // writing_summary intentionally omits concise_mode and tutor_mode (defaults to false):
           // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER
           // nor the tutor-mode system prompt.
-          const { data: summaryMsg } = await supabase.from("chat_messages").insert({
+          const { data: summaryMsg } = await adminClient.from("chat_messages").insert({
             thread_id, role: "assistant", content: summaryUpdate, source_type: "writing_summary", flow_flag: "not_assessed",
           }).select().single();
           if (summaryMsg) insertedMessages.push(summaryMsg);
@@ -1459,16 +1459,16 @@ When citing information from web search results, always include the source URL i
         if (documentsReferenced.length > 0) responseRow.documents_referenced = documentsReferenced;
         if (webSearchesPerformed.length > 0) responseRow.web_searches_performed = webSearchesPerformed;
 
-        const { data: responseMsg } = await supabase.from("chat_messages").insert(responseRow).select().single();
+        const { data: responseMsg } = await adminClient.from("chat_messages").insert(responseRow).select().single();
         if (responseMsg) insertedMessages.push(responseMsg);
 
         if (summaryUpdate !== "No update needed.") {
           if (summaryRow) {
-            await supabase.from("writing_summary_log")
+            await adminClient.from("writing_summary_log")
               .update({ summary_text: updatedSummary, last_updated_at: new Date().toISOString() })
               .eq("id", summaryRow.id);
           } else {
-            await supabase.from("writing_summary_log").insert({ project_id, summary_text: updatedSummary });
+            await adminClient.from("writing_summary_log").insert({ project_id, summary_text: updatedSummary });
           }
         }
       }
@@ -1533,7 +1533,7 @@ When citing information from web search results, always include the source URL i
       const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
       const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
 
-      const { data: promptMsg } = await supabase.from("chat_messages").insert({
+      const { data: promptMsg } = await adminClient.from("chat_messages").insert({
         thread_id, role: "user", content: userPromptContent, source_type: isAsk ? "ask_prompt" : "propose_prompt", flow_flag: "normal", concise_mode: conciseMode, tutor_mode: tutorMode,
       }).select().single();
       if (promptMsg) insertedMessages.push(promptMsg);
@@ -1542,24 +1542,24 @@ When citing information from web search results, always include the source URL i
         // writing_summary intentionally omits concise_mode and tutor_mode (defaults to false):
         // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER
         // nor the tutor-mode system prompt.
-        const { data: summaryMsg } = await supabase.from("chat_messages").insert({
+        const { data: summaryMsg } = await adminClient.from("chat_messages").insert({
           thread_id, role: "assistant", content: summaryUpdate, source_type: "writing_summary", flow_flag: "not_assessed",
         }).select().single();
         if (summaryMsg) insertedMessages.push(summaryMsg);
       }
 
-      const { data: responseMsg } = await supabase.from("chat_messages").insert({
+      const { data: responseMsg } = await adminClient.from("chat_messages").insert({
         thread_id, role: "assistant", content: aiResponse, source_type: isAsk ? "ask_response" : "propose_response", flow_flag: "normal", model_used: chatModel, concise_mode: conciseMode, tutor_mode: tutorMode,
       }).select().single();
       if (responseMsg) insertedMessages.push(responseMsg);
 
       if (summaryUpdate !== "No update needed.") {
         if (summaryRow) {
-          await supabase.from("writing_summary_log")
+          await adminClient.from("writing_summary_log")
             .update({ summary_text: updatedSummary, last_updated_at: new Date().toISOString() })
             .eq("id", summaryRow.id);
         } else {
-          await supabase.from("writing_summary_log").insert({ project_id, summary_text: updatedSummary });
+          await adminClient.from("writing_summary_log").insert({ project_id, summary_text: updatedSummary });
         }
       }
     }

@@ -330,6 +330,10 @@ prompt. Its inputs:
   responses, the analysis is told, and the Write score is capped accordingly.
   This is a deterministic backstop that doesn't rely on the model noticing.
 
+The chat history, the writing-summary log, and the editor-action record are
+writable only by Sylou's server-side functions: a modified client cannot
+fabricate these FLOW inputs by writing to the database directly.
+
 The analysis returns, for each pillar, its reasoning, cited evidence, a score (or
 `null`), and a plain-language narrative, plus an overall summary and 3–5 specific
 user contributions. The report also records, for disclosure, the model used, the

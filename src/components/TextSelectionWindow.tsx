@@ -115,13 +115,8 @@ export function TextSelectionWindow({
   const [currentActionId, setCurrentActionId] = useState<string | null>(null);
   const [loadingStage, setLoadingStage] = useState<"reviewing" | "reading_documents" | "searching_web" | "preparing">("reviewing");
   // For propose confirm flow
-  const [pendingSummaryUpdate, setPendingSummaryUpdate] = useState<string | null>(null);
-  const [pendingInstruction, setPendingInstruction] = useState<string>("");
-  const [pendingSourceBreakdown, setPendingSourceBreakdown] = useState<string | null>(null);
-  const [pendingDocumentsReferenced, setPendingDocumentsReferenced] = useState<string[] | null>(null);
   const [accepting, setAccepting] = useState(false);
   const acceptingRef = useRef(false);
-  const [pendingWebSearchesPerformed, setPendingWebSearchesPerformed] = useState<string[] | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const isCreativeModule = sourceModule !== "editor";
@@ -389,11 +384,6 @@ export function TextSelectionWindow({
                 const aiResponse = (evt.ai_response as string) || "";
                 setProposedText(aiResponse);
                 setCurrentActionId((evt.action_id as string) ?? null);
-                setPendingSummaryUpdate((evt.summary_update as string) ?? null);
-                setPendingInstruction(userInstruction);
-                setPendingSourceBreakdown(selected_text_source ?? null);
-                setPendingDocumentsReferenced((evt.documents_referenced as string[]) ?? null);
-                setPendingWebSearchesPerformed((evt.web_searches_performed as string[]) ?? null);
                 provenanceTracker?.registerAiResultText(aiResponse);
                 setPhase("result");
               }
@@ -426,11 +416,6 @@ export function TextSelectionWindow({
             if (insertedMessages.length > 0) onAskComplete(insertedMessages);
             setProposedText(data.ai_response);
             setCurrentActionId(data.action_id);
-            setPendingSummaryUpdate(data.summary_update);
-            setPendingInstruction(userInstruction);
-            setPendingSourceBreakdown(selected_text_source ?? null);
-            setPendingDocumentsReferenced(data.documents_referenced ?? null);
-            setPendingWebSearchesPerformed(data.web_searches_performed ?? null);
             provenanceTracker?.registerAiResultText(data.ai_response);
             setPhase("result");
           }
@@ -487,24 +472,13 @@ export function TextSelectionWindow({
     }
   };
 
-  /** Body for the CONFIRM call. The server records only the decision behind
-   *  an atomic pending-gate — the exchange itself is logged at delivery.
-   *  Everything beyond confirm/action_id/project_id remains in the payload
-   *  only for compatibility while an older edge function is still deployed
-   *  (slated for removal with the write-surface lockdown). */
+  /** Body for the CONFIRM call — the server records only the decision behind
+   *  an atomic pending-gate; the exchange itself was already logged at
+   *  delivery, so nothing beyond the decision context is sent. */
   const buildConfirmBody = (confirm: boolean) => ({
     confirm,
     action_id: currentActionId,
-    summary_update: pendingSummaryUpdate,
-    thread_id: threadId,
     project_id: projectId,
-    selected_text: selectedText,
-    instruction: pendingInstruction,
-    ai_response: proposedText,
-    concise_mode: conciseMode ?? false,
-    ...(pendingSourceBreakdown ? { selected_text_source: pendingSourceBreakdown } : {}),
-    ...(pendingDocumentsReferenced && pendingDocumentsReferenced.length > 0 ? { documents_referenced: pendingDocumentsReferenced } : {}),
-    ...(pendingWebSearchesPerformed && pendingWebSearchesPerformed.length > 0 ? { web_searches_performed: pendingWebSearchesPerformed } : {}),
   });
 
   /** Fire the CONFIRM call and surface the logged messages in the chat. */

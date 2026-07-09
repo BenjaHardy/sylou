@@ -1106,13 +1106,15 @@ When citing information from web search results, always include the source URL i
       model_used: chatModel,
     };
 
-    const { data: insertedUser } = await supabase
+    // Service-role writes (user write policies dropped — write-surface
+    // lockdown); thread ownership was verified at request entry.
+    const { data: insertedUser } = await adminSupabase
       .from("chat_messages")
       .insert(userMsg)
       .select()
       .single();
 
-    const { data: insertedAssistant } = await supabase
+    const { data: insertedAssistant } = await adminSupabase
       .from("chat_messages")
       .insert(assistantMsg)
       .select()
