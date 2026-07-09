@@ -538,7 +538,7 @@ Deno.serve(async (req) => {
 
     // ── CONFIRM endpoint ────────────────────────────────────────────────
     if (body.confirm !== undefined) {
-      const { confirm, action_id, summary_update, modified } = body;
+      const { confirm, action_id, modified } = body;
       const adminClient = getAdminClient();
 
       // --- Ownership gate: CONFIRM returns before the main-path projects
@@ -555,35 +555,58 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: "Project not found or not owned by user" }, 404);
       }
 
-      if (action_id) {
-        const outcome = !confirm ? "rejected" : modified ? "modified" : "accepted";
-        const { error: updateErr } = await adminClient
-          .from("ai_editor_actions")
-          .update({ outcome })
-          .eq("id", action_id)
-          .eq("project_id", project_id);
-        if (updateErr) console.error("ai_editor_actions outcome update failed:", JSON.stringify(updateErr));
+      // --- Atomic pending-gate: only the FIRST decision for an action row
+      // transitions it out of 'pending' and performs the chat/summary writes.
+      // Replays, accept↔reject flips and concurrent double-submits match zero
+      // rows here and no-op idempotently. The transition also returns the
+      // server-stored proposal + summary delta (written at Propose time), so
+      // nothing below trusts client-supplied content — a modified client can
+      // no longer seed `not_assessed` summary text or forge the AI response.
+      if (!action_id || typeof action_id !== "string") {
+        // No ledger row to transition (the Propose-time insert failed):
+        // content is server-sourced now, so there is nothing trustworthy to log.
+        return jsonResponse({ ok: true, inserted_messages: [], already_resolved: true });
+      }
+      const outcome = !confirm ? "rejected" : modified ? "modified" : "accepted";
+      const { data: transitioned, error: gateErr } = await adminClient
+        .from("ai_editor_actions")
+        .update({ outcome })
+        .eq("id", action_id)
+        .eq("project_id", project_id)
+        .eq("outcome", "pending")
+        .select("ai_response_full, proposed_summary")
+        .maybeSingle();
+      if (gateErr) {
+        console.error("CONFIRM pending-gate update failed:", JSON.stringify(gateErr));
+        return jsonResponse({ error: "Failed to record decision" }, 500);
+      }
+      if (!transitioned) {
+        // Unknown id, not owned, or already decided — nothing written.
+        return jsonResponse({ ok: true, inserted_messages: [], already_resolved: true });
       }
 
-      if (confirm && thread_id) {
-        let aiResponseContent = "";
-        if (action_id) {
-          const { data: actionRow, error: fetchErr } = await adminClient
-            .from("ai_editor_actions")
-            .select("ai_response_full")
-            .eq("id", action_id)
-            .eq("project_id", project_id)
-            .maybeSingle();
-          if (fetchErr) console.error("ai_editor_actions fetch failed:", JSON.stringify(fetchErr));
-          aiResponseContent = actionRow?.ai_response_full ?? "";
-        }
-        if (!aiResponseContent && body.ai_response) {
-          aiResponseContent = body.ai_response;
-        }
+      if (thread_id) {
+        // Log the exchange for accept AND reject — a deliberate contract
+        // change (TRANSPARENCY.md §5.1): the user read the proposal either
+        // way, so an unlogged rejection could quietly seed AI ideas the FLOW
+        // analysis would then mis-attribute to the user. The prompt, the
+        // summary delta and the proposal enter the chat, and the summary log
+        // advances, in lockstep for both outcomes. What distinguishes them is
+        // whether the text entered the writing — recorded independently by
+        // the outcome column above and by provenance ([ai] span only on accept).
+        const aiResponseContent = transitioned.ai_response_full ?? "";
+        const summaryUpdate = transitioned.proposed_summary ?? "";
 
-        const documentsReferenced: string[] | undefined = body.documents_referenced;
-        const webSearchesPerformed: string[] | undefined = body.web_searches_performed;
-        const conciseMode: boolean = body.concise_mode ?? false;
+        // Display metadata arrays are client-echoed; accept only well-shaped
+        // string arrays (they annotate the message, they carry no authority).
+        const strArray = (v: unknown): string[] | undefined =>
+          Array.isArray(v) && v.length > 0 && v.length <= 50 &&
+            v.every((x) => typeof x === "string" && x.length <= 500)
+            ? (v as string[])
+            : undefined;
+        const documentsReferenced = strArray(body.documents_referenced);
+        const webSearchesPerformed = strArray(body.web_searches_performed);
+        const conciseMode: boolean = body.concise_mode === true;
 
         // tutor_mode comes from the ownership-gated project read above
         // (source of truth at the time of the Propose request).
@@ -592,7 +615,7 @@ Deno.serve(async (req) => {
         const insertedMessages = [];
 
         const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
-        const userPromptContent = `[Propose] Selected: "${(selected_text || "").slice(0, 200)}"${sourceNote}\nInstruction: ${instruction || ""}`;
+        const userPromptContent = `[Propose] Selected: "${String(selected_text || "").slice(0, 200)}"${sourceNote}\nInstruction: ${String(instruction || "").slice(0, INPUT_LIMITS.INSTRUCTION_CHARS)}`;
         const { data: promptMsg } = await supabase.from("chat_messages").insert({
           thread_id,
           role: "user",
@@ -604,14 +627,14 @@ Deno.serve(async (req) => {
         }).select().single();
         if (promptMsg) insertedMessages.push(promptMsg);
 
-        if (summary_update && summary_update !== "No update needed.") {
+        if (summaryUpdate && summaryUpdate !== "No update needed.") {
           // writing_summary intentionally omits concise_mode and tutor_mode (defaults to false):
           // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER
           // nor the tutor-mode system prompt.
           const { data: summaryMsg } = await supabase.from("chat_messages").insert({
             thread_id,
             role: "assistant",
-            content: summary_update,
+            content: summaryUpdate,
             source_type: "writing_summary",
             flow_flag: "not_assessed",
           }).select().single();
@@ -636,10 +659,14 @@ Deno.serve(async (req) => {
           responseMsgRow.web_searches_performed = webSearchesPerformed;
         }
 
-        const { data: responseMsg } = await supabase.from("chat_messages").insert(responseMsgRow).select().single();
-        if (responseMsg) insertedMessages.push(responseMsg);
+        // Pre-proposed_summary/ai_response_full rows can be empty here — skip
+        // an empty assistant bubble rather than inserting one.
+        if (aiResponseContent) {
+          const { data: responseMsg } = await supabase.from("chat_messages").insert(responseMsgRow).select().single();
+          if (responseMsg) insertedMessages.push(responseMsg);
+        }
 
-        if (summary_update && summary_update !== "No update needed.") {
+        if (summaryUpdate && summaryUpdate !== "No update needed.") {
           const { data: existingLog } = await supabase
             .from("writing_summary_log")
             .select("id, summary_text")
@@ -647,9 +674,9 @@ Deno.serve(async (req) => {
             .single();
 
           if (existingLog) {
-            const newSummary = summary_update.startsWith("Additionally")
-              ? existingLog.summary_text + "\n" + summary_update
-              : summary_update;
+            const newSummary = summaryUpdate.startsWith("Additionally")
+              ? existingLog.summary_text + "\n" + summaryUpdate
+              : summaryUpdate;
             await supabase
               .from("writing_summary_log")
               .update({ summary_text: newSummary, last_updated_at: new Date().toISOString() })
@@ -657,7 +684,7 @@ Deno.serve(async (req) => {
           } else {
             await supabase.from("writing_summary_log").insert({
               project_id,
-              summary_text: summary_update,
+              summary_text: summaryUpdate,
             });
           }
         }
@@ -995,6 +1022,7 @@ When citing information from web search results, always include the source URL i
             selected_text_preview: selected_text.slice(0, 500),
             ai_response_preview: aiResponse.slice(0, 500),
             ai_response_full: aiResponse,
+            proposed_summary: summaryUpdate,
             char_count_original: selected_text.length,
             char_count_result: aiResponse.length,
             outcome: action_type === "ask" ? "delivered" : "pending",
@@ -1477,6 +1505,7 @@ When citing information from web search results, always include the source URL i
           selected_text_preview: selected_text.slice(0, 500),
           ai_response_preview: aiResponse.slice(0, 500),
           ai_response_full: aiResponse,
+          proposed_summary: summaryUpdate,
           char_count_original: selected_text.length,
           char_count_result: aiResponse.length,
           outcome: action_type === "ask" ? "delivered" : "pending",

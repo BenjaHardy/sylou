@@ -26,6 +26,7 @@ export type Database = {
           instruction_text: string | null
           outcome: string
           project_id: string
+          proposed_summary: string | null
           selected_text_preview: string | null
         }
         Insert: {
@@ -39,6 +40,7 @@ export type Database = {
           instruction_text?: string | null
           outcome: string
           project_id: string
+          proposed_summary?: string | null
           selected_text_preview?: string | null
         }
         Update: {
@@ -52,6 +54,7 @@ export type Database = {
           instruction_text?: string | null
           outcome?: string
           project_id?: string
+          proposed_summary?: string | null
           selected_text_preview?: string | null
         }
         Relationships: [
