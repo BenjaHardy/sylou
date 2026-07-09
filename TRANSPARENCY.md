@@ -241,10 +241,16 @@ very differently:
 
 **Ask vs Propose.** For **Ask**, the prompt, the summary delta, and the AI's
 answer are logged to the chat as the exchange happens. For **Propose**, logging
-is *deferred until you act on the proposal*: a proposed rewrite is only written
-to the chat — and the summary log only advanced — if you accept it. If you
-reject it, neither the chat nor the summary log is touched, so the two never
-drift out of sync.
+is *deferred until you decide on the proposal*: once you accept — **or
+reject** — it, the prompt, the summary delta, and the proposed text are written
+to the chat and the summary log advances, atomically and exactly once.
+Rejections are logged deliberately: you read the proposal either way, and an
+unlogged rejected proposal could quietly seed ideas that the analysis would
+then mis-attribute to you. What distinguishes the outcomes is that only an
+accepted proposal enters your writing (and only then does an `[ai]` provenance
+span appear); the recorded outcome and the provenance map carry that
+distinction. Until you decide, nothing is written — and the chat and the
+summary log always advance together, so the two never drift out of sync.
 
 ### 5.2 The full context-prompt sequence
 
@@ -264,8 +270,8 @@ Putting 5.2 together with the other inputs, a single Ask/Propose runs roughly:
 6. **Second LLM call** — produce the answer (Ask) or proposal (Propose),
    streamed back to you, with progress phases surfaced as it works
    ("reviewing", "reading documents", "searching the web").
-7. Persist per 5.2 (Ask immediately; Propose on accept), and record the
-   interaction so it's available to FLOW.
+7. Persist per 5.1 (Ask immediately; Propose when you decide — accept or
+   reject), and record the interaction so it's available to FLOW.
 
 Every document read and every web search performed in this sequence is recorded
 against the resulting message, so the analysis can see not just what the AI said

@@ -71,8 +71,13 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   only as a chat message flagged `flow_flag='not_assessed'` (the per-turn
   delta, never the full summary). `Ask` persists in the same request;
   `Propose` defers all chat + summary-log writes to the `context-prompt`
-  CONFIRM endpoint, so a rejected proposal mutates neither. Don't collapse
-  these paths.
+  CONFIRM endpoint, which logs the exchange for accept AND reject alike
+  (deliberate contract change, 2026-07: the user read the proposal either
+  way; only acceptance injects text — and its `[ai]` provenance — into the
+  writing). CONFIRM is pending-gated: the first decision per action row
+  wins, replays/flips no-op idempotently, and the logged summary/response
+  come from the action row (`proposed_summary`/`ai_response_full`), never
+  from the request body. Don't collapse these paths.
 - **RLS**: security-definer functions (`owns_project`, `owns_thread`)
   verify ownership through the profile → project hierarchy; project-child
   tables gate on `owns_project(project_id)`. There is **no role system

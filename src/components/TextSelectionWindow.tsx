@@ -75,14 +75,6 @@ const ACTION_TYPE_MAP: Record<string, string> = {
   translate: "translate",
 };
 
-async function updateOutcome(actionId: string, outcome: string) {
-  const { error } = await supabase
-    .from("ai_editor_actions")
-    .update({ outcome })
-    .eq("id", actionId);
-  if (error) console.error("Failed to update action outcome:", error);
-}
-
 /** Get fresh auth headers for raw fetch calls */
 async function getAuthHeaders(): Promise<Record<string, string> | null> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -479,50 +471,57 @@ export function TextSelectionWindow({
     }
   };
 
+  /** Body for the CONFIRM call. The server records the decision behind an
+   *  atomic pending-gate and sources the logged summary/response from the
+   *  action row (P2-7); summary_update/ai_response remain in the payload only
+   *  for compatibility while an older edge function is still deployed. */
+  const buildConfirmBody = (confirm: boolean) => ({
+    confirm,
+    action_id: currentActionId,
+    summary_update: pendingSummaryUpdate,
+    thread_id: threadId,
+    project_id: projectId,
+    selected_text: selectedText,
+    instruction: pendingInstruction,
+    ai_response: proposedText,
+    concise_mode: conciseMode ?? false,
+    ...(pendingSourceBreakdown ? { selected_text_source: pendingSourceBreakdown } : {}),
+    ...(pendingDocumentsReferenced && pendingDocumentsReferenced.length > 0 ? { documents_referenced: pendingDocumentsReferenced } : {}),
+    ...(pendingWebSearchesPerformed && pendingWebSearchesPerformed.length > 0 ? { web_searches_performed: pendingWebSearchesPerformed } : {}),
+  });
+
+  /** Fire the CONFIRM call and surface the logged messages in the chat. */
+  const confirmDecision = async (confirm: boolean) => {
+    if (!currentActionId) return; // no ledger row — nothing to record
+    try {
+      const { data, error } = await supabase.functions.invoke("context-prompt", {
+        body: buildConfirmBody(confirm),
+      });
+      if (error) {
+        console.error("Confirm error:", error);
+        toast.error("Failed to log proposal to chat.");
+        onChatRefresh?.();
+      } else {
+        const msgs = data?.inserted_messages ?? [];
+        if (msgs.length > 0) {
+          onAskComplete(msgs);
+        } else {
+          onChatRefresh?.();
+        }
+      }
+    } catch (err) {
+      console.error("Failed to confirm propose:", err);
+      toast.error("Failed to log proposal to chat.");
+      onChatRefresh?.();
+    }
+  };
+
   const handleAccept = async () => {
     if (acceptingRef.current) return;
     acceptingRef.current = true;
     setAccepting(true);
     try {
-      // For propose actions with pending summary, confirm (works with or without action_id)
-      if (pendingSummaryUpdate !== null) {
-        try {
-          const { data, error } = await supabase.functions.invoke("context-prompt", {
-            body: {
-              confirm: true,
-              action_id: currentActionId,
-              summary_update: pendingSummaryUpdate,
-              thread_id: threadId,
-              project_id: projectId,
-              selected_text: selectedText,
-              instruction: pendingInstruction,
-              ai_response: proposedText,
-              concise_mode: conciseMode ?? false,
-              ...(pendingSourceBreakdown ? { selected_text_source: pendingSourceBreakdown } : {}),
-              ...(pendingDocumentsReferenced && pendingDocumentsReferenced.length > 0 ? { documents_referenced: pendingDocumentsReferenced } : {}),
-              ...(pendingWebSearchesPerformed && pendingWebSearchesPerformed.length > 0 ? { web_searches_performed: pendingWebSearchesPerformed } : {}),
-            },
-          });
-          if (error) {
-            console.error("Confirm error:", error);
-            toast.error("Failed to log proposal to chat.");
-            onChatRefresh?.();
-          } else {
-            const msgs = data?.inserted_messages ?? [];
-            if (msgs.length > 0) {
-              onAskComplete(msgs);
-            } else {
-              onChatRefresh?.();
-            }
-          }
-        } catch (err) {
-          console.error("Failed to confirm propose:", err);
-          toast.error("Failed to log proposal to chat.");
-          onChatRefresh?.();
-        }
-      } else if (currentActionId) {
-        updateOutcome(currentActionId, "accepted");
-      }
+      await confirmDecision(true);
       onAccept(proposedText);
       onClose();
     } finally {
@@ -533,21 +532,11 @@ export function TextSelectionWindow({
 
 
   const handleReject = async () => {
-    if (pendingSummaryUpdate !== null) {
-      try {
-        await supabase.functions.invoke("context-prompt", {
-          body: {
-            confirm: false,
-            action_id: currentActionId,
-            project_id: projectId,
-          },
-        });
-      } catch (err) {
-        console.error("Failed to reject propose:", err);
-      }
-    } else if (currentActionId) {
-      updateOutcome(currentActionId, "rejected");
-    }
+    // Rejections are logged like acceptances (deliberate contract change —
+    // TRANSPARENCY.md §5.1): the user read the proposal, so the exchange
+    // enters the chat and the summary log advances; only the injection into
+    // the writing is skipped.
+    await confirmDecision(false);
     onClose();
   };
 
