@@ -69,15 +69,15 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   `writing_summary_log` is deliberately **withheld from FLOW** (the
   `analysis` function never reads it). The writing summary reaches FLOW
   only as a chat message flagged `flow_flag='not_assessed'` (the per-turn
-  delta, never the full summary). `Ask` persists in the same request;
-  `Propose` defers all chat + summary-log writes to the `context-prompt`
-  CONFIRM endpoint, which logs the exchange for accept AND reject alike
-  (deliberate contract change, 2026-07: the user read the proposal either
-  way; only acceptance injects text — and its `[ai]` provenance — into the
-  writing). CONFIRM is pending-gated: the first decision per action row
-  wins, replays/flips no-op idempotently, and the logged summary/response
-  come from the action row (`proposed_summary`/`ai_response_full`), never
-  from the request body. Don't collapse these paths.
+  delta, never the full summary). `Ask` and `Propose` both persist the
+  exchange (prompt + summary delta + reply, summary log advanced) **at
+  delivery time**, server-side in the stream-first flush — a dismissed or
+  never-decided proposal is still logged (deliberate contract, 2026-07).
+  The `context-prompt` CONFIRM endpoint records only the decision:
+  pending-gated outcome transition (first decision per action row wins;
+  replays/flips no-op idempotently); only acceptance injects the text —
+  and its `[ai]` provenance — into the writing. Don't collapse these
+  paths.
 - **RLS**: security-definer functions (`owns_project`, `owns_thread`)
   verify ownership through the profile → project hierarchy; project-child
   tables gate on `owns_project(project_id)`. There is **no role system

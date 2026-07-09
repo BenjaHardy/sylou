@@ -556,15 +556,14 @@ Deno.serve(async (req) => {
       }
 
       // --- Atomic pending-gate: only the FIRST decision for an action row
-      // transitions it out of 'pending' and performs the chat/summary writes.
-      // Replays, accept↔reject flips and concurrent double-submits match zero
-      // rows here and no-op idempotently. The transition also returns the
-      // server-stored proposal + summary delta (written at Propose time), so
-      // nothing below trusts client-supplied content — a modified client can
-      // no longer seed `not_assessed` summary text or forge the AI response.
+      // transitions it out of 'pending'. Replays, accept↔reject flips and
+      // concurrent double-submits match zero rows here and no-op idempotently.
+      // CONFIRM records ONLY the decision — the exchange itself (prompt,
+      // summary delta, proposal) was already logged at delivery in the main
+      // path (TRANSPARENCY.md §5.1), so nothing is written to the chat or the
+      // summary log here.
       if (!action_id || typeof action_id !== "string") {
-        // No ledger row to transition (the Propose-time insert failed):
-        // content is server-sourced now, so there is nothing trustworthy to log.
+        // No ledger row to transition (the Propose-time insert failed).
         return jsonResponse({ ok: true, inserted_messages: [], already_resolved: true });
       }
       const outcome = !confirm ? "rejected" : modified ? "modified" : "accepted";
@@ -574,7 +573,7 @@ Deno.serve(async (req) => {
         .eq("id", action_id)
         .eq("project_id", project_id)
         .eq("outcome", "pending")
-        .select("ai_response_full, proposed_summary")
+        .select("id")
         .maybeSingle();
       if (gateErr) {
         console.error("CONFIRM pending-gate update failed:", JSON.stringify(gateErr));
@@ -585,113 +584,8 @@ Deno.serve(async (req) => {
         return jsonResponse({ ok: true, inserted_messages: [], already_resolved: true });
       }
 
-      if (thread_id) {
-        // Log the exchange for accept AND reject — a deliberate contract
-        // change (TRANSPARENCY.md §5.1): the user read the proposal either
-        // way, so an unlogged rejection could quietly seed AI ideas the FLOW
-        // analysis would then mis-attribute to the user. The prompt, the
-        // summary delta and the proposal enter the chat, and the summary log
-        // advances, in lockstep for both outcomes. What distinguishes them is
-        // whether the text entered the writing — recorded independently by
-        // the outcome column above and by provenance ([ai] span only on accept).
-        const aiResponseContent = transitioned.ai_response_full ?? "";
-        const summaryUpdate = transitioned.proposed_summary ?? "";
-
-        // Display metadata arrays are client-echoed; accept only well-shaped
-        // string arrays (they annotate the message, they carry no authority).
-        const strArray = (v: unknown): string[] | undefined =>
-          Array.isArray(v) && v.length > 0 && v.length <= 50 &&
-            v.every((x) => typeof x === "string" && x.length <= 500)
-            ? (v as string[])
-            : undefined;
-        const documentsReferenced = strArray(body.documents_referenced);
-        const webSearchesPerformed = strArray(body.web_searches_performed);
-        const conciseMode: boolean = body.concise_mode === true;
-
-        // tutor_mode comes from the ownership-gated project read above
-        // (source of truth at the time of the Propose request).
-        const tutorMode: boolean = confirmProject.tutor_mode ?? false;
-
-        const insertedMessages = [];
-
-        const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
-        const userPromptContent = `[Propose] Selected: "${String(selected_text || "").slice(0, 200)}"${sourceNote}\nInstruction: ${String(instruction || "").slice(0, INPUT_LIMITS.INSTRUCTION_CHARS)}`;
-        const { data: promptMsg } = await supabase.from("chat_messages").insert({
-          thread_id,
-          role: "user",
-          content: userPromptContent,
-          source_type: "propose_prompt",
-          flow_flag: "normal",
-          concise_mode: conciseMode,
-          tutor_mode: tutorMode,
-        }).select().single();
-        if (promptMsg) insertedMessages.push(promptMsg);
-
-        if (summaryUpdate && summaryUpdate !== "No update needed.") {
-          // writing_summary intentionally omits concise_mode and tutor_mode (defaults to false):
-          // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER
-          // nor the tutor-mode system prompt.
-          const { data: summaryMsg } = await supabase.from("chat_messages").insert({
-            thread_id,
-            role: "assistant",
-            content: summaryUpdate,
-            source_type: "writing_summary",
-            flow_flag: "not_assessed",
-          }).select().single();
-          if (summaryMsg) insertedMessages.push(summaryMsg);
-        }
-
-        const responseMsgRow: Record<string, unknown> = {
-          thread_id,
-          role: "assistant",
-          content: aiResponseContent,
-          source_type: "propose_response",
-          flow_flag: "normal",
-          model_used: chatModel,
-          concise_mode: conciseMode,
-          tutor_mode: tutorMode,
-        };
-
-        if (documentsReferenced && documentsReferenced.length > 0) {
-          responseMsgRow.documents_referenced = documentsReferenced;
-        }
-        if (webSearchesPerformed && webSearchesPerformed.length > 0) {
-          responseMsgRow.web_searches_performed = webSearchesPerformed;
-        }
-
-        // Pre-proposed_summary/ai_response_full rows can be empty here — skip
-        // an empty assistant bubble rather than inserting one.
-        if (aiResponseContent) {
-          const { data: responseMsg } = await supabase.from("chat_messages").insert(responseMsgRow).select().single();
-          if (responseMsg) insertedMessages.push(responseMsg);
-        }
-
-        if (summaryUpdate && summaryUpdate !== "No update needed.") {
-          const { data: existingLog } = await supabase
-            .from("writing_summary_log")
-            .select("id, summary_text")
-            .eq("project_id", project_id)
-            .single();
-
-          if (existingLog) {
-            const newSummary = summaryUpdate.startsWith("Additionally")
-              ? existingLog.summary_text + "\n" + summaryUpdate
-              : summaryUpdate;
-            await supabase
-              .from("writing_summary_log")
-              .update({ summary_text: newSummary, last_updated_at: new Date().toISOString() })
-              .eq("id", existingLog.id);
-          } else {
-            await supabase.from("writing_summary_log").insert({
-              project_id,
-              summary_text: summaryUpdate,
-            });
-          }
-        }
-
-        return jsonResponse({ ok: true, inserted_messages: insertedMessages });
-      }
-
+      // Decision recorded. inserted_messages stays in the response shape for
+      // older clients (always empty — delivery already logged the exchange).
       return jsonResponse({ ok: true, inserted_messages: [] });
     }
 
@@ -1051,15 +945,21 @@ When citing information from web search results, always include the source URL i
 
         const insertedMessages: unknown[] = [];
 
-        if (action_type === "ask") {
+        // Log the exchange at delivery for Ask AND Propose alike (deliberate
+        // contract — TRANSPARENCY.md §5.1): the user reads the reply either
+        // way, so it goes on the record here, server-side in the stream-first
+        // flush (surviving dismissals, tab closes and disconnects). For
+        // Propose, the CONFIRM endpoint afterwards records only the decision.
+        {
+          const isAsk = action_type === "ask";
           const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
-          const userPromptContent = `[Ask] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\nQuestion: ${instruction}`;
+          const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
 
           const { data: promptMsg } = await supabase.from("chat_messages").insert({
             thread_id,
             role: "user",
             content: userPromptContent,
-            source_type: "ask_prompt",
+            source_type: isAsk ? "ask_prompt" : "propose_prompt",
             flow_flag: "normal",
             concise_mode: conciseMode,
             tutor_mode: tutorMode,
@@ -1080,24 +980,24 @@ When citing information from web search results, always include the source URL i
             if (summaryMsg) insertedMessages.push(summaryMsg);
           }
 
-          const askResponseRow: Record<string, unknown> = {
+          const responseRow: Record<string, unknown> = {
             thread_id,
             role: "assistant",
             content: aiResponse,
-            source_type: "ask_response",
+            source_type: isAsk ? "ask_response" : "propose_response",
             flow_flag: "normal",
             model_used: chatModel,
             concise_mode: conciseMode,
             tutor_mode: tutorMode,
           };
           if (documentsReferenced.length > 0) {
-            askResponseRow.documents_referenced = documentsReferenced;
+            responseRow.documents_referenced = documentsReferenced;
           }
           if (webSearchesPerformed.length > 0) {
-            askResponseRow.web_searches_performed = webSearchesPerformed;
+            responseRow.web_searches_performed = webSearchesPerformed;
           }
 
-          const { data: responseMsg } = await supabase.from("chat_messages").insert(askResponseRow).select().single();
+          const { data: responseMsg } = await supabase.from("chat_messages").insert(responseRow).select().single();
           if (responseMsg) insertedMessages.push(responseMsg);
 
           if (summaryUpdate !== "No update needed.") {
@@ -1532,12 +1432,14 @@ When citing information from web search results, always include the source URL i
       const budgetRemaining: number | null = profile.monthly_token_budget === null ? null : profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
 
       const insertedMessages = [];
-      if (action_type === "ask") {
+      // Delivery-time logging for Ask AND Propose alike — see persistResults.
+      {
+        const isAsk = action_type === "ask";
         const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
-        const userPromptContent = `[Ask] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\nQuestion: ${instruction}`;
+        const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
 
         const { data: promptMsg } = await supabase.from("chat_messages").insert({
-          thread_id, role: "user", content: userPromptContent, source_type: "ask_prompt", flow_flag: "normal", concise_mode: conciseMode, tutor_mode: tutorMode,
+          thread_id, role: "user", content: userPromptContent, source_type: isAsk ? "ask_prompt" : "propose_prompt", flow_flag: "normal", concise_mode: conciseMode, tutor_mode: tutorMode,
         }).select().single();
         if (promptMsg) insertedMessages.push(promptMsg);
 
@@ -1551,13 +1453,13 @@ When citing information from web search results, always include the source URL i
           if (summaryMsg) insertedMessages.push(summaryMsg);
         }
 
-        const askResponseRow: Record<string, unknown> = {
-          thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: chatModel, concise_mode: conciseMode, tutor_mode: tutorMode,
+        const responseRow: Record<string, unknown> = {
+          thread_id, role: "assistant", content: aiResponse, source_type: isAsk ? "ask_response" : "propose_response", flow_flag: "normal", model_used: chatModel, concise_mode: conciseMode, tutor_mode: tutorMode,
         };
-        if (documentsReferenced.length > 0) askResponseRow.documents_referenced = documentsReferenced;
-        if (webSearchesPerformed.length > 0) askResponseRow.web_searches_performed = webSearchesPerformed;
+        if (documentsReferenced.length > 0) responseRow.documents_referenced = documentsReferenced;
+        if (webSearchesPerformed.length > 0) responseRow.web_searches_performed = webSearchesPerformed;
 
-        const { data: responseMsg } = await supabase.from("chat_messages").insert(askResponseRow).select().single();
+        const { data: responseMsg } = await supabase.from("chat_messages").insert(responseRow).select().single();
         if (responseMsg) insertedMessages.push(responseMsg);
 
         if (summaryUpdate !== "No update needed.") {
@@ -1625,12 +1527,14 @@ When citing information from web search results, always include the source URL i
     const budgetRemaining: number | null = profile.monthly_token_budget === null ? null : profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
 
     const insertedMessages = [];
-    if (action_type === "ask") {
+    // Delivery-time logging for Ask AND Propose alike — see persistResults.
+    {
+      const isAsk = action_type === "ask";
       const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
-      const userPromptContent = `[Ask] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\nQuestion: ${instruction}`;
+      const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
 
       const { data: promptMsg } = await supabase.from("chat_messages").insert({
-        thread_id, role: "user", content: userPromptContent, source_type: "ask_prompt", flow_flag: "normal", concise_mode: conciseMode, tutor_mode: tutorMode,
+        thread_id, role: "user", content: userPromptContent, source_type: isAsk ? "ask_prompt" : "propose_prompt", flow_flag: "normal", concise_mode: conciseMode, tutor_mode: tutorMode,
       }).select().single();
       if (promptMsg) insertedMessages.push(promptMsg);
 
@@ -1645,7 +1549,7 @@ When citing information from web search results, always include the source URL i
       }
 
       const { data: responseMsg } = await supabase.from("chat_messages").insert({
-        thread_id, role: "assistant", content: aiResponse, source_type: "ask_response", flow_flag: "normal", model_used: chatModel, concise_mode: conciseMode, tutor_mode: tutorMode,
+        thread_id, role: "assistant", content: aiResponse, source_type: isAsk ? "ask_response" : "propose_response", flow_flag: "normal", model_used: chatModel, concise_mode: conciseMode, tutor_mode: tutorMode,
       }).select().single();
       if (responseMsg) insertedMessages.push(responseMsg);
 

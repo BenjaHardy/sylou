@@ -372,7 +372,20 @@ export function TextSelectionWindow({
                 }
                 onClose();
               } else {
-                // Propose: populate result
+                // Propose: the exchange is already logged server-side at
+                // delivery (TRANSPARENCY.md §5.1) — surface it in the chat
+                // now, before any decision; CONFIRM only records the outcome.
+                const insertedMessages = (evt.inserted_messages as ChatMessage[]) ?? [];
+                if (insertedMessages.length > 0) {
+                  if (setMessages) {
+                    setMessages((prev) => {
+                      const existingIds = new Set(prev.map((m) => m.id));
+                      return [...prev, ...insertedMessages.filter((m) => !existingIds.has(m.id))];
+                    });
+                  } else {
+                    onAskComplete(insertedMessages);
+                  }
+                }
                 const aiResponse = (evt.ai_response as string) || "";
                 setProposedText(aiResponse);
                 setCurrentActionId((evt.action_id as string) ?? null);
@@ -408,6 +421,9 @@ export function TextSelectionWindow({
             onAskComplete(data.inserted_messages ?? []);
             onClose();
           } else {
+            // Exchange already logged at delivery — surface it (see onDone).
+            const insertedMessages = (data.inserted_messages as ChatMessage[]) ?? [];
+            if (insertedMessages.length > 0) onAskComplete(insertedMessages);
             setProposedText(data.ai_response);
             setCurrentActionId(data.action_id);
             setPendingSummaryUpdate(data.summary_update);
@@ -471,10 +487,11 @@ export function TextSelectionWindow({
     }
   };
 
-  /** Body for the CONFIRM call. The server records the decision behind an
-   *  atomic pending-gate and sources the logged summary/response from the
-   *  action row (P2-7); summary_update/ai_response remain in the payload only
-   *  for compatibility while an older edge function is still deployed. */
+  /** Body for the CONFIRM call. The server records only the decision behind
+   *  an atomic pending-gate — the exchange itself is logged at delivery.
+   *  Everything beyond confirm/action_id/project_id remains in the payload
+   *  only for compatibility while an older edge function is still deployed
+   *  (slated for removal with the write-surface lockdown). */
   const buildConfirmBody = (confirm: boolean) => ({
     confirm,
     action_id: currentActionId,
@@ -532,10 +549,8 @@ export function TextSelectionWindow({
 
 
   const handleReject = async () => {
-    // Rejections are logged like acceptances (deliberate contract change —
-    // TRANSPARENCY.md §5.1): the user read the proposal, so the exchange
-    // enters the chat and the summary log advances; only the injection into
-    // the writing is skipped.
+    // The exchange was already logged at delivery (TRANSPARENCY.md §5.1);
+    // this only records the rejected outcome on the action row.
     await confirmDecision(false);
     onClose();
   };
