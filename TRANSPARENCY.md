@@ -239,18 +239,13 @@ very differently:
   avoids re-stating, on every prompt, summary content already visible earlier in
   the conversation.
 
-**Ask vs Propose.** For **Ask**, the prompt, the summary delta, and the AI's
-answer are logged to the chat as the exchange happens. For **Propose**, logging
-is *deferred until you decide on the proposal*: once you accept — **or
-reject** — it, the prompt, the summary delta, and the proposed text are written
-to the chat and the summary log advances, atomically and exactly once.
-Rejections are logged deliberately: you read the proposal either way, and an
-unlogged rejected proposal could quietly seed ideas that the analysis would
-then mis-attribute to you. What distinguishes the outcomes is that only an
-accepted proposal enters your writing (and only then does an `[ai]` provenance
-span appear); the recorded outcome and the provenance map carry that
-distinction. Until you decide, nothing is written — and the chat and the
-summary log always advance together, so the two never drift out of sync.
+**Ask vs Propose.** The prompt, the summary delta, and the AI's reply are
+logged to the chat at delivery for Ask and Propose alike, irrespective of any
+decision that follows. The only difference: an accepted proposal is injected
+into the writing, where it carries an `[ai]` provenance span (the action
+record also stores the outcome — accepted, rejected, or left pending). The
+chat and the summary log advance in the same server-side step, so the two
+never drift out of sync.
 
 ### 5.2 The full context-prompt sequence
 
@@ -270,8 +265,9 @@ Putting 5.2 together with the other inputs, a single Ask/Propose runs roughly:
 6. **Second LLM call** — produce the answer (Ask) or proposal (Propose),
    streamed back to you, with progress phases surfaced as it works
    ("reviewing", "reading documents", "searching the web").
-7. Persist per 5.1 (Ask immediately; Propose when you decide — accept or
-   reject), and record the interaction so it's available to FLOW.
+7. Persist and log the exchange (prompt, summary delta, reply) as it
+   completes — for Ask and Propose alike; a Propose additionally records
+   your subsequent decision on the action record.
 
 Every document read and every web search performed in this sequence is recorded
 against the resulting message, so the analysis can see not just what the AI said
