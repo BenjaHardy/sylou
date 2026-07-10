@@ -457,7 +457,9 @@ Deno.serve(async (req) => {
         : `Source: ${selectedTextSource}`;
     }
 
-    const { data: actionRow, error: actionErr } = await supabase
+    // Service-role write (user write policies dropped — write-surface
+    // lockdown); project ownership was verified at request entry.
+    const { data: actionRow, error: actionErr } = await adminSupabase
       .from("ai_editor_actions")
       .insert({
         project_id: projectId,

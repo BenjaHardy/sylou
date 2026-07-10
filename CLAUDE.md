@@ -76,8 +76,12 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   The `context-prompt` CONFIRM endpoint records only the decision:
   pending-gated outcome transition (first decision per action row wins;
   replays/flips no-op idempotently); only acceptance injects the text —
-  and its `[ai]` provenance — into the writing. Don't collapse these
-  paths.
+  and its `[ai]` provenance — into the writing. The three FLOW-input
+  tables (`chat_messages`, `writing_summary_log`, `ai_editor_actions`)
+  are **user-read-only** (write policies dropped, `20260709120000`): all
+  writes go through the edge functions' service-role clients behind
+  upfront ownership checks, so FLOW signals can't be self-forged via
+  direct PostgREST writes. Don't collapse these paths.
 - **RLS**: security-definer functions (`owns_project`, `owns_thread`)
   verify ownership through the profile → project hierarchy; project-child
   tables gate on `owns_project(project_id)`. There is **no role system
