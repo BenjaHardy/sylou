@@ -1007,6 +1007,8 @@ ${writePillarNotice}`;
     type AttemptOk = {
       ok: true;
       flowResult: Record<string, unknown>;
+      /** Pillar keys the repair layer re-parsed — disclosed in flow_meta. */
+      repairedPillars: string[];
       usage: { input_tokens?: number; output_tokens?: number };
     };
     type AttemptFail = {
@@ -1146,8 +1148,9 @@ ${writePillarNotice}`;
         };
       }
 
-      // Normalize stringified-JSON pillars BEFORE validation.
-      const flowResult = repairToolOutput(toolCall.arguments) as Record<string, unknown>;
+      // Normalize stringified-JSON pillars BEFORE validation; keep the list
+      // of repaired keys so the winning attempt can disclose them.
+      const { output: flowResult, repairedPillars } = repairToolOutput(toolCall.arguments);
 
       function isValidPillar(p: unknown): boolean {
         return (
@@ -1200,7 +1203,7 @@ ${writePillarNotice}`;
         };
       }
 
-      return { ok: true, flowResult, usage };
+      return { ok: true, flowResult, repairedPillars, usage };
     };
 
     // Attempt 1 — original prompt, with repair applied.
@@ -1247,6 +1250,9 @@ ${writePillarNotice}`;
     }
 
     const flowResult = attemptResult.flowResult as Record<string, any>;
+    // Repairs from the WINNING attempt only (a failed attempt's repairs are
+    // discarded with its result) — disclosed in flow_meta below.
+    const repairedPillars = attemptResult.repairedPillars;
     const anthropicData = { usage: attemptResult.usage };
     const defaultPillar = { reasoning: "Insufficient data", evidence: [], score: null, narrative: "Could not be assessed." };
     function isValidPillar(p: unknown): boolean {
@@ -1257,11 +1263,17 @@ ${writePillarNotice}`;
       );
     }
 
-    if (!isValidPillar(flowResult.find)) flowResult.find = defaultPillar;
-    if (!isValidPillar(flowResult.lead)) flowResult.lead = defaultPillar;
-    if (!isValidPillar(flowResult.organize)) flowResult.organize = defaultPillar;
-    if (!isValidPillar(flowResult.write)) flowResult.write = defaultPillar;
-    if (!flowResult.summary || typeof flowResult.summary !== "string") flowResult.summary = "Analysis could not produce a complete summary.";
+    // Sections replaced with defaults are recorded — never silently
+    // substituted (engineering-standards §5) — and disclosed in flow_meta.
+    const defaultedSections: string[] = [];
+    if (!isValidPillar(flowResult.find)) { flowResult.find = defaultPillar; defaultedSections.push("find"); }
+    if (!isValidPillar(flowResult.lead)) { flowResult.lead = defaultPillar; defaultedSections.push("lead"); }
+    if (!isValidPillar(flowResult.organize)) { flowResult.organize = defaultPillar; defaultedSections.push("organize"); }
+    if (!isValidPillar(flowResult.write)) { flowResult.write = defaultPillar; defaultedSections.push("write"); }
+    if (!flowResult.summary || typeof flowResult.summary !== "string") {
+      flowResult.summary = "Analysis could not produce a complete summary.";
+      defaultedSections.push("summary");
+    }
 
     // --- Apply Write pillar score cap if similarity >= 35% ---
     if (
@@ -1341,6 +1353,11 @@ ${writePillarNotice}`;
       reasoning_provider: reasoningProvider,
       reasoning_thinking: reasoningThinking,
       reasoning_effort: reasoningEffort,
+      // Engineering-standards §5 disclosure: pillar keys whose stringified
+      // JSON the repair layer re-parsed, and sections replaced with the
+      // "Could not be assessed" default after validation. Empty when clean.
+      repaired_pillars: repairedPillars,
+      defaulted_sections: defaultedSections,
       ...(isCreativeProject ? { template: "creative" } : {}),
     };
 

@@ -337,7 +337,10 @@ fabricate these FLOW inputs by writing to the database directly.
 The analysis returns, for each pillar, its reasoning, cited evidence, a score (or
 `null`), and a plain-language narrative, plus an overall summary and 3–5 specific
 user contributions. The report also records, for disclosure, the model used, the
-reasoning/thinking settings, the temperature, and the similarity result.
+reasoning/thinking settings, the temperature, the similarity result, and any
+sections that had to be machine-repaired or replaced with a "could not be
+assessed" default during validation — a report never silently substitutes
+content without flagging it in its stored metadata.
 
 ### 5.5 Editor actions, and what is *not* put in the chat
 

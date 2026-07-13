@@ -37,6 +37,16 @@ export interface FlowMeta {
   reasoning_provider?: string | null;
   reasoning_thinking?: boolean | null;
   reasoning_effort?: string | null;
+  /**
+   * Engineering-standards §5 disclosure. `repaired_pillars`: pillar keys
+   * whose stringified JSON the repair layer re-parsed before validation.
+   * `defaulted_sections`: sections ("find"/"lead"/"organize"/"write"/
+   * "summary") replaced with a "Could not be assessed" default. Empty
+   * arrays on a clean run; `undefined` on reports from before disclosure
+   * shipped. Not yet surfaced in the report UI.
+   */
+  repaired_pillars?: string[];
+  defaulted_sections?: string[];
 }
 
 export interface MetricsSnapshot {

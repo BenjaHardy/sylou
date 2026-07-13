@@ -32,14 +32,18 @@ function isPillarObject(v: unknown): boolean {
 /**
  * Normalize a tool_use input object so that any pillar field
  * delivered as a stringified JSON object becomes a parsed object.
- * Returns a new object — does not mutate the input. Pillars that
- * cannot be repaired are passed through unchanged so downstream
- * schema validation (and the retry layer) can handle them.
+ * Returns a new object — does not mutate the input — plus the list of
+ * pillar keys that were repaired, so the caller can disclose the repair
+ * in the stored report metadata (engineering-standards §5: a repaired
+ * or defaulted section must be flagged, never silently substituted).
+ * Pillars that cannot be repaired are passed through unchanged so
+ * downstream schema validation (and the retry layer) can handle them.
  */
 export function repairToolOutput(
   input: Record<string, unknown>,
-): Record<string, unknown> {
+): { output: Record<string, unknown>; repairedPillars: string[] } {
   const out: Record<string, unknown> = { ...input };
+  const repairedPillars: string[] = [];
   for (const key of PILLAR_KEYS) {
     const value = out[key];
     if (isPillarObject(value)) continue;
@@ -48,6 +52,7 @@ export function repairToolOutput(
         const parsed = JSON.parse(value);
         if (isPillarObject(parsed)) {
           out[key] = parsed;
+          repairedPillars.push(key);
           console.warn(
             "[FLOW repair UNEXPECTED] Structured Outputs returned non-conforming output for pillar",
             { pillar: key },
@@ -58,5 +63,5 @@ export function repairToolOutput(
       }
     }
   }
-  return out;
+  return { output: out, repairedPillars };
 }
