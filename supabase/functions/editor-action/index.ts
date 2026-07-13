@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callLLM, providerFor, extractProviderError } from "../_shared/_llm.ts";
+import { callLLM, providerFor, normaliseResponse, extractProviderError } from "../_shared/_llm.ts";
 import { EDITOR_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
 import {
@@ -466,13 +466,9 @@ Deno.serve(async (req) => {
     }
 
     const llmData = await llmRes.json();
-    let proposedText: string;
-    if (provider === "anthropic") {
-      const blocks: any[] = llmData?.content ?? [];
-      proposedText = blocks.filter(b => b?.type === "text").map(b => b.text ?? "").join("") || "No response generated.";
-    } else {
-      proposedText = llmData.choices?.[0]?.message?.content ?? "No response generated.";
-    }
+    // Provider-agnostic parse via the router's normaliser (replaces a
+    // hand-rolled provider branch that duplicated the same logic).
+    const proposedText = normaliseResponse(provider, llmData).text || "No response generated.";
 
     // --- Estimate tokens ---
     const inputChars = llmMessages.reduce((sum, m) => sum + m.content.length, 0);
