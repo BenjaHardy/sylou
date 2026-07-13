@@ -275,134 +275,164 @@ Deno.serve(async (req) => {
         );
       }
 
-      console.log("[stream:editor-action] LLM response received, piping");
+      console.log("[stream:editor-action] LLM response received, streaming");
 
-      let fullResponse = "";
-      let clientDisconnected = false;
-      const encoder = new TextEncoder();
-      const decoder = new TextDecoder();
-      let sseBuffer = "";
-
-      const transform = new TransformStream({
-        transform(chunk, controller) {
-          sseBuffer += decoder.decode(chunk, { stream: true });
-          const lines = sseBuffer.split("\n");
-          sseBuffer = lines.pop() ?? "";
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data:")) continue;
-            const payload = trimmed.slice(5).trim();
-            if (payload === "[DONE]") continue;
-
-            try {
-              const parsed = JSON.parse(payload);
-              const delta = extractDeltaText(parsed, provider);
-              if (delta) {
-                fullResponse += delta;
-                if (!clientDisconnected) {
-                  try {
-                    controller.enqueue(
-                      encoder.encode(`data: ${JSON.stringify({ token: delta })}\n\n`)
-                    );
-                  } catch {
-                    clientDisconnected = true;
-                  }
-                }
-              }
-            } catch {
-              // skip malformed chunk
-            }
-          }
-        },
-
-        async flush(controller) {
-          console.log("[stream:editor-action] LLM stream complete, persisting");
+      // §7 stream-first pattern (matches chat/context-prompt): we OWN the
+      // ReadableStream and keep it open until controller.close(), so the
+      // isolate survives a client disconnect and persistence always runs.
+      // The previous TransformStream/pipeThrough wiring let client
+      // cancellation propagate upstream and abort flush() — a mid-stream
+      // disconnect skipped the ai_editor_actions row, token_usage and
+      // billing entirely.
+      const readable = new ReadableStream({
+        async start(controller) {
+          let fullResponse = "";
+          let clientDisconnected = false;
+          const encoder = new TextEncoder();
+          const decoder = new TextDecoder();
 
           try {
-            const proposedText = fullResponse || "No response generated.";
-            const inputChars = llmMessages.reduce((sum, m) => sum + m.content.length, 0);
-            const outputChars = proposedText.length;
-            const estimatedTokens = Math.ceil((inputChars + outputChars) / 4);
+            const reader = llmRes.body!.getReader();
+            let sseBuffer = "";
 
-            // Build instruction_text
-            let instructionText: string | null = actionType === "translate" ? `translate:${targetLanguage}` : null;
-            if (selectedTextSource) {
-              instructionText = instructionText
-                ? `${instructionText} | Source: ${selectedTextSource}`
-                : `Source: ${selectedTextSource}`;
-            }
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
 
-            const { data: actionRow } = await adminSupabase
-              .from("ai_editor_actions")
-              .insert({
-                project_id: projectId,
-                action_type: actionType,
-                selected_text_preview: selectedText.slice(0, 500),
-                ai_response_preview: proposedText.slice(0, 500),
-                char_count_original: selectedText.length,
-                char_count_result: proposedText.length,
-                outcome: "pending",
-                instruction_text: instructionText,
-              })
-              .select("id")
-              .single();
+              sseBuffer += decoder.decode(value, { stream: true });
+              const lines = sseBuffer.split("\n");
+              sseBuffer = lines.pop() ?? "";
 
-            // Log token usage
-            await adminSupabase.from("token_usage").insert({
-              user_id: user.id,
-              project_id: projectId,
-              function_name: "editor-action",
-              model_used: chatModel,
-              input_tokens: Math.ceil(inputChars / 4),
-              output_tokens: Math.ceil(outputChars / 4),
-            });
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith("data:")) continue;
+                const payload = trimmed.slice(5).trim();
+                if (payload === "[DONE]") continue;
 
-            // Update budget
-            const newTotal = profile.tokens_used_this_period + estimatedTokens;
-            await adminSupabase.rpc("increment_tokens_used", {
-              user_uuid: user.id,
-              amount: estimatedTokens,
-            });
-
-            if (!clientDisconnected) {
-              try {
-                controller.enqueue(
-                  encoder.encode(
-                    `data: ${JSON.stringify({
-                      done: true,
-                      result: proposedText,
-                      action_id: actionRow?.id ?? null,
-                      budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
-                    })}\n\n`
-                  )
-                );
-              } catch {
-                clientDisconnected = true;
+                try {
+                  const parsed = JSON.parse(payload);
+                  const delta = extractDeltaText(parsed, provider);
+                  if (delta) {
+                    fullResponse += delta;
+                    if (!clientDisconnected) {
+                      try {
+                        controller.enqueue(
+                          encoder.encode(`data: ${JSON.stringify({ token: delta })}\n\n`)
+                        );
+                      } catch {
+                        clientDisconnected = true;
+                      }
+                    }
+                  }
+                } catch {
+                  // skip malformed chunk
+                }
               }
             }
 
-            console.log("[stream:editor-action] persistence complete");
-          } catch (persistErr) {
-            console.error("[stream:editor-action] persistence error:", persistErr);
+            console.log("[stream:editor-action] LLM stream complete, persisting");
+
+            try {
+              const proposedText = fullResponse || "No response generated.";
+              const inputChars = llmMessages.reduce((sum, m) => sum + m.content.length, 0);
+              const outputChars = proposedText.length;
+              const estimatedTokens = Math.ceil((inputChars + outputChars) / 4);
+
+              // Build instruction_text
+              let instructionText: string | null = actionType === "translate" ? `translate:${targetLanguage}` : null;
+              if (selectedTextSource) {
+                instructionText = instructionText
+                  ? `${instructionText} | Source: ${selectedTextSource}`
+                  : `Source: ${selectedTextSource}`;
+              }
+
+              const { data: actionRow } = await adminSupabase
+                .from("ai_editor_actions")
+                .insert({
+                  project_id: projectId,
+                  action_type: actionType,
+                  selected_text_preview: selectedText.slice(0, 500),
+                  ai_response_preview: proposedText.slice(0, 500),
+                  char_count_original: selectedText.length,
+                  char_count_result: proposedText.length,
+                  outcome: "pending",
+                  instruction_text: instructionText,
+                })
+                .select("id")
+                .single();
+
+              // Log token usage
+              await adminSupabase.from("token_usage").insert({
+                user_id: user.id,
+                project_id: projectId,
+                function_name: "editor-action",
+                model_used: chatModel,
+                input_tokens: Math.ceil(inputChars / 4),
+                output_tokens: Math.ceil(outputChars / 4),
+              });
+
+              // Update budget (atomic RPC, unchanged from P2-1; newTotal is only
+              // the request-start estimate for the budget_remaining display).
+              const newTotal = profile.tokens_used_this_period + estimatedTokens;
+              await adminSupabase.rpc("increment_tokens_used", {
+                user_uuid: user.id,
+                amount: estimatedTokens,
+              });
+
+              if (!clientDisconnected) {
+                try {
+                  controller.enqueue(
+                    encoder.encode(
+                      `data: ${JSON.stringify({
+                        done: true,
+                        result: proposedText,
+                        action_id: actionRow?.id ?? null,
+                        budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
+                      })}\n\n`
+                    )
+                  );
+                } catch {
+                  clientDisconnected = true;
+                }
+              }
+
+              console.log("[stream:editor-action] persistence complete");
+            } catch (persistErr) {
+              console.error("[stream:editor-action] persistence error:", persistErr);
+              if (!clientDisconnected) {
+                try {
+                  controller.enqueue(
+                    encoder.encode(
+                      `data: ${JSON.stringify({ done: true, error: "Action may not have been saved." })}\n\n`
+                    )
+                  );
+                } catch {
+                  // client gone
+                }
+              }
+            }
+          } catch (err) {
+            console.error("[stream:editor-action] stream error:", err);
             if (!clientDisconnected) {
               try {
                 controller.enqueue(
                   encoder.encode(
-                    `data: ${JSON.stringify({ done: true, error: "Action may not have been saved." })}\n\n`
+                    `data: ${JSON.stringify({ done: true, error: "AI service temporarily unavailable." })}\n\n`
                   )
                 );
               } catch {
                 // client gone
               }
             }
+          } finally {
+            // Keep the stream (and the isolate) alive until everything above —
+            // including persistence — has finished. §7 load-bearing.
+            controller.close();
           }
         },
       });
 
-      const outputStream = llmRes.body!.pipeThrough(transform);
-
-      return new Response(outputStream, {
+      return new Response(readable, {
         headers: {
           ...corsHeaders,
           "Content-Type": "text/event-stream",
