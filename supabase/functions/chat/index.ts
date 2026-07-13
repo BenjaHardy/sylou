@@ -1081,9 +1081,11 @@ When citing information from web search results, always include the source URL i
     }
 
     const llmData = await llmRes.json();
-    const assistantText = cleanLLMContent(
-      llmData.choices?.[0]?.message?.content ?? "No response generated."
-    );
+    // Provider-agnostic parse via the router's normaliser (the previous
+    // OpenAI-shape read returned "No response generated." for every
+    // Anthropic response — which was then persisted and billed).
+    const norm = normaliseResponse(providerFor(chatModel), llmData);
+    const assistantText = cleanLLMContent(norm.text || "No response generated.");
 
     // --- Persist messages ---
     const userMsg = {
