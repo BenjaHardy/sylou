@@ -344,9 +344,14 @@ content without flagging it in its stored metadata.
 
 ### 5.5 Editor actions, and what is *not* put in the chat
 
-These inline editor actions — Fix grammar, Translate, Rewrite, Simplify, Expand — serve less meaningful interactions than what "Ask" and "Propose" allow, as they are bounded by the selected text. They don't produce a chat exchange and are logged to a separate record of AI editor actions, with the original text, the AI result, and whether you accepted, modified, or rejected it. They reach FLOW as activity statistics rather than as chat messages, and accepted insertions also carry the `[ai]` provenance tag in
-your writing. So these actions are fully on the record for the analysis without
-cluttering the conversation a reader sees.
+These inline editor actions — Fix grammar, Translate, Rewrite, Simplify, Expand — serve less meaningful interactions than what "Ask" and "Propose" allow, as they are bounded by the selected text. They don't produce a chat exchange and are logged to a separate record of AI editor actions, with the original text, the AI result, and whether you accepted, modified, or rejected it. They reach FLOW as activity statistics and a detailed action log rather than as chat messages, and accepted insertions also carry the `[ai]` provenance tag in your writing.
+
+Each kind of interaction is recorded once, where it belongs: inline actions
+live only in this ledger; **Propose** content lives in the chat (per 5.1),
+while the ledger records just its decision — accepted, modified, rejected, or
+still pending — linked to the chat exchange by timestamp; **Ask** lives only
+in the chat, which is its complete record. Everything is on the record for
+the analysis, and nothing is logged twice.
 
 ---
 
