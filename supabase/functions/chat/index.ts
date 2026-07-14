@@ -584,24 +584,27 @@ When citing information from web search results, always include the source URL i
 
 
 
-                const { data: insertedUser } = await adminSupabase
+                const { data: insertedUser, error: userMsgErr } = await adminSupabase
                   .from("chat_messages")
                   .insert(userMsgRow)
                   .select()
                   .single();
+                if (userMsgErr) console.error("[chat] user message insert failed:", JSON.stringify(userMsgErr));
 
-                const { data: insertedAssistant } = await adminSupabase
+                const { data: insertedAssistant, error: assistantMsgErr } = await adminSupabase
                   .from("chat_messages")
                   .insert(assistantMsgRow)
                   .select()
                   .single();
+                if (assistantMsgErr) console.error("[chat] assistant message insert failed:", JSON.stringify(assistantMsgErr));
 
                 const estimatedTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
                 const newTotal = profile.tokens_used_this_period + estimatedTokens;
-                await adminSupabase.rpc("increment_tokens_used", {
+                const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
                   user_uuid: user.id,
                   amount: estimatedTokens,
                 });
+                if (rpcErr) console.error("[chat] increment_tokens_used failed:", JSON.stringify(rpcErr));
 
                 const promptColumn = tutorMode ? "chat_prompt_count_tutor" : "chat_prompt_count_normal";
                 const { data: cs } = await adminSupabase
@@ -611,20 +614,27 @@ When citing information from web search results, always include the source URL i
                   .single();
                 if (cs) {
                   const cnt = (cs as Record<string, number>)[promptColumn] || 0;
-                  await adminSupabase
+                  const { error: statsErr } = await adminSupabase
                     .from("project_stats")
                     .update({ [promptColumn]: cnt + 1 })
                     .eq("project_id", thread.project_id);
+                  if (statsErr) console.error("[chat] project_stats update failed:", JSON.stringify(statsErr));
                 }
 
-                controller.enqueue(
-                  sseEvent({
-                    done: true,
-                    user_message: insertedUser,
-                    assistant_message: insertedAssistant,
-                    budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
-                  })
-                );
+                // Failed message writes take the same path a thrown persistence
+                // error does — never report success over missing rows.
+                if (userMsgErr || assistantMsgErr) {
+                  controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
+                } else {
+                  controller.enqueue(
+                    sseEvent({
+                      done: true,
+                      user_message: insertedUser,
+                      assistant_message: insertedAssistant,
+                      budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
+                    })
+                  );
+                }
               } catch (err) {
                 console.error("[stream] error in no-tool path:", err);
                 try {
@@ -846,34 +856,41 @@ When citing information from web search results, always include the source URL i
                 assistantMsgRow.web_searches_performed = webSearchesPerformed;
               }
 
-              const { data: insertedUser } = await adminSupabase
+              const { data: insertedUser, error: userMsgErr } = await adminSupabase
                 .from("chat_messages")
                 .insert(userMsgRow)
                 .select()
                 .single();
+              if (userMsgErr) console.error("[chat] user message insert failed:", JSON.stringify(userMsgErr));
 
-              const { data: insertedAssistant } = await adminSupabase
+              const { data: insertedAssistant, error: assistantMsgErr } = await adminSupabase
                 .from("chat_messages")
                 .insert(assistantMsgRow)
                 .select()
                 .single();
+              if (assistantMsgErr) console.error("[chat] assistant message insert failed:", JSON.stringify(assistantMsgErr));
 
               const estimatedTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
               const newTotal = profile.tokens_used_this_period + estimatedTokens;
-              await adminSupabase.rpc("increment_tokens_used", {
+              const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
                 user_uuid: user.id,
                 amount: estimatedTokens,
               });
+              if (rpcErr) console.error("[chat] increment_tokens_used failed:", JSON.stringify(rpcErr));
 
               try {
-                controller.enqueue(
-                  sseEvent({
-                    done: true,
-                    user_message: insertedUser,
-                    assistant_message: insertedAssistant,
-                    budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
-                  })
-                );
+                if (userMsgErr || assistantMsgErr) {
+                  controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
+                } else {
+                  controller.enqueue(
+                    sseEvent({
+                      done: true,
+                      user_message: insertedUser,
+                      assistant_message: insertedAssistant,
+                      budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
+                    })
+                  );
+                }
               } catch { /* client gone */ }
             } catch (err) {
               console.error("[stream] error in tool-use path:", err);
@@ -1001,17 +1018,19 @@ When citing information from web search results, always include the source URL i
               model_used: chatModel,
             };
 
-            const { data: insertedUser } = await adminSupabase
+            const { data: insertedUser, error: userMsgErr } = await adminSupabase
               .from("chat_messages")
               .insert(userMsg)
               .select()
               .single();
+            if (userMsgErr) console.error("[chat] user message insert failed:", JSON.stringify(userMsgErr));
 
-            const { data: insertedAssistant } = await adminSupabase
+            const { data: insertedAssistant, error: assistantMsgErr } = await adminSupabase
               .from("chat_messages")
               .insert(assistantMsg)
               .select()
               .single();
+            if (assistantMsgErr) console.error("[chat] assistant message insert failed:", JSON.stringify(assistantMsgErr));
 
             const inputChars = llmMessages.reduce(
               (sum, m) => sum + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length),
@@ -1021,20 +1040,25 @@ When citing information from web search results, always include the source URL i
             const estimatedTokens = Math.ceil((inputChars + outputChars) / 4);
             const newTotal = profile.tokens_used_this_period + estimatedTokens;
 
-            await adminSupabase.rpc("increment_tokens_used", {
+            const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
               user_uuid: user.id,
               amount: estimatedTokens,
             });
+            if (rpcErr) console.error("[chat] increment_tokens_used failed:", JSON.stringify(rpcErr));
 
             try {
-              controller.enqueue(
-                sseEvent({
-                  done: true,
-                  user_message: insertedUser,
-                  assistant_message: insertedAssistant,
-                  budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
-                })
-              );
+              if (userMsgErr || assistantMsgErr) {
+                controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
+              } else {
+                controller.enqueue(
+                  sseEvent({
+                    done: true,
+                    user_message: insertedUser,
+                    assistant_message: insertedAssistant,
+                    budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
+                  })
+                );
+              }
             } catch { /* client gone */ }
 
             console.log("[stream] flush() completed — persistence done");
@@ -1110,17 +1134,19 @@ When citing information from web search results, always include the source URL i
 
     // Service-role writes (user write policies dropped — write-surface
     // lockdown); thread ownership was verified at request entry.
-    const { data: insertedUser } = await adminSupabase
+    const { data: insertedUser, error: userMsgErr } = await adminSupabase
       .from("chat_messages")
       .insert(userMsg)
       .select()
       .single();
+    if (userMsgErr) console.error("[chat] user message insert failed:", JSON.stringify(userMsgErr));
 
-    const { data: insertedAssistant } = await adminSupabase
+    const { data: insertedAssistant, error: assistantMsgErr } = await adminSupabase
       .from("chat_messages")
       .insert(assistantMsg)
       .select()
       .single();
+    if (assistantMsgErr) console.error("[chat] assistant message insert failed:", JSON.stringify(assistantMsgErr));
 
     // --- Estimate tokens & update budget ---
     const inputChars = llmMessages.reduce(
@@ -1133,10 +1159,11 @@ When citing information from web search results, always include the source URL i
     const newTotal =
       profile.tokens_used_this_period + estimatedTokens;
 
-    await adminSupabase.rpc("increment_tokens_used", {
+    const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
       user_uuid: user.id,
       amount: estimatedTokens,
     });
+    if (rpcErr) console.error("[chat] increment_tokens_used failed:", JSON.stringify(rpcErr));
 
     // --- Increment prompt count in project_stats ---
     const promptColumn = tutorMode
@@ -1151,10 +1178,11 @@ When citing information from web search results, always include the source URL i
 
     if (currentStats) {
       const currentCount = (currentStats as Record<string, number>)[promptColumn] || 0;
-      await supabase
+      const { error: statsErr } = await supabase
         .from("project_stats")
         .update({ [promptColumn]: currentCount + 1 })
         .eq("project_id", thread.project_id);
+      if (statsErr) console.error("[chat] project_stats update failed:", JSON.stringify(statsErr));
     }
 
     return jsonResponse({
@@ -1163,6 +1191,9 @@ When citing information from web search results, always include the source URL i
       budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
       user_message: insertedUser,
       assistant_message: insertedAssistant,
+      // Same contract as the streaming paths: a failed message write is
+      // reported, never presented as success (client shows data.error).
+      ...(userMsgErr || assistantMsgErr ? { error: "Messages may not have been saved." } : {}),
     });
   } catch (err) {
     console.error("Chat function error:", err);

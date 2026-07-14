@@ -908,7 +908,13 @@ When citing information from web search results, always include the source URL i
         const finalOutputChars = totalOutputChars + extraOutputChars;
         const totalTokens = Math.ceil((finalInputChars + finalOutputChars) / 4);
 
-        const { data: actionRow } = await adminClient
+        // Core writes (action row, chat messages, summary log) flip this and
+        // the caller reports failure instead of success; secondary writes
+        // (token_usage, billing RPC) are logged loudly but never fail the
+        // exchange.
+        let persistenceFailed = false;
+
+        const { data: actionRow, error: actionErr } = await adminClient
           .from("ai_editor_actions")
           .insert({
             project_id,
@@ -926,8 +932,12 @@ When citing information from web search results, always include the source URL i
           })
           .select("id")
           .single();
+        if (actionErr) {
+          console.error("[context-prompt] ai_editor_actions insert failed:", JSON.stringify(actionErr));
+          persistenceFailed = true;
+        }
 
-        await supabase.from("token_usage").insert({
+        const { error: usageErr } = await supabase.from("token_usage").insert({
           user_id: authedUser.id,
           project_id,
           function_name: "context-prompt",
@@ -935,11 +945,13 @@ When citing information from web search results, always include the source URL i
           input_tokens: Math.ceil(finalInputChars / 4),
           output_tokens: Math.ceil(finalOutputChars / 4),
         });
+        if (usageErr) console.error("[context-prompt] token_usage insert failed:", JSON.stringify(usageErr));
 
-        await supabase.rpc("increment_tokens_used", {
+        const { error: rpcErr } = await supabase.rpc("increment_tokens_used", {
           user_uuid: authedUser.id,
           amount: totalTokens,
         });
+        if (rpcErr) console.error("[context-prompt] increment_tokens_used failed:", JSON.stringify(rpcErr));
 
         const budgetRemaining: number | null = authedProfile.monthly_token_budget === null ? null : authedProfile.monthly_token_budget - authedProfile.tokens_used_this_period - totalTokens;
 
@@ -955,7 +967,7 @@ When citing information from web search results, always include the source URL i
           const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
           const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
 
-          const { data: promptMsg } = await adminClient.from("chat_messages").insert({
+          const { data: promptMsg, error: promptErr } = await adminClient.from("chat_messages").insert({
             thread_id,
             role: "user",
             content: userPromptContent,
@@ -964,19 +976,27 @@ When citing information from web search results, always include the source URL i
             concise_mode: conciseMode,
             tutor_mode: tutorMode,
           }).select().single();
+          if (promptErr) {
+            console.error("[context-prompt] prompt message insert failed:", JSON.stringify(promptErr));
+            persistenceFailed = true;
+          }
           if (promptMsg) insertedMessages.push(promptMsg);
 
           if (summaryUpdate !== "No update needed.") {
             // writing_summary intentionally omits concise_mode and tutor_mode (defaults to false):
             // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER
             // nor the tutor-mode system prompt.
-            const { data: summaryMsg } = await adminClient.from("chat_messages").insert({
+            const { data: summaryMsg, error: summaryMsgErr } = await adminClient.from("chat_messages").insert({
               thread_id,
               role: "assistant",
               content: summaryUpdate,
               source_type: "writing_summary",
               flow_flag: "not_assessed",
             }).select().single();
+            if (summaryMsgErr) {
+              console.error("[context-prompt] summary message insert failed:", JSON.stringify(summaryMsgErr));
+              persistenceFailed = true;
+            }
             if (summaryMsg) insertedMessages.push(summaryMsg);
           }
 
@@ -997,25 +1017,37 @@ When citing information from web search results, always include the source URL i
             responseRow.web_searches_performed = webSearchesPerformed;
           }
 
-          const { data: responseMsg } = await adminClient.from("chat_messages").insert(responseRow).select().single();
+          const { data: responseMsg, error: responseErr } = await adminClient.from("chat_messages").insert(responseRow).select().single();
+          if (responseErr) {
+            console.error("[context-prompt] response message insert failed:", JSON.stringify(responseErr));
+            persistenceFailed = true;
+          }
           if (responseMsg) insertedMessages.push(responseMsg);
 
           if (summaryUpdate !== "No update needed.") {
             if (summaryRow) {
-              await adminClient
+              const { error: logErr } = await adminClient
                 .from("writing_summary_log")
                 .update({ summary_text: updatedSummary, last_updated_at: new Date().toISOString() })
                 .eq("id", summaryRow.id);
+              if (logErr) {
+                console.error("[context-prompt] writing_summary_log update failed:", JSON.stringify(logErr));
+                persistenceFailed = true;
+              }
             } else {
-              await adminClient.from("writing_summary_log").insert({
+              const { error: logErr } = await adminClient.from("writing_summary_log").insert({
                 project_id,
                 summary_text: updatedSummary,
               });
+              if (logErr) {
+                console.error("[context-prompt] writing_summary_log insert failed:", JSON.stringify(logErr));
+                persistenceFailed = true;
+              }
             }
           }
         }
 
-        return { actionRow, budgetRemaining, insertedMessages };
+        return { actionRow, budgetRemaining, insertedMessages, persistenceFailed };
       }
 
       // ── TWO-PASS FLOW when tools exist ──
@@ -1068,18 +1100,22 @@ When citing information from web search results, always include the source URL i
                   controller.enqueue(sseEvent({ token: responseText.slice(i, i + chunkSize) }));
                 }
 
-                const { actionRow, budgetRemaining, insertedMessages } = await persistResults(responseText, 0, 0);
+                const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistResults(responseText, 0, 0);
 
-                controller.enqueue(sseEvent({
-                  done: true,
-                  ai_response: responseText,
-                  summary_update: summaryUpdate,
-                  action_id: actionRow?.id ?? null,
-                  budget_remaining: budgetRemaining,
-                  inserted_messages: insertedMessages,
-                  ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
-                  ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
-                }));
+                if (persistenceFailed) {
+                  controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
+                } else {
+                  controller.enqueue(sseEvent({
+                    done: true,
+                    ai_response: responseText,
+                    summary_update: summaryUpdate,
+                    action_id: actionRow?.id ?? null,
+                    budget_remaining: budgetRemaining,
+                    inserted_messages: insertedMessages,
+                    ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
+                    ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
+                  }));
+                }
               } else {
                 // ── Tool use detected ──
                 console.log("[stream:context-prompt] tool use detected:", toolCalls.length, "calls");
@@ -1191,19 +1227,23 @@ When citing information from web search results, always include the source URL i
                 // Clean and persist
                 fullResponse = cleanLLMContent(fullResponse);
                 const aiResponse = fullResponse.trim() || "No response generated.";
-                const { actionRow, budgetRemaining, insertedMessages } = await persistResults(aiResponse, 0, aiResponse.length);
+                const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistResults(aiResponse, 0, aiResponse.length);
 
                 try {
-                  controller.enqueue(sseEvent({
-                    done: true,
-                    ai_response: aiResponse,
-                    summary_update: summaryUpdate,
-                    action_id: actionRow?.id ?? null,
-                    budget_remaining: budgetRemaining,
-                    inserted_messages: insertedMessages,
-                    ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
-                    ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
-                  }));
+                  if (persistenceFailed) {
+                    controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
+                  } else {
+                    controller.enqueue(sseEvent({
+                      done: true,
+                      ai_response: aiResponse,
+                      summary_update: summaryUpdate,
+                      action_id: actionRow?.id ?? null,
+                      budget_remaining: budgetRemaining,
+                      inserted_messages: insertedMessages,
+                      ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
+                      ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
+                    }));
+                  }
                 } catch { /* client gone */ }
               }
             } catch (err) {
@@ -1285,17 +1325,21 @@ When citing information from web search results, always include the source URL i
             fullResponse = cleanLLMContent(fullResponse);
             const aiResponse = fullResponse.trim() || "No response generated.";
             const extraInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
-            const { actionRow, budgetRemaining, insertedMessages } = await persistResults(aiResponse, extraInputChars, aiResponse.length);
+            const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistResults(aiResponse, extraInputChars, aiResponse.length);
 
             try {
-              controller.enqueue(sseEvent({
-                done: true,
-                ai_response: aiResponse,
-                summary_update: summaryUpdate,
-                action_id: actionRow?.id ?? null,
-                budget_remaining: budgetRemaining,
-                inserted_messages: insertedMessages,
-              }));
+              if (persistenceFailed) {
+                controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
+              } else {
+                controller.enqueue(sseEvent({
+                  done: true,
+                  ai_response: aiResponse,
+                  summary_update: summaryUpdate,
+                  action_id: actionRow?.id ?? null,
+                  budget_remaining: budgetRemaining,
+                  inserted_messages: insertedMessages,
+                }));
+              }
             } catch { /* client gone */ }
 
             console.log("[stream:context-prompt] persistence complete");
@@ -1417,8 +1461,9 @@ When citing information from web search results, always include the source URL i
         .single();
 
       if (actionErr) console.error("ai_editor_actions insert failed:", JSON.stringify(actionErr));
+      let persistenceFailed = !!actionErr;
 
-      await supabase.from("token_usage").insert({
+      const { error: usageErr } = await supabase.from("token_usage").insert({
         user_id: user.id,
         project_id,
         function_name: "context-prompt",
@@ -1426,8 +1471,10 @@ When citing information from web search results, always include the source URL i
         input_tokens: Math.ceil(totalInputChars / 4),
         output_tokens: Math.ceil(totalOutputChars / 4),
       });
+      if (usageErr) console.error("[context-prompt] token_usage insert failed:", JSON.stringify(usageErr));
 
-      await supabase.rpc("increment_tokens_used", { user_uuid: user.id, amount: totalTokens });
+      const { error: rpcErr } = await supabase.rpc("increment_tokens_used", { user_uuid: user.id, amount: totalTokens });
+      if (rpcErr) console.error("[context-prompt] increment_tokens_used failed:", JSON.stringify(rpcErr));
 
       const budgetRemaining: number | null = profile.monthly_token_budget === null ? null : profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
 
@@ -1438,18 +1485,20 @@ When citing information from web search results, always include the source URL i
         const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
         const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
 
-        const { data: promptMsg } = await adminClient.from("chat_messages").insert({
+        const { data: promptMsg, error: promptErr } = await adminClient.from("chat_messages").insert({
           thread_id, role: "user", content: userPromptContent, source_type: isAsk ? "ask_prompt" : "propose_prompt", flow_flag: "normal", concise_mode: conciseMode, tutor_mode: tutorMode,
         }).select().single();
+        if (promptErr) { console.error("[context-prompt] prompt message insert failed:", JSON.stringify(promptErr)); persistenceFailed = true; }
         if (promptMsg) insertedMessages.push(promptMsg);
 
         if (summaryUpdate !== "No update needed.") {
           // writing_summary intentionally omits concise_mode and tutor_mode (defaults to false):
           // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER
           // nor the tutor-mode system prompt.
-          const { data: summaryMsg } = await adminClient.from("chat_messages").insert({
+          const { data: summaryMsg, error: summaryMsgErr } = await adminClient.from("chat_messages").insert({
             thread_id, role: "assistant", content: summaryUpdate, source_type: "writing_summary", flow_flag: "not_assessed",
           }).select().single();
+          if (summaryMsgErr) { console.error("[context-prompt] summary message insert failed:", JSON.stringify(summaryMsgErr)); persistenceFailed = true; }
           if (summaryMsg) insertedMessages.push(summaryMsg);
         }
 
@@ -1459,16 +1508,19 @@ When citing information from web search results, always include the source URL i
         if (documentsReferenced.length > 0) responseRow.documents_referenced = documentsReferenced;
         if (webSearchesPerformed.length > 0) responseRow.web_searches_performed = webSearchesPerformed;
 
-        const { data: responseMsg } = await adminClient.from("chat_messages").insert(responseRow).select().single();
+        const { data: responseMsg, error: responseErr } = await adminClient.from("chat_messages").insert(responseRow).select().single();
+        if (responseErr) { console.error("[context-prompt] response message insert failed:", JSON.stringify(responseErr)); persistenceFailed = true; }
         if (responseMsg) insertedMessages.push(responseMsg);
 
         if (summaryUpdate !== "No update needed.") {
           if (summaryRow) {
-            await adminClient.from("writing_summary_log")
+            const { error: logErr } = await adminClient.from("writing_summary_log")
               .update({ summary_text: updatedSummary, last_updated_at: new Date().toISOString() })
               .eq("id", summaryRow.id);
+            if (logErr) { console.error("[context-prompt] writing_summary_log update failed:", JSON.stringify(logErr)); persistenceFailed = true; }
           } else {
-            await adminClient.from("writing_summary_log").insert({ project_id, summary_text: updatedSummary });
+            const { error: logErr } = await adminClient.from("writing_summary_log").insert({ project_id, summary_text: updatedSummary });
+            if (logErr) { console.error("[context-prompt] writing_summary_log insert failed:", JSON.stringify(logErr)); persistenceFailed = true; }
           }
         }
       }
@@ -1482,6 +1534,9 @@ When citing information from web search results, always include the source URL i
         inserted_messages: insertedMessages,
         ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
         ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
+        // Same contract as the streaming paths: failed core writes are
+        // reported, never presented as success.
+        ...(persistenceFailed ? { error: "Messages may not have been saved." } : {}),
       });
     }
 
@@ -1512,8 +1567,9 @@ When citing information from web search results, always include the source URL i
       .single();
 
     if (actionErr) console.error("ai_editor_actions insert failed:", JSON.stringify(actionErr));
+    let persistenceFailed = !!actionErr;
 
-    await supabase.from("token_usage").insert({
+    const { error: usageErr } = await supabase.from("token_usage").insert({
       user_id: user.id,
       project_id,
       function_name: "context-prompt",
@@ -1521,8 +1577,10 @@ When citing information from web search results, always include the source URL i
       input_tokens: Math.ceil(finalInputChars / 4),
       output_tokens: Math.ceil(finalOutputChars / 4),
     });
+    if (usageErr) console.error("[context-prompt] token_usage insert failed:", JSON.stringify(usageErr));
 
-    await supabase.rpc("increment_tokens_used", { user_uuid: user.id, amount: totalTokens });
+    const { error: rpcErr } = await supabase.rpc("increment_tokens_used", { user_uuid: user.id, amount: totalTokens });
+    if (rpcErr) console.error("[context-prompt] increment_tokens_used failed:", JSON.stringify(rpcErr));
 
     const budgetRemaining: number | null = profile.monthly_token_budget === null ? null : profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
 
@@ -1533,33 +1591,38 @@ When citing information from web search results, always include the source URL i
       const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
       const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
 
-      const { data: promptMsg } = await adminClient.from("chat_messages").insert({
+      const { data: promptMsg, error: promptErr } = await adminClient.from("chat_messages").insert({
         thread_id, role: "user", content: userPromptContent, source_type: isAsk ? "ask_prompt" : "propose_prompt", flow_flag: "normal", concise_mode: conciseMode, tutor_mode: tutorMode,
       }).select().single();
+      if (promptErr) { console.error("[context-prompt] prompt message insert failed:", JSON.stringify(promptErr)); persistenceFailed = true; }
       if (promptMsg) insertedMessages.push(promptMsg);
 
       if (summaryUpdate !== "No update needed.") {
         // writing_summary intentionally omits concise_mode and tutor_mode (defaults to false):
         // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER
         // nor the tutor-mode system prompt.
-        const { data: summaryMsg } = await adminClient.from("chat_messages").insert({
+        const { data: summaryMsg, error: summaryMsgErr } = await adminClient.from("chat_messages").insert({
           thread_id, role: "assistant", content: summaryUpdate, source_type: "writing_summary", flow_flag: "not_assessed",
         }).select().single();
+        if (summaryMsgErr) { console.error("[context-prompt] summary message insert failed:", JSON.stringify(summaryMsgErr)); persistenceFailed = true; }
         if (summaryMsg) insertedMessages.push(summaryMsg);
       }
 
-      const { data: responseMsg } = await adminClient.from("chat_messages").insert({
+      const { data: responseMsg, error: responseErr } = await adminClient.from("chat_messages").insert({
         thread_id, role: "assistant", content: aiResponse, source_type: isAsk ? "ask_response" : "propose_response", flow_flag: "normal", model_used: chatModel, concise_mode: conciseMode, tutor_mode: tutorMode,
       }).select().single();
+      if (responseErr) { console.error("[context-prompt] response message insert failed:", JSON.stringify(responseErr)); persistenceFailed = true; }
       if (responseMsg) insertedMessages.push(responseMsg);
 
       if (summaryUpdate !== "No update needed.") {
         if (summaryRow) {
-          await adminClient.from("writing_summary_log")
+          const { error: logErr } = await adminClient.from("writing_summary_log")
             .update({ summary_text: updatedSummary, last_updated_at: new Date().toISOString() })
             .eq("id", summaryRow.id);
+          if (logErr) { console.error("[context-prompt] writing_summary_log update failed:", JSON.stringify(logErr)); persistenceFailed = true; }
         } else {
-          await adminClient.from("writing_summary_log").insert({ project_id, summary_text: updatedSummary });
+          const { error: logErr } = await adminClient.from("writing_summary_log").insert({ project_id, summary_text: updatedSummary });
+          if (logErr) { console.error("[context-prompt] writing_summary_log insert failed:", JSON.stringify(logErr)); persistenceFailed = true; }
         }
       }
     }
@@ -1571,6 +1634,9 @@ When citing information from web search results, always include the source URL i
       tokens_used: totalTokens,
       budget_remaining: budgetRemaining,
       inserted_messages: insertedMessages,
+      // Same contract as the streaming paths: failed core writes are
+      // reported, never presented as success.
+      ...(persistenceFailed ? { error: "Messages may not have been saved." } : {}),
     });
   } catch (err) {
     console.error("Context-prompt error:", err);

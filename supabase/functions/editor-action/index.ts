@@ -346,7 +346,7 @@ Deno.serve(async (req) => {
                   : `Source: ${selectedTextSource}`;
               }
 
-              const { data: actionRow } = await adminSupabase
+              const { data: actionRow, error: actionErr } = await adminSupabase
                 .from("ai_editor_actions")
                 .insert({
                   project_id: projectId,
@@ -360,9 +360,10 @@ Deno.serve(async (req) => {
                 })
                 .select("id")
                 .single();
+              if (actionErr) console.error("[editor-action] ai_editor_actions insert failed:", JSON.stringify(actionErr));
 
               // Log token usage
-              await adminSupabase.from("token_usage").insert({
+              const { error: usageErr } = await adminSupabase.from("token_usage").insert({
                 user_id: user.id,
                 project_id: projectId,
                 function_name: "editor-action",
@@ -370,27 +371,40 @@ Deno.serve(async (req) => {
                 input_tokens: Math.ceil(inputChars / 4),
                 output_tokens: Math.ceil(outputChars / 4),
               });
+              if (usageErr) console.error("[editor-action] token_usage insert failed:", JSON.stringify(usageErr));
 
               // Update budget (atomic RPC, unchanged from P2-1; newTotal is only
               // the request-start estimate for the budget_remaining display).
               const newTotal = profile.tokens_used_this_period + estimatedTokens;
-              await adminSupabase.rpc("increment_tokens_used", {
+              const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
                 user_uuid: user.id,
                 amount: estimatedTokens,
               });
+              if (rpcErr) console.error("[editor-action] increment_tokens_used failed:", JSON.stringify(rpcErr));
 
               if (!clientDisconnected) {
                 try {
-                  controller.enqueue(
-                    encoder.encode(
-                      `data: ${JSON.stringify({
-                        done: true,
-                        result: proposedText,
-                        action_id: actionRow?.id ?? null,
-                        budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
-                      })}\n\n`
-                    )
-                  );
+                  if (actionErr) {
+                    // Failed ledger write takes the same path a thrown
+                    // persistence error does — never report success over a
+                    // missing action row.
+                    controller.enqueue(
+                      encoder.encode(
+                        `data: ${JSON.stringify({ done: true, error: "Action may not have been saved." })}\n\n`
+                      )
+                    );
+                  } else {
+                    controller.enqueue(
+                      encoder.encode(
+                        `data: ${JSON.stringify({
+                          done: true,
+                          result: proposedText,
+                          action_id: actionRow?.id ?? null,
+                          budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
+                        })}\n\n`
+                      )
+                    );
+                  }
                 } catch {
                   clientDisconnected = true;
                 }
@@ -505,7 +519,7 @@ Deno.serve(async (req) => {
     }
 
     // --- Log token usage ---
-    await supabase.from("token_usage").insert({
+    const { error: usageErr } = await supabase.from("token_usage").insert({
       user_id: user.id,
       project_id: projectId,
       function_name: "editor-action",
@@ -513,13 +527,15 @@ Deno.serve(async (req) => {
       input_tokens: Math.ceil(inputChars / 4),
       output_tokens: Math.ceil(outputChars / 4),
     });
+    if (usageErr) console.error("[editor-action] token_usage insert failed:", JSON.stringify(usageErr));
 
     // --- Update budget ---
     const newTotal = profile.tokens_used_this_period + estimatedTokens;
-    await adminSupabase.rpc("increment_tokens_used", {
+    const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
       user_uuid: user.id,
       amount: estimatedTokens,
     });
+    if (rpcErr) console.error("[editor-action] increment_tokens_used failed:", JSON.stringify(rpcErr));
 
     return jsonResponse({
       proposed_text: proposedText,
