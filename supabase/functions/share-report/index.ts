@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 
 // --- CORS allow-list (parsed once at module load) ---
 const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGIN") ?? "")
