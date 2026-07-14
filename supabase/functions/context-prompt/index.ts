@@ -914,27 +914,35 @@ When citing information from web search results, always include the source URL i
         // exchange.
         let persistenceFailed = false;
 
-        const { data: actionRow, error: actionErr } = await adminClient
-          .from("ai_editor_actions")
-          .insert({
-            project_id,
-            action_type: action_type === "ask" ? "ask" : "propose",
-            selected_text_preview: selected_text.slice(0, 500),
-            ai_response_preview: aiResponse.slice(0, 500),
-            ai_response_full: aiResponse,
-            proposed_summary: summaryUpdate,
-            char_count_original: selected_text.length,
-            char_count_result: aiResponse.length,
-            outcome: action_type === "ask" ? "delivered" : "pending",
-            instruction_text: selectedTextSource
-              ? `${instruction.slice(0, 1000)} | Source: ${selectedTextSource}`
-              : instruction.slice(0, 1000),
-          })
-          .select("id")
-          .single();
-        if (actionErr) {
-          console.error("[context-prompt] ai_editor_actions insert failed:", JSON.stringify(actionErr));
-          persistenceFailed = true;
+        // Only Propose gets a ledger row: it carries the decision that the
+        // pending-gated CONFIRM endpoint records, and feeds the FLOW outcome
+        // statistics. Ask has no decision to record — its full exchange is
+        // logged in the chat below, which is its canonical (and only) record.
+        let actionRow: { id: string } | null = null;
+        if (action_type !== "ask") {
+          const { data: insertedAction, error: actionErr } = await adminClient
+            .from("ai_editor_actions")
+            .insert({
+              project_id,
+              action_type: "propose",
+              selected_text_preview: selected_text.slice(0, 500),
+              ai_response_preview: aiResponse.slice(0, 500),
+              ai_response_full: aiResponse,
+              proposed_summary: summaryUpdate,
+              char_count_original: selected_text.length,
+              char_count_result: aiResponse.length,
+              outcome: "pending",
+              instruction_text: selectedTextSource
+                ? `${instruction.slice(0, 1000)} | Source: ${selectedTextSource}`
+                : instruction.slice(0, 1000),
+            })
+            .select("id")
+            .single();
+          if (actionErr) {
+            console.error("[context-prompt] ai_editor_actions insert failed:", JSON.stringify(actionErr));
+            persistenceFailed = true;
+          }
+          actionRow = insertedAction;
         }
 
         const { error: usageErr } = await supabase.from("token_usage").insert({
@@ -1441,27 +1449,33 @@ When citing information from web search results, always include the source URL i
 
       const totalTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
 
-      const { data: actionRow, error: actionErr } = await adminClient
-        .from("ai_editor_actions")
-        .insert({
-          project_id,
-          action_type: action_type === "ask" ? "ask" : "propose",
-          selected_text_preview: selected_text.slice(0, 500),
-          ai_response_preview: aiResponse.slice(0, 500),
-          ai_response_full: aiResponse,
-          proposed_summary: summaryUpdate,
-          char_count_original: selected_text.length,
-          char_count_result: aiResponse.length,
-          outcome: action_type === "ask" ? "delivered" : "pending",
-          instruction_text: selectedTextSource
-            ? `${instruction.slice(0, 1000)} | Source: ${selectedTextSource}`
-            : instruction.slice(0, 1000),
-        })
-        .select("id")
-        .single();
-
-      if (actionErr) console.error("ai_editor_actions insert failed:", JSON.stringify(actionErr));
-      let persistenceFailed = !!actionErr;
+      // Only Propose gets a ledger row (decision + outcome stats for FLOW);
+      // Ask's canonical record is the chat itself — see persistResults.
+      let actionRow: { id: string } | null = null;
+      let persistenceFailed = false;
+      if (action_type !== "ask") {
+        const { data: insertedAction, error: actionErr } = await adminClient
+          .from("ai_editor_actions")
+          .insert({
+            project_id,
+            action_type: "propose",
+            selected_text_preview: selected_text.slice(0, 500),
+            ai_response_preview: aiResponse.slice(0, 500),
+            ai_response_full: aiResponse,
+            proposed_summary: summaryUpdate,
+            char_count_original: selected_text.length,
+            char_count_result: aiResponse.length,
+            outcome: "pending",
+            instruction_text: selectedTextSource
+              ? `${instruction.slice(0, 1000)} | Source: ${selectedTextSource}`
+              : instruction.slice(0, 1000),
+          })
+          .select("id")
+          .single();
+        if (actionErr) console.error("ai_editor_actions insert failed:", JSON.stringify(actionErr));
+        persistenceFailed = !!actionErr;
+        actionRow = insertedAction;
+      }
 
       const { error: usageErr } = await supabase.from("token_usage").insert({
         user_id: user.id,
@@ -1548,26 +1562,33 @@ When citing information from web search results, always include the source URL i
     const finalOutputChars = totalOutputChars + responseResult.outputChars;
     const totalTokens = Math.ceil((finalInputChars + finalOutputChars) / 4);
 
-    const { data: actionRow, error: actionErr } = await adminClient
-      .from("ai_editor_actions")
-      .insert({
-        project_id,
-        action_type: action_type === "ask" ? "ask" : "propose",
-        selected_text_preview: selected_text.slice(0, 500),
-        ai_response_preview: aiResponse.slice(0, 500),
-        ai_response_full: aiResponse,
-        char_count_original: selected_text.length,
-        char_count_result: aiResponse.length,
-        outcome: action_type === "ask" ? "delivered" : "pending",
-        instruction_text: selectedTextSource
-          ? `${instruction.slice(0, 1000)} | Source: ${selectedTextSource}`
-          : instruction.slice(0, 1000),
-      })
-      .select("id")
-      .single();
-
-    if (actionErr) console.error("ai_editor_actions insert failed:", JSON.stringify(actionErr));
-    let persistenceFailed = !!actionErr;
+    // Only Propose gets a ledger row (decision + outcome stats for FLOW);
+    // Ask's canonical record is the chat itself — see persistResults.
+    let actionRow: { id: string } | null = null;
+    let persistenceFailed = false;
+    if (action_type !== "ask") {
+      const { data: insertedAction, error: actionErr } = await adminClient
+        .from("ai_editor_actions")
+        .insert({
+          project_id,
+          action_type: "propose",
+          selected_text_preview: selected_text.slice(0, 500),
+          ai_response_preview: aiResponse.slice(0, 500),
+          ai_response_full: aiResponse,
+          proposed_summary: summaryUpdate,
+          char_count_original: selected_text.length,
+          char_count_result: aiResponse.length,
+          outcome: "pending",
+          instruction_text: selectedTextSource
+            ? `${instruction.slice(0, 1000)} | Source: ${selectedTextSource}`
+            : instruction.slice(0, 1000),
+        })
+        .select("id")
+        .single();
+      if (actionErr) console.error("ai_editor_actions insert failed:", JSON.stringify(actionErr));
+      persistenceFailed = !!actionErr;
+      actionRow = insertedAction;
+    }
 
     const { error: usageErr } = await supabase.from("token_usage").insert({
       user_id: user.id,

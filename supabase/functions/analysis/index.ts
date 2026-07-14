@@ -386,6 +386,7 @@ function buildEditorStatsString(
     selected_text_preview?: string | null;
     ai_response_preview?: string | null;
     instruction_text?: string | null;
+    created_at?: string;
   }>
 ): string {
   if (!actions || actions.length === 0) {
@@ -419,15 +420,25 @@ function buildEditorStatsString(
     lines.push(`Estimated % of writing from accepted AI suggestions: ~${pct}%`);
   }
 
-  // Append detailed per-action log (most recent 20) so the LLM can see
-  // the user's original text vs the AI result — critical for cases where
-  // user-written text was merely grammar-checked or lightly rewritten.
+  // Append detailed per-action log (most recent 20). Inline actions
+  // (grammar/rewrite/simplify/expand/translate) show their full previews —
+  // this ledger is their only record, and seeing the user's original text
+  // vs the AI result matters for cases where user-written text was merely
+  // grammar-checked or lightly rewritten. Propose rows appear as compact
+  // outcome+timestamp lines only: their full content is already in the
+  // timestamped Chat History, and the timestamp lets the model link each
+  // decision to its chat exchange without duplicating the content. (Ask
+  // writes no ledger row at all — the chat is its complete record.)
   const detailedActions = actions.slice(0, 20);
   if (detailedActions.some(a => a.selected_text_preview || a.ai_response_preview)) {
     lines.push("");
     lines.push("--- Detailed action log (most recent 20) ---");
     for (let i = 0; i < detailedActions.length; i++) {
       const a = detailedActions[i];
+      if (a.action_type === "propose") {
+        lines.push(`\n--- Action ${i + 1}: propose (${a.outcome})${a.created_at ? ` at ${a.created_at}` : ""} — content in Chat History above ---`);
+        continue;
+      }
       lines.push(`\n--- Action ${i + 1}: ${a.action_type} (${a.outcome}) ---`);
       if (a.selected_text_preview) {
         // Parse source info from instruction_text if present (after "| Source:" or "Source:")
@@ -789,6 +800,7 @@ Character-count breakdown by provenance type:
         selected_text_preview: string | null;
         ai_response_preview: string | null;
         instruction_text: string | null;
+        created_at: string;
       }>) ?? []
     );
 
@@ -881,7 +893,7 @@ ${importedDocsSection}
 
 # === AI EDITOR ACTIVITY ===
 
-The following statistics summarize AI-assisted editing actions performed via the text selection window. Predefined actions (grammar, rewrite, simplify, expand, translate) are counted. Ask and Propose interactions are also counted here but their full content appears in the Chat History above.
+The following statistics summarize AI-assisted editing actions performed via the text selection window. Predefined actions (grammar, rewrite, simplify, expand, translate) are counted, with a detailed log of recent ones below. Propose interactions are listed with their outcome (accepted/modified/rejected/pending) and timestamp — their full content appears in the timestamped Chat History above. Ask interactions appear in the Chat History only.
 
 ${editorStatsStr}
 ${writePillarNotice}`;
