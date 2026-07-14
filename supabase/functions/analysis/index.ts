@@ -1028,6 +1028,9 @@ ${writePillarNotice}`;
       errorResponse: Response;
       usage: { input_tokens?: number; output_tokens?: number };
       noRetry?: boolean;
+      /** token_usage.function_name for billing this failure (defaults to
+       *  "analysis:schema_invalid" on the retry funnel). */
+      failureLabel?: string;
     };
 
     const attemptFlowCall = async (attempt: 1 | 2): Promise<AttemptOk | AttemptFail> => {
@@ -1108,6 +1111,7 @@ ${writePillarNotice}`;
               ok: false,
               usage: { input_tokens: rawData?.usage?.input_tokens, output_tokens: rawData?.usage?.output_tokens },
               noRetry: true,
+              failureLabel: "analysis:refusal",
               errorResponse: jsonResponse(
                 {
                   error:
@@ -1122,6 +1126,7 @@ ${writePillarNotice}`;
               ok: false,
               usage: { input_tokens: rawData?.usage?.input_tokens, output_tokens: rawData?.usage?.output_tokens },
               noRetry: true,
+              failureLabel: "analysis:max_tokens",
               errorResponse: jsonResponse(
                 { error: "Analysis output was truncated. Please try again or use a smaller project." },
                 502,
@@ -1219,45 +1224,66 @@ ${writePillarNotice}`;
     };
 
     // Attempt 1 — original prompt, with repair applied.
+    // Admin client for billing — created before the attempts so failure
+    // paths can bill too; the success path below reuses it.
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
+
+    // Bill a FAILED attempt: the provider charged for it, so both the
+    // token_usage history and the budget counter must reflect it even though
+    // no report is produced. (Previously schema failures wrote the history
+    // row but skipped the counter, and refusal/max_tokens recorded nothing.)
+    // Never throws — a billing hiccup must not mask the prepared error
+    // response the caller is about to return.
+    const billFailedAttempt = async (
+      label: string,
+      usage: { input_tokens?: number; output_tokens?: number },
+    ) => {
+      try {
+        const inputTokens = usage.input_tokens ?? 0;
+        const outputTokens = usage.output_tokens ?? 0;
+        const { error: usageErr } = await supabase.from("token_usage").insert({
+          user_id: user.id,
+          project_id: projectId,
+          function_name: label,
+          model_used: flowModel,
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+        });
+        if (usageErr) console.error("[analysis] token_usage insert failed:", JSON.stringify(usageErr));
+        const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
+          user_uuid: user.id,
+          amount: inputTokens + outputTokens,
+        });
+        if (rpcErr) console.error("[analysis] increment_tokens_used failed:", JSON.stringify(rpcErr));
+      } catch (e) {
+        console.error("[analysis] failed-attempt billing threw:", e);
+      }
+    };
+
     let attemptResult = await attemptFlowCall(1);
 
     // Attempt 2 — only if attempt 1 failed validation AFTER repair.
     // Skip retry on deterministic failures (refusal, max_tokens) — retrying
     // them would only burn tokens and mask the underlying signal.
     if (!attemptResult.ok && !attemptResult.noRetry) {
-      // Log token usage for the failed first attempt.
-      try {
-        await supabase.from("token_usage").insert({
-          user_id: user.id,
-          project_id: projectId,
-          function_name: "analysis:schema_invalid",
-          model_used: flowModel,
-          input_tokens: attemptResult.usage.input_tokens ?? 0,
-          output_tokens: attemptResult.usage.output_tokens ?? 0,
-        });
-      } catch (_) { /* ignore */ }
+      // Bill the failed first attempt (history row + budget counter).
+      await billFailedAttempt(attemptResult.failureLabel ?? "analysis:schema_invalid", attemptResult.usage);
 
       console.log("[FLOW retry] attempt 1 failed schema validation, retrying");
       attemptResult = await attemptFlowCall(2);
 
       if (!attemptResult.ok) {
         console.log("[FLOW retry] attempt 2 also failed, returning 502");
-        try {
-          await supabase.from("token_usage").insert({
-            user_id: user.id,
-            project_id: projectId,
-            function_name: "analysis:schema_invalid",
-            model_used: flowModel,
-            input_tokens: attemptResult.usage.input_tokens ?? 0,
-            output_tokens: attemptResult.usage.output_tokens ?? 0,
-          });
-        } catch (_) { /* ignore */ }
+        await billFailedAttempt(attemptResult.failureLabel ?? "analysis:schema_invalid", attemptResult.usage);
         return attemptResult.errorResponse;
       }
 
       console.log("[FLOW retry] attempt 2 succeeded");
     } else if (!attemptResult.ok) {
-      // noRetry path (refusal / max_tokens) — return the prepared error.
+      // noRetry path (refusal / max_tokens): bill the attempt — the provider
+      // charged for it — then return the prepared error.
+      await billFailedAttempt(attemptResult.failureLabel ?? "analysis:failed", attemptResult.usage);
       return attemptResult.errorResponse;
     }
 
@@ -1285,6 +1311,30 @@ ${writePillarNotice}`;
     if (!flowResult.summary || typeof flowResult.summary !== "string") {
       flowResult.summary = "Analysis could not produce a complete summary.";
       defaultedSections.push("summary");
+    }
+
+    // Score integrity (engineering-standards §5): a pillar score must be a
+    // number in [0, 5] or null. Schema enforcement varies by provider (forced
+    // tool-calling relies on prompt compliance), so normalize here — BEFORE
+    // the similarity cap below, which must compare against a real number —
+    // and disclose every change in flow_meta. Number() keeps half-points
+    // intact ("4.5" → 4.5) and, unlike parseFloat, rejects trailing garbage
+    // ("4.5x" → NaN → nulled) instead of guessing.
+    for (const key of ["find", "lead", "organize", "write"] as const) {
+      const pillar = flowResult[key] as Record<string, unknown>;
+      const raw = pillar.score;
+      if (raw === null) continue;
+      if (typeof raw === "number" && raw >= 0 && raw <= 5) continue;
+      const coerced = typeof raw === "string" && raw.trim() !== "" ? Number(raw) : NaN;
+      if (Number.isFinite(coerced) && coerced >= 0 && coerced <= 5) {
+        pillar.score = coerced;
+        repairedPillars.push(`${key}.score`);
+        console.warn("[FLOW score repair] string score coerced to number", { pillar: key, raw });
+      } else {
+        pillar.score = null;
+        defaultedSections.push(`${key}.score`);
+        console.warn("[FLOW score default] invalid score set to null", { pillar: key, raw });
+      }
     }
 
     // --- Apply Write pillar score cap if similarity >= 35% ---
@@ -1365,9 +1415,12 @@ ${writePillarNotice}`;
       reasoning_provider: reasoningProvider,
       reasoning_thinking: reasoningThinking,
       reasoning_effort: reasoningEffort,
-      // Engineering-standards §5 disclosure: pillar keys whose stringified
-      // JSON the repair layer re-parsed, and sections replaced with the
-      // "Could not be assessed" default after validation. Empty when clean.
+      // Engineering-standards §5 disclosure. repaired_pillars: pillar keys
+      // whose stringified JSON the repair layer re-parsed, plus
+      // "<pillar>.score" entries for numeric-string scores coerced to
+      // numbers. defaulted_sections: sections replaced with the "Could not
+      // be assessed" default, plus "<pillar>.score" entries for invalid
+      // scores nulled by validation. Empty when clean.
       repaired_pillars: repairedPillars,
       defaulted_sections: defaultedSections,
       ...(isCreativeProject ? { template: "creative" } : {}),
@@ -1449,10 +1502,8 @@ ${writePillarNotice}`;
     }
 
     // --- Log token usage & atomically increment budget ---
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
-
-    await Promise.all([
+    // (adminSupabase is created above the attempt orchestration.)
+    const [successUsageRes, successRpcRes] = await Promise.all([
       supabase.from("token_usage").insert({
         user_id: user.id,
         project_id: projectId,
@@ -1466,6 +1517,8 @@ ${writePillarNotice}`;
         amount: totalTokens,
       }),
     ]);
+    if (successUsageRes.error) console.error("[analysis] token_usage insert failed:", JSON.stringify(successUsageRes.error));
+    if (successRpcRes.error) console.error("[analysis] increment_tokens_used failed:", JSON.stringify(successRpcRes.error));
 
     return jsonResponse({
       report,
