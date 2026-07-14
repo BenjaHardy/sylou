@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -53,12 +53,25 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Deno
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+
+      # Cache Deno's module store so a registry blip (e.g. the esm.sh 522
+      # that failed a green build) can't redden CI, and repeat runs skip the
+      # cold download of every remote import. Keyed on the functions' source
+      # (imports live inline); restore-keys serve a stale-but-useful cache
+      # when imports change — deno revalidates and fetches only what's new.
+      - name: Cache Deno dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/deno
+          key: deno-${{ runner.os }}-${{ hashFiles('supabase/functions/**/*.ts', 'supabase/functions/deno.json') }}
+          restore-keys: |
+            deno-${{ runner.os }}-
 
       # Mirrors the local `deno task check` (config: supabase/functions/deno.json;
       # nodeModulesDir=auto resolves the one npm: import for the typecheck).
