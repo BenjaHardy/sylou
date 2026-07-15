@@ -127,7 +127,8 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 | Reasoning-supported Mistral models            | `supabase/functions/_shared/_thinking.ts`     | `MISTRAL_REASONING_MODELS` set.                                                                   |
 | max_tokens base values + raise rules          | `supabase/functions/_shared/_thinking.ts`     | `resolveMaxTokens()` function.                                                                    |
 | Anthropic models without temperature          | `supabase/functions/_shared/_temperatures.ts` | `NO_TEMPERATURE_MODELS` set.                                                                      |
-| Server-side model allowlist + input limits    | `supabase/functions/_shared/_models.ts`       | `ALLOWED_MODELS` (gates the `model` request override), `INPUT_LIMITS` (request text ceilings).   |
+| Server-side model allowlist + input limits    | `supabase/functions/_shared/_models.ts`       | `ALLOWED_MODELS` (gates the `model` request override), `INPUT_LIMITS` (request text ceilings), `CONTEXT_LIMIT_TOKENS` (per-model context windows, mirrors the registry). |
+| FLOW imported-documents budget                | `supabase/functions/analysis/index.ts`        | `FLOW_IMPORTED_DOCS_BUDGET_TOKENS` cost ceiling; effective allowance = min(policy, model-window remainder after the never-truncated sections). |
 | Body-level wire format (per provider)         | `supabase/functions/_shared/_llm.ts`          | `toAnthropicBody`, `toOpenAIBody`.                                                                |
 
 ---
@@ -152,6 +153,8 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 2. Register the model in edge functions
    
     Add the model id to ALLOWED_MODELS in supabase/functions/_shared/_models.ts — requests naming a model not in this set are rejected with 400, so a model missing here is selectable in Settings but unusable via the request override.
+   
+    Add the model's context window to CONTEXT_LIMIT_TOKENS in the same file (a mirror of contextLimit in src/lib/models.ts) — the FLOW imported-documents budget and the report's token-usage disclosure read it. A missing id falls back to a conservative 200k window.
    
     Update fallback model strings in each edge function that references a default:
    

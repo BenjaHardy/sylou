@@ -44,7 +44,8 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   `export-json.ts`, `markdown-to-pm.ts`, `tiptap-font-size.ts`,
   `editor-extensions/pagination.ts`, `sse-stream.ts`, `estimateTokens.ts`.
 - `supabase/functions/_shared/` — `_llm.ts` (provider router), `_repair.ts`,
-  `_temperatures.ts`, `_thinking.ts`.
+  `_temperatures.ts`, `_thinking.ts`, `_models.ts` (model allowlist,
+  input caps, per-model context limits), `_provenance.ts`, `_similarity.ts`.
 - Edge functions (7): `chat`, `analysis`, `editor-action`, `context-prompt`,
   `extract-text`, `share-report`, `config`.
 
