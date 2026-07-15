@@ -22,6 +22,11 @@ export interface FlowMeta {
   imported_documents_count?: number;
   imported_documents_total_chars?: number;
   /**
+   * Applied imported-docs allowance in chars: min(cost-policy ceiling,
+   * model-window remainder). Absent on reports from before P3-7d.
+   */
+  imported_documents_char_budget?: number;
+  /**
    * Temperature actually sent to the LLM for this analysis.
    * `null` = the provider controls it (e.g. Claude Opus 4.7+ rejects any
    * non-default value with HTTP 400, so we omit the field).

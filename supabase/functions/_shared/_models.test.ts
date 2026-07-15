@@ -1,7 +1,12 @@
 // Deno unit tests for the server-side model allowlist + input limits.
 // Run with: deno test supabase/functions/_shared/_models.test.ts
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { ALLOWED_MODELS, INPUT_LIMITS } from "./_models.ts";
+import {
+  ALLOWED_MODELS,
+  CONTEXT_LIMIT_TOKENS,
+  FALLBACK_CONTEXT_LIMIT_TOKENS,
+  INPUT_LIMITS,
+} from "./_models.ts";
 
 Deno.test("allowlist contains exactly the six registry models", () => {
   assertEquals([...ALLOWED_MODELS].sort(), [
@@ -34,4 +39,21 @@ Deno.test("input limits are sane and ordered", () => {
   assert(INPUT_LIMITS.SHORT_FIELD_CHARS < INPUT_LIMITS.INSTRUCTION_CHARS);
   assert(INPUT_LIMITS.INSTRUCTION_CHARS < INPUT_LIMITS.CHAT_MESSAGE_CHARS);
   assert(INPUT_LIMITS.CHAT_MESSAGE_CHARS < INPUT_LIMITS.SELECTED_TEXT_CHARS);
+});
+
+Deno.test("every allowed model has a context limit, and nothing else does", () => {
+  assertEquals(
+    Object.keys(CONTEXT_LIMIT_TOKENS).sort(),
+    [...ALLOWED_MODELS].sort(),
+  );
+});
+
+Deno.test("context limits are sane and the fallback is the floor", () => {
+  for (const [id, limit] of Object.entries(CONTEXT_LIMIT_TOKENS)) {
+    assert(
+      limit >= FALLBACK_CONTEXT_LIMIT_TOKENS,
+      `${id} context limit ${limit} is below the conservative fallback`,
+    );
+  }
+  assert(FALLBACK_CONTEXT_LIMIT_TOKENS >= 100_000);
 });

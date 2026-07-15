@@ -1,5 +1,6 @@
 // Server-side request-validation constants for the LLM edge functions:
-// the model allowlist and the user-input size ceilings (audit P2-6 / F4+F5).
+// the model allowlist, the user-input size ceilings (audit P2-6 / F4+F5)
+// and the per-model context-window mirror (P3-7d).
 
 /**
  * Models a request may select via the optional `model` body field.
@@ -42,3 +43,33 @@ export const INPUT_LIMITS = {
   /** Short label-ish fields: selected_text_source, target_language. */
   SHORT_FIELD_CHARS: 200,
 } as const;
+
+/**
+ * Context-window size (input tokens) per allowed model.
+ *
+ * Same mirror-of-the-frontend-registry discipline as ALLOWED_MODELS above
+ * (`contextLimit` in src/lib/models.ts is the source of truth) — KEEP IN
+ * SYNC when adding or removing a model (checklist in
+ * docs/model-configuration.md).
+ *
+ * Consumed by `analysis` to fit the imported-documents budget to the model
+ * actually running the FLOW analysis, and to disclose the real window in
+ * `flow_meta.context_limit_tokens` (previously hardcoded to 1M regardless
+ * of model, which skewed the report's token-usage panel).
+ */
+export const CONTEXT_LIMIT_TOKENS: Readonly<Record<string, number>> = {
+  "mistral-small-2603": 256_000,
+  "mistral-medium-3-5": 256_000,
+  "mistral-large-2512": 256_000,
+  "claude-sonnet-4-6": 1_000_000,
+  "claude-opus-4-8": 1_000_000,
+  "deepseek-v4-flash": 1_000_000,
+};
+
+/**
+ * Conservative fallback when a model id isn't in the table (e.g. a stale
+ * legacy id still stored as a profile preference). Mirrors the client's
+ * DEFAULT_CONTEXT_LIMIT posture in src/lib/estimateTokens.ts: an unknown
+ * model under-budgets, never over.
+ */
+export const FALLBACK_CONTEXT_LIMIT_TOKENS = 200_000;

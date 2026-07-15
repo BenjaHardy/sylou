@@ -16,6 +16,20 @@ import {
   FLOW_THINKING, FLOW_EFFORT, FLOW_MISTRAL_EFFORT, MISTRAL_REASONING_MODELS,
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
+import {
+  ALLOWED_MODELS,
+  CONTEXT_LIMIT_TOKENS,
+  FALLBACK_CONTEXT_LIMIT_TOKENS,
+} from "../_shared/_models.ts";
+import { computeSimilarityPct } from "../_shared/_similarity.ts";
+
+// Cost-policy ceiling for imported documents in a FLOW prompt, in tokens
+// (~4 chars each; 2026-07 maintainer decision). Deliberately below every
+// allowed model's context window: reference documents may enrich the
+// analysis but must not dominate its cost. The effective allowance is
+// min(this, what the model's window leaves after the never-truncated
+// sections) — see the 3-tier budget in the handler.
+const FLOW_IMPORTED_DOCS_BUDGET_TOKENS = 100_000;
 
 // --- CORS allow-list (parsed once at module load) ---
 const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGIN") ?? "")
@@ -468,54 +482,10 @@ function buildEditorStatsString(
 }
 
 // ---------------------------------------------------------------------------
-// Similarity detection: compare writing against AI assistant chat messages
+// Similarity detection lives in ../_shared/_similarity.ts (P3-7d): the
+// writing side is HTML-stripped there before the 5-gram comparison. The
+// ≥35% Write-score cap that consumes the result stays in this handler.
 // ---------------------------------------------------------------------------
-
-
-function normalise(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function ngrams(text: string, n: number): Set<string> {
-  const words = text.split(" ");
-  const out = new Set<string>();
-  for (let i = 0; i <= words.length - n; i++) {
-    out.add(words.slice(i, i + n).join(" "));
-  }
-  return out;
-}
-
-function computeSimilarityPct(
-  writingContent: string,
-  assistantMessages: string[]
-): number {
-  const normWriting = normalise(writingContent);
-  if (!normWriting) return 0;
-
-  const assistantNgrams = new Set<string>();
-  for (const msg of assistantMessages) {
-    const normMsg = normalise(msg);
-    for (const ng of ngrams(normMsg, 5)) {
-      assistantNgrams.add(ng);
-    }
-  }
-
-  if (assistantNgrams.size === 0) return 0;
-
-  const writingNgramsList = ngrams(normWriting, 5);
-  if (writingNgramsList.size === 0) return 0;
-
-  let matchCount = 0;
-  for (const ng of writingNgramsList) {
-    if (assistantNgrams.has(ng)) matchCount++;
-  }
-
-  return Math.round((matchCount / writingNgramsList.size) * 100);
-}
 
 // ---------------------------------------------------------------------------
 // Creative data formatting for FLOW analysis
@@ -670,7 +640,7 @@ Deno.serve(async (req) => {
     await supabase.rpc("reset_tokens_if_stale", { user_uuid: user.id });
     const { data: profile } = await supabase
       .from("profiles")
-      .select("tokens_used_this_period, monthly_token_budget")
+      .select("tokens_used_this_period, monthly_token_budget, preferred_flow_model")
       .eq("id", user.id)
       .single();
 
@@ -679,6 +649,46 @@ Deno.serve(async (req) => {
     }
 
     const isCreativeProject = project.template === "creative";
+
+    // --- Resolve FLOW model (gated request override, else profile pref) ---
+    // Gate the request override against the registry allowlist; an absent/
+    // empty value falls back to the profile preference as before. Without
+    // this, any authed caller could route to arbitrary provider models on
+    // the operator's key (the shipped client never sends `model`). Mirrors
+    // chat/editor-action/context-prompt (P2-6); analysis was the one LLM
+    // function still ungated.
+    const requestedModel: string | undefined = body.model;
+    if (requestedModel && !ALLOWED_MODELS.has(requestedModel)) {
+      return jsonResponse(
+        { error: `Unsupported model: ${String(requestedModel).slice(0, 64)}` },
+        400,
+      );
+    }
+    const flowModel: string =
+      requestedModel || profile.preferred_flow_model || "mistral-medium-3-5";
+
+    const provider = providerFor(flowModel);
+    if (!Deno.env.get(envKeyFor(provider))) {
+      return jsonResponse({ error: `${provider} API key not configured` }, 500);
+    }
+
+    // Resolve per-model knobs ONCE per request and bake into baseLlmArgs.
+    // The retry path (attempt === 2 below) spreads baseLlmArgs, so it
+    // inherits the exact same temperature — no second resolveTemperature()
+    // call, no risk of mid-request drift if the table is edited. Resolved
+    // this early because the imported-docs budget needs the model's context
+    // window and output reserve before the prompt is assembled.
+    const temperature = resolveTemperature(FLOW_TEMPERATURE, flowModel);
+    const thinking = resolveThinking(FLOW_THINKING, flowModel);
+    const effort = resolveEffort(FLOW_EFFORT, flowModel);
+    const mistralEffort = resolveMistralEffort(FLOW_MISTRAL_EFFORT, flowModel);
+    const flowMaxTokens = resolveMaxTokens(8192, flowModel, thinking, mistralEffort !== undefined);
+
+    // The model's real context window (tokens), from the server-side mirror
+    // of the src/lib/models.ts registry; conservative fallback for stale
+    // legacy preference ids.
+    const contextLimitTokens =
+      CONTEXT_LIMIT_TOKENS[flowModel] ?? FALLBACK_CONTEXT_LIMIT_TOKENS;
 
     // --- Fetch all project data in parallel ---
     const fetchPromises = [
@@ -816,18 +826,68 @@ Character-count breakdown by provenance type:
       writePillarNotice = `\n# === WRITE PILLAR NOTICE ===\n\nAutomated similarity analysis detected that ${similarityPct}% of the writing content closely matches AI assistant responses from the chat history. This is a significant indicator for Write pillar scoring. Consider this alongside the provenance annotations ([t], [cc], [ce], [ai] tags) in the writing content.`;
     }
 
-    // --- 3-tier imported documents budget ---
-    // Context limit: 200k tokens for Claude minus 4k output reserve ≈ 196k tokens
-    // 1 token ≈ 4 chars
-    const CONTEXT_CHAR_LIMIT = 196_000 * 4; // 784,000 chars
-
-    // Build the prompt WITHOUT imported documents first to measure baseline
+    // --- Build every non-docs prompt section first ---
+    // The imported-docs budget below needs the true size of everything that
+    // ships regardless of the docs decision, so every other section (creative
+    // tools, editor activity, notices, and the template actually used) is
+    // built and measured before the budget. The previous baseline missed the
+    // creative section, the editor-activity section and the creative
+    // template's length.
     const basePromptParts = [
       `# LANGUAGE\n\nRespond entirely in ${project.language}. All summaries, analyses, evidence items, reasoning, and narratives must be written in ${project.language}. Only JSON structure and field names remain in English.`,
       `# WRITING CONTENT (PROVENANCE-ANNOTATED)\n\nThe writing content below is annotated with provenance tags indicating the origin of each text segment. Use these annotations to inform your assessment, particularly for the Write pillar:\n\n- [t] = typed by the external third-party user (original user writing, including text copied from the user's own chat messages)\n- [cc] = copied from AI assistant chat messages (AI-originated text)\n- [ce] = copied from an external source (neither user nor AI contribution; pay attention not to wrongly attribute to user)\n- [ai] = AI-generated text accepted from the text selection window (the user selected text in their editor and requested an AI rewrite, expansion, simplification, or proposal, then accepted the result)\n\n${annotatedWriting}\n\n${provenanceSection}`,
       `# CHAT HISTORY\n\nThe following chat messages between the AI and the external third-party user are from all project threads, merged in chronological order. Each message is prefixed with a timestamp and thread label.\n\nSome messages originate from the text selection window, a feature that allows the user to select text in their editor and either ask the AI a question about it (Ask) or request the AI to propose a rewritten version (Propose). These messages are flagged with their source type below.\n\nWriting summaries are marked "[NOT ASSESSED]" — they provide context for the subsequent discussion but should not be scored as either party's contribution, because they are AI-generated condensations of the writing and creative tools data at that point in time that may include contributions from any party. Consider the whole chat log and other contents to properly identify the respective contributions of each party, noting that new ideas or contributions appearing for the first time in a writing summary and not found in earlier chat messages would normally be user contributions unless copied from external sources.\n\n${chatHistoryStr}`,
     ];
-    const baseChars = FLOW_PROMPT_TEMPLATE.length + basePromptParts.join("\n\n").length;
+    // --- Build creative tools section (if applicable) ---
+    let creativeToolsSection = "";
+    if (isCreativeProject && creativeDataRes.data && creativeDataRes.data.length > 0) {
+      creativeToolsSection = `\n\n# === CREATIVE TOOLS CONTENT ===\n\nThe following content comes from the creative tools accessible by the external third-party user to help develop key story elements: world-building notes, character diagram, timeline. This content is critical for assessing the L – Lead pillar (directly) and O – Organize pillar (indirectly).\n\n${formatCreativeDataForAnalysis(creativeDataRes.data as any)}`;
+    }
+
+    const systemPromptTemplate = isCreativeProject ? CREATIVE_FLOW_PROMPT_TEMPLATE : FLOW_PROMPT_TEMPLATE;
+
+    const chatHistoryNote = isCreativeProject
+      ? `# CHAT HISTORY\n\nThe following chat messages are from all project threads, merged in chronological order. Each message is prefixed with a timestamp and thread label.\n\nSome messages originate from the text selection window, a feature that allows the user to select text in their editor or in the creative tools and either ask the AI a question about it (Ask – available for both the editor and the creative tools) or request the AI to propose a rewritten version (Propose – available solely for the editor). These messages are flagged with their source type below.\n\nWriting summaries are marked "[NOT ASSESSED]" — they provide context for the subsequent discussion but should not be scored as either party's contribution, because they are AI-generated condensations of the writing and creative tools data at that point in time that may include contributions from any party. Consider the whole chat log and other contents to properly identify the respective contributions of each party, noting that new ideas or contributions appearing for the first time in a writing summary and not found in earlier chat messages would normally be user contributions unless copied from external sources.\n\n${chatHistoryStr}`
+      : basePromptParts[2]; // original chat history section
+
+    // Whole user prompt minus the imported-docs payload; the docs decision
+    // below slots into the IMPORTED DOCUMENTS section.
+    const buildUserPrompt = (docs: string) => `${basePromptParts[0]}\n\n${basePromptParts[1]}${creativeToolsSection}\n\n${chatHistoryNote}
+
+# === IMPORTED DOCUMENTS ===
+
+The following documents were imported by the external third-party user as reference material. They are neither user nor AI contributions. If the writing closely mirrors imported document content, note this in your analysis but do not score it as AI contribution.
+
+${docs}
+
+# === AI EDITOR ACTIVITY ===
+
+The following statistics summarize AI-assisted editing actions performed via the text selection window. Predefined actions (grammar, rewrite, simplify, expand, translate) are counted, with a detailed log of recent ones below. Propose interactions are listed with their outcome (accepted/modified/rejected/pending) and timestamp — their full content appears in the timestamped Chat History above. Ask interactions appear in the Chat History only.
+
+${editorStatsStr}
+${writePillarNotice}`;
+
+    const baseChars = systemPromptTemplate.length + buildUserPrompt("").length;
+
+    // --- 3-tier imported documents budget ---
+    // Imported docs get the SMALLER of two independent ceilings (2026-07
+    // maintainer decision):
+    //   (a) cost policy — at most FLOW_IMPORTED_DOCS_BUDGET_TOKENS of docs
+    //       per analysis, whatever the model;
+    //   (b) window fit — the whole prompt plus the output reserve must fit
+    //       the model's real context window. Only this term carries the ×0.8
+    //       cushion (the char→token estimate is approximate); the policy
+    //       term stays exact, so the configured number means what it says.
+    // Writing, chat and creative content are NEVER truncated — they consume
+    // the window first and only squeeze the docs allowance (possibly to ≤0,
+    // which lands in the excluded tier).
+    // 1 token ≈ 4 chars
+    const windowRemainingChars =
+      (contextLimitTokens - flowMaxTokens) * 4 - baseChars;
+    const docsAllowanceChars = Math.min(
+      FLOW_IMPORTED_DOCS_BUDGET_TOKENS * 4,
+      Math.floor(windowRemainingChars * 0.8),
+    );
 
     let importedDocsSection = "";
     let importedDocsMode: "full_text" | "summaries" | "excluded" | "none" = "none";
@@ -849,54 +909,27 @@ Character-count breakdown by provenance type:
       });
       const summarySection = summaryEntries.join("\n\n");
 
-      const remainingBudget = CONTEXT_CHAR_LIMIT - baseChars;
-
-      if (fullTextSection.length < remainingBudget * 0.8) {
+      if (fullTextSection.length <= docsAllowanceChars) {
         // Tier 1: full text fits
         importedDocsMode = "full_text";
         importedDocsSection = fullTextSection;
-      } else if (summarySection.length < remainingBudget * 0.8) {
+      } else if (summarySection.length <= docsAllowanceChars) {
         // Tier 2: summaries fit
         importedDocsMode = "summaries";
         const wordEstimate = Math.round(importedDocsTotalChars / 5);
-        importedDocsSection = `Note: The full text of imported documents (~${wordEstimate.toLocaleString()} words total) exceeded the context window. Summaries are provided instead.\n\n${summarySection}`;
+        importedDocsSection = `Note: The full text of imported documents (~${wordEstimate.toLocaleString()} words total) exceeded the space available for imported documents in this analysis. Summaries are provided instead.\n\n${summarySection}`;
       } else {
         // Tier 3: exclude
         importedDocsMode = "excluded";
         const wordEstimate = Math.round(importedDocsTotalChars / 5);
-        importedDocsSection = `Note: ${importedDocs.length} imported document(s) (~${wordEstimate.toLocaleString()} words total) were excluded from this analysis because they exceed the available context window, even as summaries. The documents' titles are: ${importedDocs.map(d => `"${d.file_name}"`).join(", ")}.`;
+        importedDocsSection = `Note: ${importedDocs.length} imported document(s) (~${wordEstimate.toLocaleString()} words total) were excluded from this analysis because they exceed the space available for imported documents, even as summaries. The documents' titles are: ${importedDocs.map(d => `"${d.file_name}"`).join(", ")}.`;
       }
     } else {
       importedDocsSection = "None";
     }
 
-    // --- Build creative tools section (if applicable) ---
-    let creativeToolsSection = "";
-    if (isCreativeProject && creativeDataRes.data && creativeDataRes.data.length > 0) {
-      creativeToolsSection = `\n\n# === CREATIVE TOOLS CONTENT ===\n\nThe following content comes from the creative tools accessible by the external third-party user to help develop key story elements: world-building notes, character diagram, timeline. This content is critical for assessing the L – Lead pillar (directly) and O – Organize pillar (indirectly).\n\n${formatCreativeDataForAnalysis(creativeDataRes.data as any)}`;
-    }
-
     // --- Build full prompt ---
-    const systemPromptTemplate = isCreativeProject ? CREATIVE_FLOW_PROMPT_TEMPLATE : FLOW_PROMPT_TEMPLATE;
-
-    const chatHistoryNote = isCreativeProject
-      ? `# CHAT HISTORY\n\nThe following chat messages are from all project threads, merged in chronological order. Each message is prefixed with a timestamp and thread label.\n\nSome messages originate from the text selection window, a feature that allows the user to select text in their editor or in the creative tools and either ask the AI a question about it (Ask – available for both the editor and the creative tools) or request the AI to propose a rewritten version (Propose – available solely for the editor). These messages are flagged with their source type below.\n\nWriting summaries are marked "[NOT ASSESSED]" — they provide context for the subsequent discussion but should not be scored as either party's contribution, because they are AI-generated condensations of the writing and creative tools data at that point in time that may include contributions from any party. Consider the whole chat log and other contents to properly identify the respective contributions of each party, noting that new ideas or contributions appearing for the first time in a writing summary and not found in earlier chat messages would normally be user contributions unless copied from external sources.\n\n${chatHistoryStr}`
-      : basePromptParts[2]; // original chat history section
-
-    const userPrompt = `${basePromptParts[0]}\n\n${basePromptParts[1]}${creativeToolsSection}\n\n${chatHistoryNote}
-
-# === IMPORTED DOCUMENTS ===
-
-The following documents were imported by the external third-party user as reference material. They are neither user nor AI contributions. If the writing closely mirrors imported document content, note this in your analysis but do not score it as AI contribution.
-
-${importedDocsSection}
-
-# === AI EDITOR ACTIVITY ===
-
-The following statistics summarize AI-assisted editing actions performed via the text selection window. Predefined actions (grammar, rewrite, simplify, expand, translate) are counted, with a detailed log of recent ones below. Propose interactions are listed with their outcome (accepted/modified/rejected/pending) and timestamp — their full content appears in the timestamped Chat History above. Ask interactions appear in the Chat History only.
-
-${editorStatsStr}
-${writePillarNotice}`;
+    const userPrompt = buildUserPrompt(importedDocsSection);
 
     // --- Budget check (after prompt is fully built) ---
     const fullPromptText = systemPromptTemplate + userPrompt;
@@ -908,11 +941,13 @@ ${writePillarNotice}`;
         ? null
         : profile.monthly_token_budget - profile.tokens_used_this_period;
 
-    if (budgetRemaining !== null && budgetRemaining < estimated + 2000) {
+    // Reserve the real configured output cap (a flat 2000 previously, which
+    // understated reasoning models' 16k output budget).
+    if (budgetRemaining !== null && budgetRemaining < estimated + flowMaxTokens) {
       return jsonResponse(
         {
           error: `Insufficient token budget for FLOW analysis`,
-          estimated_cost: estimated + 2000,
+          estimated_cost: estimated + flowMaxTokens,
           budget_remaining: budgetRemaining,
         },
         403
@@ -921,26 +956,10 @@ ${writePillarNotice}`;
 
     // --- Estimate input tokens for flow_meta ---
     const estimatedInputTokens = estimated;
-    const contextLimitTokens = 1000000; // Claude Sonnet 4.6 context window
-
-    // --- Resolve FLOW model from profile (or request body) ---
-    const reqBody = (typeof body !== "undefined" ? body : {}) as Record<string, unknown>;
-    const { data: prefRow } = await supabase
-      .from("profiles")
-      .select("preferred_flow_model")
-      .eq("id", user.id)
-      .maybeSingle();
-    const flowModel: string =
-      (reqBody.model as string | undefined) ||
-      (prefRow as { preferred_flow_model?: string } | null)?.preferred_flow_model ||
-      "mistral-medium-3-5";
 
     // --- Call LLM with tool use (provider-agnostic) ---
-    const provider = providerFor(flowModel);
-    if (!Deno.env.get(envKeyFor(provider))) {
-      return jsonResponse({ error: `${provider} API key not configured` }, 500);
-    }
-
+    // (model, per-model knobs and the context limit were resolved before
+    // prompt assembly — the imported-docs budget needed them)
     if (provider === "anthropic") {
       console.log("FLOW tool schema sent to Claude", {
         model: flowModel,
@@ -948,16 +967,6 @@ ${writePillarNotice}`;
         input_schema: JSON.stringify(SUBMIT_FLOW_TOOL.input_schema),
       });
     }
-
-    // Resolve FLOW temperature ONCE per request and bake into baseLlmArgs.
-    // The retry path (attempt === 2 below) spreads baseLlmArgs, so it
-    // inherits the exact same temperature — no second resolveTemperature()
-    // call, no risk of mid-request drift if the table is edited.
-    const temperature = resolveTemperature(FLOW_TEMPERATURE, flowModel);
-    const thinking = resolveThinking(FLOW_THINKING, flowModel);
-    const effort = resolveEffort(FLOW_EFFORT, flowModel);
-    const mistralEffort = resolveMistralEffort(FLOW_MISTRAL_EFFORT, flowModel);
-    const flowMaxTokens = resolveMaxTokens(8192, flowModel, thinking, mistralEffort !== undefined);
 
     // Anthropic Sonnet 4.6 / Opus 4.7+ support Structured Outputs (GA, no
     // beta header). This is the proper fix for the stringified-pillar bug:
@@ -1408,6 +1417,9 @@ ${writePillarNotice}`;
       imported_documents_mode: importedDocsMode,
       imported_documents_count: importedDocs.length,
       imported_documents_total_chars: importedDocsTotalChars,
+      // The applied docs allowance: min(cost policy, window remainder) in
+      // chars — discloses which ceiling squeezed the docs decision above.
+      imported_documents_char_budget: docsAllowanceChars,
       // `null` means the provider controls the temperature (e.g. Opus 4.7+
       // which 400s on any non-default value); a number means we explicitly
       // requested that value. Surfaced in the FLOW report disclosure line.
