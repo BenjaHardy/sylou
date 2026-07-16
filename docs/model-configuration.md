@@ -129,6 +129,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 | Anthropic models without temperature          | `supabase/functions/_shared/_temperatures.ts` | `NO_TEMPERATURE_MODELS` set.                                                                      |
 | Server-side model allowlist + input limits    | `supabase/functions/_shared/_models.ts`       | `ALLOWED_MODELS` (gates the `model` request override), `INPUT_LIMITS` (request text ceilings), `CONTEXT_LIMIT_TOKENS` (per-model context windows, mirrors the registry). |
 | FLOW imported-documents budget                | `supabase/functions/analysis/index.ts`        | `FLOW_IMPORTED_DOCS_BUDGET_TOKENS` cost ceiling; effective allowance = min(policy, model-window remainder after the never-truncated sections). |
+| Provider request timeout                      | `supabase/functions/_shared/_llm.ts`          | `callLLM` `timeoutMs` — default 120s; analysis passes 145s (hosted request-idle limit is 150s); Brave web-search fetches use a 10s `AbortSignal.timeout`. |
 | Body-level wire format (per provider)         | `supabase/functions/_shared/_llm.ts`          | `toAnthropicBody`, `toOpenAIBody`.                                                                |
 
 ---

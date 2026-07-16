@@ -1,7 +1,8 @@
-// Deno unit tests for sanitizeAnthropicSchema and toAnthropicBody.
+// Deno unit tests for sanitizeAnthropicSchema, the body translators and
+// fetchWithTimeout.
 // Run with: deno test supabase/functions/_shared/_llm.test.ts
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { sanitizeAnthropicSchema, toAnthropicBody, toOpenAIBody } from "./_llm.ts";
+import { fetchWithTimeout, sanitizeAnthropicSchema, toAnthropicBody, toOpenAIBody } from "./_llm.ts";
 
 Deno.test("no-op: allowlisted-only schema round-trips structurally identical", () => {
   const input = {
@@ -218,4 +219,44 @@ Deno.test("toAnthropicBody: json_schema path sends no tools/tool_choice even wit
   });
   assert(!("tools" in body));
   assert(!("tool_choice" in body));
+});
+
+// --- fetchWithTimeout (P3-7e): outbound-request timeout wiring ---
+// Tested with an injected fetch so no network (or --allow-net) is needed.
+
+Deno.test("fetchWithTimeout: aborts a fetch that never settles", async () => {
+  const hangingFetch = (_url: string, init?: RequestInit) =>
+    new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () =>
+        reject(new DOMException("The signal has been aborted", "AbortError")));
+    });
+  let message = "";
+  try {
+    await fetchWithTimeout("https://example.invalid/", {}, 50, hangingFetch);
+  } catch (err) {
+    message = (err as Error).message;
+  }
+  assert(message.includes("timed out after"), `unexpected: "${message}"`);
+});
+
+Deno.test("fetchWithTimeout: passes a settled response through and clears the timer", async () => {
+  const fastFetch = (_url: string, _init?: RequestInit) =>
+    Promise.resolve(new Response("ok"));
+  const res = await fetchWithTimeout("https://example.invalid/", {}, 50, fastFetch);
+  assertEquals(await res.text(), "ok");
+  // Give the (cleared) timer a chance to misfire if it wasn't cleared —
+  // Deno's test sanitizer would also flag a leaked timer.
+  await new Promise((resolve) => setTimeout(resolve, 80));
+});
+
+Deno.test("fetchWithTimeout: non-abort errors pass through unchanged", async () => {
+  const failingFetch = (_url: string, _init?: RequestInit) =>
+    Promise.reject(new Error("ECONNREFUSED"));
+  let message = "";
+  try {
+    await fetchWithTimeout("https://example.invalid/", {}, 1000, failingFetch);
+  } catch (err) {
+    message = (err as Error).message;
+  }
+  assertEquals(message, "ECONNREFUSED");
 });

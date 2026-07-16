@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, extractProviderError } from "../_shared/_llm.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
+import { sliceSafe } from "../_shared/_text.ts";
 import {
   CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT,
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
@@ -157,6 +158,12 @@ function buildWebSearchTool() {
   };
 }
 
+// Real tool executions per assistant turn; calls past this (and unknown
+// tool names) still get a stub result — every echoed tool_call MUST be
+// answered or the follow-up provider request 400s for the unpaired ids
+// (P3-7e).
+const TOOL_CALL_LIMIT = 5;
+
 async function searchWeb(query: string): Promise<{ title: string; url: string; snippet: string }[]> {
   const apiKey = Deno.env.get("BRAVE_SEARCH_API_KEY");
   if (!apiKey) {
@@ -173,6 +180,9 @@ async function searchWeb(query: string): Promise<{ title: string; url: string; s
           "Accept-Encoding": "gzip",
           "X-Subscription-Token": apiKey,
         },
+        // A hung Brave call must not stall the whole turn — the catch
+        // below already degrades to "no results" (P3-7e).
+        signal: AbortSignal.timeout(10_000),
       }
     );
 
@@ -511,7 +521,7 @@ Deno.serve(async (req) => {
     // Registry allowlist for the request override — see chat/index.ts for rationale.
     if (requestedModel && !ALLOWED_MODELS.has(requestedModel)) {
       return jsonResponse(
-        { error: `Unsupported model: ${String(requestedModel).slice(0, 64)}` },
+        { error: `Unsupported model: ${sliceSafe(String(requestedModel), 64)}` },
         400,
       );
     }
@@ -925,16 +935,16 @@ When citing information from web search results, always include the source URL i
             .insert({
               project_id,
               action_type: "propose",
-              selected_text_preview: selected_text.slice(0, 500),
-              ai_response_preview: aiResponse.slice(0, 500),
+              selected_text_preview: sliceSafe(selected_text, 500),
+              ai_response_preview: sliceSafe(aiResponse, 500),
               ai_response_full: aiResponse,
               proposed_summary: summaryUpdate,
               char_count_original: selected_text.length,
               char_count_result: aiResponse.length,
               outcome: "pending",
               instruction_text: selectedTextSource
-                ? `${instruction.slice(0, 1000)} | Source: ${selectedTextSource}`
-                : instruction.slice(0, 1000),
+                ? `${sliceSafe(instruction, 1000)} | Source: ${selectedTextSource}`
+                : sliceSafe(instruction, 1000),
             })
             .select("id")
             .single();
@@ -973,7 +983,7 @@ When citing information from web search results, always include the source URL i
         {
           const isAsk = action_type === "ask";
           const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
-          const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
+          const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${sliceSafe(selected_text, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
 
           const { data: promptMsg, error: promptErr } = await adminClient.from("chat_messages").insert({
             thread_id,
@@ -1136,8 +1146,14 @@ When citing information from web search results, always include the source URL i
                   norm2a.assistantMessage as unknown as Record<string, unknown>,
                 ];
 
-                for (const tc of toolCalls.slice(0, 5)) {
-                  if (tc.name === "read_imported_document") {
+                for (const [tcIndex, tc] of toolCalls.entries()) {
+                  if (tcIndex >= TOOL_CALL_LIMIT) {
+                    toolMessages.push({
+                      role: "tool",
+                      tool_call_id: tc.id,
+                      content: "Not executed: per-turn tool-call limit reached. Ask again in a follow-up if still needed.",
+                    });
+                  } else if (tc.name === "read_imported_document") {
                     const docId = tc.arguments.document_id as string;
                     console.log("[stream:context-prompt] reading document:", docId);
                     documentsReferenced.push(docId);
@@ -1177,6 +1193,12 @@ When citing information from web search results, always include the source URL i
                       role: "tool",
                       tool_call_id: tc.id,
                       content: toolResult,
+                    });
+                  } else {
+                    toolMessages.push({
+                      role: "tool",
+                      tool_call_id: tc.id,
+                      content: `Unknown tool "${tc.name}" — not executed.`,
                     });
                   }
                 }
@@ -1256,7 +1278,7 @@ When citing information from web search results, always include the source URL i
               }
             } catch (err) {
               console.error("[stream:context-prompt] error in tool-use path:", err);
-              const msg = err instanceof Error && err.message ? err.message.slice(0, 200) : "AI service temporarily unavailable.";
+              const msg = err instanceof Error && err.message ? sliceSafe(err.message, 200) : "AI service temporarily unavailable.";
               try { controller.enqueue(sseEvent({ done: true, error: msg })); } catch { /* */ }
             } finally {
               controller.close();
@@ -1404,8 +1426,14 @@ When citing information from web search results, always include the source URL i
           norm2a.assistantMessage as unknown as Record<string, unknown>,
         ];
 
-        for (const tc of toolCalls.slice(0, 5)) {
-          if (tc.name === "read_imported_document") {
+        for (const [tcIndex, tc] of toolCalls.entries()) {
+          if (tcIndex >= TOOL_CALL_LIMIT) {
+            toolMessages.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: "Not executed: per-turn tool-call limit reached. Ask again in a follow-up if still needed.",
+            });
+          } else if (tc.name === "read_imported_document") {
             const docId = tc.arguments.document_id as string;
             documentsReferenced.push(docId);
             const { data: docData } = await adminClient
@@ -1438,6 +1466,12 @@ When citing information from web search results, always include the source URL i
               tool_call_id: tc.id,
               content: toolResult,
             });
+          } else {
+            toolMessages.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: `Unknown tool "${tc.name}" — not executed.`,
+            });
           }
         }
 
@@ -1459,16 +1493,16 @@ When citing information from web search results, always include the source URL i
           .insert({
             project_id,
             action_type: "propose",
-            selected_text_preview: selected_text.slice(0, 500),
-            ai_response_preview: aiResponse.slice(0, 500),
+            selected_text_preview: sliceSafe(selected_text, 500),
+            ai_response_preview: sliceSafe(aiResponse, 500),
             ai_response_full: aiResponse,
             proposed_summary: summaryUpdate,
             char_count_original: selected_text.length,
             char_count_result: aiResponse.length,
             outcome: "pending",
             instruction_text: selectedTextSource
-              ? `${instruction.slice(0, 1000)} | Source: ${selectedTextSource}`
-              : instruction.slice(0, 1000),
+              ? `${sliceSafe(instruction, 1000)} | Source: ${selectedTextSource}`
+              : sliceSafe(instruction, 1000),
           })
           .select("id")
           .single();
@@ -1497,7 +1531,7 @@ When citing information from web search results, always include the source URL i
       {
         const isAsk = action_type === "ask";
         const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
-        const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
+        const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${sliceSafe(selected_text, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
 
         const { data: promptMsg, error: promptErr } = await adminClient.from("chat_messages").insert({
           thread_id, role: "user", content: userPromptContent, source_type: isAsk ? "ask_prompt" : "propose_prompt", flow_flag: "normal", concise_mode: conciseMode, tutor_mode: tutorMode,
@@ -1572,16 +1606,16 @@ When citing information from web search results, always include the source URL i
         .insert({
           project_id,
           action_type: "propose",
-          selected_text_preview: selected_text.slice(0, 500),
-          ai_response_preview: aiResponse.slice(0, 500),
+          selected_text_preview: sliceSafe(selected_text, 500),
+          ai_response_preview: sliceSafe(aiResponse, 500),
           ai_response_full: aiResponse,
           proposed_summary: summaryUpdate,
           char_count_original: selected_text.length,
           char_count_result: aiResponse.length,
           outcome: "pending",
           instruction_text: selectedTextSource
-            ? `${instruction.slice(0, 1000)} | Source: ${selectedTextSource}`
-            : instruction.slice(0, 1000),
+            ? `${sliceSafe(instruction, 1000)} | Source: ${selectedTextSource}`
+            : sliceSafe(instruction, 1000),
         })
         .select("id")
         .single();
@@ -1610,7 +1644,7 @@ When citing information from web search results, always include the source URL i
     {
       const isAsk = action_type === "ask";
       const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
-      const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${selected_text.slice(0, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
+      const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${sliceSafe(selected_text, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
 
       const { data: promptMsg, error: promptErr } = await adminClient.from("chat_messages").insert({
         thread_id, role: "user", content: userPromptContent, source_type: isAsk ? "ask_prompt" : "propose_prompt", flow_flag: "normal", concise_mode: conciseMode, tutor_mode: tutorMode,

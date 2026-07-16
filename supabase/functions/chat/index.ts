@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, extractProviderError, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
+import { sliceSafe } from "../_shared/_text.ts";
 import {
   CHAT_THINKING, CHAT_EFFORT, CHAT_MISTRAL_EFFORT,
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
@@ -163,6 +164,9 @@ async function searchWeb(query: string): Promise<{ title: string; url: string; s
           "Accept-Encoding": "gzip",
           "X-Subscription-Token": apiKey,
         },
+        // A hung Brave call must not stall the whole turn — the catch
+        // below already degrades to "no results" (P3-7e).
+        signal: AbortSignal.timeout(10_000),
       }
     );
 
@@ -258,7 +262,7 @@ Deno.serve(async (req) => {
     // key (the shipped client never sends `model`).
     if (requestedModel && !ALLOWED_MODELS.has(requestedModel)) {
       return jsonResponse(
-        { error: `Unsupported model: ${String(requestedModel).slice(0, 64)}` },
+        { error: `Unsupported model: ${sliceSafe(String(requestedModel), 64)}` },
         400,
       );
     }
@@ -665,14 +669,25 @@ When citing information from web search results, always include the source URL i
               // Resolve tool calls iteratively (up to 5 iterations)
               let iteration = 0;
               const MAX_ITERATIONS = 5;
+              // Real executions per assistant turn; calls past this (and
+              // unknown tool names) still get a stub result — every echoed
+              // tool_call MUST be answered or the follow-up request 400s
+              // for the unpaired ids (P3-7e).
+              const TOOL_CALL_LIMIT = 5;
               let currentToolCalls = toolCalls;
 
               while (currentToolCalls.length > 0 && iteration < MAX_ITERATIONS) {
                 iteration++;
                 console.log(`[stream] tool iteration ${iteration}, ${currentToolCalls.length} calls`);
 
-                for (const tc of currentToolCalls.slice(0, 5)) {
-                  if (tc.name === "read_imported_document") {
+                for (const [tcIndex, tc] of currentToolCalls.entries()) {
+                  if (tcIndex >= TOOL_CALL_LIMIT) {
+                    toolMessages.push({
+                      role: "tool",
+                      tool_call_id: tc.id,
+                      content: "Not executed: per-turn tool-call limit reached. Ask again in a follow-up if still needed.",
+                    });
+                  } else if (tc.name === "read_imported_document") {
                     const docId = tc.arguments.document_id as string;
                     console.log("[stream] reading document:", docId);
                     documentsReferenced.push(docId);
@@ -712,6 +727,12 @@ When citing information from web search results, always include the source URL i
                       role: "tool",
                       tool_call_id: tc.id,
                       content: toolResult,
+                    });
+                  } else {
+                    toolMessages.push({
+                      role: "tool",
+                      tool_call_id: tc.id,
+                      content: `Unknown tool "${tc.name}" — not executed.`,
                     });
                   }
                 }

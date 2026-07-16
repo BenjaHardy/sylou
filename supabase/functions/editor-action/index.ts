@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, extractProviderError } from "../_shared/_llm.ts";
 import { EDITOR_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
+import { sliceSafe } from "../_shared/_text.ts";
 import {
   EDITOR_THINKING, EDITOR_EFFORT, EDITOR_MISTRAL_EFFORT,
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
@@ -229,7 +230,7 @@ Deno.serve(async (req) => {
     // Registry allowlist for the request override — see chat/index.ts for rationale.
     if (requestedModel && !ALLOWED_MODELS.has(requestedModel)) {
       return jsonResponse(
-        { error: `Unsupported model: ${String(requestedModel).slice(0, 64)}` },
+        { error: `Unsupported model: ${sliceSafe(String(requestedModel), 64)}` },
         400
       );
     }
@@ -351,8 +352,8 @@ Deno.serve(async (req) => {
                 .insert({
                   project_id: projectId,
                   action_type: actionType,
-                  selected_text_preview: selectedText.slice(0, 500),
-                  ai_response_preview: proposedText.slice(0, 500),
+                  selected_text_preview: sliceSafe(selectedText, 500),
+                  ai_response_preview: sliceSafe(proposedText, 500),
                   char_count_original: selectedText.length,
                   char_count_result: proposedText.length,
                   outcome: "pending",
@@ -504,8 +505,8 @@ Deno.serve(async (req) => {
       .insert({
         project_id: projectId,
         action_type: actionType,
-        selected_text_preview: selectedText.slice(0, 500),
-        ai_response_preview: proposedText.slice(0, 500),
+        selected_text_preview: sliceSafe(selectedText, 500),
+        ai_response_preview: sliceSafe(proposedText, 500),
         char_count_original: selectedText.length,
         char_count_result: proposedText.length,
         outcome: "pending",
