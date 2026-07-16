@@ -22,9 +22,9 @@ export default function ProfilePaintingReveal({ code }: ProfilePaintingRevealPro
           type="button"
           onClick={() => setRevealed(true)}
           aria-label="Reveal your profile's painting"
-          className="group relative w-[140px] h-[140px] rounded-lg border-2 border-dashed border-[#5D89A8]/40 bg-[#5D89A8]/5 hover:bg-[#5D89A8]/10 hover:border-[#5D89A8]/70 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md flex flex-col items-center justify-center gap-2 cursor-pointer"
+          className="group relative w-[140px] h-[140px] rounded-lg border-2 border-dashed border-flow-accent/40 bg-flow-accent/5 hover:bg-flow-accent/10 hover:border-flow-accent/70 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md flex flex-col items-center justify-center gap-2 cursor-pointer"
         >
-          <Sparkles className="w-8 h-8 text-[#5D89A8] group-hover:scale-110 transition-transform" />
+          <Sparkles className="w-8 h-8 text-flow-accent group-hover:scale-110 transition-transform" />
           <span className="text-[11px] font-medium text-muted-foreground px-2 text-center leading-tight">
             Reveal your profile's painting
           </span>
@@ -66,7 +66,7 @@ export default function ProfilePaintingReveal({ code }: ProfilePaintingRevealPro
           href={painting.sourceUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-[#5D89A8] hover:underline"
+          className="inline-flex items-center gap-1 text-flow-accent hover:underline"
         >
           Wikimedia Commons
           <ExternalLink className="w-3 h-3" />

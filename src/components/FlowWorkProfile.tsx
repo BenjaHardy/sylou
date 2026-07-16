@@ -40,7 +40,7 @@ export default function FlowWorkProfile({ profile, scores }: FlowWorkProfileProp
                 key={i}
                 className={
                   char !== "-"
-                    ? "text-[#5D89A8] font-bold"
+                    ? "text-flow-accent font-bold"
                     : "text-muted-foreground/40"
                 }
               >
@@ -84,7 +84,7 @@ export default function FlowWorkProfile({ profile, scores }: FlowWorkProfileProp
                       <div
                         className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold cursor-help ${
                           isLed
-                            ? "text-white"
+                            ? "text-primary-foreground"
                             : isNull
                               ? "border-2 border-dashed border-muted-foreground/30 text-muted-foreground/40"
                               : "border-2 text-muted-foreground/80"

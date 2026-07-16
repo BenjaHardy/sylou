@@ -304,8 +304,8 @@ export function FlowReportView({
 
   let radarUserFeedback: FlowFeedback | null = null;
   let radarUserLabel = "Self-assessment (by user)";
-  const greenColor = "hsl(142, 71%, 45%)";
-  const orangeColor = "hsl(32, 95%, 55%)";
+  const greenColor = "hsl(var(--chart-user))";
+  const orangeColor = "hsl(var(--chart-editor))";
   let radarUserColor = orangeColor;
 
   if (hasBothFeedback) {

@@ -64,7 +64,7 @@ export function FlowRadarChart({ report, userFeedback, userLabel, userColor }: F
     : null;
 
   const hasNullScores = aiSeries.some((s) => s == null);
-  const aiStroke = "hsl(217, 91%, 60%)";
+  const aiStroke = "hsl(var(--chart-ai))";
 
   return (
     <div className="flex flex-col items-center">

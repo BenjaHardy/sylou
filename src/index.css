@@ -51,6 +51,20 @@
     --ethos-hover: 210 60% 37%;
     --ethos-navy: 27 18% 92%;
     --ethos-navy-light: 27 14% 87%;
+
+    /* FLOW identity accent — Silver Lake Blue (≡ the former inline #5D89A8) */
+    --flow-accent: 205 30% 51%;
+
+    /* Report/replay data-viz series — single source for the chart colors
+       that were previously inline hsl() literals. Primary roles:
+       --chart-ai     the AI's score series (radar) + chat events (replay)
+       --chart-user   user-side material: pre-analysis self-assessment,
+                      writing versions (replay)
+       --chart-editor AI-editor activity (replay) + post-analysis
+                      self-assessment (radar) */
+    --chart-ai: 217 91% 60%;
+    --chart-user: 142 71% 45%;
+    --chart-editor: 32 95% 55%;
   }
 
   .dark {
@@ -73,6 +87,13 @@
     --border: 0 0% 100% / 0.1;
     --input: 0 0% 100% / 0.1;
     --ring: 210 60% 45%;
+
+    /* FLOW accent + data-viz series: theme-invariant for now (same values
+       as :root) so charts and FLOW branding read identically in dark. */
+    --flow-accent: 205 30% 51%;
+    --chart-ai: 217 91% 60%;
+    --chart-user: 142 71% 45%;
+    --chart-editor: 32 95% 55%;
   }
 }
 
