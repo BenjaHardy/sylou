@@ -128,7 +128,9 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const chatSetMessagesRef = useRef<((updater: (prev: ChatMessage[]) => ChatMessage[]) => void) | null>(null);
   const [provenanceKey, setProvenanceKey] = useState(0);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
-  const flushProvenanceRef = useRef<(() => Promise<boolean>) | null>(null);
+  // Combined editor flush (writing content + provenance) handed up by
+  // WritingEditor; resolves false if either save failed.
+  const flushEditorRef = useRef<(() => Promise<boolean>) | null>(null);
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const { markWriting } = useActivityTracker(project?.id ?? null);
@@ -172,7 +174,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
     }
     const flush = async () => {
       // No editor mounted (?? true) counts as success — nothing to flush.
-      const editorOk = (await flushProvenanceRef.current?.()) ?? true;
+      const editorOk = (await flushEditorRef.current?.()) ?? true;
       await Promise.all([worldbuilding.flush(), characters.flush(), timeline.flush()]);
       return editorOk;
     };
@@ -245,7 +247,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
 
     if (estimation.status === "ok") {
       setShowFlowReport(true);
-      await flushProvenanceRef.current?.();
+      await flushEditorRef.current?.();
       runAnalysis();
     } else {
       setShowTokenWarning(true);
@@ -260,7 +262,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
 
     if (estimation.status === "ok") {
       setShowFlowReport(true);
-      await flushProvenanceRef.current?.();
+      await flushEditorRef.current?.();
       runAnalysis();
     } else {
       setShowTokenWarning(true);
@@ -271,7 +273,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
     setShowTokenWarning(false);
     clearPreCheck();
     setShowFlowReport(true);
-    await flushProvenanceRef.current?.();
+    await flushEditorRef.current?.();
     runAnalysis();
   };
 
@@ -327,7 +329,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
               onConfirm={async () => {
                 setShowTokenWarning(false);
                 clearPreCheck();
-                await flushProvenanceRef.current?.();
+                await flushEditorRef.current?.();
                 runAnalysis();
               }}
               onCancel={() => {
@@ -482,7 +484,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
                   onAskComplete={(msgs) => setPendingChatMessages((prev) => [...prev, ...msgs])}
                   onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
                   onProvenanceTracker={setProvenanceTracker}
-                  onFlushProvenance={(fn) => { flushProvenanceRef.current = fn; }}
+                  onFlushEditor={(fn) => { flushEditorRef.current = fn; }}
                   conciseMode={conciseMode}
                   onEditorContent={setEditorHtml}
                   chatSetMessages={chatSetMessagesRef.current ?? undefined}
