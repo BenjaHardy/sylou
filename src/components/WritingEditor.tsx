@@ -38,13 +38,13 @@ interface Props {
   onChatRefresh?: () => void;
   onProvenanceTracker?: (tracker: ProvenanceTracker) => void;
   /** Registers the combined writing+provenance flush; resolves false when a write failed. */
-  onFlushProvenance?: (flush: () => Promise<boolean>) => void;
+  onFlushEditor?: (flush: () => Promise<boolean>) => void;
   conciseMode?: boolean;
   chatSetMessages?: (updater: (prev: ChatMessage[]) => ChatMessage[]) => void;
   webSearchEnabled?: boolean;
 }
 
-export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, onFlushProvenance, conciseMode, onEditorContent, chatSetMessages, webSearchEnabled }: Props & { onEditorContent?: (html: string) => void }) {
+export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, onFlushEditor, conciseMode, onEditorContent, chatSetMessages, webSearchEnabled }: Props & { onEditorContent?: (html: string) => void }) {
   
   const { content, loading, saveState, updateContent, isDirty, manualSave, flushSave: flushWritingContent } = useWritingContent(projectId);
   const { getTracker, initWithContentLength, scheduleSave, flushSave: flushProvenance, provenanceLoaded } = useProvenanceTracker(projectId);
@@ -79,8 +79,8 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       const provenanceOk = await flushProvenanceRef.current();
       return writingOk && provenanceOk;
     };
-    onFlushProvenance?.(stableFlush);
-  }, [onFlushProvenance]);
+    onFlushEditor?.(stableFlush);
+  }, [onFlushEditor]);
 
   // Keep a ref of isDirty so the unload handler reads it without re-registering
   // listeners on every keystroke.
