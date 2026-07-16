@@ -29,9 +29,9 @@ interface FlowReplayOverlayProps {
 const SPEED_OPTIONS = [1, 2, 5, 10];
 
 const EVENT_COLORS: Record<string, string> = {
-  writing_version: "hsl(142, 71%, 45%)",
-  chat_message: "hsl(217, 91%, 60%)",
-  ai_editor_action: "hsl(32, 95%, 55%)",
+  writing_version: "hsl(var(--chart-user))",
+  chat_message: "hsl(var(--chart-ai))",
+  ai_editor_action: "hsl(var(--chart-editor))",
 };
 
 const EVENT_LABELS: Record<string, string> = {

@@ -194,11 +194,11 @@ export default function SharedReport() {
     if (postFeedbackScores) {
       radarUserFeedback = postFeedbackScores;
       radarUserLabel = "User Assessment";
-      radarUserColor = "hsl(32, 95%, 55%)";
+      radarUserColor = "hsl(var(--chart-editor))";
     } else if (preFeedbackScores) {
       radarUserFeedback = preFeedbackScores;
       radarUserLabel = "User Assessment";
-      radarUserColor = "hsl(142, 71%, 45%)";
+      radarUserColor = "hsl(var(--chart-user))";
     }
   }
 
