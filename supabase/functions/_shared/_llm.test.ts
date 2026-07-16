@@ -2,7 +2,14 @@
 // fetchWithTimeout.
 // Run with: deno test supabase/functions/_shared/_llm.test.ts
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { fetchWithTimeout, sanitizeAnthropicSchema, toAnthropicBody, toOpenAIBody } from "./_llm.ts";
+import {
+  extractDeltaText,
+  fetchWithTimeout,
+  normaliseResponse,
+  sanitizeAnthropicSchema,
+  toAnthropicBody,
+  toOpenAIBody,
+} from "./_llm.ts";
 
 Deno.test("no-op: allowlisted-only schema round-trips structurally identical", () => {
   const input = {
@@ -219,6 +226,65 @@ Deno.test("toAnthropicBody: json_schema path sends no tools/tool_choice even wit
   });
   assert(!("tools" in body));
   assert(!("tool_choice" in body));
+});
+
+// --- Mistral reasoning-mode content arrays ---
+// With reasoning_effort ≠ "none" (Medium 3.5 in chat/context-prompt),
+// non-streaming message.content is an ARRAY of ThinkChunk + TextChunk.
+// The string-only read dropped the whole answer → "No response generated."
+
+Deno.test("normaliseResponse (OpenAI shape): reasoning array content yields the text chunks", () => {
+  const norm = normaliseResponse("mistral", {
+    choices: [{
+      message: {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: [{ type: "text", text: "reasoning trace…" }] },
+          { type: "text", text: "Hello! How can I help?" },
+        ],
+      },
+    }],
+    usage: { prompt_tokens: 12, completion_tokens: 34 },
+  });
+  assertEquals(norm.text, "Hello! How can I help?");
+  assertEquals(norm.toolCalls, []);
+  assertEquals(norm.usage, { input_tokens: 12, output_tokens: 34 });
+});
+
+Deno.test("normaliseResponse (OpenAI shape): plain string content is unchanged", () => {
+  const norm = normaliseResponse("mistral", {
+    choices: [{ message: { role: "assistant", content: "plain answer" } }],
+  });
+  assertEquals(norm.text, "plain answer");
+});
+
+Deno.test("normaliseResponse (OpenAI shape): tool_calls alongside a reasoning array still parse", () => {
+  const norm = normaliseResponse("mistral", {
+    choices: [{
+      message: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: [{ type: "text", text: "…" }] }],
+        tool_calls: [{ id: "abc", function: { name: "web_search", arguments: '{"query":"x"}' } }],
+      },
+    }],
+  });
+  assertEquals(norm.text, "");
+  assertEquals(norm.toolCalls, [{ id: "abc", name: "web_search", arguments: { query: "x" } }]);
+});
+
+Deno.test("extractDeltaText: array-of-chunks delta joins only the text chunks", () => {
+  const delta = extractDeltaText({
+    choices: [{
+      delta: {
+        content: [
+          { type: "thinking", thinking: [] },
+          { type: "text", text: "Hel" },
+          { type: "text", text: "lo" },
+        ],
+      },
+    }],
+  }, "mistral");
+  assertEquals(delta, "Hello");
 });
 
 // --- fetchWithTimeout (P3-7e): outbound-request timeout wiring ---

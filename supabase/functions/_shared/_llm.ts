@@ -502,7 +502,12 @@ export function normaliseResponse(
   }
   // OpenAI-shape (Mistral/DeepSeek)
   const msg: RawMessage = r.choices?.[0]?.message ?? {};
-  const text = typeof msg.content === "string" ? msg.content : "";
+  // Mistral reasoning models (reasoning_effort ≠ "none") return content as
+  // an ARRAY of chunks (ThinkChunk + TextChunk) instead of a string. A
+  // string-only read here silently dropped the whole answer whenever the
+  // model replied in text on a non-streaming path (chat two-pass Call #1,
+  // context-prompt) — the user saw "No response generated."
+  const text = textFromContent(msg.content);
   const toolCalls = Array.isArray(msg.tool_calls)
     ? msg.tool_calls.map((tc) => ({
         id: tc.id ?? "",
@@ -523,20 +528,31 @@ export function normaliseResponse(
   };
 }
 
+// Extract user-visible text from an OpenAI-shape `content` value. Plain
+// completions use a string; Mistral reasoning models return an ARRAY of
+// chunks ({type:"thinking"|"text", …}) — only the text chunks are the
+// answer. Shared by normaliseResponse (non-streaming) and extractDeltaText
+// (streaming) so the two parsers handle the same wire shapes identically
+// and cannot drift apart again.
+function textFromContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return (content as RawContentBlock[])
+      .filter((b) => b?.type === "text")
+      .map((b) => b.text ?? "")
+      .join("");
+  }
+  return "";
+}
+
 // Extract a single text delta from a streaming SSE chunk JSON, model-agnostic.
 export function extractDeltaText(parsed: unknown, _provider: ProviderId): string | null {
   const p = parsed as RawStreamChunk;
   // OpenAI-shape
   const choices = p.choices;
   const content = choices?.[0]?.delta?.content;
-  if (content) {
-    if (typeof content === "string") return content;
-    if (Array.isArray(content)) {
-      return (content as RawContentBlock[])
-        .filter((b) => b?.type === "text")
-        .map((b) => b.text ?? "")
-        .join("");
-    }
+  if (content && (typeof content === "string" || Array.isArray(content))) {
+    return textFromContent(content);
   }
   // Anthropic-shape
   if (p.type === "content_block_delta") {
