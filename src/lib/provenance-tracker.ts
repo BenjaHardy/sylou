@@ -429,6 +429,9 @@ export class ProvenanceTracker {
       mapping: {
         map: (pos: number, bias?: number) => number;
         maps: readonly { forEach: (fn: (oldStart: number, oldEnd: number, newStart: number, newEnd: number) => void) => void }[];
+        /** Sub-mapping over steps [from, end) — used to express a step's
+         *  output coordinates in the final document space (P3-11). */
+        slice: (from: number) => { map: (pos: number, bias?: number) => number };
       };
       doc: { content: { size: number }; textBetween: (from: number, to: number, blockSeparator: string) => string };
     },
@@ -469,13 +472,24 @@ export class ProvenanceTracker {
 
     const maps = mapping.maps;
     for (let i = 0; i < maps.length; i++) {
-      maps[i].forEach((oldStart: number, oldEnd: number, newStart: number, newEnd: number) => {
-        const newLen = newEnd - newStart;
-        if (newLen > 0) {
-          const finalStart = mapping.map(oldStart, -1);
-          const insertionLength = newLen;
-          const finalEnd = finalStart + insertionLength;
-          insertionRanges.push({ start: finalStart, end: finalEnd });
+      // Coordinate spaces (P3-11): `newStart`/`newEnd` describe the inserted
+      // range in the document as it stood right AFTER step i. To express
+      // them in the FINAL document, map through the REMAINING steps only
+      // (slice(i + 1)). The previous idiom fed the PRE-transaction
+      // `oldStart` through the WHOLE mapping and assumed the insertion
+      // stayed contiguous — identical for single-step transactions (typing,
+      // paste, AI inserts), but it mis-placed ranges on multi-step ones
+      // (list toggles, drag-moves, multi-range replaces).
+      const remaining = mapping.slice(i + 1);
+      maps[i].forEach((_oldStart: number, _oldEnd: number, newStart: number, newEnd: number) => {
+        if (newEnd > newStart) {
+          const finalStart = remaining.map(newStart, 1); // bias right: keep later same-point inserts outside
+          const finalEnd = remaining.map(newEnd, -1); //    bias left: same at the end boundary
+          // A later step may have deleted the inserted content entirely —
+          // skip the now-empty range instead of pushing a phantom.
+          if (finalEnd > finalStart) {
+            insertionRanges.push({ start: finalStart, end: finalEnd });
+          }
         }
       });
     }
