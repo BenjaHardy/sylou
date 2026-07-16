@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { Mapping, StepMap } from "@tiptap/pm/transform";
 import { ProvenanceTracker, type ProvenanceSegment } from "@/lib/provenance-tracker";
 
 /**
@@ -40,6 +41,8 @@ function makeInsertionTx(opts: {
     mapping: {
       map: (pos: number, bias?: number) => mapPos(pos, bias ?? 0),
       maps: [stepMap],
+      // Single-step stub: slice(1) over one step = empty mapping = identity.
+      slice: (_from: number) => ({ map: (pos: number, _bias?: number) => pos }),
     },
     doc: {
       content: { size: newSize },
@@ -96,6 +99,66 @@ describe("ProvenanceTracker.getSegmentSlice", () => {
       expect.objectContaining({ gapStart: 5, gapEnd: 10 }),
     );
     debugSpy.mockRestore();
+  });
+});
+
+describe("ProvenanceTracker.applyTransaction multi-step mapping (P3-11)", () => {
+  // Real ProseMirror StepMap/Mapping — the same classes TipTap transactions
+  // carry at runtime, so these fixtures use authentic mapping semantics.
+  function makeTx(mapping: Mapping, finalText: string) {
+    return {
+      mapping,
+      doc: {
+        content: { size: finalText.length },
+        textBetween: (from: number, to: number, _sep: string) =>
+          finalText.slice(from, Math.min(to, finalText.length)),
+      },
+    };
+  }
+
+  let tracker: ProvenanceTracker;
+  beforeEach(() => { tracker = new ProvenanceTracker(); });
+
+  it("single-step replace behaves exactly as before (equivalence guard for typing/paste/AI)", () => {
+    seed(tracker, [{ start: 0, end: 20, source: "ai_editor" }]);
+    // Replace [4,7) with 5 chars: doc 20 → 22.
+    const mapping = new Mapping([new StepMap([4, 3, 5])]);
+    tracker.applyTransaction(makeTx(mapping, "x".repeat(22)));
+    expect(tracker.getSegments()).toEqual([
+      { start: 0, end: 4, source: "ai_editor" },
+      { start: 4, end: 9, source: "typed" },
+      { start: 9, end: 22, source: "ai_editor" },
+    ]);
+  });
+
+  it("places the second insertion of a two-step transaction at its true final position", () => {
+    seed(tracker, [{ start: 0, end: 20, source: "ai_editor" }]);
+    // Step 0 inserts 3 chars at 2; step 1 inserts 2 chars at 10 IN STEP-0'S
+    // OUTPUT SPACE. Final doc: 25 chars; true inserted ranges [2,5) and
+    // [10,12). The old idiom computed [15,17) for the second range
+    // (re-applied both steps' shifts to an intermediate coordinate),
+    // mis-attributing untouched AI text as typed.
+    const mapping = new Mapping([new StepMap([2, 0, 3]), new StepMap([10, 0, 2])]);
+    tracker.applyTransaction(makeTx(mapping, "x".repeat(25)));
+    expect(tracker.getSegments()).toEqual([
+      { start: 0, end: 2, source: "ai_editor" },
+      { start: 2, end: 5, source: "typed" },
+      { start: 5, end: 10, source: "ai_editor" },
+      { start: 10, end: 12, source: "typed" },
+      { start: 12, end: 25, source: "ai_editor" },
+    ]);
+  });
+
+  it("drops an insertion that a later step deleted again (no phantom range)", () => {
+    seed(tracker, [{ start: 0, end: 20, source: "ai_editor" }]);
+    // Step 0 inserts 3 chars at 5; step 1 deletes exactly those 3 chars.
+    // The document is unchanged, so the provenance map must be too — the
+    // old idiom pushed a phantom [5,8) range and split the segment.
+    const mapping = new Mapping([new StepMap([5, 0, 3]), new StepMap([5, 3, 0])]);
+    tracker.applyTransaction(makeTx(mapping, "x".repeat(20)));
+    expect(tracker.getSegments()).toEqual([
+      { start: 0, end: 20, source: "ai_editor" },
+    ]);
   });
 });
 
