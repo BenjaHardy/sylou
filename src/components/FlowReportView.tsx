@@ -591,7 +591,7 @@ export function FlowReportView({
                         }}
                       />
                       <label htmlFor="share-include-replay" className="text-xs text-muted-foreground cursor-pointer">
-                        Include project replay in shared report
+                        Include project replay (writing history + full chat messages) in shared report
                       </label>
                     </div>
 

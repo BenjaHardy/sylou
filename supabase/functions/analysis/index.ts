@@ -22,6 +22,7 @@ import {
   FALLBACK_CONTEXT_LIMIT_TOKENS,
 } from "../_shared/_models.ts";
 import { computeSimilarityPct } from "../_shared/_similarity.ts";
+import { sliceSafe } from "../_shared/_text.ts";
 
 // Cost-policy ceiling for imported documents in a FLOW prompt, in tokens
 // (~4 chars each; 2026-07 maintainer decision). Deliberately below every
@@ -660,7 +661,7 @@ Deno.serve(async (req) => {
     const requestedModel: string | undefined = body.model;
     if (requestedModel && !ALLOWED_MODELS.has(requestedModel)) {
       return jsonResponse(
-        { error: `Unsupported model: ${String(requestedModel).slice(0, 64)}` },
+        { error: `Unsupported model: ${sliceSafe(String(requestedModel), 64)}` },
         400,
       );
     }
@@ -991,6 +992,7 @@ ${writePillarNotice}`;
           temperature,
           thinking,
           effort,
+          timeoutMs: 145_000, // hosted request-idle limit is 150s — fail in-contract before the platform 504
         }
       : {
           model: flowModel,
@@ -1011,6 +1013,7 @@ ${writePillarNotice}`;
           disableParallelToolUse: true,
           temperature,
           mistral_effort: mistralEffort,
+          timeoutMs: 145_000, // hosted request-idle limit is 150s — fail in-contract before the platform 504
         };
 
     // ============================================================
@@ -1457,7 +1460,10 @@ ${writePillarNotice}`;
         type: "chat_message",
         content: {
           role: m.role,
-          content: m.content.length > 500 ? m.content.slice(0, 500) + "…" : m.content,
+          // Full message (2026-07-15 maintainer decision): the replay
+          // should disclose the project's whole evolution and match what
+          // FLOW itself read. Also removes a split-surrogate jsonb hazard.
+          content: m.content,
           thread_name: m.thread_name,
           source_type: m.source_type,
         },

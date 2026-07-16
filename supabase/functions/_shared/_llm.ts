@@ -14,6 +14,8 @@
 // streaming-delta extractor and a safe upstream-error formatter.
 // ============================================================
 
+import { sliceSafe } from "./_text.ts";
+
 export type ProviderId = "mistral" | "anthropic" | "deepseek";
 
 // Effort taxonomy is provider-specific:
@@ -567,6 +569,14 @@ export async function callLLM(opts: {
    *  of resolveMistralEffort() — it already encodes the allowlist and
    *  "none" → undefined collapsing, so we just forward it. */
   mistral_effort?: MistralEffort;
+  /** Abort if the provider's response hasn't STARTED after this many ms
+   *  (default 120s). The timer clears once headers arrive, so streaming
+   *  bodies are never cut mid-stream; non-streaming provider APIs send
+   *  headers with the finished body, so there it bounds the whole
+   *  generation. analysis passes 145s: the hosted request-idle limit is
+   *  150s, and an in-contract timeout (billing + honest error) must beat
+   *  the platform's opaque 504. */
+  timeoutMs?: number;
 }): Promise<Response> {
   const provider = providerFor(opts.model);
   const key = Deno.env.get(envKeyFor(provider));
@@ -618,11 +628,49 @@ export async function callLLM(opts: {
     if (b.top_p !== undefined) logLine.top_p = b.top_p;
     console.log("[callLLM] outbound", JSON.stringify(logLine));
   }
-  return await fetch(endpointFor(provider), {
+  return await fetchWithTimeout(endpointFor(provider), {
     method: "POST",
     headers: authHeadersFor(provider, key),
     body: JSON.stringify(body),
-  });
+  }, opts.timeoutMs ?? DEFAULT_LLM_TIMEOUT_MS);
+}
+
+/** Default outbound-request timeout for provider calls (see callLLM.timeoutMs). */
+const DEFAULT_LLM_TIMEOUT_MS = 120_000;
+
+type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
+/**
+ * fetch() that aborts if the response hasn't STARTED after `timeoutMs`.
+ *
+ * The timer is cleared as soon as the response promise settles (headers
+ * arrived), so a streaming body is never cut mid-stream — the timeout only
+ * bounds the wait for the stream to begin. Non-streaming provider APIs send
+ * headers together with the finished body, so there it bounds the whole
+ * generation. Abort surfaces as a plain Error (not a DOMException) so the
+ * callers' existing catch paths render a clean message.
+ * `fetchImpl` is injectable for tests; production always uses global fetch.
+ */
+export async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  fetchImpl: FetchLike = fetch,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetchImpl(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new Error(
+        `Provider request timed out after ${Math.round(timeoutMs / 1000)}s`,
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 
@@ -638,6 +686,6 @@ export function extractProviderError(provider: ProviderId, status: number, rawBo
     if (typeof candidate === "string") msg = candidate;
   } catch { /* not JSON */ }
   if (!msg) msg = `HTTP ${status}`;
-  if (msg.length > 200) msg = msg.slice(0, 197) + "...";
+  if (msg.length > 200) msg = sliceSafe(msg, 197) + "...";
   return `${providerName}: ${msg}`;
 }

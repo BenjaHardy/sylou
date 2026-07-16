@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, envKeyFor } from "../_shared/_llm.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
+import { sliceSafe } from "../_shared/_text.ts";
 
 // --- CORS allow-list (parsed once at module load) ---
 const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGIN") ?? "")
@@ -167,9 +168,9 @@ Deno.serve(async (req) => {
 
       if (!Deno.env.get(envKeyFor(provider))) {
         // Chosen provider's key isn't configured — degrade gracefully.
-        summary = extractedText.slice(0, SHORT_TEXT_THRESHOLD) + "...";
+        summary = sliceSafe(extractedText, SHORT_TEXT_THRESHOLD) + "...";
       } else {
-        const textForSummary = extractedText.slice(0, 10000);
+        const textForSummary = sliceSafe(extractedText, 10000);
         const summaryPrompt = `Summarize the following document in 3-5 sentences. Focus on the main topics, arguments, and conclusions. This summary will be used to help an AI assistant decide whether to read the full document when answering user questions.\n\n${textForSummary}`;
 
         try {
@@ -184,7 +185,7 @@ Deno.serve(async (req) => {
             const llmData = await llmRes.json();
             const norm = normaliseResponse(provider, llmData);
             const summaryText = norm.text.trim();
-            summary = summaryText || extractedText.slice(0, SHORT_TEXT_THRESHOLD);
+            summary = summaryText || sliceSafe(extractedText, SHORT_TEXT_THRESHOLD);
 
             // Log token usage (provider-reported when available, else estimated).
             const inputTokens = norm.usage?.input_tokens ?? Math.ceil(summaryPrompt.length / 4);
@@ -205,11 +206,11 @@ Deno.serve(async (req) => {
             });
           } else {
             console.error("Summary LLM error:", llmRes.status, await llmRes.text());
-            summary = extractedText.slice(0, SHORT_TEXT_THRESHOLD) + "...";
+            summary = sliceSafe(extractedText, SHORT_TEXT_THRESHOLD) + "...";
           }
         } catch (llmErr) {
           console.error("LLM summary call failed:", llmErr);
-          summary = extractedText.slice(0, SHORT_TEXT_THRESHOLD) + "...";
+          summary = sliceSafe(extractedText, SHORT_TEXT_THRESHOLD) + "...";
         }
       }
     }
