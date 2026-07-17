@@ -282,7 +282,11 @@ export class ProvenanceTracker {
    */
   consumeInternalClipboardSlice(pastedText: string): ProvenanceSlice | null {
     if (!this._internalClipboard) return null;
-    const normalize = (t: string) => t.trim().replace(/\s+/g, " ");
+    // Strip ALL whitespace before comparing: separator shape differs by
+    // path (raw textBetween without leafText glues hard breaks; TipTap's
+    // clipboard serializer emits "\n" for them; block boundaries arrive as
+    // "\n" or "\n\n"). Same non-whitespace characters ⇒ same copied content.
+    const normalize = (t: string) => t.replace(/\s+/g, "");
     if (normalize(pastedText) === normalize(this._internalClipboard.text)) {
       return this._internalClipboard;
     }
@@ -606,89 +610,67 @@ export class ProvenanceTracker {
     const gapLength = gapEnd - gapStart;
     const signal = this._pendingSignal;
 
-    // Bound on the gap-vs-slice length delta we will tolerate before falling
-    // back to dominant-source degradation. Sized to cover ~1–2 crossed block
-    // boundaries (paragraph / list-item open+close tokens). Larger structural
-    // complexity makes positional misalignment risk meaningful — degrade instead.
+    // Observability threshold only: deltas beyond ~1–2 crossed block
+    // boundaries (paragraph / list-item open+close tokens) get a debug line.
+    // The breakdown is replayed regardless — see the contract below.
     const MAX_BOUNDARY_DELTA = 4;
 
     if (signal?.kind === "slice") {
       this._pendingSignal = null;
       const delta = gapLength - signal.totalLength;
 
-      if (delta === 0) {
-        return signal.segments.map(s => ({
+      // The slice measures the COPIED span in document positions; the gap
+      // measures what the paste/drop actually INSERTED. The two legitimately
+      // diverge when ProseMirror's clipboard fitting rebuilds structure
+      // around the content — e.g. pasting into an empty paragraph that has
+      // content after it re-parses the payload as a CLOSED block and inserts
+      // block tokens the copied span never contained (observed: a constant
+      // +7 on plain one-line pastes — P3-11 field investigation).
+      //
+      // CONTRACT: the user's multi-source breakdown is ALWAYS replayed,
+      // never collapsed to a single source. The structural remainder is
+      // absorbed at the gap's tail, so up to |delta| positions near block
+      // boundaries may carry the neighbouring source. That imprecision is
+      // token-scale and mostly invisible; the previous over-threshold
+      // fallback (stamp everything with the dominant source) destroyed
+      // exactly the data provenance exists to keep.
+      if (Math.abs(delta) > MAX_BOUNDARY_DELTA) {
+        console.debug(
+          "[ProvenanceTracker] slice replay with large structural delta (boundary fuzz)",
+          { gapStart, gapEnd, gapLength, sliceTotal: signal.totalLength, delta },
+        );
+      }
+
+      if (signal.segments.length === 0) {
+        return [{ start: gapStart, end: gapEnd, source: "typed" }];
+      }
+
+      if (delta >= 0) {
+        // Replay every piece at its captured offset; the final piece
+        // stretches over the structural remainder to gapEnd. (For
+        // delta === 0 this reproduces the exact-match behaviour verbatim.)
+        return signal.segments.map((s, i) => ({
           start: gapStart + s.offset,
-          end: gapStart + s.offset + s.length,
+          end: i === signal.segments.length - 1
+            ? gapEnd
+            : gapStart + s.offset + s.length,
           source: s.source,
         }));
       }
 
-      // Dominant source — used both as the trailing-filler tag in the
-      // tolerance branch and as the fallback when delta exceeds bound.
-      const cov = new Map<SegmentSource, number>();
-      for (const s of signal.segments) cov.set(s.source, (cov.get(s.source) ?? 0) + s.length);
-      let dominant: SegmentSource = "typed";
-      let bestLen = 0;
-      for (const [src, len] of cov) if (len > bestLen) { dominant = src; bestLen = len; }
-
-      if (Math.abs(delta) <= MAX_BOUNDARY_DELTA) {
-        // Tolerance branch — NOT exact arithmetic.
-        //
-        // The slice signal measures plain-text characters; the drop gap
-        // measures ProseMirror document positions, which include block-
-        // boundary tokens (paragraph / list-item open+close). The two
-        // differ by a few positions whenever the dragged selection
-        // crosses a block boundary.
-        //
-        // We trade a sub-character positional misalignment for keeping
-        // the multi-source breakdown. The misalignment is usually
-        // invisible because it lands inside the boundary tokens
-        // themselves; in the worst case (source transition mid-block on
-        // the far side of a crossed boundary) a region of at most
-        // MAX_BOUNDARY_DELTA chars near the boundary may be tagged with
-        // the neighbouring source.
-        //
-        // MAX_BOUNDARY_DELTA = 4 keeps that region at wrapper-token
-        // scale. Above the bound, structural complexity makes the
-        // misalignment risk meaningful — we degrade to dominant instead.
-        //
-        // Proper fix: switch the slice signal from character offsets to
-        // document positions in getSegmentSlice. Deferred — see
-        // mem://constraints/deferred-features.
-        if (delta > 0) {
-          const segs: ProvenanceSegment[] = signal.segments.map(s => ({
-            start: gapStart + s.offset,
-            end: gapStart + s.offset + s.length,
-            source: s.source,
-          }));
-          segs.push({
-            start: gapStart + signal.totalLength,
-            end: gapEnd,
-            source: dominant,
-          });
-          return segs;
-        }
-        // delta < 0: clamp segments at gapEnd; drop segments starting past it.
-        const segs: ProvenanceSegment[] = [];
-        for (const s of signal.segments) {
-          const segStart = gapStart + s.offset;
-          if (segStart >= gapEnd) break;
-          const segEnd = Math.min(gapStart + s.offset + s.length, gapEnd);
-          segs.push({
-            start: segStart,
-            end: segEnd,
-            source: s.source,
-          });
-        }
-        return segs;
+      // delta < 0: the gap is smaller than the copied span — clamp pieces
+      // at gapEnd and drop pieces that start beyond it.
+      const segs: ProvenanceSegment[] = [];
+      for (const s of signal.segments) {
+        const segStart = gapStart + s.offset;
+        if (segStart >= gapEnd) break;
+        segs.push({
+          start: segStart,
+          end: Math.min(segStart + s.length, gapEnd),
+          source: s.source,
+        });
       }
-
-      console.debug(
-        "[ProvenanceTracker] cross-block drag-drop exceeded boundary tolerance: degraded to dominant",
-        { gapStart, gapEnd, gapLength, sliceTotal: signal.totalLength, delta, max: MAX_BOUNDARY_DELTA, dominant },
-      );
-      return [{ start: gapStart, end: gapEnd, source: dominant }];
+      return segs;
     }
 
     const classification = this.classifyInsertion(gapText);

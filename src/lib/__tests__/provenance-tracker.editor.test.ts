@@ -12,7 +12,21 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import type { Transaction } from "@tiptap/pm/state";
+import type { Slice } from "@tiptap/pm/model";
+import * as pmView from "@tiptap/pm/view";
 import { ProvenanceTracker, type ProvenanceSegment } from "@/lib/provenance-tracker";
+
+// prosemirror-view exports its real clipboard parser for exactly this kind of
+// test; it is not part of the public type surface, hence the assertion.
+const parseFromClipboard = (pmView as unknown as {
+  __parseFromClipboard: (
+    view: unknown,
+    text: string,
+    html: string,
+    plainText: boolean,
+    $context: unknown,
+  ) => Slice;
+}).__parseFromClipboard;
 
 describe("ProvenanceTracker.applyTransaction — real TipTap transactions", () => {
   let editor: Editor;
@@ -197,6 +211,62 @@ describe("ProvenanceTracker.applyTransaction — real TipTap transactions", () =
       { start: 0, end: 12, source: "typed" },
       { start: 12, end: 24, source: "ai_editor" },
       { start: 24, end: 36, source: "typed" },
+    ]);
+  });
+
+  it("paste into an empty paragraph with trailing content (closed-slice fit): the breakdown survives the structural delta", () => {
+    // Field bug (P3-11 investigation, reproduced from the user's exact
+    // Firefox clipboard payload): when the cursor sits in an EMPTY paragraph
+    // that has content after it, prosemirror-view's clipboard parser
+    // re-parses the data-pm-slice payload as a CLOSED block, and the
+    // insertion carries rebuilt structure — 43 positions for the 36 copied
+    // ones (delta +7). The tracker must replay the multi-source breakdown
+    // across that gap, never collapse it to the dominant source.
+    makeEditor("<p>Test:What can I help you with today?</p><p></p><p>after</p>");
+    seed(
+      [
+        { start: 0, end: 6, source: "typed" },     // p_open + "Test:"
+        { start: 6, end: 37, source: "chat_ai" },  // the AI sentence
+        { start: 37, end: 47, source: "typed" },   // close + empty p + after-p
+      ],
+      47,
+    );
+
+    // Copy the visible line: 5 typed + 31 chat_ai characters.
+    const provSlice = tracker.getSegmentSlice(
+      1,
+      37,
+      editor.state.doc.textBetween(1, 37, "\n", "\n"),
+    );
+    expect(provSlice.totalLength).toBe(36);
+    tracker.setPendingSignal({
+      kind: "slice",
+      segments: provSlice.segments,
+      totalLength: provSlice.totalLength,
+    });
+
+    // Paste with the REAL clipboard parser at position 39 (inside the empty
+    // middle paragraph), using the exact payload shape ProseMirror writes.
+    editor.commands.setTextSelection(39);
+    const slice = parseFromClipboard(
+      editor.view,
+      "Test:What can I help you with today?",
+      '<html><body>\n<!--StartFragment--><p data-pm-slice="1 1 []">Test:What can I help you with today?</p><!--EndFragment-->\n</body>\n</html>',
+      false,
+      editor.state.selection.$from,
+    );
+    editor.view.dispatch(editor.state.tr.replaceSelection(slice));
+    applyCaptured();
+
+    // Breakdown replayed; the typed piece absorbs ~2 leading tokens and the
+    // final chat_ai piece stretches over the rebuilt trailing structure —
+    // token-scale boundary fuzz instead of a total collapse.
+    expect(tracker.getSegments()).toEqual([
+      { start: 0, end: 6, source: "typed" },
+      { start: 6, end: 37, source: "chat_ai" },
+      { start: 37, end: 44, source: "typed" },
+      { start: 44, end: 82, source: "chat_ai" },
+      { start: 82, end: 90, source: "typed" },
     ]);
   });
 });

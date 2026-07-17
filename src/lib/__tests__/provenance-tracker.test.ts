@@ -162,6 +162,30 @@ describe("ProvenanceTracker.applyTransaction multi-step mapping (P3-11)", () => 
   });
 });
 
+describe("ProvenanceTracker.consumeInternalClipboardSlice matching", () => {
+  // The stored text and the clipboard text legitimately differ in whitespace
+  // SHAPE: raw textBetween without leafText glues hard breaks, TipTap's
+  // clipboard serializer emits "\n" for them, and block boundaries arrive as
+  // "\n" or "\n\n" depending on the serializer. Matching must be immune.
+  it("matches when hard breaks glued the stored text but the clipboard has newlines", () => {
+    const tracker = new ProvenanceTracker();
+    tracker.setInternalClipboardSlice({ text: "TestHow can I assist", segments: [], totalLength: 20 });
+    expect(tracker.consumeInternalClipboardSlice("Test\nHow can I assist")).not.toBeNull();
+  });
+
+  it("matches across block-separator shapes (\\n vs \\n\\n)", () => {
+    const tracker = new ProvenanceTracker();
+    tracker.setInternalClipboardSlice({ text: "alpha\nbeta", segments: [], totalLength: 10 });
+    expect(tracker.consumeInternalClipboardSlice("alpha\n\nbeta")).not.toBeNull();
+  });
+
+  it("rejects genuinely different content", () => {
+    const tracker = new ProvenanceTracker();
+    tracker.setInternalClipboardSlice({ text: "hello world", segments: [], totalLength: 11 });
+    expect(tracker.consumeInternalClipboardSlice("goodbye world")).toBeNull();
+  });
+});
+
 describe("ProvenanceTracker slice paste round-trip", () => {
   it("reproduces the source breakdown of a mixed-source selection at the paste point", () => {
     const tracker = new ProvenanceTracker();
@@ -195,7 +219,11 @@ describe("ProvenanceTracker slice paste round-trip", () => {
     expect(newOnes[2]).toMatchObject({ start: 50, end: 53 });
   });
 
-  it("degrades gracefully on length mismatch (single dominant segment, no throw)", () => {
+  it("clamps the breakdown on a shorter gap — never collapses to the dominant source", () => {
+    // Contract since the P3-11 field fix: a gap-vs-slice length mismatch
+    // (structural fitting, partial inserts) keeps the multi-source
+    // breakdown; pieces are clamped/stretched at the boundaries instead of
+    // the old fallback that stamped the whole gap with the dominant source.
     const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
     const tracker = new ProvenanceTracker();
     seed(tracker, [{ start: 0, end: 20, source: "typed" }]);
@@ -204,7 +232,7 @@ describe("ProvenanceTracker slice paste round-trip", () => {
       kind: "slice",
       segments: [
         { offset: 0, length: 5, source: "typed" },
-        { offset: 5, length: 15, source: "ai_editor" }, // dominant
+        { offset: 5, length: 15, source: "ai_editor" },
       ],
       totalLength: 20,
     });
@@ -212,9 +240,11 @@ describe("ProvenanceTracker slice paste round-trip", () => {
     const tx = makeInsertionTx({ oldSize: 20, at: 20, insertLen: 10, insertText: "x".repeat(10) });
     expect(() => tracker.applyTransaction(tx)).not.toThrow();
 
-    const newOnes = tracker.getSegments().filter(s => s.start >= 20);
-    expect(newOnes).toHaveLength(1);
-    expect(newOnes[0]).toMatchObject({ start: 20, end: 30, source: "ai_editor" });
+    // The replayed typed piece [20,25) merges with the typed seed [0,20).
+    expect(tracker.getSegments()).toEqual([
+      { start: 0, end: 25, source: "typed" },
+      { start: 25, end: 30, source: "ai_editor" }, // clamped at gapEnd
+    ]);
     debugSpy.mockRestore();
   });
 
