@@ -146,7 +146,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           const { from, to } = ed.state.selection;
           if (from === to) return false;
           const tracker = getTracker();
-          const text = ed.state.doc.textBetween(from, to, "\n");
+          const text = ed.state.doc.textBetween(from, to, "\n", "\n"); // leafText "\n": count hard breaks like the clipboard serializer does
           if (text) {
             tracker.setInternalClipboardSlice(tracker.getSegmentSlice(from, to, text));
           }
@@ -158,7 +158,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           const { from, to } = ed2.state.selection;
           if (from === to) return false;
           const tracker = getTracker();
-          const text = ed2.state.doc.textBetween(from, to, "\n");
+          const text = ed2.state.doc.textBetween(from, to, "\n", "\n"); // leafText "\n": count hard breaks like the clipboard serializer does
           if (text) {
             tracker.setInternalClipboardSlice(tracker.getSegmentSlice(from, to, text));
           }
@@ -174,7 +174,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
           const { from, to } = ed.state.selection;
           if (from === to) return false;
           const tracker = getTracker();
-          const text = ed.state.doc.textBetween(from, to, "\n");
+          const text = ed.state.doc.textBetween(from, to, "\n", "\n"); // leafText "\n": count hard breaks like the clipboard serializer does
           const slice = tracker.getSegmentSlice(from, to, text);
           tracker.setPendingSignal({
             kind: "slice",
