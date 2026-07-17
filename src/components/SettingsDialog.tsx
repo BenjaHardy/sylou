@@ -19,9 +19,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { LogOut } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { LogOut, Trash2 } from "lucide-react";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 import { MODELS, type ModelInfo } from "@/lib/models";
 
 interface Props {
@@ -94,6 +106,30 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
   useEffect(() => {
     setDisplayName(settings.display_name ?? "");
   }, [settings.display_name]);
+
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const deleteArmed = deleteConfirm.trim().toUpperCase() === "DELETE";
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    const { error } = await supabase.functions.invoke("delete-account");
+    if (error) {
+      setDeleting(false);
+      toast({
+        title: "Account deletion failed",
+        description: "Your account was not deleted. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // The account is gone server-side. Clear the local session only (a
+    // server sign-out would fail — the user no longer exists) and
+    // hard-reload so no in-memory state survives.
+    await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+    window.location.assign("/auth");
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -241,6 +277,20 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                 Sign out
               </Button>
             </div>
+
+            <div className="border-t pt-4 space-y-2">
+              <p className="text-sm font-medium text-destructive">Danger zone</p>
+              <p className="text-xs text-muted-foreground">
+                Permanently delete your account and all of your data —
+                projects, writing, chat history, FLOW reports, and imported
+                files. Links to reports you have shared stop working. This
+                cannot be undone.
+              </p>
+              <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete account
+              </Button>
+            </div>
           </TabsContent>
         </Tabs>
 
@@ -249,6 +299,48 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
             Loading…
           </p>
         )}
+
+        {/* Account-deletion confirmation (portals to body; nesting is fine) */}
+        <AlertDialog
+          open={deleteOpen}
+          onOpenChange={(v) => {
+            if (deleting) return; // no closing mid-request
+            setDeleteOpen(v);
+            if (!v) setDeleteConfirm("");
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete account?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently erases your account and everything in it —
+                projects, writing, chat history, FLOW reports, and imported
+                files. Links to reports you have shared stop working. This
+                cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <Input
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder="Type DELETE to confirm"
+              disabled={deleting}
+              autoFocus
+            />
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={!deleteArmed || deleting}
+                onClick={(e) => {
+                  e.preventDefault(); // keep the dialog open while the request runs
+                  handleDeleteAccount();
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deleting ? "Deleting…" : "Delete my account"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );

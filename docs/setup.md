@@ -172,13 +172,13 @@ The values are masked but the names should all appear.
 
 ## Step 6 — Deploy the edge functions
 
-Sylou has seven edge functions that handle chat, FLOW analysis, document import, and other backend work. Deploy them all:
+Sylou has eight edge functions that handle chat, FLOW analysis, document import, account deletion, and other backend work. Deploy them all:
 
 ```bash
 supabase functions deploy
 ```
 
-This deploys every function defined in the `supabase/functions/` directory. Each function takes 5–15 seconds. Once complete, you should see all seven listed as deployed in **Edge Functions** in your Supabase dashboard.
+This deploys every function defined in the `supabase/functions/` directory. Each function takes 5–15 seconds. Once complete, you should see all eight listed as deployed in **Edge Functions** in your Supabase dashboard.
 
 If you can't use the Supabase CLI for any reason, the same functions can be deployed manually via the Supabase dashboard's **Edge Functions** section. Note that dashboard deployment is significantly more fiddly (each function has multiple files, and the JWT verification toggle must be set manually for each — see `supabase/config.toml` for the correct settings). The CLI is strongly recommended.
 
@@ -392,7 +392,7 @@ A few things to be aware of as an operator:
 - **AI Act position**: see [docs/ai-act-position.md](ai-act-position.md). If you operate Sylou for users other than yourself, you may have your own obligations under the EU AI Act. The transparency measures shipped with Sylou are designed to support a self-hoster's compliance posture, but cannot substitute for the self-hoster's own responsibilities.
 - **Terms of Use and Privacy Policy**: if you serve other users, you'll likely want both. Template documents are planned for the repo; for now, consult your own legal advisor if your deployment scale warrants it.
 - **Database-level data access (disclose it)**: as the operator you can read everything your users store in the instance — the Supabase dashboard, the SQL editor, and the service-role key all bypass row-level security by design. RLS isolates users from *each other*, not from the operator. If you serve other users, state this plainly in your Privacy Policy; in EU terms, you are the data controller for your instance.
-- **Account deletion / right to erasure**: Sylou has no in-app account-deletion flow yet (it's on the roadmap). As the operator you can fully erase a user today via the Supabase dashboard: delete the user under **Authentication → Users** (the database schema cascades from there), then remove their files under **Storage → imports → `<user-id>/`** (storage objects do not cascade automatically). Factor this into your privacy commitments if you serve other users, especially in the EU.
+- **Account deletion / right to erasure**: users can permanently delete their own account in-app (**Settings → Account → Delete account**, typed confirmation). The `delete-account` edge function first purges the user's files under **Storage → imports → `<user-id>/`** (storage objects do not cascade automatically), then deletes the auth user — the database schema cascades from there (projects, writing, chat, FLOW reports; shared report links stop working). Deletions appear in the function's logs as a single non-PII line (user id + file count). The manual operator path still works as a fallback: delete the user under **Authentication → Users**, then remove their files under **Storage → imports → `<user-id>/`**. Factor deletion into your privacy commitments if you serve other users, especially in the EU.
 - **Before opening registration to others**: three switches are worth flipping first. (1) Set a per-user `monthly_token_budget` (see [Per-user token budgets](#per-user-token-budgets)) — the default is *unlimited*, and the budget is the instance's only built-in cost lever. (2) Enable **leaked-password protection** (Dashboard → **Authentication → Passwords**) so sign-ups can't use known-breached passwords. (3) Review the sign-up mode and auth rate limits (see [Additional cost & abuse protection](#additional-cost--abuse-protection)).
 - **Trademark**: see [TRADEMARK-POLICY.md](../TRADEMARK-POLICY.md). Self-hosting unmodified Sylou under the Sylou name is welcomed; substantive modifications need a different name.
 - **Backups**: Supabase provides automated backups on paid plans. For a personal or small-team instance, the free tier's recovery options may be limited — verify what's available on your plan before depending on it.
