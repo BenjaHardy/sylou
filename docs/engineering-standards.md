@@ -277,6 +277,14 @@ can have; changes require an explicit transparency-impact note in the PR.
 - **Bias against new dependencies** (CONTRIBUTING policy). Every import must
   exist in `package.json` — no phantom deps that resolve transitively. Remove
   a dep when its last usage goes.
+- **Frontend versions are pinned exact** — no `^`/`~` ranges: `package.json`
+  carries the precise tested version of every dependency, `.npmrc` sets
+  `save-exact`, and an `overrides` block freezes the `prosemirror-*` family
+  (transitives whose drift changes *editor semantics* — a routine lockfile
+  regeneration once changed paste fitting and broke provenance capture in
+  the field). Upgrades are deliberate PRs: bump the pin, regenerate the
+  lockfile, and let the full gates — including the real-editor provenance
+  fixtures — judge the new versions.
 - Edge functions **can and must share code via `supabase/functions/_shared/`**.
   Do not copy-paste helpers between functions, and do not write comments
   claiming sharing is impossible (it isn't).
