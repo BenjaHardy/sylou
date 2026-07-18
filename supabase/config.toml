@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.config]
 verify_jwt = false
+
+[functions.delete-account]
+verify_jwt = false

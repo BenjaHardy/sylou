@@ -46,8 +46,8 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 - `supabase/functions/_shared/` — `_llm.ts` (provider router), `_repair.ts`,
   `_temperatures.ts`, `_thinking.ts`, `_models.ts` (model allowlist,
   input caps, per-model context limits), `_provenance.ts`, `_similarity.ts`.
-- Edge functions (7): `chat`, `analysis`, `editor-action`, `context-prompt`,
-  `extract-text`, `share-report`, `config`.
+- Edge functions (8): `chat`, `analysis`, `editor-action`, `context-prompt`,
+  `extract-text`, `share-report`, `config`, `delete-account`.
 
 ## 4. Conventions (mirror these; don't drift)
 - **Layout**: root is `h-screen overflow-hidden`; flex parents get
