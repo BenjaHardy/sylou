@@ -125,6 +125,13 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
   const [provenanceTracker, setProvenanceTracker] = useState<ProvenanceTracker | null>(null);
   const [showLiveProvenance, setShowLiveProvenance] = useState(false);
   const [editorHtml, setEditorHtml] = useState("");
+  // Clear on project switch: the new project's HTML arrives only when its
+  // content finishes loading (WritingEditor pushes it after the initial
+  // setContent) — until then the previous project's HTML is stale and the
+  // Live Provenance View must not pair it with the new tracker's segments.
+  useEffect(() => {
+    setEditorHtml("");
+  }, [project?.id]);
   const chatSetMessagesRef = useRef<((updater: (prev: ChatMessage[]) => ChatMessage[]) => void) | null>(null);
   const [provenanceKey, setProvenanceKey] = useState(0);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
