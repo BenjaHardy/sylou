@@ -21,13 +21,22 @@ export function useChatThread(projectId: string | null) {
   // Session-level memory: projectId → last-selected threadId
   const selectionMemory = useRef(new Map<string, string>());
 
+  // Generation guard (P3-9): only the latest fetch may install thread
+  // state. Without it, a slow project-A response landing after a switch to
+  // B shows A's thread list under B — and clicking one of those phantom
+  // entries would poison selectionMemory for B via setActiveThreadId.
+  const fetchSeqRef = useRef(0);
+
   const fetchThreads = useCallback(async (pid: string) => {
+    const seq = ++fetchSeqRef.current;
     setLoading(true);
     const { data, error } = await supabase
       .from("chat_threads")
       .select("id, name, created_at")
       .eq("project_id", pid)
       .order("created_at", { ascending: true });
+
+    if (seq !== fetchSeqRef.current) return; // superseded — discard silently
 
     if (error || !data) {
       console.error("Failed to load threads:", error);
@@ -48,6 +57,9 @@ export function useChatThread(projectId: string | null) {
 
   useEffect(() => {
     if (!projectId) {
+      // Invalidate any in-flight fetch so it can't resurrect state after
+      // this clear.
+      fetchSeqRef.current++;
       setThreads([]);
       setActiveThreadIdState(null);
       return;
