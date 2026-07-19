@@ -300,10 +300,17 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       prevDocLenRef.current = docLen;
       initWithContentLength(docLen);
       setInitialSet(true);
+      // Push the loaded HTML up: setContent does not fire onUpdate, so the
+      // parent's editorHtml (and the Live Provenance View reading it) would
+      // otherwise keep the previous project's text until the first
+      // keystroke. Direct call rather than setContent's emitUpdate flag —
+      // emitting would also trigger updateContent (a pointless re-save of
+      // just-loaded content) and the writing-activity ping.
+      onEditorContent?.(editor.getHTML());
       // Expose tracker to parent (flush is handled by the stable ref-based effect above)
       onProvenanceTracker?.(tracker);
     }
-  }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker]);
+  }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker, onEditorContent]);
 
   // Reset when projectId changes
   useEffect(() => {
