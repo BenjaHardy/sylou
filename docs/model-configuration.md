@@ -121,7 +121,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 | Setting                                       | File                                          | Notes                                                                                             |
 | --------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | Model registry (which models exist)           | `src/lib/models.ts`                           | Pricing, labels, default chat model.                                                              |
-| Temperature per function × model              | `supabase/functions/_shared/_temperatures.ts` | Four tables: `FLOW_TEMPERATURE`, `CHAT_TEMPERATURE`, `EDITOR_TEMPERATURE`, `CONTEXT_TEMPERATURE`. |
+| Temperature per function × model              | `supabase/functions/_shared/_temperatures.ts` | Five tables: `FLOW_TEMPERATURE`, `CHAT_TEMPERATURE`, `EDITOR_TEMPERATURE`, `CONTEXT_TEMPERATURE`, `SUMMARY_TEMPERATURE` (conversation-memory consolidation, 0.3 — faithful carry-over over prose variety). |
 | Claude thinking + effort per function × model | `supabase/functions/_shared/_thinking.ts`     | Tables: `*_THINKING`, `*_EFFORT`.                                                                 |
 | Mistral reasoning_effort per function × model | `supabase/functions/_shared/_thinking.ts`     | Tables: `*_MISTRAL_EFFORT`.                                                                       |
 | Reasoning-supported Mistral models            | `supabase/functions/_shared/_thinking.ts`     | `MISTRAL_REASONING_MODELS` set.                                                                   |

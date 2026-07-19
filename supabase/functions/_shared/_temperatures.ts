@@ -45,6 +45,11 @@
 //                         on every provider that accepts a value,
 //                         to maximize schema compliance and reduce
 //                         repair/retry rates.
+//   SUMMARY_TEMPERATURE — conversation-memory consolidation
+//                         (_conversation_memory.ts), low (0.3): faithful
+//                         fact/decision carry-over matters more than prose
+//                         variety, but not FLOW-style 0.0 — the summary
+//                         still reads as prose.
 // ============================================================
 
 export type TemperatureTable = Record<string, number>;
@@ -90,6 +95,14 @@ export const FLOW_TEMPERATURE: TemperatureTable = {
   "mistral-small-2603":   0.0,
   "claude-sonnet-4-6":    0.0,
   "deepseek-v4-flash":    0.0,
+};
+
+export const SUMMARY_TEMPERATURE: TemperatureTable = {
+  "mistral-large-2512":   0.3,
+  "mistral-medium-3-5":   0.3,
+  "mistral-small-2603":   0.3,
+  "claude-sonnet-4-6":    0.3,
+  "deepseek-v4-flash":    0.3,
 };
 
 export function resolveTemperature(
