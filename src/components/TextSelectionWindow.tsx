@@ -143,8 +143,51 @@ export function TextSelectionWindow({
     return () => document.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
-  // Close on click outside
+  // While a run is in flight (loading/streaming), a proposal awaits a
+  // decision (result), or a CONFIRM is being recorded (accepting), the
+  // window must not die to a stray outside click — and the click must not
+  // reach the document either: Accept inserts at the editor's LIVE
+  // selection (WritingEditor.handleAcceptProposal → insertContent), so a
+  // click that moved the selection would make Accept misinsert at the
+  // click point. Escape and the ✕ button remain the explicit outs; wheel
+  // scrolling is untouched (capture-phase listeners, no overlay element).
+  const isProtected =
+    phase === "loading" || phase === "streaming" || phase === "result" || accepting;
+
+  // Close on click outside (menu/input phases); swallow + explain while protected.
+  const lastBlockedToastRef = useRef(0);
   useEffect(() => {
+    if (isProtected) {
+      const swallow = (e: Event) => {
+        if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+          e.preventDefault();
+          e.stopPropagation();
+          // Toast once per physical click (mousedown+click both land here),
+          // throttled so rapid clicking doesn't stack a wall of them.
+          if (e.type === "mousedown") {
+            const now = Date.now();
+            if (now - lastBlockedToastRef.current > 2500) {
+              lastBlockedToastRef.current = now;
+              toast.info(
+                phase === "result"
+                  ? "Review the proposal — Accept or Reject it, or close the window (✕ or Esc)."
+                  : "An AI action is in progress — wait for it to finish, or close the window (✕ or Esc).",
+              );
+            }
+          }
+        }
+      };
+      document.addEventListener("mousedown", swallow, true);
+      document.addEventListener("click", swallow, true);
+      // Passive signal that outside interaction is blocked; the panel root
+      // sets cursor-auto so its own subtree keeps normal cursors.
+      document.body.style.cursor = "not-allowed";
+      return () => {
+        document.removeEventListener("mousedown", swallow, true);
+        document.removeEventListener("click", swallow, true);
+        document.body.style.cursor = "";
+      };
+    }
     const handleClick = (e: MouseEvent) => {
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
         onClose();
@@ -157,7 +200,7 @@ export function TextSelectionWindow({
       clearTimeout(timer);
       document.removeEventListener("mousedown", handleClick);
     };
-  }, [onClose]);
+  }, [onClose, isProtected, phase]);
 
   const getSourceBreakdown = useCallback(() => {
     if (isCreativeModule) return undefined;
@@ -537,7 +580,7 @@ export function TextSelectionWindow({
   return (
     <div
       ref={panelRef}
-      className="absolute z-50 w-[330px] rounded-xl shadow-xl border border-border bg-popover text-popover-foreground animate-in fade-in-0 slide-in-from-top-2 duration-150"
+      className="absolute z-50 w-[330px] cursor-auto rounded-xl shadow-xl border border-border bg-popover text-popover-foreground animate-in fade-in-0 slide-in-from-top-2 duration-150"
       style={{ top, left }}
     >
       {/* Header */}
