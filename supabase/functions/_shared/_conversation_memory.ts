@@ -141,8 +141,8 @@ export function buildSummaryMessages(
 You will receive the previous memory (possibly empty) and the next portion of the conversation transcript. Rewrite the ENTIRE memory as one consolidated summary covering everything — old memory and new portion merged, duplicates collapsed, superseded points updated.
 
 Structure the memory in exactly these five sections, each a short list or tight prose:
-1. Decisions & direction — what the author has decided about intent, angle, approach; directions considered and rejected, and why.
-2. Structure & plan — outline, ordering, planned architecture of the piece; what is drafted vs pending.
+1. Direction & decisions — *what* the author has decided to convey with his writing: intent, ideas, opinions, perspectives, including key story elements where applicable; directions considered and rejected, and why.
+2. Structure & plan — *how* the author wants to convey: outline, ordering, planned architecture, narrative, or agumentation of the piece; what is decided vs pending.
 3. Established facts & entities — ${factsFlavor}. Carry names and explicitly stated decisions VERBATIM; never paraphrase a proper noun.
 4. Open threads — unresolved questions, parked ideas, pending suggestions.
 5. How we got here — two or three sentences of narrative arc.
