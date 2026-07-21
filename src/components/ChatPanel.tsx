@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, KeyboardEvent, useCallback, useMemo } from "react";
+import { Fragment, useState, useRef, useEffect, KeyboardEvent, useCallback, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MessageSquare, Send, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp, BookmarkIcon, Globe, Paperclip } from "lucide-react";
@@ -8,6 +8,11 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { useChatThread } from "@/hooks/useChatThread";
+import { useConversationMemory } from "@/hooks/useConversationMemory";
+import {
+  ConversationMemoryDivider,
+  ConversationMemoryDialog,
+} from "@/components/ConversationMemoryView";
 import { useChatMessages, ChatMessage } from "@/hooks/useChatMessages";
 import { ChatThreadSelector } from "@/components/ChatThreadSelector";
 import { BookmarkPopover } from "@/components/BookmarkPopover";
@@ -254,6 +259,54 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   const { messages, loading, sending, phase, sendMessage, budgetRemaining, refreshMessages, appendMessages, setMessages } = useChatMessages(activeThreadId);
   const { settings: userSettings } = useUserSettings();
   const { bookmarks, createBookmark, updateBookmark, deleteBookmark, getBookmarkForMessage } = useBookmarks(projectId);
+  const { memory, refetch: refetchMemory } = useConversationMemory(activeThreadId);
+  const [memoryDialogOpen, setMemoryDialogOpen] = useState(false);
+  const [showMemoryPill, setShowMemoryPill] = useState(false);
+  const memoryCoversRef = useRef<string | null>(null);
+  useEffect(() => {
+    memoryCoversRef.current = memory?.covers_through ?? null;
+  }, [memory]);
+
+  // Divider position: the first message newer than the memory's watermark
+  // (-1 = everything covered → divider renders after the last message).
+  // Ephemeral client ids carry toISOString() timestamps while DB rows use
+  // the PostgREST format — Date-parse both sides rather than trusting the
+  // string formats to align.
+  const memoryDividerIndex = useMemo(() => {
+    if (!memory) return null;
+    const watermark = new Date(memory.covers_through).getTime();
+    return messages.findIndex((m) => new Date(m.created_at).getTime() > watermark);
+  }, [memory, messages]);
+
+  // conversation-memory refresh detection — client-side by design: the
+  // server refreshes AFTER `done` is sent, so no stream payload can
+  // announce it. When a new message lands (chat exchange or Ask/Propose
+  // insertion), schedule two quiet refetches bracketing the tail's
+  // summarize time; if the watermark advanced, surface the pill (the
+  // divider moves with the refetched row). Token updates re-run this
+  // effect without changing the last id, so only the timers armed by the
+  // final (post-done) update survive to fire.
+  const lastMsgIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const lastId = messages.length > 0 ? messages[messages.length - 1].id : null;
+    const prevId = lastMsgIdRef.current;
+    lastMsgIdRef.current = lastId;
+    if (!lastId || lastId === prevId || prevId === null) return;
+    const timers = [12_000, 30_000].map((ms) =>
+      setTimeout(async () => {
+        const before = memoryCoversRef.current;
+        const fresh = await refetchMemory();
+        if (fresh && fresh.covers_through !== before) setShowMemoryPill(true);
+      }, ms),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [messages, refetchMemory]);
+
+  useEffect(() => {
+    if (!showMemoryPill) return;
+    const t = setTimeout(() => setShowMemoryPill(false), 5000);
+    return () => clearTimeout(t);
+  }, [showMemoryPill]);
   const [input, setInput] = useState("");
   // User preference (what they've toggled). Distinct from instance capability
   // (whether web search is configured on this deployment at all). Preserve
@@ -514,16 +567,26 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
             </p>
           </div>
         ) : (
-          messages.map((msg) => (
-            <ChatBubble
-              key={msg.id}
-              message={msg}
-              bookmark={getBookmarkForMessage(msg.id)}
-              onCreateBookmark={() => activeThreadId && createBookmark(activeThreadId, msg.id)}
-              onUpdateBookmark={updateBookmark}
-              onDeleteBookmark={deleteBookmark}
-            />
+          messages.map((msg, i) => (
+            <Fragment key={msg.id}>
+              {memoryDividerIndex === i && (
+                <ConversationMemoryDivider onClick={() => setMemoryDialogOpen(true)} />
+              )}
+              <ChatBubble
+                message={msg}
+                bookmark={getBookmarkForMessage(msg.id)}
+                onCreateBookmark={() => activeThreadId && createBookmark(activeThreadId, msg.id)}
+                onUpdateBookmark={updateBookmark}
+                onDeleteBookmark={deleteBookmark}
+              />
+            </Fragment>
           ))
+        )}
+
+        {/* All messages covered (the normal state right after a refresh):
+            the divider sits at the end of the scrollback. */}
+        {!loading && memory && memoryDividerIndex === -1 && (
+          <ConversationMemoryDivider onClick={() => setMemoryDialogOpen(true)} />
         )}
 
         {sending && !messages.some((m) => m.id === "streaming-assistant" || m.id === "streaming-ask") && (
@@ -553,6 +616,20 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
           </div>
         )}
       </div>
+
+      {showMemoryPill && (
+        <div className="flex justify-center py-1">
+          <span className="text-[11px] text-muted-foreground bg-muted rounded-full px-2.5 py-0.5">
+            Conversation memory updated
+          </span>
+        </div>
+      )}
+
+      <ConversationMemoryDialog
+        open={memoryDialogOpen}
+        onOpenChange={setMemoryDialogOpen}
+        memory={memory}
+      />
 
       {/* Input */}
       <div className="border-t border-border p-3 shrink-0">
