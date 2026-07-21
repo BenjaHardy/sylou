@@ -67,6 +67,27 @@ export async function exportProjectAsJson(projectId: string) {
 
   // Fetch messages for each thread
   const threads = threadsRes.data ?? [];
+
+  // Conversation memory (rolling per-thread summary): user-readable data,
+  // so it belongs in the user's export. FLOW never reads it.
+  const threadIds = threads.map((t) => t.id);
+  let summaries: {
+    thread_id: string;
+    summary_text: string;
+    covers_through: string;
+    covered_message_count: number;
+    model_used: string | null;
+    created_at: string;
+    updated_at: string;
+  }[] = [];
+  if (threadIds.length > 0) {
+    const { data } = await supabase
+      .from("chat_thread_summaries")
+      .select("thread_id, summary_text, covers_through, covered_message_count, model_used, created_at, updated_at")
+      .in("thread_id", threadIds);
+    summaries = data ?? [];
+  }
+
   const threadsWithMessages = await Promise.all(
     threads.map(async (thread) => {
       const { data: messages } = await supabase
@@ -74,7 +95,11 @@ export async function exportProjectAsJson(projectId: string) {
         .select("id, role, content, created_at, source_type, flow_flag, tutor_mode, concise_mode, model_used, documents_referenced, web_searches_performed")
         .eq("thread_id", thread.id)
         .order("created_at");
-      return { ...thread, messages: messages ?? [] };
+      return {
+        ...thread,
+        messages: messages ?? [],
+        conversation_memory: summaries.find((s) => s.thread_id === thread.id) ?? null,
+      };
     })
   );
 
@@ -95,7 +120,7 @@ export async function exportProjectAsJson(projectId: string) {
 
   const exportData = {
     exported_at: new Date().toISOString(),
-    version: "1.0",
+    version: "1.1", // 1.1: + chat_threads[].conversation_memory
     project: {
       ...projectRes.data,
       id: projectId,
