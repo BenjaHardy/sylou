@@ -93,7 +93,7 @@ Deno.test("buildSummaryMessages carries the five sections and the core rules", (
     msg("user", "hello", "2026-07-20T10:00:00.000Z"),
   ], false);
   assertEquals(system.role, "system");
-  assertStringIncludes(text(system), "Decisions & direction");
+  assertStringIncludes(text(system), "Direction & decisions");
   assertStringIncludes(text(system), "Structure & plan");
   assertStringIncludes(text(system), "Established facts & entities");
   assertStringIncludes(text(system), "Open threads");
