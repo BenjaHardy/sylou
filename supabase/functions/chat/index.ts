@@ -1125,6 +1125,20 @@ When citing information from web search results, always include the source URL i
             } catch { /* client gone */ }
 
             console.log("[stream] flush() completed — persistence done");
+
+            // conversation-memory: refresh in the tail, after `done` is
+            // sent (see the tool-offered paths for the full rationale).
+            // This is the third of chat's three streaming completions — the
+            // no-tools path (no imported documents, web search off) — and
+            // the one the original hook pass missed.
+            await maybeRefreshConversationMemory({
+              admin: adminSupabase,
+              threadId,
+              model: chatModel,
+              userId: user.id,
+              overBudget: profile.monthly_token_budget !== null && newTotal >= profile.monthly_token_budget,
+              logTag: "[chat]",
+            });
           } catch (persistErr) {
             console.error("[stream] persistence error:", persistErr);
             try {
