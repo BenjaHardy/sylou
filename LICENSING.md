@@ -50,4 +50,13 @@ part of an edge-function refactor), this map will be updated to point there.
 - **Naming**: neither license grants trademark rights — see the
   [trademark policy](TRADEMARK-POLICY.md).
 
+## Third-party software
+
+Sylou builds on open-source packages, all under AGPL-compatible licenses
+(MIT, ISC, BSD, Apache-2.0 and similar). The complete inventory — every
+package, exact pinned version, and license, for both the application and
+the edge functions — lives in
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md), generated from the
+lockfile and kept in sync by CI.
+
 Questions: [contact@sylou.eu](mailto:contact@sylou.eu).

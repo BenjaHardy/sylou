@@ -285,6 +285,12 @@ can have; changes require an explicit transparency-impact note in the PR.
   the field). Upgrades are deliberate PRs: bump the pin, regenerate the
   lockfile, and let the full gates — including the real-editor provenance
   fixtures — judge the new versions.
+- **Any dependency change regenerates the attribution file**: run
+  `npm run licenses:generate` (rebuilds `THIRD_PARTY_LICENSES.md` from the
+  lockfile) in the same PR — CI fails on drift. Edge-function URL imports
+  are hand-listed in `scripts/generate-third-party-licenses.mjs`
+  (`EDGE_DEPS`); update that list when one changes. New licenses must stay
+  AGPL-3.0-compatible (MIT/ISC/BSD/Apache-2.0 class).
 - Edge functions **can and must share code via `supabase/functions/_shared/`**.
   Do not copy-paste helpers between functions, and do not write comments
   claiming sharing is impossible (it isn't).
