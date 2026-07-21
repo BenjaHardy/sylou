@@ -18,7 +18,6 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 const paginationKey = new PluginKey("pagination");
 
 declare module "@tiptap/core" {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface Commands<ReturnType> {
     pagination: {
       setPaginationEnabled: (enabled: boolean) => ReturnType;

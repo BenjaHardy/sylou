@@ -40,6 +40,13 @@ jobs:
       - name: Unit tests (vitest)
         run: npm test
 
+      # Attribution stays in sync with the dependency tree: any PR that
+      # changes package-lock.json must regenerate THIRD_PARTY_LICENSES.md
+      # (npm run licenses:generate) or this fails. The check only compares;
+      # it never writes.
+      - name: Third-party licenses up to date
+        run: node scripts/generate-third-party-licenses.mjs --check
+
       # Vercel only builds on push to main (post-merge), so without this step
       # a PR that breaks the production build (asset imports, CSS, Rolldown
       # issues tsc can't see) would merge green and then fail the deploy.
