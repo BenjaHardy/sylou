@@ -253,10 +253,10 @@ Putting 5.2 together with the other inputs, a single Ask/Propose runs roughly:
 
 1. Load the current writing (and creative-tool content, for creative projects),
    the existing summary log, and recent chat across the project's threads.
-2. **First LLM call** — generate or extend the work summary (per 5.2).
+2. **First LLM call** — generate or extend the work/writing summary (per 5.2).
 3. Assemble the answer prompt: the appropriate system prompt (classic or Tutor
-   mode), project-template context, the writing summary, the selected text, the
-   instruction, and recent chat.
+   mode), project-template context, the work/writing summary, the selected text, the
+   instruction, and recent chat (together with conversation memory where applicable).
 4. **Imported documents**, if any: the AI is given an *index* of titles and
    summaries and a tool to pull a document's full text on demand; documents you
    mark as favourites are injected in full up front, no tool call needed.
@@ -334,7 +334,7 @@ The chat history, the writing-summary log, and the editor-action record are
 writable only by Sylou's server-side functions: a modified client cannot
 fabricate these FLOW inputs by writing to the database directly.
 
-The conversation memory (5.6) is deliberately **not** an input: the analysis
+NB: By design, the conversation memory (5.6) is **not** an input: the analysis
 always reads the full, raw chat history itself, never the summarized form.
 
 The analysis returns, for each pillar, its reasoning, cited evidence, a score (or
@@ -356,7 +356,7 @@ still pending — linked to the chat exchange by timestamp; **Ask** lives only
 in the chat, which is its complete record. Everything is on the record for
 the analysis, and nothing is logged twice.
 
-### 5.6 Conversation memory: how long chats stay coherent
+### 5.6 Conversation memory (coherence of long chat discussions)
 
 On every message, the assistant re-reads only the most recent stretch of the
 conversation (about 50 messages). So that long collaborations don't lose their
@@ -367,15 +367,13 @@ work so far — regenerated (not appended) roughly every 50 messages, capped in
 size, and stored with the thread. Chat replies and Ask/Propose actions then
 work from this memory plus the newest messages verbatim; where the two differ,
 the assistant is instructed that the verbatim messages win. The summarization
-runs on your selected chat model and is billed like any other call.
+runs on the selected chat model and is billed like any other call.
 
-Three properties keep it honest. It is stored per thread in the project's
+Three properties: it is stored per thread in the project's
 database, readable only by the account owner. Like the other AI-maintained
-records, only Sylou's server-side functions can write it — a modified client
-cannot plant fabricated "memory" the assistant would then trust. And **FLOW
-never reads it**: like the writing-summary log (5.1), the memory is a
-continuity aid, not assessment evidence — the analysis reads the full raw
-chat history itself (5.4).
+records, only Sylou's server-side functions can write it (a modified client
+cannot plant fabricated "memory" the assistant would then trust). And FLOW
+never reads it: instead the analysis reads the full raw chat history itself (5.4).
 
 ---
 
