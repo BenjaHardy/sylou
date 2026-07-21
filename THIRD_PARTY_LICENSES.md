@@ -31,7 +31,7 @@ Packages bundled into (or supporting) the shipped application.
 
 ### (MPL-2.0 OR Apache-2.0) (1)
 
-- dompurify@3.4.11
+- dompurify@3.4.12
 
 ### 0BSD (1)
 
