@@ -8,6 +8,11 @@ import {
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
   type ClaudeEffort, type MistralEffort,
 } from "../_shared/_thinking.ts";
+import {
+  buildMemoryInjection,
+  fetchConversationMemory,
+  maybeRefreshConversationMemory,
+} from "../_shared/_conversation_memory.ts";
 
 // Budget helper. Duplicated across the four LLM edge functions today;
 // consolidating it into _shared/ is a tracked refactor (functions can and
@@ -421,6 +426,7 @@ function buildResponsePrompt(
   recentChat: { role: string; content: string }[],
   actionType: "ask" | "propose",
   language: string,
+  conversationMemory: string | null = null,
 ): { role: string; content: string }[] {
   const taskInstruction =
     actionType === "ask"
@@ -446,7 +452,7 @@ The user selected the following text in their ${sourceModule}:
 === USER'S REQUEST ===
 ${instruction}
 
-=== RECENT CHAT HISTORY ===
+${conversationMemory ? `${buildMemoryInjection(conversationMemory)}\n\n` : ""}=== RECENT CHAT HISTORY ===
 ${chatHistory}
 
 === YOUR TASK ===
@@ -857,6 +863,13 @@ When in doubt, prefer searching - an unnecessary search is better than an outdat
 When citing information from web search results, always include the source URL inline in your response text (e.g. "According to [Source Title](URL), ..."). This ensures the user can verify and revisit the sources later.`;
     }
 
+    // conversation-memory: the ACTIVE thread's rolling summary (the recent
+    // window above is project-wide; the memory is per-thread). Read via the
+    // user-context client so RLS scopes it to the caller's own threads. It
+    // renders next to RECENT CHAT HISTORY inside the same context container
+    // that already carries the raw messages — identical relative privilege.
+    const conversationMemory = await fetchConversationMemory(supabase, thread_id);
+
     const responseMessages = buildResponsePrompt(
       systemPrompt,
       updatedSummary,
@@ -866,6 +879,7 @@ When citing information from web search results, always include the source URL i
       recentChat,
       action_type,
       projectLanguage,
+      conversationMemory?.summary_text ?? null,
     );
 
     // Track totals across all calls
@@ -1281,6 +1295,19 @@ When citing information from web search results, always include the source URL i
               const msg = err instanceof Error && err.message ? sliceSafe(err.message, 200) : "AI service temporarily unavailable.";
               try { controller.enqueue(sseEvent({ done: true, error: msg })); } catch { /* */ }
             } finally {
+              // conversation-memory: refresh in the tail, after `done` —
+              // Ask/Propose exchanges land in the thread too, so this
+              // function crosses the boundary as well. Non-fatal; no-ops
+              // cheaply when fewer than the threshold are uncovered.
+              await maybeRefreshConversationMemory({
+                admin: adminClient,
+                threadId: thread_id,
+                model: chatModel,
+                userId: authedUser.id,
+                overBudget: authedProfile.monthly_token_budget !== null &&
+                  authedProfile.tokens_used_this_period >= authedProfile.monthly_token_budget,
+                logTag: "[context-prompt]",
+              });
               controller.close();
             }
           },
@@ -1379,6 +1406,16 @@ When citing information from web search results, always include the source URL i
               controller.enqueue(sseEvent({ done: true, error: "Action may not have been saved." }));
             } catch { /* client gone */ }
           } finally {
+            // conversation-memory: refresh in the tail (see tool-use path).
+            await maybeRefreshConversationMemory({
+              admin: adminClient,
+              threadId: thread_id,
+              model: chatModel,
+              userId: authedUser.id,
+              overBudget: authedProfile.monthly_token_budget !== null &&
+                authedProfile.tokens_used_this_period >= authedProfile.monthly_token_budget,
+              logTag: "[context-prompt]",
+            });
             controller.close();
           }
         },

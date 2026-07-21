@@ -334,6 +334,9 @@ The chat history, the writing-summary log, and the editor-action record are
 writable only by Sylou's server-side functions: a modified client cannot
 fabricate these FLOW inputs by writing to the database directly.
 
+The conversation memory (5.6) is deliberately **not** an input: the analysis
+always reads the full, raw chat history itself, never the summarized form.
+
 The analysis returns, for each pillar, its reasoning, cited evidence, a score (or
 `null`), and a plain-language narrative, plus an overall summary and 3–5 specific
 user contributions. The report also records, for disclosure, the model used, the
@@ -352,6 +355,27 @@ while the ledger records just its decision — accepted, modified, rejected, or
 still pending — linked to the chat exchange by timestamp; **Ask** lives only
 in the chat, which is its complete record. Everything is on the record for
 the analysis, and nothing is logged twice.
+
+### 5.6 Conversation memory: how long chats stay coherent
+
+On every message, the assistant re-reads only the most recent stretch of the
+conversation (about 50 messages). So that long collaborations don't lose their
+earlier decisions, each thread past that size gets a rolling **conversation
+memory**: an AI-written summary — decisions and direction, structure and
+plans, established facts and names, open threads, and a short narrative of the
+work so far — regenerated (not appended) roughly every 50 messages, capped in
+size, and stored with the thread. Chat replies and Ask/Propose actions then
+work from this memory plus the newest messages verbatim; where the two differ,
+the assistant is instructed that the verbatim messages win. The summarization
+runs on your selected chat model and is billed like any other call.
+
+Three properties keep it honest. It is stored per thread in the project's
+database, readable only by the account owner. Like the other AI-maintained
+records, only Sylou's server-side functions can write it — a modified client
+cannot plant fabricated "memory" the assistant would then trust. And **FLOW
+never reads it**: like the writing-summary log (5.1), the memory is a
+continuity aid, not assessment evidence — the analysis reads the full raw
+chat history itself (5.4).
 
 ---
 

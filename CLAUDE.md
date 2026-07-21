@@ -45,7 +45,8 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   `editor-extensions/pagination.ts`, `sse-stream.ts`, `estimateTokens.ts`.
 - `supabase/functions/_shared/` — `_llm.ts` (provider router), `_repair.ts`,
   `_temperatures.ts`, `_thinking.ts`, `_models.ts` (model allowlist,
-  input caps, per-model context limits), `_provenance.ts`, `_similarity.ts`.
+  input caps, per-model context limits), `_provenance.ts`, `_similarity.ts`,
+  `_conversation_memory.ts` (rolling per-thread chat summary).
 - Edge functions (8): `chat`, `analysis`, `editor-action`, `context-prompt`,
   `extract-text`, `share-report`, `config`, `delete-account`.
 
@@ -82,7 +83,13 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   are **user-read-only** (write policies dropped, `20260709120000`): all
   writes go through the edge functions' service-role clients behind
   upfront ownership checks, so FLOW signals can't be self-forged via
-  direct PostgREST writes. Don't collapse these paths.
+  direct PostgREST writes. The per-thread **conversation memory**
+  (`chat_thread_summaries`, maintained by `_shared/_conversation_memory.ts`
+  in the chat/context-prompt stream tails) follows the same pattern —
+  user-read-only, service-role writes, injected into chat and
+  context-prompt prompts — and is **never** read by FLOW (same principle
+  as the withheld `writing_summary_log`: continuity aid, not assessment
+  evidence). Don't collapse these paths.
 - **RLS**: security-definer functions (`owns_project`, `owns_thread`)
   verify ownership through the profile → project hierarchy; project-child
   tables gate on `owns_project(project_id)`. There is **no role system

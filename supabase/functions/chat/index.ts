@@ -7,6 +7,11 @@ import {
   CHAT_THINKING, CHAT_EFFORT, CHAT_MISTRAL_EFFORT,
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
+import {
+  buildMemoryInjection,
+  fetchConversationMemory,
+  maybeRefreshConversationMemory,
+} from "../_shared/_conversation_memory.ts";
 
 // Budget helper. Duplicated across the four LLM edge functions today;
 // consolidating it into _shared/ is a tracked refactor (functions can and
@@ -461,9 +466,22 @@ When citing information from web search results, always include the source URL i
       .limit(50);
     const history = (recentHistory ?? []).reverse();
 
+    // conversation-memory: inject the rolling thread summary (if one
+    // exists) ahead of the verbatim window. User zone, deliberately never
+    // the system prompt — it is condensed USER conversation and must stay
+    // exactly as privileged as the raw messages it summarizes. Read via the
+    // user-context client so RLS scopes it to the caller's own threads.
+    const conversationMemory = await fetchConversationMemory(supabase, threadId);
+
     // --- Build messages array ---
     const llmMessages: LLMMessage[] = [
       { role: "system", content: systemPrompt },
+      ...(conversationMemory
+        ? [{
+            role: "user" as const,
+            content: buildMemoryInjection(conversationMemory.summary_text),
+          }]
+        : []),
       ...(history ?? []).map((m: { role: string; content: string }): LLMMessage => ({
         role: m.role as LLMMessage["role"],
         content: m.content,
@@ -639,6 +657,19 @@ When citing information from web search results, always include the source URL i
                     })
                   );
                 }
+
+                // conversation-memory: refresh in the tail, after `done` is
+                // sent — the user never waits on it, and the stream-first
+                // pattern keeps the isolate alive until controller.close().
+                // Non-fatal by contract (the helper never throws).
+                await maybeRefreshConversationMemory({
+                  admin: adminSupabase,
+                  threadId,
+                  model: chatModel,
+                  userId: user.id,
+                  overBudget: profile.monthly_token_budget !== null && newTotal >= profile.monthly_token_budget,
+                  logTag: "[chat]",
+                });
               } catch (err) {
                 console.error("[stream] error in no-tool path:", err);
                 try {
@@ -913,6 +944,17 @@ When citing information from web search results, always include the source URL i
                   );
                 }
               } catch { /* client gone */ }
+
+              // conversation-memory: refresh in the tail, after `done` is
+              // sent (see the no-tool path for the full rationale).
+              await maybeRefreshConversationMemory({
+                admin: adminSupabase,
+                threadId,
+                model: chatModel,
+                userId: user.id,
+                overBudget: profile.monthly_token_budget !== null && newTotal >= profile.monthly_token_budget,
+                logTag: "[chat]",
+              });
             } catch (err) {
               console.error("[stream] error in tool-use path:", err);
               try {

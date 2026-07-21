@@ -175,6 +175,47 @@ export type Database = {
           },
         ]
       }
+      chat_thread_summaries: {
+        Row: {
+          covered_message_count: number
+          covers_through: string
+          created_at: string
+          id: string
+          model_used: string | null
+          summary_text: string
+          thread_id: string
+          updated_at: string
+        }
+        Insert: {
+          covered_message_count?: number
+          covers_through: string
+          created_at?: string
+          id?: string
+          model_used?: string | null
+          summary_text: string
+          thread_id: string
+          updated_at?: string
+        }
+        Update: {
+          covered_message_count?: number
+          covers_through?: string
+          created_at?: string
+          id?: string
+          model_used?: string | null
+          summary_text?: string
+          thread_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_thread_summaries_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: true
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_threads: {
         Row: {
           created_at: string
