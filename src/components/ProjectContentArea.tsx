@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, lazy, Suspense } from "react";
 import sylouLogo from "@/assets/sylou-logo.png";
 import type { ChatMessage } from "@/hooks/useChatMessages";
 import { Lightbulb, Loader2, Eye, RefreshCw, StickyNote, FileText, Globe, Users, Clock, PenTool } from "lucide-react";
@@ -8,7 +8,13 @@ import { Button } from "@/components/ui/button";
 import { WritingEditor } from "@/components/WritingEditor";
 import { ChatPanel } from "@/components/ChatPanel";
 import { ProjectActivityBar } from "@/components/ProjectActivityBar";
-import { FlowReportView } from "@/components/FlowReportView";
+// Lazy panels (P4-3): mounted only when opened, so their code — the
+// flow-report subtree (incl. qrcode + painting references) and the
+// creative tools — stays out of the initial authoring chunk. Loading is
+// one-time; once mounted they follow the usual keep-mounted conventions.
+const FlowReportView = lazy(() =>
+  import("@/components/FlowReportView").then((m) => ({ default: m.FlowReportView })),
+);
 import { FlowHighlightedText } from "@/components/FlowHighlightedText";
 import { ProvenanceErrorBoundary } from "@/components/ProvenanceErrorBoundary";
 import { FlowConfirmDialog } from "@/components/FlowConfirmDialog";
@@ -22,10 +28,18 @@ import { ImportedDocumentsPanel } from "@/components/ImportedDocumentsPanel";
 import { useFlowAnalysis } from "@/hooks/useFlowAnalysis";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { useCreativeData } from "@/hooks/useCreativeData";
-import { WorldBuildingNotes } from "@/components/creative-tools/WorldBuildingNotes";
 import type { WorldBuildingData } from "@/components/creative-tools/WorldBuildingNotes";
-import { CharactersDiagram, type CharactersData } from "@/components/creative-tools/CharactersDiagram";
-import { TimelineView, type TimelineData } from "@/components/creative-tools/TimelineView";
+import type { CharactersData } from "@/components/creative-tools/CharactersDiagram";
+import type { TimelineData } from "@/components/creative-tools/TimelineView";
+const WorldBuildingNotes = lazy(() =>
+  import("@/components/creative-tools/WorldBuildingNotes").then((m) => ({ default: m.WorldBuildingNotes })),
+);
+const CharactersDiagram = lazy(() =>
+  import("@/components/creative-tools/CharactersDiagram").then((m) => ({ default: m.CharactersDiagram })),
+);
+const TimelineView = lazy(() =>
+  import("@/components/creative-tools/TimelineView").then((m) => ({ default: m.TimelineView })),
+);
 import { CreativeAIContextProvider } from "@/contexts/CreativeAIContext";
 import type { Project } from "@/hooks/useProjects";
 import type { ImperativePanelHandle } from "react-resizable-panels";
@@ -97,6 +111,12 @@ function WelcomeScreen() {
 
 const DEFAULT_EDITOR_SIZE = 70;
 const DEFAULT_CHAT_SIZE = 30;
+
+const LazyPanelFallback = () => (
+  <div className="flex-1 flex items-center justify-center py-8">
+    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+  </div>
+);
 
 export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }: Props) {
   const [chatExpanded, setChatExpanded] = useState(false);
@@ -309,27 +329,31 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
           </div>
         ) : flowLoading ? (
           <div className="flex-1 flex flex-col bg-background h-full min-h-0">
-            <FlowReportView
-              report={flowReport!}
-              projectName={project.name}
-              loading={true}
-              onBack={handleCloseFlowReport}
-              onSaveFeedback={() => {}}
-              onSaveAssessment={() => {}}
-              showPreAnalysis={false}
-            />
+            <Suspense fallback={<LazyPanelFallback />}>
+              <FlowReportView
+                report={flowReport!}
+                projectName={project.name}
+                loading={true}
+                onBack={handleCloseFlowReport}
+                onSaveFeedback={() => {}}
+                onSaveAssessment={() => {}}
+                showPreAnalysis={false}
+              />
+            </Suspense>
           </div>
         ) : flowReport ? (
           <>
-            <FlowReportView
-              report={flowReport}
-              projectName={project.name}
-              loading={false}
-              onBack={handleCloseFlowReport}
-              onSaveFeedback={saveFeedback}
-              onSaveAssessment={saveUserAssessment}
-              showPreAnalysis={isCurrentRunFirst}
-            />
+            <Suspense fallback={<LazyPanelFallback />}>
+              <FlowReportView
+                report={flowReport}
+                projectName={project.name}
+                loading={false}
+                onBack={handleCloseFlowReport}
+                onSaveFeedback={saveFeedback}
+                onSaveAssessment={saveUserAssessment}
+                showPreAnalysis={isCurrentRunFirst}
+              />
+            </Suspense>
             <FlowTokenWarningDialog
               open={showTokenWarning}
               estimation={preCheck}
@@ -539,6 +563,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
                 onChatRefresh={() => setChatRefreshTrigger((n) => n + 1)}
                 onAskComplete={(msgs) => setPendingChatMessages((prev) => [...prev, ...msgs])}
               >
+                <Suspense fallback={<LazyPanelFallback />}>
                 {/* World-Building tab — stays mounted, hidden via CSS */}
                 <div style={{ display: activeCreativeTab === "worldbuilding" ? undefined : "none" }} className="flex-1 flex flex-col min-h-0">
                   <WorldBuildingNotes
@@ -569,6 +594,7 @@ export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }:
                     characters={characters.data.characters ?? []}
                   />
                 </div>
+                </Suspense>
               </CreativeAIContextProvider>
             )}
           </ResizablePanel>
