@@ -41,10 +41,10 @@ The most analytically demanding function. All models targeted for determinism (t
 
 | Model              | Temperature                  | Thinking / Effort                                      | max_tokens (output) | Notes                                                                                           |
 | ------------------ | ---------------------------- | ------------------------------------------------------ | ------------------- | ----------------------------------------------------------------------------------------------- |
-| Claude Sonnet 4.6  | 0.0                          | thinking: off, effort: high (matches provider default) | 8192                | Recommended Claude model for FLOW; quality and repeatability.                                          |
+| Claude Sonnet 4.6  | 0.0                          | thinking: off, effort: high (matches provider default) | 8192                | *Recommended* model for FLOW; quality and repeatability.                                          |
 | Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high                       | 16000               | Adaptive thinking; consumes more tokens, not recommended except for specific scenarios.         |
 | Mistral Large 3    | 0.0                          | n/a (no reasoning support)                             | 8192                | *Not* recommended, strong inherent bias towards the user.                                       |
-| Mistral Medium 3.5 | 0.0                          | reasoning_effort: off                                  | 8192                | Recommended Mistral model for FLOW; quality and repeatability. |
+| Mistral Medium 3.5 | 0.0                          | reasoning_effort: off                                  | 8192                | *Not* recommended, or with extreme care. Good repeatability, but strong Write pillar and provenance data lead to user-bias on other pillars. |
 | Mistral Small 4    | 0.0                          | reasoning_effort: high                                 | 16000               | *Not* recommended, bias towards the user, poor repeatability.  |
 | DeepSeek V4 Flash  | 0.0                          | n/a                                                    | 8192                | *Not* recommended, bias towards the user, poor repeatability.  |
 
