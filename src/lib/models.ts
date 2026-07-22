@@ -41,7 +41,10 @@ export const MODELS: ModelInfo[] = [
     provider: "mistral",
     pricing: { input: 1.50, output: 7.50 },
     contextLimit: 256_000,
-    note: "Recommended for FLOW analysis",
+    // FLOW recommendation removed 2026-07: field testing showed user-leaning
+    // bias when the Write pillar is high, and weak pillar segregation (one
+    // pillar colouring the others). See docs/model-configuration.md, "FLOW
+    // (analysis)". Fine for chat.
   },
   {
     id: "mistral-large-2512",
