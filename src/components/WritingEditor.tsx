@@ -20,7 +20,6 @@ import { Loader2, Activity } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
-import { exportWritingAsDocx } from "@/lib/export-docx";
 import { exportProjectAsJson } from "@/lib/export-json";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 import { buildEditorMarkdownParser, parseMarkdownToFragment } from "@/lib/markdown-to-pm";
@@ -581,6 +580,9 @@ function ExportEnabledToolbar({
 
   const handleExportDOCX = useCallback(async () => {
     try {
+      // Click-time import (P4-3): the docx library is heavy and only needed
+      // here — it stays out of the initial bundle and loads on first export.
+      const { exportWritingAsDocx } = await import("@/lib/export-docx");
       const html = editor.getHTML();
       await exportWritingAsDocx(html, projectName);
       toast.success("DOCX exported successfully");
