@@ -1,19 +1,24 @@
-import flowArchitect from "@/assets/flow-profiles/flow-architect.jpg";
-import floStrategist from "@/assets/flow-profiles/flo-strategist.jpeg";
-import flwEssayist from "@/assets/flow-profiles/fl-w-essayist.jpg";
-import flVisionary from "@/assets/flow-profiles/fl-visionary.jpg";
-import fowEditor from "@/assets/flow-profiles/f-ow-editor.jpg";
-import foAnalyst from "@/assets/flow-profiles/f-o-analyst.jpg";
-import fwResearcherWriter from "@/assets/flow-profiles/f-w-researcher-writer.jpg";
-import fInvestigator from "@/assets/flow-profiles/f-investigator.jpg";
-import lowAuteur from "@/assets/flow-profiles/low-auteur.jpg";
-import loThinker from "@/assets/flow-profiles/lo-thinker.png";
-import lwVoice from "@/assets/flow-profiles/l-w-voice.jpg";
+// All paintings ship as display-resolution WebP (≤720px tall — 2× the app's
+// 360px display cap), converted from the museum-scan originals (P4-3
+// follow-up; ~6.3 MB → ~1.3 MB). The source links below still lead to full
+// resolution. lo-thinker is encoded at q95 (maintainer's eye caught q80 on
+// its small, never-downsized source), the rest at q80.
+import flowArchitect from "@/assets/flow-profiles/flow-architect.webp";
+import floStrategist from "@/assets/flow-profiles/flo-strategist.webp";
+import flwEssayist from "@/assets/flow-profiles/fl-w-essayist.webp";
+import flVisionary from "@/assets/flow-profiles/fl-visionary.webp";
+import fowEditor from "@/assets/flow-profiles/f-ow-editor.webp";
+import foAnalyst from "@/assets/flow-profiles/f-o-analyst.webp";
+import fwResearcherWriter from "@/assets/flow-profiles/f-w-researcher-writer.webp";
+import fInvestigator from "@/assets/flow-profiles/f-investigator.webp";
+import lowAuteur from "@/assets/flow-profiles/low-auteur.webp";
+import loThinker from "@/assets/flow-profiles/lo-thinker.webp";
+import lwVoice from "@/assets/flow-profiles/l-w-voice.webp";
 import lSpark from "@/assets/flow-profiles/l-spark.webp";
-import owCraftsperson from "@/assets/flow-profiles/ow-craftsperson.jpg";
-import oOrganizer from "@/assets/flow-profiles/o-organizer.png";
-import wScribe from "@/assets/flow-profiles/w-scribe.jpg";
-import conductor from "@/assets/flow-profiles/conductor.jpg";
+import owCraftsperson from "@/assets/flow-profiles/ow-craftsperson.webp";
+import oOrganizer from "@/assets/flow-profiles/o-organizer.webp";
+import wScribe from "@/assets/flow-profiles/w-scribe.webp";
+import conductor from "@/assets/flow-profiles/conductor.webp";
 
 export type ProfilePainting = {
   image: string;
