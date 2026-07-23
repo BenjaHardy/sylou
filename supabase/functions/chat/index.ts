@@ -29,35 +29,9 @@ function isOverBudget(profile: {
 
 
 // --- CORS allow-list (parsed once at module load) ---
-const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGIN") ?? "")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+import { makeCorsHeadersFor } from "../_shared/_cors.ts";
 
-if (ALLOWED_ORIGINS.length === 0) {
-  console.warn(
-    "[cors] ALLOWED_ORIGIN is not set. No cross-origin browser requests " +
-    "will be accepted. Set ALLOWED_ORIGIN to a comma-separated list of " +
-    "origins this instance is served from (e.g. https://example.com).",
-  );
-}
-
-const BASE_CORS_HEADERS: Record<string, string> = {
-  "Vary": "Origin",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
-
-function corsHeadersFor(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin");
-  if (origin && ALLOWED_ORIGINS.includes(origin)) {
-    return { ...BASE_CORS_HEADERS, "Access-Control-Allow-Origin": origin };
-  }
-  // Non-matching or missing Origin: omit Access-Control-Allow-Origin entirely.
-  // Browsers will block the response; non-browser callers ignore CORS.
-  return { ...BASE_CORS_HEADERS };
-}
+const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
 
 /**
  * Clean LLM content that may be wrapped in Mistral's structured JSON format.
