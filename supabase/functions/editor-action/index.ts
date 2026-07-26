@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, extractProviderError } from "../_shared/_llm.ts";
+import { makeSSEHelpers, readProviderStream } from "../_shared/_sse.ts";
 import { EDITOR_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
@@ -15,35 +16,6 @@ import { isOverBudget, getBudgetedProfile } from "../_shared/_billing.ts";
 import { makeCorsHeadersFor } from "../_shared/_cors.ts";
 
 const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
-
-/**
- * Extract the text delta from a streaming chunk, model-agnostic.
- * Canonical version: supabase/functions/chat/index.ts
- */
-function extractDeltaText(
-  parsed: Record<string, unknown>,
-  _provider: string
-): string | null {
-  const choices = parsed.choices as
-    | Array<{ delta?: { content?: unknown } }>
-    | undefined;
-  const content = choices?.[0]?.delta?.content;
-  if (content) {
-    if (typeof content === "string") return content;
-    if (Array.isArray(content)) {
-      return content
-        .filter((b: any) => b?.type === "text")
-        .map((b: any) => b.text ?? "")
-        .join("");
-    }
-    return String(content);
-  }
-  if (parsed.type === "content_block_delta") {
-    const delta = parsed.delta as { text?: string } | undefined;
-    if (delta?.text) return delta.text;
-  }
-  return null;
-}
 
 const ACTION_PROMPTS: Record<string, string> = {
   fix_grammar:
@@ -212,6 +184,8 @@ Deno.serve(async (req) => {
     if (streamRequested) {
       console.log("[stream:editor-action] entering streaming path");
 
+      const { sseEvent, createSSEResponse } = makeSSEHelpers(corsHeaders);
+
       const llmRes = await callLLM({
         model: chatModel,
         messages: llmMessages as any,
@@ -245,47 +219,19 @@ Deno.serve(async (req) => {
         async start(controller) {
           let fullResponse = "";
           let clientDisconnected = false;
-          const encoder = new TextEncoder();
-          const decoder = new TextDecoder();
 
           try {
-            const reader = llmRes.body!.getReader();
-            let sseBuffer = "";
-
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-
-              sseBuffer += decoder.decode(value, { stream: true });
-              const lines = sseBuffer.split("\n");
-              sseBuffer = lines.pop() ?? "";
-
-              for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || !trimmed.startsWith("data:")) continue;
-                const payload = trimmed.slice(5).trim();
-                if (payload === "[DONE]") continue;
-
-                try {
-                  const parsed = JSON.parse(payload);
-                  const delta = extractDeltaText(parsed, provider);
-                  if (delta) {
-                    fullResponse += delta;
-                    if (!clientDisconnected) {
-                      try {
-                        controller.enqueue(
-                          encoder.encode(`data: ${JSON.stringify({ token: delta })}\n\n`)
-                        );
-                      } catch {
-                        clientDisconnected = true;
-                      }
-                    }
+            fullResponse = await readProviderStream(llmRes, provider, {
+              onToken: (delta) => {
+                if (!clientDisconnected) {
+                  try {
+                    controller.enqueue(sseEvent({ token: delta }));
+                  } catch {
+                    clientDisconnected = true;
                   }
-                } catch {
-                  // skip malformed chunk
                 }
-              }
-            }
+              },
+            });
 
             console.log("[stream:editor-action] LLM stream complete, persisting");
 
@@ -346,20 +292,16 @@ Deno.serve(async (req) => {
                     // persistence error does — never report success over a
                     // missing action row.
                     controller.enqueue(
-                      encoder.encode(
-                        `data: ${JSON.stringify({ done: true, error: "Action may not have been saved." })}\n\n`
-                      )
+                      sseEvent({ done: true, error: "Action may not have been saved." })
                     );
                   } else {
                     controller.enqueue(
-                      encoder.encode(
-                        `data: ${JSON.stringify({
-                          done: true,
-                          result: proposedText,
-                          action_id: actionRow?.id ?? null,
-                          budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
-                        })}\n\n`
-                      )
+                      sseEvent({
+                        done: true,
+                        result: proposedText,
+                        action_id: actionRow?.id ?? null,
+                        budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
+                      })
                     );
                   }
                 } catch {
@@ -373,9 +315,7 @@ Deno.serve(async (req) => {
               if (!clientDisconnected) {
                 try {
                   controller.enqueue(
-                    encoder.encode(
-                      `data: ${JSON.stringify({ done: true, error: "Action may not have been saved." })}\n\n`
-                    )
+                    sseEvent({ done: true, error: "Action may not have been saved." })
                   );
                 } catch {
                   // client gone
@@ -387,9 +327,7 @@ Deno.serve(async (req) => {
             if (!clientDisconnected) {
               try {
                 controller.enqueue(
-                  encoder.encode(
-                    `data: ${JSON.stringify({ done: true, error: "AI service temporarily unavailable." })}\n\n`
-                  )
+                  sseEvent({ done: true, error: "AI service temporarily unavailable." })
                 );
               } catch {
                 // client gone
@@ -403,15 +341,7 @@ Deno.serve(async (req) => {
         },
       });
 
-      return new Response(readable, {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          "X-Accel-Buffering": "no",
-          Connection: "keep-alive",
-        },
-      });
+      return createSSEResponse(readable);
     }
 
     // =========================================================
