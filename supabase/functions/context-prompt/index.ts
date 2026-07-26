@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, normaliseResponse, extractProviderError } from "../_shared/_llm.ts";
+import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent } from "../_shared/_llm.ts";
+import { searchWeb } from "../_shared/_tools.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
@@ -42,30 +43,6 @@ import { makeCorsHeadersFor } from "../_shared/_cors.ts";
 const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * Clean LLM content that may be wrapped in Mistral's structured JSON format.
- */
-function cleanLLMContent(content: unknown): string {
-  if (!content) return "";
-  // Already an array (Mistral structured format passed as object, not string)
-  if (Array.isArray(content)) {
-    return content
-      .filter(b => b?.type === "text")
-      .map(b => b.text ?? b.content ?? "")
-      .join("");
-  }
-  if (typeof content !== "string") return String(content);
-  const trimmed = content.trim();
-  if (!trimmed.startsWith("[")) return content;
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(b => b?.type === "text")) {
-      return parsed.map(b => b.text ?? b.content ?? "").join("");
-    }
-  } catch { /* not JSON */ }
-  return content;
-}
 
 /**
  * Extract the text delta from a streaming chunk, model-agnostic.
@@ -142,46 +119,6 @@ function buildWebSearchTool() {
 // answered or the follow-up provider request 400s for the unpaired ids
 // (P3-7e).
 const TOOL_CALL_LIMIT = 5;
-
-async function searchWeb(query: string): Promise<{ title: string; url: string; snippet: string }[]> {
-  const apiKey = Deno.env.get("BRAVE_SEARCH_API_KEY");
-  if (!apiKey) {
-    console.error("[web_search] BRAVE_SEARCH_API_KEY not configured");
-    return [];
-  }
-
-  try {
-    const res = await fetch(
-      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
-      {
-        headers: {
-          "Accept": "application/json",
-          "Accept-Encoding": "gzip",
-          "X-Subscription-Token": apiKey,
-        },
-        // A hung Brave call must not stall the whole turn — the catch
-        // below already degrades to "no results" (P3-7e).
-        signal: AbortSignal.timeout(10_000),
-      }
-    );
-
-    if (!res.ok) {
-      console.error("[web_search] Brave API error:", res.status, await res.text());
-      return [];
-    }
-
-    const data = await res.json();
-    const results = (data.web?.results ?? []).slice(0, 5);
-    return results.map((r: { title?: string; url?: string; description?: string }) => ({
-      title: r.title ?? "",
-      url: r.url ?? "",
-      snippet: r.description ?? "",
-    }));
-  } catch (err) {
-    console.error("[web_search] error:", err);
-    return [];
-  }
-}
 
 function formatWebSearchResults(query: string, results: { title: string; url: string; snippet: string }[]): string {
   if (results.length === 0) {
