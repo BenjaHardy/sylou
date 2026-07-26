@@ -1,4 +1,4 @@
-// Shared tool helpers for the LLM edge functions (P4-1, seams #2 + #2b).
+// Shared tool helpers for the LLM edge functions (P4-1, seams #2 + #2b + #2c).
 //
 // searchWeb existed as byte-identical copies in chat/ and context-prompt/;
 // moved verbatim (seam 2). The tool DEFINITIONS below followed in seam 2b:
@@ -52,6 +52,19 @@ export async function searchWeb(query: string): Promise<{ title: string; url: st
     console.error("[web_search] error:", err);
     return [];
   }
+}
+
+/** Format searchWeb results into the tool-result string handed back to
+ *  the model. Moved verbatim from md5-identical copies in chat/ and
+ *  context-prompt/ (seam #2c). */
+export function formatWebSearchResults(query: string, results: { title: string; url: string; snippet: string }[]): string {
+  if (results.length === 0) {
+    return `Web search results for: "${query}"\n\nNo results found.`;
+  }
+  const formatted = results.map((r, i) =>
+    `${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.snippet}`
+  ).join("\n\n");
+  return `Web search results for: "${query}"\n\n${formatted}`;
 }
 
 /** Tool definition: fetch an imported document's full text by id. */
