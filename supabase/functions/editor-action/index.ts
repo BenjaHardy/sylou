@@ -8,19 +8,7 @@ import {
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 
-// Budget helper. Duplicated across the four LLM edge functions today;
-// consolidating it into _shared/ is a tracked refactor (functions can and
-// do import from ../_shared/, as the imports above show).
-// A NULL monthly_token_budget means "no limit" (operator hasn't set one).
-function isOverBudget(profile: {
-  monthly_token_budget: number | null;
-  tokens_used_this_period: number;
-}): boolean {
-  return (
-    profile.monthly_token_budget !== null &&
-    profile.tokens_used_this_period >= profile.monthly_token_budget
-  );
-}
+import { isOverBudget, getBudgetedProfile } from "../_shared/_billing.ts";
 
 
 // --- CORS allow-list (parsed once at module load) ---
@@ -103,13 +91,7 @@ Deno.serve(async (req) => {
     }
 
     // --- Token budget + preferred model ---
-    // Best-effort monthly budget-window reset (lazy; no-op if already current).
-    await supabase.rpc("reset_tokens_if_stale", { user_uuid: user.id });
-    const { data: profile, error: profileErr } = await supabase
-      .from("profiles")
-      .select("tokens_used_this_period, monthly_token_budget, preferred_chat_model")
-      .eq("id", user.id)
-      .single();
+    const { profile, profileErr } = await getBudgetedProfile(supabase, user.id);
 
     if (profileErr || !profile) {
       return jsonResponse({ error: "Profile not found" }, 404);
