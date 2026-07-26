@@ -12,7 +12,7 @@ As it's becoming ever more difficult to identify whether AI was used in a text a
 
 Sylou's whole point is to make human-AI collaboration visible for users willing to show this transparency. It's designed for writers, students, educators, researchers, and anyone who cares about AI-use transparency and is looking to proactively demonstrate how they have used AI, in a clear, visual and insightful way.
 
-Additionally, it can further be used in an educational context as a means to promote one's own AI-use awareness.
+Additionally, it can further be used in an educational context as a means to promote one's own AI-use awareness, and help serve as a framework for AI-use.
 
 ---
 
