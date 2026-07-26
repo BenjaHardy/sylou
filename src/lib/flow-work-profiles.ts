@@ -137,7 +137,7 @@ export const FLOW_PROFILES: FlowProfile[] = [
     name: "The Conductor",
     tagline: "You directed the orchestra without playing an instrument.",
     description:
-      "The AI contributed heavily across all pillars, and your role was more curatorial: selecting, approving, and steering. That's a legitimate collaboration style, and in many contexts it's exactly the right approach. The baton matters.",
+      "The AI contributed heavily across all pillars, and your role was more curatorial: selecting, approving, and steering. Depending on context, it can be a legitimate collaboration style. The baton matters (sometimes).",
     pillarHighlights: { find: false, lead: false, organize: false, write: false },
   },
 ];
