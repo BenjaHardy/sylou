@@ -562,6 +562,32 @@ export function extractDeltaText(parsed: unknown, _provider: ProviderId): string
   return null;
 }
 
+/**
+ * Clean LLM content that may be wrapped in Mistral's structured JSON format.
+ * (P4-1 seam #2 — moved verbatim from byte-identical copies in chat/ and
+ * context-prompt/; lives here beside its content-parsing siblings.)
+ */
+export function cleanLLMContent(content: unknown): string {
+  if (!content) return "";
+  // Already an array (Mistral structured format passed as object, not string)
+  if (Array.isArray(content)) {
+    return content
+      .filter(b => b?.type === "text")
+      .map(b => b.text ?? b.content ?? "")
+      .join("");
+  }
+  if (typeof content !== "string") return String(content);
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("[")) return content;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(b => b?.type === "text")) {
+      return parsed.map(b => b.text ?? b.content ?? "").join("");
+    }
+  } catch { /* not JSON */ }
+  return content;
+}
+
 // Unified call: returns raw fetch Response so callers handle stream vs non-stream uniformly.
 export async function callLLM(opts: {
   model: string;
