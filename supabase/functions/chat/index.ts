@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
-import { searchWeb, buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
+import { searchWeb, buildDocumentTool, buildWebSearchTool, formatWebSearchResults } from "../_shared/_tools.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
@@ -48,16 +48,6 @@ function extractDeltaText(
     if (delta?.text) return delta.text;
   }
   return null;
-}
-
-function formatWebSearchResults(query: string, results: { title: string; url: string; snippet: string }[]): string {
-  if (results.length === 0) {
-    return `Web search results for: "${query}"\n\nNo results found.`;
-  }
-  const formatted = results.map((r, i) =>
-    `${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.snippet}`
-  ).join("\n\n");
-  return `Web search results for: "${query}"\n\n${formatted}`;
 }
 
 Deno.serve(async (req) => {

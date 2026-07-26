@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, type LLMTool } from "../_shared/_llm.ts";
-import { searchWeb, buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
+import { searchWeb, buildDocumentTool, buildWebSearchTool, formatWebSearchResults } from "../_shared/_tools.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
@@ -65,16 +65,6 @@ function extractDeltaText(
 // answered or the follow-up provider request 400s for the unpaired ids
 // (P3-7e).
 const TOOL_CALL_LIMIT = 5;
-
-function formatWebSearchResults(query: string, results: { title: string; url: string; snippet: string }[]): string {
-  if (results.length === 0) {
-    return `Web search results for: "${query}"\n\nNo results found.`;
-  }
-  const formatted = results.map((r, i) =>
-    `${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.snippet}`
-  ).join("\n\n");
-  return `Web search results for: "${query}"\n\n${formatted}`;
-}
 
 async function callChatModel(
   model: string,
