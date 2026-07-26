@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
+import { makeSSEHelpers, readProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { searchWeb, buildDocumentTool, buildWebSearchTool, formatWebSearchResults } from "../_shared/_tools.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
@@ -21,34 +22,6 @@ import { isOverBudget, getBudgetedProfile } from "../_shared/_billing.ts";
 import { makeCorsHeadersFor } from "../_shared/_cors.ts";
 
 const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
-
-/**
- * Extract the text delta from a streaming chunk, model-agnostic.
- */
-function extractDeltaText(
-  parsed: Record<string, unknown>,
-  _provider: string
-): string | null {
-  const choices = parsed.choices as
-    | Array<{ delta?: { content?: unknown } }>
-    | undefined;
-  const content = choices?.[0]?.delta?.content;
-  if (content) {
-    if (typeof content === "string") return content;
-    if (Array.isArray(content)) {
-      return content
-        .filter((b: any) => b?.type === "text")
-        .map((b: any) => b.text ?? "")
-        .join("");
-    }
-    return String(content);
-  }
-  if (parsed.type === "content_block_delta") {
-    const delta = parsed.delta as { text?: string } | undefined;
-    if (delta?.text) return delta.text;
-  }
-  return null;
-}
 
 Deno.serve(async (req) => {
   const corsHeaders = corsHeadersFor(req);
@@ -355,23 +328,35 @@ When citing information from web search results, always include the source URL i
     if (streamRequested) {
       console.log("[stream] entering streaming path for thread", threadId, "hasTools:", hasTools);
 
-      const encoder = new TextEncoder();
+      const { sseEvent, createSSEResponse } = makeSSEHelpers(corsHeaders);
 
-      function createSSEResponse(readable: ReadableStream) {
-        return new Response(readable, {
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            Connection: "keep-alive",
-          },
-        });
-      }
-
-      function sseEvent(data: Record<string, unknown>): Uint8Array {
-        return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
-      }
+      // Fire-and-forget prompt-count increment: runs once per request, on
+      // the first [DONE] marker from the provider stream (both reader
+      // loops pass this as onDoneMarker). The tools-unused replay path
+      // counts differently — an awaited update in its tail.
+      let promptCounted = false;
+      const countPromptOnce = () => {
+        if (promptCounted) return;
+        promptCounted = true;
+        const promptColumn = tutorMode ? "chat_prompt_count_tutor" : "chat_prompt_count_normal";
+        adminSupabase
+          .from("project_stats")
+          .select(promptColumn)
+          .eq("project_id", thread.project_id)
+          .single()
+          .then(({ data: cs }) => {
+            if (cs) {
+              const cnt = (cs as Record<string, number>)[promptColumn] || 0;
+              adminSupabase
+                .from("project_stats")
+                .update({ [promptColumn]: cnt + 1 })
+                .eq("project_id", thread.project_id)
+                .then(() =>
+                  console.log("[stream] prompt count incremented for", thread.project_id)
+                );
+            }
+          });
+      };
 
       // ---- TWO-PASS FLOW when tools exist ----
       if (hasTools) {
@@ -419,11 +404,7 @@ When citing information from web search results, always include the source URL i
           const readable = new ReadableStream({
             async start(controller) {
               try {
-                const chunkSize = 20;
-                for (let i = 0; i < responseText.length; i += chunkSize) {
-                  const chunk = responseText.slice(i, i + chunkSize);
-                  controller.enqueue(sseEvent({ token: chunk }));
-                }
+                replayTokenBurst(responseText, (chunk) => controller.enqueue(sseEvent({ token: chunk })));
 
                 const userMsgRow = {
                   thread_id: threadId,
@@ -665,60 +646,13 @@ When citing information from web search results, always include the source URL i
                 return;
               }
 
-              // Read Call #2 stream manually and forward tokens
-              let fullResponse = "";
-              let promptCounted = false;
-              const decoder = new TextDecoder();
-              let sseBuffer = "";
-              const reader = call2Res.body!.getReader();
-
-              while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                sseBuffer += decoder.decode(value, { stream: true });
-                const lines = sseBuffer.split("\n");
-                sseBuffer = lines.pop() ?? "";
-
-                for (const line of lines) {
-                  const trimmed = line.trim();
-                  if (!trimmed || !trimmed.startsWith("data:")) continue;
-                  const payload = trimmed.slice(5).trim();
-                  if (payload === "[DONE]") {
-                    if (!promptCounted) {
-                      promptCounted = true;
-                      const promptColumn = tutorMode ? "chat_prompt_count_tutor" : "chat_prompt_count_normal";
-                      adminSupabase
-                        .from("project_stats")
-                        .select(promptColumn)
-                        .eq("project_id", thread.project_id)
-                        .single()
-                        .then(({ data: cs }) => {
-                          if (cs) {
-                            const cnt = (cs as Record<string, number>)[promptColumn] || 0;
-                            adminSupabase
-                              .from("project_stats")
-                              .update({ [promptColumn]: cnt + 1 })
-                              .eq("project_id", thread.project_id)
-                              .then(() =>
-                                console.log("[stream] prompt count incremented for", thread.project_id)
-                              );
-                          }
-                        });
-                    }
-                    continue;
-                  }
-
-                  try {
-                    const parsed = JSON.parse(payload);
-                    const delta = extractDeltaText(parsed, providerFor(chatModel));
-                    if (delta) {
-                      fullResponse += delta;
-                      try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
-                    }
-                  } catch { /* skip malformed */ }
-                }
-              }
+              // Read Call #2 stream and forward tokens
+              let fullResponse = await readProviderStream(call2Res, providerFor(chatModel), {
+                onToken: (delta) => {
+                  try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
+                },
+                onDoneMarker: countPromptOnce,
+              });
 
               // Clean and persist
               fullResponse = cleanLLMContent(fullResponse);
@@ -839,66 +773,16 @@ When citing information from web search results, always include the source URL i
       const readable = new ReadableStream({
         async start(controller) {
           let fullResponse = "";
-          let promptCounted = false;
-          const decoder = new TextDecoder();
-          let sseBuffer = "";
 
           try {
-            const reader = llmRes.body!.getReader();
-
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-
-              sseBuffer += decoder.decode(value, { stream: true });
-              const lines = sseBuffer.split("\n");
-              sseBuffer = lines.pop() ?? "";
-
-              for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || !trimmed.startsWith("data:")) continue;
-                const payload = trimmed.slice(5).trim();
-                if (payload === "[DONE]") {
-                  if (!promptCounted) {
-                    promptCounted = true;
-                    const promptColumn = tutorMode
-                      ? "chat_prompt_count_tutor"
-                      : "chat_prompt_count_normal";
-                    adminSupabase
-                      .from("project_stats")
-                      .select(promptColumn)
-                      .eq("project_id", thread.project_id)
-                      .single()
-                      .then(({ data: cs }) => {
-                        if (cs) {
-                          const cnt = (cs as Record<string, number>)[promptColumn] || 0;
-                          adminSupabase
-                            .from("project_stats")
-                            .update({ [promptColumn]: cnt + 1 })
-                            .eq("project_id", thread.project_id)
-                            .then(() =>
-                              console.log("[stream] prompt count incremented for", thread.project_id)
-                            );
-                        }
-                      });
-                  }
-                  continue;
-                }
-
+            fullResponse = await readProviderStream(llmRes, providerFor(chatModel), {
+              onToken: (delta) => {
                 try {
-                  const parsed = JSON.parse(payload);
-                  const delta = extractDeltaText(parsed, providerFor(chatModel));
-                  if (delta) {
-                    fullResponse += delta;
-                    try {
-                      controller.enqueue(sseEvent({ token: delta }));
-                    } catch { /* client gone */ }
-                  }
-                } catch {
-                  // skip malformed chunk
-                }
-              }
-            }
+                  controller.enqueue(sseEvent({ token: delta }));
+                } catch { /* client gone */ }
+              },
+              onDoneMarker: countPromptOnce,
+            });
 
             // Persist
             console.log("[stream] flush() started");

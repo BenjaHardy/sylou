@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, type LLMTool } from "../_shared/_llm.ts";
+import { makeSSEHelpers, readProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { searchWeb, buildDocumentTool, buildWebSearchTool, formatWebSearchResults } from "../_shared/_tools.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
@@ -31,34 +32,6 @@ import { makeCorsHeadersFor } from "../_shared/_cors.ts";
 const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * Extract the text delta from a streaming chunk, model-agnostic.
- */
-function extractDeltaText(
-  parsed: Record<string, unknown>,
-  _provider: string
-): string | null {
-  const choices = parsed.choices as
-    | Array<{ delta?: { content?: unknown } }>
-    | undefined;
-  const content = choices?.[0]?.delta?.content;
-  if (content) {
-    if (typeof content === "string") return content;
-    if (Array.isArray(content)) {
-      return content
-        .filter((b: any) => b?.type === "text")
-        .map((b: any) => b.text ?? "")
-        .join("");
-    }
-    return String(content);
-  }
-  if (parsed.type === "content_block_delta") {
-    const delta = parsed.delta as { text?: string } | undefined;
-    if (delta?.text) return delta.text;
-  }
-  return null;
-}
 
 // Real tool executions per assistant turn; calls past this (and unknown
 // tool names) still get a stub result — every echoed tool_call MUST be
@@ -748,23 +721,7 @@ When citing information from web search results, always include the source URL i
     if (streamRequested) {
       console.log("[stream:context-prompt] entering streaming path, action_type:", action_type, "hasTools:", hasTools);
 
-      const encoder = new TextEncoder();
-
-      function sseEvent(data: Record<string, unknown>): Uint8Array {
-        return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
-      }
-
-      function createSSEResponse(readable: ReadableStream) {
-        return new Response(readable, {
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            Connection: "keep-alive",
-          },
-        });
-      }
+      const { sseEvent, createSSEResponse } = makeSSEHelpers(corsHeaders);
 
       // Helper: persist results after streaming completes
       async function persistResults(
@@ -971,10 +928,7 @@ When citing information from web search results, always include the source URL i
 
                 controller.enqueue(sseEvent({ phase: "responding" }));
 
-                const chunkSize = 20;
-                for (let i = 0; i < responseText.length; i += chunkSize) {
-                  controller.enqueue(sseEvent({ token: responseText.slice(i, i + chunkSize) }));
-                }
+                replayTokenBurst(responseText, (chunk) => controller.enqueue(sseEvent({ token: chunk })));
 
                 const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistResults(responseText, 0, 0);
 
@@ -1082,35 +1036,11 @@ When citing information from web search results, always include the source URL i
                 }
 
                 // Read Call #2b stream and forward tokens
-                let fullResponse = "";
-                const decoder = new TextDecoder();
-                let sseBuffer = "";
-                const reader = call2bRes.body!.getReader();
-
-                while (true) {
-                  const { done, value } = await reader.read();
-                  if (done) break;
-
-                  sseBuffer += decoder.decode(value, { stream: true });
-                  const lines = sseBuffer.split("\n");
-                  sseBuffer = lines.pop() ?? "";
-
-                  for (const line of lines) {
-                    const trimmed = line.trim();
-                    if (!trimmed || !trimmed.startsWith("data:")) continue;
-                    const payload = trimmed.slice(5).trim();
-                    if (payload === "[DONE]") continue;
-
-                    try {
-                      const parsed = JSON.parse(payload);
-                      const delta = extractDeltaText(parsed, providerFor(chatModel));
-                      if (delta) {
-                        fullResponse += delta;
-                        try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
-                      }
-                    } catch { /* skip malformed */ }
-                  }
-                }
+                let fullResponse = await readProviderStream(call2bRes, providerFor(chatModel), {
+                  onToken: (delta) => {
+                    try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
+                  },
+                });
 
                 // Clean and persist
                 fullResponse = cleanLLMContent(fullResponse);
@@ -1185,42 +1115,17 @@ When citing information from web search results, always include the source URL i
       const readable = new ReadableStream({
         async start(controller) {
           let fullResponse = "";
-          const decoder = new TextDecoder();
-          let sseBuffer = "";
 
           try {
             controller.enqueue(sseEvent({ phase: "responding" }));
 
-            const reader = llmRes.body!.getReader();
-
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-
-              sseBuffer += decoder.decode(value, { stream: true });
-              const lines = sseBuffer.split("\n");
-              sseBuffer = lines.pop() ?? "";
-
-              for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || !trimmed.startsWith("data:")) continue;
-                const payload = trimmed.slice(5).trim();
-                if (payload === "[DONE]") continue;
-
+            fullResponse = await readProviderStream(llmRes, providerFor(chatModel), {
+              onToken: (delta) => {
                 try {
-                  const parsed = JSON.parse(payload);
-                  const delta = extractDeltaText(parsed, providerFor(chatModel));
-                  if (delta) {
-                    fullResponse += delta;
-                    try {
-                      controller.enqueue(sseEvent({ token: delta }));
-                    } catch { /* client gone */ }
-                  }
-                } catch {
-                  // skip malformed chunk
-                }
-              }
-            }
+                  controller.enqueue(sseEvent({ token: delta }));
+                } catch { /* client gone */ }
+              },
+            });
 
             console.log("[stream:context-prompt] LLM stream complete, persisting");
             fullResponse = cleanLLMContent(fullResponse);
