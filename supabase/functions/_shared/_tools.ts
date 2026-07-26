@@ -1,10 +1,14 @@
-// Shared tool-execution helpers for the LLM edge functions (P4-1, seam #2).
+// Shared tool helpers for the LLM edge functions (P4-1, seams #2 + #2b).
 //
 // searchWeb existed as byte-identical copies in chat/ and context-prompt/;
-// moved verbatim. The per-function TOOL DEFINITIONS (buildDocumentTool /
-// buildWebSearchTool) deliberately remain local to each function: their
-// schemas and description strings are per-function prompt engineering and
-// differ between the two — unifying them would change what the models see.
+// moved verbatim (seam 2). The tool DEFINITIONS below followed in seam 2b:
+// their copies differed only by a compile-time-erased return annotation, so
+// the runtime tool JSON offered to the models was always byte-identical
+// (seam 2's commit claimed otherwise — that claim was wrong). Any future
+// edit to these descriptions changes what BOTH functions' models see:
+// deliberate prompt engineering, done with both call sites in view.
+
+import type { LLMTool } from "./_llm.ts";
 
 /** Brave web search: top-5 results, 10s timeout, degrades to [] on any
  *  failure (missing key, API error, timeout) — a hung or broken search
@@ -48,4 +52,48 @@ export async function searchWeb(query: string): Promise<{ title: string; url: st
     console.error("[web_search] error:", err);
     return [];
   }
+}
+
+/** Tool definition: fetch an imported document's full text by id. */
+export function buildDocumentTool(): LLMTool {
+  return {
+    type: "function",
+    function: {
+      name: "read_imported_document",
+      description:
+        "Retrieve the full text of an imported reference document. Use this when the user's question requires information from a specific imported document.",
+      parameters: {
+        type: "object",
+        properties: {
+          document_id: {
+            type: "string",
+            description: "The ID of the document to retrieve",
+          },
+        },
+        required: ["document_id"],
+      },
+    },
+  };
+}
+
+/** Tool definition: Brave web search (executed by searchWeb above). */
+export function buildWebSearchTool(): LLMTool {
+  return {
+    type: "function",
+    function: {
+      name: "web_search",
+      description:
+        "Search the web for current information. Use this when the user's question requires information not available in your training data or the project's imported documents. Returns the top results with titles, URLs, and text snippets.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "The search query",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  };
 }

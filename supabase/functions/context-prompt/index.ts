@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent } from "../_shared/_llm.ts";
-import { searchWeb } from "../_shared/_tools.ts";
+import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, type LLMTool } from "../_shared/_llm.ts";
+import { searchWeb, buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
@@ -70,48 +70,6 @@ function extractDeltaText(
     if (delta?.text) return delta.text;
   }
   return null;
-}
-
-function buildDocumentTool() {
-  return {
-    type: "function",
-    function: {
-      name: "read_imported_document",
-      description:
-        "Retrieve the full text of an imported reference document. Use this when the user's question requires information from a specific imported document.",
-      parameters: {
-        type: "object",
-        properties: {
-          document_id: {
-            type: "string",
-            description: "The ID of the document to retrieve",
-          },
-        },
-        required: ["document_id"],
-      },
-    },
-  };
-}
-
-function buildWebSearchTool() {
-  return {
-    type: "function",
-    function: {
-      name: "web_search",
-      description:
-        "Search the web for current information. Use this when the user's question requires information not available in your training data or the project's imported documents. Returns the top results with titles, URLs, and text snippets.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description: "The search query",
-          },
-        },
-        required: ["query"],
-      },
-    },
-  };
 }
 
 // Real tool executions per assistant turn; calls past this (and unknown
@@ -801,7 +759,10 @@ When citing information from web search results, always include the source URL i
 
     // --- Build tools array ---
     const hasTools = hasDocuments || webSearchActive;
-    const tools: Record<string, unknown>[] = [];
+    // LLMTool[] since seam 2b: the shared builders are precisely typed, and
+    // the previous Record<string, unknown>[] annotation can't hold them.
+    // Type-level only — erased at compile time.
+    const tools: LLMTool[] = [];
     if (hasDocuments) tools.push(buildDocumentTool());
     if (webSearchActive) tools.push(buildWebSearchTool());
 
