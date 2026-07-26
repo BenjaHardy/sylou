@@ -672,7 +672,6 @@ When citing information from web search results, always include the source URL i
                 console.error("[stream] Call #2 error:", call2Res.status, errText);
                 const msg = extractProviderError(providerFor(chatModel), call2Res.status, errText);
                 try { controller.enqueue(sseEvent({ done: true, error: msg })); } catch { /* */ }
-                controller.close();
                 return;
               }
 
@@ -710,7 +709,10 @@ When citing information from web search results, always include the source URL i
                             adminSupabase
                               .from("project_stats")
                               .update({ [promptColumn]: cnt + 1 })
-                              .eq("project_id", thread.project_id);
+                              .eq("project_id", thread.project_id)
+                              .then(() =>
+                                console.log("[stream] prompt count incremented for", thread.project_id)
+                              );
                           }
                         });
                     }
