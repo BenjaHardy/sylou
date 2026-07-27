@@ -230,6 +230,7 @@ The frontend is a plain Vite SPA — it works on any static host. Two configurat
 
 - **SPA fallback routing**: your host must serve `index.html` for any unknown route. On Netlify, Cloudflare Pages, and Vercel this is automatic. On generic static hosts, you may need to configure a fallback rule (e.g., `_redirects` file for Netlify-compatible hosts).
 - **Environment variables**: must be available at build time (Vite bakes them into the JS bundle), not just at runtime.
+- **Shared-report headers**: serve `/report/*` with `X-Robots-Tag: noindex` and `Referrer-Policy: no-referrer` — this keeps shared FLOW reports out of search-engine indices and keeps the token-bearing URL out of outbound referrers, while leaving the pages fully reachable (and machine-readable) for anyone holding a link. On Vercel this comes from `vercel.json`; Cloudflare Pages and Netlify pick it up automatically from the repo's `public/_headers`; on other hosts replicate it in your server config (e.g., an nginx `add_header` block for `location /report/`). Do **not** add a robots.txt `Disallow` for `/report/` instead — crawlers that can't fetch the page never see the `noindex`, so leaked links would still be indexable.
 
 ---
 
