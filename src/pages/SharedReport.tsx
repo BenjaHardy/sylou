@@ -10,6 +10,8 @@ import { ProjectActivitySection } from "@/components/flow-report/ProjectActivity
 import { FlowReplayOverlay, type ReplayEvent } from "@/components/FlowReplayOverlay";
 import { ProfileTabContent } from "@/components/flow-report/ProfileTabContent";
 import { WritingSnapshotTab } from "@/components/flow-report/WritingSnapshotTab";
+import { FlowHighlightedText } from "@/components/FlowHighlightedText";
+import { HighlightedTextErrorBoundary } from "@/components/flow-report/HighlightedTextErrorBoundary";
 import { KeyUserContributions } from "@/components/flow-report/KeyUserContributions";
 import { SelfAssessmentDisplay } from "@/components/flow-report/SelfAssessmentDisplay";
 import {
@@ -20,9 +22,10 @@ import {
 } from "@/components/flow-report/shared-utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Activity, Loader2, ShieldAlert, ExternalLink, Award, Play } from "lucide-react";
+import { Activity, Loader2, ShieldAlert, ExternalLink, Award, Play, Eye } from "lucide-react";
 import { MODEL_LABELS } from "@/lib/models";
 import type { FlowReport, FlowFeedback } from "@/hooks/useFlowAnalysis";
+import type { ProvenanceSegment } from "@/lib/provenance-tracker";
 
 const AI_GENERATED_SECTIONS = {
   report: "ai-assessment",
@@ -45,6 +48,10 @@ export default function SharedReport() {
   const [profileAvailable, setProfileAvailable] = useState(true);
   const [activeTab, setActiveTab] = useState<"report" | "writing" | "profile" | "replay">("report");
   const [profileSource, setProfileSource] = useState<"ai" | "pre" | "post">("ai");
+
+  // Provenance overlay state (segments arrive via their own tolerant fetch)
+  const [provenanceSegments, setProvenanceSegments] = useState<ProvenanceSegment[] | null>(null);
+  const [showHighlighted, setShowHighlighted] = useState(false);
 
   useEffect(() => {
     async function fetchReport() {
@@ -86,6 +93,27 @@ export default function SharedReport() {
 
     fetchReport();
   }, [token]);
+
+  // Provenance is fetched in its own tolerant query: on instances where the
+  // migration exposing provenance_snapshot on flow_reports_public has not
+  // been applied yet, this select fails and the highlighted-text button
+  // simply stays hidden — the report page itself is unaffected.
+  useEffect(() => {
+    if (!token || !report) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .rpc("get_shared_report", { _token: token })
+        .select("provenance_snapshot")
+        .maybeSingle();
+      if (!cancelled && !error && data?.provenance_snapshot) {
+        setProvenanceSegments(data.provenance_snapshot as unknown as ProvenanceSegment[]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, report]);
 
   const handleLoadReplay = useCallback(async () => {
     if (!report || !token || replaySnapshot) return;
@@ -222,6 +250,21 @@ export default function SharedReport() {
           <Award className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold text-primary">FLOW Certificate #{certificateId}</span>
         </div>
+      )}
+
+      {/* Highlighted Text Panel — provenance over the shared writing snapshot
+          (the snapshot pair is offset-consistent: both columns were captured
+          in the same analysis insert). */}
+      {showHighlighted && provenanceSegments && (
+        <HighlightedTextErrorBoundary onClose={() => setShowHighlighted(false)}>
+          <div className="absolute inset-0 z-10 bg-background">
+            <FlowHighlightedText
+              segments={provenanceSegments}
+              writingContent={report.writing_snapshot ?? ""}
+              onClose={() => setShowHighlighted(false)}
+            />
+          </div>
+        </HighlightedTextErrorBoundary>
       )}
 
       <ScrollArea className="h-[calc(100vh-3.5rem)]">
@@ -362,6 +405,21 @@ export default function SharedReport() {
 
                 {/* Key User Contributions */}
                 <KeyUserContributions contributions={report.key_user_contributions} />
+
+                {/* View Highlighted Text (provenance-annotated writing) */}
+                {provenanceSegments && provenanceSegments.length > 0 && (
+                  <div className="flex justify-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs"
+                      onClick={() => setShowHighlighted(true)}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      View Highlighted Text
+                    </Button>
+                  </div>
+                )}
               </section>
 
               {/* User Self-Assessment (read-only) */}
