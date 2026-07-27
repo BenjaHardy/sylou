@@ -928,7 +928,7 @@ When citing information from web search results, always include the source URL i
 
                 controller.enqueue(sseEvent({ phase: "responding" }));
 
-                replayTokenBurst(responseText, (chunk) => controller.enqueue(sseEvent({ token: chunk })));
+                await replayTokenBurst(responseText, (chunk) => controller.enqueue(sseEvent({ token: chunk })));
 
                 const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistResults(responseText, 0, 0);
 

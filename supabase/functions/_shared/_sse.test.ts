@@ -191,15 +191,28 @@ Deno.test("createSSEResponse: the five SSE headers plus the caller's CORS header
 
 // ── replayTokenBurst ─────────────────────────────────────────────────
 
-Deno.test("replayTokenBurst: 20-char chunks in order, remainder last", () => {
+Deno.test("replayTokenBurst: 20-char chunks in order, remainder last", async () => {
   const chunks: string[] = [];
-  replayTokenBurst("a".repeat(20) + "b".repeat(20) + "tail", (c) => chunks.push(c));
+  await replayTokenBurst("a".repeat(20) + "b".repeat(20) + "tail", (c) => chunks.push(c));
   assertEquals(chunks, ["a".repeat(20), "b".repeat(20), "tail"]);
 });
 
-Deno.test("replayTokenBurst: empty text emits nothing", () => {
+Deno.test("replayTokenBurst: paces long text without losing or reordering content", async () => {
+  // 240 chars = 12 chunks -> two 15ms pacing yields (after chunks 5 and 10).
+  const text = Array.from({ length: 240 }, (_, i) => String.fromCharCode(97 + (i % 26))).join("");
+  const chunks: string[] = [];
+  const started = performance.now();
+  await replayTokenBurst(text, (c) => chunks.push(c));
+  const elapsed = performance.now() - started;
+  assertEquals(chunks.length, 12);
+  assertEquals(chunks.join(""), text);
+  // Timers only fire late, never early: two 15ms yields => >= ~25ms.
+  assert(elapsed >= 25, `expected pacing delays, got ${elapsed}ms`);
+});
+
+Deno.test("replayTokenBurst: empty text emits nothing", async () => {
   let called = false;
-  replayTokenBurst("", () => {
+  await replayTokenBurst("", () => {
     called = true;
   });
   assert(!called);
