@@ -21,7 +21,7 @@ function formatDuration(seconds: number): string {
 const ACTIVITY_TOOLTIPS = {
   Active: "Total time the project was open and the user was actively interacting (typing, clicking, scrolling).",
   Writing: "Time spent typing or editing in the writing editor specifically.",
-  Prompts: "Number of messages sent to the AI chat assistant.",
+  Prompts: "Number of prompts sent to the AI assistant: chat messages and Ask/Propose requests (inline editor actions are not counted).",
 } as const;
 
 export function ProjectActivityBar({ projectId }: Props) {

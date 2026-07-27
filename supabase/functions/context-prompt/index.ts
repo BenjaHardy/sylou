@@ -17,6 +17,7 @@ import {
 } from "../_shared/_conversation_memory.ts";
 
 import { isOverBudget, getBudgetedProfile } from "../_shared/_billing.ts";
+import { incrementPromptCount } from "../_shared/_stats.ts";
 
 
 // Service-role client for ai_editor_actions (bypasses RLS)
@@ -880,6 +881,12 @@ When citing information from web search results, always include the source URL i
           }
         }
 
+        // Count this Ask/Propose exchange as a prompt (policy 2026-07-27:
+        // chat + Ask/Propose count; editor actions and CONFIRM do not).
+        // Unconditional like chat's counters — a failed message insert
+        // doesn't uncount the exchange; failures are log-only.
+        await incrementPromptCount(adminClient, project_id, tutorMode, "[context-prompt]");
+
         return { actionRow, budgetRemaining, insertedMessages, persistenceFailed };
       }
 
@@ -1310,6 +1317,8 @@ When citing information from web search results, always include the source URL i
       const { error: rpcErr } = await supabase.rpc("increment_tokens_used", { user_uuid: user.id, amount: totalTokens });
       if (rpcErr) console.error("[context-prompt] increment_tokens_used failed:", JSON.stringify(rpcErr));
 
+      await incrementPromptCount(adminClient, project_id, tutorMode, "[context-prompt]");
+
       const budgetRemaining: number | null = profile.monthly_token_budget === null ? null : profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
 
       const insertedMessages = [];
@@ -1422,6 +1431,8 @@ When citing information from web search results, always include the source URL i
 
     const { error: rpcErr } = await supabase.rpc("increment_tokens_used", { user_uuid: user.id, amount: totalTokens });
     if (rpcErr) console.error("[context-prompt] increment_tokens_used failed:", JSON.stringify(rpcErr));
+
+    await incrementPromptCount(adminClient, project_id, tutorMode, "[context-prompt]");
 
     const budgetRemaining: number | null = profile.monthly_token_budget === null ? null : profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
 
