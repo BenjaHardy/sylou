@@ -41,7 +41,7 @@ export function ProjectActivitySection({ metrics }: { metrics: MetricsSnapshot }
           <span className="text-muted-foreground flex items-center gap-1">
             <Tooltip>
               <TooltipTrigger asChild><MessageSquare className="h-3 w-3 cursor-help" /></TooltipTrigger>
-              <TooltipContent side="top" className="max-w-xs text-xs">Number of messages sent to the AI chat assistant.</TooltipContent>
+              <TooltipContent side="top" className="max-w-xs text-xs">Number of prompts sent to the AI assistant: chat messages and Ask/Propose requests (inline editor actions are not counted).</TooltipContent>
             </Tooltip>
             Chat prompts
           </span>
