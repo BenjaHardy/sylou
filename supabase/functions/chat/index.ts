@@ -404,7 +404,7 @@ When citing information from web search results, always include the source URL i
           const readable = new ReadableStream({
             async start(controller) {
               try {
-                replayTokenBurst(responseText, (chunk) => controller.enqueue(sseEvent({ token: chunk })));
+                await replayTokenBurst(responseText, (chunk) => controller.enqueue(sseEvent({ token: chunk })));
 
                 const userMsgRow = {
                   thread_id: threadId,

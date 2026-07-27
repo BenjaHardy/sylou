@@ -105,13 +105,32 @@ export async function readProviderStream(
   return fullResponse;
 }
 
-/** Re-emit already-complete text as a synchronous burst of 20-char
- *  chunks — no pacing, no per-chunk guard (the callers' outer try
- *  covers it, as before). The counterpart to readProviderStream for
- *  the no-tool-use branches; a separate primitive by design. */
-export function replayTokenBurst(text: string, emit: (chunk: string) => void) {
+/** Re-emit already-complete text as a PACED burst of 20-char chunks so
+ *  the client renders it progressively (deliberate UX change, 2026-07-27;
+ *  from its 2026-04 birth until then the burst was fully synchronous and
+ *  painted the whole answer in a single frame). Yields for PACE_DELAY_MS
+ *  every PACE_EVERY chunks (~100 chars per paint), with a hard cap on the
+ *  total added delay so a pathologically long answer can never stall the
+ *  stream-first persistence tail behind it — past the cap, the remainder
+ *  flushes at once. No per-chunk guard: the callers' outer try covers
+ *  enqueue failures, as before. Callers MUST await (emits would otherwise
+ *  race the persistence tail). Still a separate primitive from
+ *  readProviderStream by design (B12) — never unify the two. */
+export async function replayTokenBurst(text: string, emit: (chunk: string) => void) {
   const chunkSize = 20;
+  const paceEvery = 5;
+  const paceDelayMs = 15;
+  const maxTotalDelayMs = 3_000;
+  let delaysLeft = Math.floor(maxTotalDelayMs / paceDelayMs);
+
+  let sinceYield = 0;
   for (let i = 0; i < text.length; i += chunkSize) {
     emit(text.slice(i, i + chunkSize));
+    sinceYield++;
+    if (sinceYield >= paceEvery && delaysLeft > 0) {
+      sinceYield = 0;
+      delaysLeft--;
+      await new Promise((resolve) => setTimeout(resolve, paceDelayMs));
+    }
   }
 }
