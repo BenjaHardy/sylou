@@ -794,6 +794,7 @@ export type Database = {
           model_used: string | null
           project_id: string | null
           project_name: string | null
+          provenance_snapshot: Json | null
           replay_snapshot: Json | null
           share_enabled: boolean | null
           share_include_feedback: boolean | null
@@ -824,6 +825,7 @@ export type Database = {
           model_used?: string | null
           project_id?: string | null
           project_name?: string | null
+          provenance_snapshot?: Json | null
           replay_snapshot?: never
           share_enabled?: boolean | null
           share_include_feedback?: boolean | null
@@ -854,6 +856,7 @@ export type Database = {
           model_used?: string | null
           project_id?: string | null
           project_name?: string | null
+          provenance_snapshot?: Json | null
           replay_snapshot?: never
           share_enabled?: boolean | null
           share_include_feedback?: boolean | null
