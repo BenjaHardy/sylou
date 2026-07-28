@@ -17,7 +17,7 @@ import {
 } from "../_shared/_conversation_memory.ts";
 
 import { isOverBudget, getBudgetedProfile } from "../_shared/_billing.ts";
-import { incrementPromptCount } from "../_shared/_stats.ts";
+import { persistContextExchange, type PersistCtx } from "./persist.ts";
 
 
 // Service-role client for ai_editor_actions (bypasses RLS)
@@ -328,8 +328,9 @@ Deno.serve(async (req) => {
     }
 
     // Past the auth/profile guards above, user & profile are non-null. Capture
-    // them here so nested closures (persistResults) keep the narrowed types —
-    // TS doesn't propagate outer narrowing into inner function scopes.
+    // them here so nested closures (the streaming tails' conversation-memory
+    // refresh) keep the narrowed types — TS doesn't propagate outer narrowing
+    // into inner function scopes. persistCtx below also reads these.
     const authedUser = user;
     const authedProfile = profile;
 
@@ -703,6 +704,34 @@ When citing information from web search results, always include the source URL i
     const documentsReferenced: string[] = [];
     const webSearchesPerformed: string[] = [];
 
+    // Per-request persistence context (persist.ts) — built once, before the
+    // stream/no-stream split; every field is stable by this point. The
+    // mutating char totals deliberately stay OUT: they are passed to
+    // persistContextExchange as call-time finals. The two arrays are safe
+    // by reference (const, populated by the tool loops before any
+    // persistence call fires).
+    const persistCtx: PersistCtx = {
+      admin: adminClient,
+      userClient: supabase,
+      userId: authedUser.id,
+      monthlyTokenBudget: authedProfile.monthly_token_budget,
+      tokensUsedThisPeriod: authedProfile.tokens_used_this_period,
+      projectId: project_id,
+      threadId: thread_id,
+      actionType: action_type,
+      selectedText: selected_text,
+      instruction,
+      selectedTextSource,
+      chatModel,
+      conciseMode,
+      tutorMode,
+      summaryUpdate,
+      updatedSummary,
+      summaryRow: summaryRow ?? null,
+      documentsReferenced,
+      webSearchesPerformed,
+    };
+
     // --- Build tools array ---
     const hasTools = hasDocuments || webSearchActive;
     // LLMTool[] since seam 2b: the shared builders are precisely typed, and
@@ -723,172 +752,6 @@ When citing information from web search results, always include the source URL i
       console.log("[stream:context-prompt] entering streaming path, action_type:", action_type, "hasTools:", hasTools);
 
       const { sseEvent, createSSEResponse } = makeSSEHelpers(corsHeaders);
-
-      // Helper: persist results after streaming completes
-      async function persistResults(
-        aiResponse: string,
-        extraInputChars: number,
-        extraOutputChars: number,
-      ) {
-        const finalInputChars = totalInputChars + extraInputChars;
-        const finalOutputChars = totalOutputChars + extraOutputChars;
-        const totalTokens = Math.ceil((finalInputChars + finalOutputChars) / 4);
-
-        // Core writes (action row, chat messages, summary log) flip this and
-        // the caller reports failure instead of success; secondary writes
-        // (token_usage, billing RPC) are logged loudly but never fail the
-        // exchange.
-        let persistenceFailed = false;
-
-        // Only Propose gets a ledger row: it carries the decision that the
-        // pending-gated CONFIRM endpoint records, and feeds the FLOW outcome
-        // statistics. Ask has no decision to record — its full exchange is
-        // logged in the chat below, which is its canonical (and only) record.
-        let actionRow: { id: string } | null = null;
-        if (action_type !== "ask") {
-          const { data: insertedAction, error: actionErr } = await adminClient
-            .from("ai_editor_actions")
-            .insert({
-              project_id,
-              action_type: "propose",
-              selected_text_preview: sliceSafe(selected_text, 500),
-              ai_response_preview: sliceSafe(aiResponse, 500),
-              ai_response_full: aiResponse,
-              proposed_summary: summaryUpdate,
-              char_count_original: selected_text.length,
-              char_count_result: aiResponse.length,
-              outcome: "pending",
-              instruction_text: selectedTextSource
-                ? `${sliceSafe(instruction, 1000)} | Source: ${selectedTextSource}`
-                : sliceSafe(instruction, 1000),
-            })
-            .select("id")
-            .single();
-          if (actionErr) {
-            console.error("[context-prompt] ai_editor_actions insert failed:", JSON.stringify(actionErr));
-            persistenceFailed = true;
-          }
-          actionRow = insertedAction;
-        }
-
-        const { error: usageErr } = await supabase.from("token_usage").insert({
-          user_id: authedUser.id,
-          project_id,
-          function_name: "context-prompt",
-          model_used: chatModel,
-          input_tokens: Math.ceil(finalInputChars / 4),
-          output_tokens: Math.ceil(finalOutputChars / 4),
-        });
-        if (usageErr) console.error("[context-prompt] token_usage insert failed:", JSON.stringify(usageErr));
-
-        const { error: rpcErr } = await supabase.rpc("increment_tokens_used", {
-          user_uuid: authedUser.id,
-          amount: totalTokens,
-        });
-        if (rpcErr) console.error("[context-prompt] increment_tokens_used failed:", JSON.stringify(rpcErr));
-
-        const budgetRemaining: number | null = authedProfile.monthly_token_budget === null ? null : authedProfile.monthly_token_budget - authedProfile.tokens_used_this_period - totalTokens;
-
-        const insertedMessages: unknown[] = [];
-
-        // Log the exchange at delivery for Ask AND Propose alike (deliberate
-        // contract — TRANSPARENCY.md §5.1): the user reads the reply either
-        // way, so it goes on the record here, server-side in the stream-first
-        // flush (surviving dismissals, tab closes and disconnects). For
-        // Propose, the CONFIRM endpoint afterwards records only the decision.
-        {
-          const isAsk = action_type === "ask";
-          const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
-          const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${sliceSafe(selected_text, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
-
-          const { data: promptMsg, error: promptErr } = await adminClient.from("chat_messages").insert({
-            thread_id,
-            role: "user",
-            content: userPromptContent,
-            source_type: isAsk ? "ask_prompt" : "propose_prompt",
-            flow_flag: "normal",
-            concise_mode: conciseMode,
-            tutor_mode: tutorMode,
-          }).select().single();
-          if (promptErr) {
-            console.error("[context-prompt] prompt message insert failed:", JSON.stringify(promptErr));
-            persistenceFailed = true;
-          }
-          if (promptMsg) insertedMessages.push(promptMsg);
-
-          if (summaryUpdate !== "No update needed.") {
-            // writing_summary intentionally omits concise_mode and tutor_mode (defaults to false):
-            // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER
-            // nor the tutor-mode system prompt.
-            const { data: summaryMsg, error: summaryMsgErr } = await adminClient.from("chat_messages").insert({
-              thread_id,
-              role: "assistant",
-              content: summaryUpdate,
-              source_type: "writing_summary",
-              flow_flag: "not_assessed",
-            }).select().single();
-            if (summaryMsgErr) {
-              console.error("[context-prompt] summary message insert failed:", JSON.stringify(summaryMsgErr));
-              persistenceFailed = true;
-            }
-            if (summaryMsg) insertedMessages.push(summaryMsg);
-          }
-
-          const responseRow: Record<string, unknown> = {
-            thread_id,
-            role: "assistant",
-            content: aiResponse,
-            source_type: isAsk ? "ask_response" : "propose_response",
-            flow_flag: "normal",
-            model_used: chatModel,
-            concise_mode: conciseMode,
-            tutor_mode: tutorMode,
-          };
-          if (documentsReferenced.length > 0) {
-            responseRow.documents_referenced = documentsReferenced;
-          }
-          if (webSearchesPerformed.length > 0) {
-            responseRow.web_searches_performed = webSearchesPerformed;
-          }
-
-          const { data: responseMsg, error: responseErr } = await adminClient.from("chat_messages").insert(responseRow).select().single();
-          if (responseErr) {
-            console.error("[context-prompt] response message insert failed:", JSON.stringify(responseErr));
-            persistenceFailed = true;
-          }
-          if (responseMsg) insertedMessages.push(responseMsg);
-
-          if (summaryUpdate !== "No update needed.") {
-            if (summaryRow) {
-              const { error: logErr } = await adminClient
-                .from("writing_summary_log")
-                .update({ summary_text: updatedSummary, last_updated_at: new Date().toISOString() })
-                .eq("id", summaryRow.id);
-              if (logErr) {
-                console.error("[context-prompt] writing_summary_log update failed:", JSON.stringify(logErr));
-                persistenceFailed = true;
-              }
-            } else {
-              const { error: logErr } = await adminClient.from("writing_summary_log").insert({
-                project_id,
-                summary_text: updatedSummary,
-              });
-              if (logErr) {
-                console.error("[context-prompt] writing_summary_log insert failed:", JSON.stringify(logErr));
-                persistenceFailed = true;
-              }
-            }
-          }
-        }
-
-        // Count this Ask/Propose exchange as a prompt (policy 2026-07-27:
-        // chat + Ask/Propose count; editor actions and CONFIRM do not).
-        // Unconditional like chat's counters — a failed message insert
-        // doesn't uncount the exchange; failures are log-only.
-        await incrementPromptCount(adminClient, project_id, tutorMode, "[context-prompt]");
-
-        return { actionRow, budgetRemaining, insertedMessages, persistenceFailed };
-      }
 
       // ── TWO-PASS FLOW when tools exist ──
       // Move entire Call #2a inside ReadableStream so phase events stream immediately
@@ -937,7 +800,7 @@ When citing information from web search results, always include the source URL i
 
                 await replayTokenBurst(responseText, (chunk) => controller.enqueue(sseEvent({ token: chunk })));
 
-                const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistResults(responseText, 0, 0);
+                const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, responseText, totalInputChars, totalOutputChars);
 
                 if (persistenceFailed) {
                   controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
@@ -1052,7 +915,7 @@ When citing information from web search results, always include the source URL i
                 // Clean and persist
                 fullResponse = cleanLLMContent(fullResponse);
                 const aiResponse = fullResponse.trim() || "No response generated.";
-                const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistResults(aiResponse, 0, aiResponse.length);
+                const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars, totalOutputChars + aiResponse.length);
 
                 try {
                   if (persistenceFailed) {
@@ -1138,7 +1001,7 @@ When citing information from web search results, always include the source URL i
             fullResponse = cleanLLMContent(fullResponse);
             const aiResponse = fullResponse.trim() || "No response generated.";
             const extraInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
-            const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistResults(aiResponse, extraInputChars, aiResponse.length);
+            const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars + extraInputChars, totalOutputChars + aiResponse.length);
 
             try {
               if (persistenceFailed) {
@@ -1274,99 +1137,7 @@ When citing information from web search results, always include the source URL i
         aiResponse = call2bResult.text.trim() || "No response generated.";
       }
 
-      const totalTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
-
-      // Only Propose gets a ledger row (decision + outcome stats for FLOW);
-      // Ask's canonical record is the chat itself — see persistResults.
-      let actionRow: { id: string } | null = null;
-      let persistenceFailed = false;
-      if (action_type !== "ask") {
-        const { data: insertedAction, error: actionErr } = await adminClient
-          .from("ai_editor_actions")
-          .insert({
-            project_id,
-            action_type: "propose",
-            selected_text_preview: sliceSafe(selected_text, 500),
-            ai_response_preview: sliceSafe(aiResponse, 500),
-            ai_response_full: aiResponse,
-            proposed_summary: summaryUpdate,
-            char_count_original: selected_text.length,
-            char_count_result: aiResponse.length,
-            outcome: "pending",
-            instruction_text: selectedTextSource
-              ? `${sliceSafe(instruction, 1000)} | Source: ${selectedTextSource}`
-              : sliceSafe(instruction, 1000),
-          })
-          .select("id")
-          .single();
-        if (actionErr) console.error("ai_editor_actions insert failed:", JSON.stringify(actionErr));
-        persistenceFailed = !!actionErr;
-        actionRow = insertedAction;
-      }
-
-      const { error: usageErr } = await supabase.from("token_usage").insert({
-        user_id: user.id,
-        project_id,
-        function_name: "context-prompt",
-        model_used: chatModel,
-        input_tokens: Math.ceil(totalInputChars / 4),
-        output_tokens: Math.ceil(totalOutputChars / 4),
-      });
-      if (usageErr) console.error("[context-prompt] token_usage insert failed:", JSON.stringify(usageErr));
-
-      const { error: rpcErr } = await supabase.rpc("increment_tokens_used", { user_uuid: user.id, amount: totalTokens });
-      if (rpcErr) console.error("[context-prompt] increment_tokens_used failed:", JSON.stringify(rpcErr));
-
-      await incrementPromptCount(adminClient, project_id, tutorMode, "[context-prompt]");
-
-      const budgetRemaining: number | null = profile.monthly_token_budget === null ? null : profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
-
-      const insertedMessages = [];
-      // Delivery-time logging for Ask AND Propose alike — see persistResults.
-      {
-        const isAsk = action_type === "ask";
-        const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
-        const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${sliceSafe(selected_text, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
-
-        const { data: promptMsg, error: promptErr } = await adminClient.from("chat_messages").insert({
-          thread_id, role: "user", content: userPromptContent, source_type: isAsk ? "ask_prompt" : "propose_prompt", flow_flag: "normal", concise_mode: conciseMode, tutor_mode: tutorMode,
-        }).select().single();
-        if (promptErr) { console.error("[context-prompt] prompt message insert failed:", JSON.stringify(promptErr)); persistenceFailed = true; }
-        if (promptMsg) insertedMessages.push(promptMsg);
-
-        if (summaryUpdate !== "No update needed.") {
-          // writing_summary intentionally omits concise_mode and tutor_mode (defaults to false):
-          // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER
-          // nor the tutor-mode system prompt.
-          const { data: summaryMsg, error: summaryMsgErr } = await adminClient.from("chat_messages").insert({
-            thread_id, role: "assistant", content: summaryUpdate, source_type: "writing_summary", flow_flag: "not_assessed",
-          }).select().single();
-          if (summaryMsgErr) { console.error("[context-prompt] summary message insert failed:", JSON.stringify(summaryMsgErr)); persistenceFailed = true; }
-          if (summaryMsg) insertedMessages.push(summaryMsg);
-        }
-
-        const responseRow: Record<string, unknown> = {
-          thread_id, role: "assistant", content: aiResponse, source_type: isAsk ? "ask_response" : "propose_response", flow_flag: "normal", model_used: chatModel, concise_mode: conciseMode, tutor_mode: tutorMode,
-        };
-        if (documentsReferenced.length > 0) responseRow.documents_referenced = documentsReferenced;
-        if (webSearchesPerformed.length > 0) responseRow.web_searches_performed = webSearchesPerformed;
-
-        const { data: responseMsg, error: responseErr } = await adminClient.from("chat_messages").insert(responseRow).select().single();
-        if (responseErr) { console.error("[context-prompt] response message insert failed:", JSON.stringify(responseErr)); persistenceFailed = true; }
-        if (responseMsg) insertedMessages.push(responseMsg);
-
-        if (summaryUpdate !== "No update needed.") {
-          if (summaryRow) {
-            const { error: logErr } = await adminClient.from("writing_summary_log")
-              .update({ summary_text: updatedSummary, last_updated_at: new Date().toISOString() })
-              .eq("id", summaryRow.id);
-            if (logErr) { console.error("[context-prompt] writing_summary_log update failed:", JSON.stringify(logErr)); persistenceFailed = true; }
-          } else {
-            const { error: logErr } = await adminClient.from("writing_summary_log").insert({ project_id, summary_text: updatedSummary });
-            if (logErr) { console.error("[context-prompt] writing_summary_log insert failed:", JSON.stringify(logErr)); persistenceFailed = true; }
-          }
-        }
-      }
+      const { actionRow, budgetRemaining, insertedMessages, persistenceFailed, totalTokens } = await persistContextExchange(persistCtx, aiResponse, totalInputChars, totalOutputChars);
 
       return jsonResponse({
         ai_response: aiResponse,
@@ -1389,95 +1160,7 @@ When citing information from web search results, always include the source URL i
 
     const finalInputChars = totalInputChars + responseResult.inputChars;
     const finalOutputChars = totalOutputChars + responseResult.outputChars;
-    const totalTokens = Math.ceil((finalInputChars + finalOutputChars) / 4);
-
-    // Only Propose gets a ledger row (decision + outcome stats for FLOW);
-    // Ask's canonical record is the chat itself — see persistResults.
-    let actionRow: { id: string } | null = null;
-    let persistenceFailed = false;
-    if (action_type !== "ask") {
-      const { data: insertedAction, error: actionErr } = await adminClient
-        .from("ai_editor_actions")
-        .insert({
-          project_id,
-          action_type: "propose",
-          selected_text_preview: sliceSafe(selected_text, 500),
-          ai_response_preview: sliceSafe(aiResponse, 500),
-          ai_response_full: aiResponse,
-          proposed_summary: summaryUpdate,
-          char_count_original: selected_text.length,
-          char_count_result: aiResponse.length,
-          outcome: "pending",
-          instruction_text: selectedTextSource
-            ? `${sliceSafe(instruction, 1000)} | Source: ${selectedTextSource}`
-            : sliceSafe(instruction, 1000),
-        })
-        .select("id")
-        .single();
-      if (actionErr) console.error("ai_editor_actions insert failed:", JSON.stringify(actionErr));
-      persistenceFailed = !!actionErr;
-      actionRow = insertedAction;
-    }
-
-    const { error: usageErr } = await supabase.from("token_usage").insert({
-      user_id: user.id,
-      project_id,
-      function_name: "context-prompt",
-      model_used: chatModel,
-      input_tokens: Math.ceil(finalInputChars / 4),
-      output_tokens: Math.ceil(finalOutputChars / 4),
-    });
-    if (usageErr) console.error("[context-prompt] token_usage insert failed:", JSON.stringify(usageErr));
-
-    const { error: rpcErr } = await supabase.rpc("increment_tokens_used", { user_uuid: user.id, amount: totalTokens });
-    if (rpcErr) console.error("[context-prompt] increment_tokens_used failed:", JSON.stringify(rpcErr));
-
-    await incrementPromptCount(adminClient, project_id, tutorMode, "[context-prompt]");
-
-    const budgetRemaining: number | null = profile.monthly_token_budget === null ? null : profile.monthly_token_budget - profile.tokens_used_this_period - totalTokens;
-
-    const insertedMessages = [];
-    // Delivery-time logging for Ask AND Propose alike — see persistResults.
-    {
-      const isAsk = action_type === "ask";
-      const sourceNote = selectedTextSource ? ` Source: ${selectedTextSource}.` : "";
-      const userPromptContent = `[${isAsk ? "Ask" : "Propose"}] Selected: "${sliceSafe(selected_text, 200)}${selected_text.length > 200 ? "…" : ""}"${sourceNote}\n${isAsk ? "Question" : "Instruction"}: ${instruction}`;
-
-      const { data: promptMsg, error: promptErr } = await adminClient.from("chat_messages").insert({
-        thread_id, role: "user", content: userPromptContent, source_type: isAsk ? "ask_prompt" : "propose_prompt", flow_flag: "normal", concise_mode: conciseMode, tutor_mode: tutorMode,
-      }).select().single();
-      if (promptErr) { console.error("[context-prompt] prompt message insert failed:", JSON.stringify(promptErr)); persistenceFailed = true; }
-      if (promptMsg) insertedMessages.push(promptMsg);
-
-      if (summaryUpdate !== "No update needed.") {
-        // writing_summary intentionally omits concise_mode and tutor_mode (defaults to false):
-        // the summary is produced by LLM #1 which never receives the CONCISE_MODE_MODIFIER
-        // nor the tutor-mode system prompt.
-        const { data: summaryMsg, error: summaryMsgErr } = await adminClient.from("chat_messages").insert({
-          thread_id, role: "assistant", content: summaryUpdate, source_type: "writing_summary", flow_flag: "not_assessed",
-        }).select().single();
-        if (summaryMsgErr) { console.error("[context-prompt] summary message insert failed:", JSON.stringify(summaryMsgErr)); persistenceFailed = true; }
-        if (summaryMsg) insertedMessages.push(summaryMsg);
-      }
-
-      const { data: responseMsg, error: responseErr } = await adminClient.from("chat_messages").insert({
-        thread_id, role: "assistant", content: aiResponse, source_type: isAsk ? "ask_response" : "propose_response", flow_flag: "normal", model_used: chatModel, concise_mode: conciseMode, tutor_mode: tutorMode,
-      }).select().single();
-      if (responseErr) { console.error("[context-prompt] response message insert failed:", JSON.stringify(responseErr)); persistenceFailed = true; }
-      if (responseMsg) insertedMessages.push(responseMsg);
-
-      if (summaryUpdate !== "No update needed.") {
-        if (summaryRow) {
-          const { error: logErr } = await adminClient.from("writing_summary_log")
-            .update({ summary_text: updatedSummary, last_updated_at: new Date().toISOString() })
-            .eq("id", summaryRow.id);
-          if (logErr) { console.error("[context-prompt] writing_summary_log update failed:", JSON.stringify(logErr)); persistenceFailed = true; }
-        } else {
-          const { error: logErr } = await adminClient.from("writing_summary_log").insert({ project_id, summary_text: updatedSummary });
-          if (logErr) { console.error("[context-prompt] writing_summary_log insert failed:", JSON.stringify(logErr)); persistenceFailed = true; }
-        }
-      }
-    }
+    const { actionRow, budgetRemaining, insertedMessages, persistenceFailed, totalTokens } = await persistContextExchange(persistCtx, aiResponse, finalInputChars, finalOutputChars);
 
     return jsonResponse({
       ai_response: aiResponse,

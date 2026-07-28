@@ -13,6 +13,6 @@
   "tasks": {
     "check": "deno check **/*.ts",
     "lint": "deno lint",
-    "test": "deno test --allow-read _shared/"
+    "test": "deno test --allow-read _shared/ context-prompt/persist.test.ts"
   }
 }
