@@ -49,8 +49,11 @@ export function makeSSEHelpers(corsHeaders: Record<string, string>) {
  *
  * Contract, pinned by _sse.test.ts (all five former copies behaved this
  * way — do not "improve" without a checkpoint):
- *   - `[DONE]` fires onDoneMarker (every occurrence) and CONTINUES; the
- *     loop only exits when the reader reports done.
+ *   - `[DONE]` is skipped and the loop CONTINUES; it only exits when the
+ *     reader reports done. Callers must NOT hang side effects off the
+ *     [DONE] sentinel — only OpenAI-shape providers send it (Anthropic
+ *     ends with message_stop); completion work belongs in the caller's
+ *     tail, after this function resolves.
  *   - Deltas are filtered by truthiness: empty-string deltas are neither
  *     accumulated nor forwarded.
  *   - onToken owns the enqueue and its own disconnect-guard style; it is
@@ -66,7 +69,6 @@ export async function readProviderStream(
   provider: ProviderId,
   handlers: {
     onToken: (delta: string) => void;
-    onDoneMarker?: () => void;
   },
 ): Promise<string> {
   let fullResponse = "";
@@ -86,10 +88,7 @@ export async function readProviderStream(
       const trimmed = line.trim();
       if (!trimmed || !trimmed.startsWith("data:")) continue;
       const payload = trimmed.slice(5).trim();
-      if (payload === "[DONE]") {
-        handlers.onDoneMarker?.();
-        continue;
-      }
+      if (payload === "[DONE]") continue;
 
       try {
         const parsed = JSON.parse(payload);

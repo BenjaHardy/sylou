@@ -330,10 +330,13 @@ When citing information from web search results, always include the source URL i
 
       const { sseEvent, createSSEResponse } = makeSSEHelpers(corsHeaders);
 
-      // Fire-and-forget prompt-count increment: runs once per request, on
-      // the first [DONE] marker from the provider stream (both reader
-      // loops pass this as onDoneMarker). The tools-unused replay path
-      // counts differently — an awaited update in its tail.
+      // Fire-and-forget prompt-count increment: runs once per request,
+      // called from each streaming tail once the provider stream has
+      // completed. Deliberately NOT hung off the provider's [DONE] marker —
+      // only OpenAI-shape providers (Mistral/DeepSeek) send that sentinel;
+      // Anthropic streams end with message_stop, which left Claude-model
+      // chats uncounted. The tools-unused replay path counts differently —
+      // an awaited update in its tail.
       let promptCounted = false;
       const countPromptOnce = () => {
         if (promptCounted) return;
@@ -651,7 +654,6 @@ When citing information from web search results, always include the source URL i
                 onToken: (delta) => {
                   try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
                 },
-                onDoneMarker: countPromptOnce,
               });
 
               // Clean and persist
@@ -706,6 +708,8 @@ When citing information from web search results, always include the source URL i
                 amount: estimatedTokens,
               });
               if (rpcErr) console.error("[chat] increment_tokens_used failed:", JSON.stringify(rpcErr));
+
+              countPromptOnce();
 
               try {
                 if (userMsgErr || assistantMsgErr) {
@@ -781,7 +785,6 @@ When citing information from web search results, always include the source URL i
                   controller.enqueue(sseEvent({ token: delta }));
                 } catch { /* client gone */ }
               },
-              onDoneMarker: countPromptOnce,
             });
 
             // Persist
@@ -835,6 +838,8 @@ When citing information from web search results, always include the source URL i
               amount: estimatedTokens,
             });
             if (rpcErr) console.error("[chat] increment_tokens_used failed:", JSON.stringify(rpcErr));
+
+            countPromptOnce();
 
             try {
               if (userMsgErr || assistantMsgErr) {

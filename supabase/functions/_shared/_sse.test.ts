@@ -65,26 +65,15 @@ Deno.test("readProviderStream: multi-byte character split across byte chunks sur
   assertEquals(result, "🌊ok");
 });
 
-Deno.test("readProviderStream: [DONE] fires the marker and CONTINUES — later deltas still stream", async () => {
-  let markers = 0;
+Deno.test("readProviderStream: [DONE] is skipped and CONTINUES — later deltas still stream", async () => {
   const tokens: string[] = [];
   const result = await readProviderStream(
     sseResponse([openaiDelta("a"), "data: [DONE]\n", openaiDelta("b")]),
     "mistral",
-    { onToken: (d) => tokens.push(d), onDoneMarker: () => markers++ },
+    { onToken: (d) => tokens.push(d) },
   );
-  assertEquals(markers, 1);
   assertEquals(tokens, ["a", "b"]);
   assertEquals(result, "ab");
-});
-
-Deno.test("readProviderStream: [DONE] without a marker callback is a no-op", async () => {
-  const result = await readProviderStream(
-    sseResponse(["data: [DONE]\n", openaiDelta("x")]),
-    "anthropic",
-    { onToken: () => {} },
-  );
-  assertEquals(result, "x");
 });
 
 Deno.test("readProviderStream: malformed JSON and non-data lines are skipped without dying", async () => {
