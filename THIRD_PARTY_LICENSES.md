@@ -327,7 +327,7 @@ Packages bundled into (or supporting) the shipped application.
 - postcss-nested@6.2.0
 - postcss-selector-parser@6.1.4
 - postcss-value-parser@4.2.0
-- postcss@8.5.16
+- postcss@8.5.23
 - process-nextick-args@2.0.1
 - property-information@7.2.0
 - prosemirror-changeset@2.4.1
