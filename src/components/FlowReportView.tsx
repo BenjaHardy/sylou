@@ -112,22 +112,6 @@ export function FlowReportView({
     });
   }, [showHighlighted]);
 
-  const [writingContent, setWritingContent] = useState<string>("");
-
-  const fetchWritingContent = useCallback(async () => {
-    if (!report?.project_id) return;
-    const { data } = await supabase
-      .from("writing_content")
-      .select("content")
-      .eq("project_id", report.project_id)
-      .single();
-    if (data) setWritingContent(data.content);
-  }, [report?.project_id]);
-
-  useEffect(() => {
-    fetchWritingContent();
-  }, [fetchWritingContent]);
-
   useEffect(() => {
     if (!showPreAnalysis) {
       setPreFeedbackViewed(true);
@@ -322,11 +306,16 @@ export function FlowReportView({
       {showHighlighted && report?.provenance_snapshot && (
         <HighlightedTextErrorBoundary onClose={() => setShowHighlighted(false)}>
           <div className="absolute inset-0 z-10 bg-background">
+            {/* Segments pair with the FROZEN writing_snapshot — captured in
+                the same analysis insert as the provenance map, so offsets
+                always match. Pairing with live writing_content (the old
+                behavior) drifted as soon as the user kept editing. */}
             <FlowHighlightedText
               segments={report.provenance_snapshot}
-              writingContent={writingContent}
+              writingContent={report.writing_snapshot ?? ""}
               onClose={() => setShowHighlighted(false)}
             />
+
           </div>
         </HighlightedTextErrorBoundary>
       )}
