@@ -459,6 +459,24 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Project not found or not owned by user" }, 404);
     }
 
+    // --- Verify the target thread belongs to this project (fail-closed) ---
+    // The service-role persistence writes key on thread_id, so it must be
+    // ownership-gated like project_id is above — without this, a foreign
+    // thread UUID in the body would let the admin-client inserts land
+    // Ask/Propose rows (FLOW-input signals) in another user's thread.
+    // RLS on chat_threads returns null for threads the caller can't see,
+    // and the project_id predicate pins the thread to THIS project
+    // (mirrors chat's gate). CONFIRM returns before this and is unaffected.
+    const { data: targetThread } = await supabase
+      .from("chat_threads")
+      .select("id")
+      .eq("id", thread_id)
+      .eq("project_id", project_id)
+      .maybeSingle();
+    if (!targetThread) {
+      return jsonResponse({ error: "Thread not found or not owned by user" }, 404);
+    }
+
     const projectLanguage = project.language ?? "English";
 
     // --- 1. Fetch writing content ---
