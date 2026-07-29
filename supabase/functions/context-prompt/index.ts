@@ -11,7 +11,6 @@ import {
   type ClaudeEffort, type MistralEffort,
 } from "../_shared/_thinking.ts";
 import {
-  buildMemoryInjection,
   fetchConversationMemory,
   maybeRefreshConversationMemory,
 } from "../_shared/_conversation_memory.ts";
@@ -19,6 +18,7 @@ import {
 import { isOverBudget, getBudgetedProfile } from "../_shared/_billing.ts";
 import { persistContextExchange, type PersistCtx } from "./persist.ts";
 import { formatCreativeDataForSummary } from "./creative.ts";
+import { mergeSummary, buildSummaryPrompt, buildResponsePrompt } from "./prompts.ts";
 
 
 // Service-role client for ai_editor_actions (bypasses RLS)
@@ -77,113 +77,6 @@ async function callChatModel(
   const text = cleanLLMContent(rawText);
   const inputChars = messages.reduce((s, m) => s + m.content.length, 0);
   return { text, inputChars, outputChars: text.length };
-}
-
-// ── Prompt builders ─────────────────────────────────────────────────────────
-
-function buildSummaryPrompt(
-  writingContent: string,
-  existingSummary: string | null,
-  selectedText: string,
-  instruction: string,
-  sourceModule: string,
-  language: string,
-  creativeDataSection: string = "",
-): { role: string; content: string }[] {
-  const prompt = `You are a writing analysis assistant. Respond in ${language}.
-
-Your task is to produce a brief, focused summary of the user's current writing project, relevant to answering a specific question or fulfilling a specific request.
-
-=== CURRENT WRITING ===
-${writingContent}
-${creativeDataSection}
-
-=== EXISTING WRITING SUMMARY (if any) ===
-${existingSummary ?? "None"}
-
-=== USER'S SELECTED TEXT ===
-${selectedText}
-
-=== USER'S QUESTION/REQUEST ===
-${instruction}
-
-=== SOURCE MODULE ===
-${sourceModule}
-
-=== YOUR TASK ===
-- Produce a brief summary of the writing that includes ONLY information needed to answer the user's question or fulfill their request effectively. Be concise and specific.
-
-CRITICAL RULES — follow exactly:
-
-1. If an EXISTING WRITING SUMMARY is provided above AND it already covers
-   all information needed to answer the user's question:
-   → Reply with exactly: "No update needed."
-
-2. If an EXISTING WRITING SUMMARY is provided above BUT additional details
-   from the writing are needed:
-   → Start your reply with "Additionally, " and provide ONLY the new facts.
-   → Do NOT repeat anything from the existing summary.
-
-3. If NO existing summary exists (it says "None"):
-   → Start with "Writing currently includes..." and write a fresh summary.
-
-FORMAT:
-- Keep under 300 words. 
-- State only facts from the writing — no analysis or recommendations.
-- Focus on aspects relevant to the user's question
-- Include character traits, plot points, arguments, or structural elements ONLY if they are needed to provide a good response`;
-
-  return [
-    { role: "system", content: prompt },
-    { role: "user", content: `Please analyze the writing and produce a summary relevant to: "${instruction}"` },
-  ];
-}
-
-function buildResponsePrompt(
-  systemPrompt: string,
-  updatedSummary: string,
-  selectedText: string,
-  instruction: string,
-  sourceModule: string,
-  recentChat: { role: string; content: string }[],
-  actionType: "ask" | "propose",
-  language: string,
-  conversationMemory: string | null = null,
-): { role: string; content: string }[] {
-  const taskInstruction =
-    actionType === "ask"
-      ? "Respond to the user's question with informed, specific feedback based on the writing context provided. Reference specific aspects of their work. Be helpful and constructive."
-      : "Produce a revised version of the selected text that fulfills the user's request. Provide ONLY the proposed replacement text, without explanation or commentary. The user will have the option to accept, modify, or reject your proposal.";
-
-  const chatHistory = recentChat.length > 0
-    ? recentChat.map((m) => `${m.role}: ${m.content}`).join("\n")
-    : "No previous messages.";
-
-  const contextPrompt = `${systemPrompt}
-
-Respond in ${language}.
-
-=== WRITING CONTEXT ===
-The following is a summary of the user's current writing, relevant to their request:
-${updatedSummary}
-
-=== SELECTED TEXT ===
-The user selected the following text in their ${sourceModule}:
-"${selectedText}"
-
-=== USER'S REQUEST ===
-${instruction}
-
-${conversationMemory ? `${buildMemoryInjection(conversationMemory)}\n\n` : ""}=== RECENT CHAT HISTORY ===
-${chatHistory}
-
-=== YOUR TASK ===
-${taskInstruction}`;
-
-  return [
-    { role: "system", content: contextPrompt },
-    { role: "user", content: instruction },
-  ];
 }
 
 // ── Main handler ────────────────────────────────────────────────────────────
@@ -443,20 +336,8 @@ Deno.serve(async (req) => {
     const summaryResult = await callChatModel(chatModel, summaryMessages, summaryMaxTokens, temperature, thinking, effort, mistralEffort);
     const summaryText = summaryResult.text.trim();
 
-    // --- 5. Determine summary update ---
-    let updatedSummary: string;
-    let summaryUpdate: string;
-
-    if (summaryText === "No update needed." && existingSummary) {
-      updatedSummary = existingSummary;
-      summaryUpdate = "No update needed.";
-    } else if (existingSummary && summaryText.startsWith("Additionally")) {
-      updatedSummary = existingSummary + "\n" + summaryText;
-      summaryUpdate = summaryText;
-    } else {
-      updatedSummary = summaryText;
-      summaryUpdate = summaryText;
-    }
+    // --- 5. Determine summary update (protocol + merge live in prompts.ts) ---
+    const { updatedSummary, summaryUpdate } = mergeSummary(summaryText, existingSummary);
 
     // --- 6. Build LLM Call #2 prompt ---
     const tutorMode = project.tutor_mode ?? false;
