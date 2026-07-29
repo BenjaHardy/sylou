@@ -8,7 +8,6 @@ import { sliceSafe } from "../_shared/_text.ts";
 import {
   CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT,
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
-  type ClaudeEffort, type MistralEffort,
 } from "../_shared/_thinking.ts";
 import {
   fetchConversationMemory,
@@ -19,6 +18,7 @@ import { isOverBudget, getBudgetedProfile } from "../_shared/_billing.ts";
 import { persistContextExchange, type PersistCtx } from "./persist.ts";
 import { formatCreativeDataForSummary } from "./creative.ts";
 import { mergeSummary, buildSummaryPrompt, buildResponsePrompt } from "./prompts.ts";
+import { callChatModel } from "./call-model.ts";
 
 
 // Service-role client for ai_editor_actions (bypasses RLS)
@@ -40,44 +40,6 @@ const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
 // answered or the follow-up provider request 400s for the unpaired ids
 // (P3-7e).
 const TOOL_CALL_LIMIT = 5;
-
-async function callChatModel(
-  model: string,
-  messages: { role: string; content: string }[],
-  maxTokens = 2000,
-  temperature?: number,
-  thinking?: boolean,
-  effort?: ClaudeEffort,
-  mistralEffort?: MistralEffort,
-): Promise<{ text: string; inputChars: number; outputChars: number }> {
-  const res = await callLLM({
-    model,
-    messages: messages as any,
-    max_tokens: maxTokens,
-    temperature,
-    thinking,
-    effort,
-    mistral_effort: mistralEffort,
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error("LLM API error:", res.status, errText);
-    throw new Error(extractProviderError(providerFor(model), res.status, errText));
-  }
-
-  const data = await res.json();
-  let rawText = "";
-  if (providerFor(model) === "anthropic") {
-    const blocks: any[] = data?.content ?? [];
-    rawText = blocks.filter(b => b?.type === "text").map(b => b.text ?? "").join("");
-  } else {
-    rawText = data.choices?.[0]?.message?.content ?? "";
-  }
-  const text = cleanLLMContent(rawText);
-  const inputChars = messages.reduce((s, m) => s + m.content.length, 0);
-  return { text, inputChars, outputChars: text.length };
-}
 
 // ── Main handler ────────────────────────────────────────────────────────────
 
