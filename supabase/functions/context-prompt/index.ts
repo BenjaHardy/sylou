@@ -19,6 +19,7 @@ import { persistContextExchange, type PersistCtx } from "./persist.ts";
 import { formatCreativeDataForSummary } from "./creative.ts";
 import { mergeSummary, buildSummaryPrompt, buildResponsePrompt } from "./prompts.ts";
 import { callChatModel } from "./call-model.ts";
+import { handleConfirm } from "./confirm.ts";
 
 
 // Service-role client for ai_editor_actions (bypasses RLS)
@@ -125,56 +126,17 @@ Deno.serve(async (req) => {
     const webSearchEnabled: boolean = body.web_search_enabled ?? false;
 
     // ── CONFIRM endpoint ────────────────────────────────────────────────
+    // Ordering invariant: this call sits AFTER the budget/allowlist/key
+    // gates and BEFORE field validation — CONFIRM requests deliberately
+    // inherit those three rejections. Branch body lives in confirm.ts.
     if (body.confirm !== undefined) {
-      const { confirm, action_id, modified } = body;
-      const adminClient = getAdminClient();
-
-      // --- Ownership gate: CONFIRM returns before the main-path projects
-      // check and uses the RLS-bypassing service-role client, so it must
-      // verify ownership manually. Read via the RLS-scoped `supabase` client —
-      // a row comes back only if the caller owns this project. maybeSingle()
-      // keeps "not owned" a clean null (fail-closed) rather than a PGRST116.
-      const { data: confirmProject } = await supabase
-        .from("projects")
-        .select("id, tutor_mode")
-        .eq("id", project_id)
-        .maybeSingle();
-      if (!confirmProject) {
-        return jsonResponse({ error: "Project not found or not owned by user" }, 404);
-      }
-
-      // --- Atomic pending-gate: only the FIRST decision for an action row
-      // transitions it out of 'pending'. Replays, accept↔reject flips and
-      // concurrent double-submits match zero rows here and no-op idempotently.
-      // CONFIRM records ONLY the decision — the exchange itself (prompt,
-      // summary delta, proposal) was already logged at delivery in the main
-      // path (TRANSPARENCY.md §5.1), so nothing is written to the chat or the
-      // summary log here.
-      if (!action_id || typeof action_id !== "string") {
-        // No ledger row to transition (the Propose-time insert failed).
-        return jsonResponse({ ok: true, inserted_messages: [], already_resolved: true });
-      }
-      const outcome = !confirm ? "rejected" : modified ? "modified" : "accepted";
-      const { data: transitioned, error: gateErr } = await adminClient
-        .from("ai_editor_actions")
-        .update({ outcome })
-        .eq("id", action_id)
-        .eq("project_id", project_id)
-        .eq("outcome", "pending")
-        .select("id")
-        .maybeSingle();
-      if (gateErr) {
-        console.error("CONFIRM pending-gate update failed:", JSON.stringify(gateErr));
-        return jsonResponse({ error: "Failed to record decision" }, 500);
-      }
-      if (!transitioned) {
-        // Unknown id, not owned, or already decided — nothing written.
-        return jsonResponse({ ok: true, inserted_messages: [], already_resolved: true });
-      }
-
-      // Decision recorded. inserted_messages stays in the response shape for
-      // older clients (always empty — delivery already logged the exchange).
-      return jsonResponse({ ok: true, inserted_messages: [] });
+      return await handleConfirm({
+        body,
+        supabase,
+        admin: getAdminClient(),
+        projectId: project_id,
+        jsonResponse,
+      });
     }
 
     // ── Main context-prompt flow ────────────────────────────────────────
