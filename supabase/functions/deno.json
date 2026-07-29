@@ -5,14 +5,19 @@
     "rules": {
       // no-import-prefix: inline https:/npm: imports are the standard Supabase
       //   edge-function style (no import map here).
-      // no-inner-declarations: the streaming handlers intentionally declare
-      //   inner functions that close over request-scoped state.
+      // no-inner-declarations: originally for the streaming handlers'
+      //   request-scoped inner functions; those left with the Phase C/D
+      //   context-prompt refactors. Sole remaining consumer is
+      //   analysis/index.ts (2 findings) — revisit at the analysis split.
       "exclude": ["no-import-prefix", "no-inner-declarations"]
     }
   },
   "tasks": {
     "check": "deno check **/*.ts",
     "lint": "deno lint",
-    "test": "deno test --allow-read _shared/ context-prompt/persist.test.ts"
+    // deno test collects only *.test.ts from listed directories; the
+    // functions' index.ts files are never imported (importing one would
+    // execute Deno.serve).
+    "test": "deno test --allow-read _shared/ context-prompt/"
   }
 }

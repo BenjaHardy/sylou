@@ -8,16 +8,22 @@ import { sliceSafe } from "../_shared/_text.ts";
 import {
   CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT,
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
-  type ClaudeEffort, type MistralEffort,
 } from "../_shared/_thinking.ts";
 import {
-  buildMemoryInjection,
   fetchConversationMemory,
   maybeRefreshConversationMemory,
 } from "../_shared/_conversation_memory.ts";
 
 import { isOverBudget, getBudgetedProfile } from "../_shared/_billing.ts";
 import { persistContextExchange, type PersistCtx } from "./persist.ts";
+import { formatCreativeDataForSummary } from "./creative.ts";
+import {
+  mergeSummary, buildSummaryPrompt, buildResponsePrompt,
+  CLASSIC_MODE_SYSTEM_PROMPT, TUTOR_MODE_SYSTEM_PROMPT,
+  CONCISE_MODE_MODIFIER, TEMPLATE_PROMPTS,
+} from "./prompts.ts";
+import { callChatModel } from "./call-model.ts";
+import { handleConfirm } from "./confirm.ts";
 
 
 // Service-role client for ai_editor_actions (bypasses RLS)
@@ -39,251 +45,6 @@ const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
 // answered or the follow-up provider request 400s for the unpaired ids
 // (P3-7e).
 const TOOL_CALL_LIMIT = 5;
-
-async function callChatModel(
-  model: string,
-  messages: { role: string; content: string }[],
-  maxTokens = 2000,
-  temperature?: number,
-  thinking?: boolean,
-  effort?: ClaudeEffort,
-  mistralEffort?: MistralEffort,
-): Promise<{ text: string; inputChars: number; outputChars: number }> {
-  const res = await callLLM({
-    model,
-    messages: messages as any,
-    max_tokens: maxTokens,
-    temperature,
-    thinking,
-    effort,
-    mistral_effort: mistralEffort,
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error("LLM API error:", res.status, errText);
-    throw new Error(extractProviderError(providerFor(model), res.status, errText));
-  }
-
-  const data = await res.json();
-  let rawText = "";
-  if (providerFor(model) === "anthropic") {
-    const blocks: any[] = data?.content ?? [];
-    rawText = blocks.filter(b => b?.type === "text").map(b => b.text ?? "").join("");
-  } else {
-    rawText = data.choices?.[0]?.message?.content ?? "";
-  }
-  const text = cleanLLMContent(rawText);
-  const inputChars = messages.reduce((s, m) => s + m.content.length, 0);
-  return { text, inputChars, outputChars: text.length };
-}
-
-// ── Creative data formatting helpers ─────────────────────────────────────────
-
-function stripHtmlDeno(html: string): string {
-  if (!html) return "";
-  // No DOMParser global in the Deno/Supabase edge runtime (browser-only API),
-  // so a DOM-parse branch throws on every call — regex-strip is what runs.
-  return html.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
-}
-
-function formatCreativeDataForSummary(
-  creativeRows: Array<{ tool_type: string; data: Record<string, unknown> }>
-): string {
-  if (!creativeRows || creativeRows.length === 0) return "";
-
-  const sections: string[] = [];
-
-  for (const row of creativeRows) {
-    if (row.tool_type === "worldbuilding") {
-      const cats = (row.data as any)?.categories as Array<{
-        name: string;
-        notes: Array<{ title: string; subcategory: string; content: string }>;
-      }> ?? [];
-      if (cats.length === 0) continue;
-      const lines = ["--- World-Building Notes ---"];
-      for (const cat of cats) {
-        for (const note of (cat.notes ?? [])) {
-          const text = stripHtmlDeno(note.content);
-          if (text) {
-            lines.push(`[${cat.name} / ${note.subcategory}] ${note.title}: ${text}`);
-          }
-        }
-      }
-      if (lines.length > 1) sections.push(lines.join("\n"));
-    }
-
-    if (row.tool_type === "characters") {
-      const chars = (row.data as any)?.characters as Array<{
-        id: string; name: string; description: string; traits: string[];
-      }> ?? [];
-      const rels = (row.data as any)?.relationships as Array<{
-        from_id: string; to_id: string; type_id: string; notes: string;
-      }> ?? [];
-      const relTypes = (row.data as any)?.relationshipTypes as Array<{
-        id: string; label: string;
-      }> ?? [];
-      if (chars.length === 0) continue;
-
-      const nameMap = new Map(chars.map(c => [c.id, c.name]));
-      const lines = ["--- Character Diagram ---"];
-      for (const c of chars) {
-        let line = `- ${c.name}`;
-        if (c.description) line += `: ${c.description}`;
-        if (c.traits?.length) line += ` [Traits: ${c.traits.join(", ")}]`;
-        lines.push(line);
-      }
-      if (rels.length > 0) {
-        lines.push("Relationships:");
-        for (const r of rels) {
-          const fromName = nameMap.get(r.from_id) ?? "?";
-          const toName = nameMap.get(r.to_id) ?? "?";
-          const typeLabel = relTypes.find(t => t.id === r.type_id)?.label ?? "?";
-          let line = `  ${fromName} → ${toName} (${typeLabel})`;
-          if (r.notes) line += ` — ${r.notes}`;
-          lines.push(line);
-        }
-      }
-      sections.push(lines.join("\n"));
-    }
-
-    if (row.tool_type === "timeline") {
-      const events = (row.data as any)?.events as Array<{
-        title: string; date: string; description: string; order: number;
-        character_ids: string[];
-      }> ?? [];
-      if (events.length === 0) continue;
-
-      // Need character names from characters row
-      const charsRow = creativeRows.find(r => r.tool_type === "characters");
-      const chars = (charsRow?.data as any)?.characters as Array<{ id: string; name: string }> ?? [];
-      const nameMap = new Map(chars.map(c => [c.id, c.name]));
-
-      const sorted = [...events].sort((a, b) => a.order - b.order);
-      const lines = ["--- Timeline ---"];
-      for (const e of sorted) {
-        let line = `- ${e.date ? `[${e.date}] ` : ""}${e.title}`;
-        if (e.description) line += `: ${e.description}`;
-        if (e.character_ids?.length) {
-          const names = e.character_ids.map(id => nameMap.get(id) ?? "?").join(", ");
-          line += ` [Characters: ${names}]`;
-        }
-        lines.push(line);
-      }
-      sections.push(lines.join("\n"));
-    }
-  }
-
-  if (sections.length === 0) return "";
-  return "\n\n=== CREATIVE WRITING TOOLS ===\n\n" + sections.join("\n\n");
-}
-
-// ── Prompt builders ─────────────────────────────────────────────────────────
-
-function buildSummaryPrompt(
-  writingContent: string,
-  existingSummary: string | null,
-  selectedText: string,
-  instruction: string,
-  sourceModule: string,
-  language: string,
-  creativeDataSection: string = "",
-): { role: string; content: string }[] {
-  const prompt = `You are a writing analysis assistant. Respond in ${language}.
-
-Your task is to produce a brief, focused summary of the user's current writing project, relevant to answering a specific question or fulfilling a specific request.
-
-=== CURRENT WRITING ===
-${writingContent}
-${creativeDataSection}
-
-=== EXISTING WRITING SUMMARY (if any) ===
-${existingSummary ?? "None"}
-
-=== USER'S SELECTED TEXT ===
-${selectedText}
-
-=== USER'S QUESTION/REQUEST ===
-${instruction}
-
-=== SOURCE MODULE ===
-${sourceModule}
-
-=== YOUR TASK ===
-- Produce a brief summary of the writing that includes ONLY information needed to answer the user's question or fulfill their request effectively. Be concise and specific.
-
-CRITICAL RULES — follow exactly:
-
-1. If an EXISTING WRITING SUMMARY is provided above AND it already covers
-   all information needed to answer the user's question:
-   → Reply with exactly: "No update needed."
-
-2. If an EXISTING WRITING SUMMARY is provided above BUT additional details
-   from the writing are needed:
-   → Start your reply with "Additionally, " and provide ONLY the new facts.
-   → Do NOT repeat anything from the existing summary.
-
-3. If NO existing summary exists (it says "None"):
-   → Start with "Writing currently includes..." and write a fresh summary.
-
-FORMAT:
-- Keep under 300 words. 
-- State only facts from the writing — no analysis or recommendations.
-- Focus on aspects relevant to the user's question
-- Include character traits, plot points, arguments, or structural elements ONLY if they are needed to provide a good response`;
-
-  return [
-    { role: "system", content: prompt },
-    { role: "user", content: `Please analyze the writing and produce a summary relevant to: "${instruction}"` },
-  ];
-}
-
-function buildResponsePrompt(
-  systemPrompt: string,
-  updatedSummary: string,
-  selectedText: string,
-  instruction: string,
-  sourceModule: string,
-  recentChat: { role: string; content: string }[],
-  actionType: "ask" | "propose",
-  language: string,
-  conversationMemory: string | null = null,
-): { role: string; content: string }[] {
-  const taskInstruction =
-    actionType === "ask"
-      ? "Respond to the user's question with informed, specific feedback based on the writing context provided. Reference specific aspects of their work. Be helpful and constructive."
-      : "Produce a revised version of the selected text that fulfills the user's request. Provide ONLY the proposed replacement text, without explanation or commentary. The user will have the option to accept, modify, or reject your proposal.";
-
-  const chatHistory = recentChat.length > 0
-    ? recentChat.map((m) => `${m.role}: ${m.content}`).join("\n")
-    : "No previous messages.";
-
-  const contextPrompt = `${systemPrompt}
-
-Respond in ${language}.
-
-=== WRITING CONTEXT ===
-The following is a summary of the user's current writing, relevant to their request:
-${updatedSummary}
-
-=== SELECTED TEXT ===
-The user selected the following text in their ${sourceModule}:
-"${selectedText}"
-
-=== USER'S REQUEST ===
-${instruction}
-
-${conversationMemory ? `${buildMemoryInjection(conversationMemory)}\n\n` : ""}=== RECENT CHAT HISTORY ===
-${chatHistory}
-
-=== YOUR TASK ===
-${taskInstruction}`;
-
-  return [
-    { role: "system", content: contextPrompt },
-    { role: "user", content: instruction },
-  ];
-}
 
 // ── Main handler ────────────────────────────────────────────────────────────
 
@@ -369,56 +130,17 @@ Deno.serve(async (req) => {
     const webSearchEnabled: boolean = body.web_search_enabled ?? false;
 
     // ── CONFIRM endpoint ────────────────────────────────────────────────
+    // Ordering invariant: this call sits AFTER the budget/allowlist/key
+    // gates and BEFORE field validation — CONFIRM requests deliberately
+    // inherit those three rejections. Branch body lives in confirm.ts.
     if (body.confirm !== undefined) {
-      const { confirm, action_id, modified } = body;
-      const adminClient = getAdminClient();
-
-      // --- Ownership gate: CONFIRM returns before the main-path projects
-      // check and uses the RLS-bypassing service-role client, so it must
-      // verify ownership manually. Read via the RLS-scoped `supabase` client —
-      // a row comes back only if the caller owns this project. maybeSingle()
-      // keeps "not owned" a clean null (fail-closed) rather than a PGRST116.
-      const { data: confirmProject } = await supabase
-        .from("projects")
-        .select("id, tutor_mode")
-        .eq("id", project_id)
-        .maybeSingle();
-      if (!confirmProject) {
-        return jsonResponse({ error: "Project not found or not owned by user" }, 404);
-      }
-
-      // --- Atomic pending-gate: only the FIRST decision for an action row
-      // transitions it out of 'pending'. Replays, accept↔reject flips and
-      // concurrent double-submits match zero rows here and no-op idempotently.
-      // CONFIRM records ONLY the decision — the exchange itself (prompt,
-      // summary delta, proposal) was already logged at delivery in the main
-      // path (TRANSPARENCY.md §5.1), so nothing is written to the chat or the
-      // summary log here.
-      if (!action_id || typeof action_id !== "string") {
-        // No ledger row to transition (the Propose-time insert failed).
-        return jsonResponse({ ok: true, inserted_messages: [], already_resolved: true });
-      }
-      const outcome = !confirm ? "rejected" : modified ? "modified" : "accepted";
-      const { data: transitioned, error: gateErr } = await adminClient
-        .from("ai_editor_actions")
-        .update({ outcome })
-        .eq("id", action_id)
-        .eq("project_id", project_id)
-        .eq("outcome", "pending")
-        .select("id")
-        .maybeSingle();
-      if (gateErr) {
-        console.error("CONFIRM pending-gate update failed:", JSON.stringify(gateErr));
-        return jsonResponse({ error: "Failed to record decision" }, 500);
-      }
-      if (!transitioned) {
-        // Unknown id, not owned, or already decided — nothing written.
-        return jsonResponse({ ok: true, inserted_messages: [], already_resolved: true });
-      }
-
-      // Decision recorded. inserted_messages stays in the response shape for
-      // older clients (always empty — delivery already logged the exchange).
-      return jsonResponse({ ok: true, inserted_messages: [] });
+      return await handleConfirm({
+        body,
+        supabase,
+        admin: getAdminClient(),
+        projectId: project_id,
+        jsonResponse,
+      });
     }
 
     // ── Main context-prompt flow ────────────────────────────────────────
@@ -542,96 +264,18 @@ Deno.serve(async (req) => {
     const summaryResult = await callChatModel(chatModel, summaryMessages, summaryMaxTokens, temperature, thinking, effort, mistralEffort);
     const summaryText = summaryResult.text.trim();
 
-    // --- 5. Determine summary update ---
-    let updatedSummary: string;
-    let summaryUpdate: string;
-
-    if (summaryText === "No update needed." && existingSummary) {
-      updatedSummary = existingSummary;
-      summaryUpdate = "No update needed.";
-    } else if (existingSummary && summaryText.startsWith("Additionally")) {
-      updatedSummary = existingSummary + "\n" + summaryText;
-      summaryUpdate = summaryText;
-    } else {
-      updatedSummary = summaryText;
-      summaryUpdate = summaryText;
-    }
+    // --- 5. Determine summary update (protocol + merge live in prompts.ts) ---
+    const { updatedSummary, summaryUpdate } = mergeSummary(summaryText, existingSummary);
 
     // --- 6. Build LLM Call #2 prompt ---
     const tutorMode = project.tutor_mode ?? false;
     const conciseMode = body.concise_mode ?? false;
-
-    const CLASSIC_MODE_SYSTEM_PROMPT = `You are an AI assistant working in the Sylou environment, designed to help users create high-quality work through thoughtful human-AI collaboration.
-
-Your role is to assist the user with their writing project by providing helpful feedback, generating ideas, answering questions, and supporting their creative or analytical process. You should be knowledgeable, supportive, and responsive to the user's needs.
-
-# GUIDELINES:
-
-- Provide substantive, thoughtful responses that genuinely help the user
-- When asked for opinions or feedback, be honest and constructive
-- Adapt your communication style to the user's needs and the project type
-- If the user asks you to write content, provide high-quality drafts that the user can then review, edit, and make their own
-- Support the user's learning and thinking process, not just their output
-- Be aware that your conversation is part of a collaborative writing project that will be assessed for the balance of human and AI contributions
-
-# CONTEXT AWARENESS:
-
-- If the user asks about specific parts of their writing without providing the text, suggest they use the "Interact with AI" button when selecting text in the editor for the most accurate and context-aware response.
-- When responding to Ask or Propose requests from the text selection window, you will receive a writing summary providing relevant context about the user's work. Use this context to give informed, specific feedback rather than generic advice.
-- For projects using the Creative template, you may also receive context from creative writing tools (character diagrams, timelines, world-building notes). Use this structured data to ensure consistency in your suggestions.
-
-# TRANSPARENCY:
-
-- Your interactions with the user are recorded and may be analyzed as part of the FLOW assessment of this project
-- Be genuine in your assistance — do not try to influence the FLOW assessment by changing your behavior`;
-
-    const TUTOR_MODE_SYSTEM_PROMPT = `You are an AI assistant working in the Sylou environment, operating in Tutor Mode. You are a patient teaching assistant who should prioritize learning over giving direct answers, on a reasonable basis.
-
-You may provide generic information and share facts that are helpful for the user to complete their intellectual work, but you should avoid producing said intellectual work yourself. Before responding in a way that produces intellectual work (instead of just sharing information or data), ask the user one or two reflective questions to incite the user to work by himself and to guide them.
-
-Guide the user to think, reflect, and structure ideas on their own.
-
-In doing so, consider the following behavior with regards to the four FLOW pillars showcasing the necessary steps to complete an intellectual work:
-
-- F - Find (Research & Critical Thinking): You may provide facts and generic information that are helpful for the user to complete their intellectual work, while giving tips on how to find other relevant and useful information, and reminding to complete fact-checking.
-- L - Lead (Ideas & Opinions): Encourage the user to think and reflect on their own ideas and opinions, and to share them with you. You may provide tips on how to develop and refine their ideas and opinions, and provide feedback on said ideas and opinions if requested.
-- O - Organize (Structure & Argumentation): You should avoid providing directly a full outline or structure of the work, but you may provide guidance to help the user achieve this goal and to help develop the structure of their argumentation.
-- W - Write (Writing & Text Production): You should avoid providing directly a full draft of the final / intellectual work, but you may provide tips, guidance, or orthographic/grammatical corrections.
-
-Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
-
-# CONTEXT AWARENESS:
-
-- If the user asks about specific parts of their writing without providing the text, suggest they select the text and use the "Ask" button for context-aware guidance.
-- In Tutor Mode, only "Fix grammar", "Translate", and "Ask" are available from the text selection window. This is intentional — the user should write and revise independently.
-- When responding to Ask requests from the text selection window, use the writing summary to give targeted questions and guidance rather than answers.
-- For Creative template projects, use character diagrams and timelines to ask probing questions about consistency and character development.
-
-# TRANSPARENCY:
-
-- Your interactions are recorded and analyzed as part of the FLOW assessment.
-- Tutor Mode is designed to help the user achieve higher FLOW scores by developing genuine ownership of their work.`;
-
-    const CONCISE_MODE_MODIFIER = `CONCISE MODE ACTIVE: Keep your responses brief and focused.
-
-- Use short paragraphs (2-3 sentences maximum)
-- Get to the point quickly — no lengthy preambles
-- Use bullet points only when listing specific items
-- If the user needs more detail, they will ask
-- In tutor mode: ask 1-2 focused questions rather than multiple
-- Do not give examples unless specifically requested
-- Aim for responses under 150 words unless the topic requires more`;
 
     let systemPrompt = tutorMode
       ? TUTOR_MODE_SYSTEM_PROMPT
       : CLASSIC_MODE_SYSTEM_PROMPT;
 
     // --- Append template-specific context ---
-    const TEMPLATE_PROMPTS: Record<string, string> = {
-      academic: "This is an academic writing project. The user may be working on essays, papers, or research work. Importance of using reputable or reliable information and sources.",
-      creative: "This is a creative writing project. The user may be working on fiction, poetry, or narrative work.",
-      professional: "This is a professional writing project. The user may be working on business documents, reports, or communications. Focus on clarity, precision, and professional tone.",
-    };
     const templateAddition = TEMPLATE_PROMPTS[project?.template ?? ""];
     if (templateAddition) {
       systemPrompt += `\n\n# PROJECT TEMPLATE\n\n${templateAddition}`;
