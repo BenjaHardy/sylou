@@ -3,9 +3,9 @@
 //
 // Unifies what were three near-identical copies in index.ts: the streaming
 // persistResults closure and the two non-streaming inline tails. This file
-// is the "persist" piece of the planned Phase D context-prompt split,
-// landed one phase early because the sequence-pinning tests below cannot
-// import index.ts (importing it executes Deno.serve).
+// is the "persist" piece of the Phase D context-prompt split (landed one
+// phase early, in Phase C, because the sequence-pinning tests below cannot
+// import index.ts — importing it executes Deno.serve).
 //
 // CONTRACT (CLAUDE.md §4 / TRANSPARENCY.md §5.1 — pinned by
 // persist.test.ts; a red test means the transparency contract changed and

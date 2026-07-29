@@ -241,8 +241,9 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   against profile rows or client storage `(not yet implemented)`.
 - No new backend server code — Edge Functions only.
 - Keep components small; extract hooks rather than growing components.
-  (Known oversized offenders flagged for the refactor audit:
-  `ProjectContentArea.tsx`; `context-prompt/index.ts`, ~1.6k lines.)
+  (Known oversized offender flagged for the refactor audit:
+  `ProjectContentArea.tsx`. `context-prompt/` was split into sibling
+  modules in the P4-1 campaign.)
 - Confirm debounced-save + flush-on-navigation paths still hold for any
   new persisted state.
 - Builds are auto-triggered by Vercel on push to main. Don't run
