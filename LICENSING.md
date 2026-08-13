@@ -28,13 +28,13 @@ embedded in code files:
 
 | Location | What's there | License situation |
 |---|---|---|
-| `supabase/functions/analysis/index.ts` | The FLOW analysis prompt text (embedded string constants) | The file is AGPL code; the embedded prompt text is CC BY-SA methodology |
+| `supabase/functions/analysis/prompts.ts` | The FLOW analysis prompt text (embedded string constants) | The file is AGPL code; the embedded prompt text is CC BY-SA methodology |
 | `src/lib/flow-work-profiles.ts` | The 16 work-profile taxonomy (codes, names, descriptions, domain palette) | The data is CC BY-SA methodology; the surrounding TypeScript is AGPL |
 | `src/lib/flowBands.ts` | The six display bands (thresholds, labels, domain palette) | Same as above |
 | `TRANSPARENCY.md` §2–§3 | Prose definition of the pillars and the scale | CC BY-SA methodology |
 
-If the analysis prompt is later extracted into standalone files (planned as
-part of an edge-function refactor), this map will be updated to point there.
+The analysis prompt was extracted into `analysis/prompts.ts` as part of the
+2026 edge-function refactor; the map above points at its current home.
 
 ## Practical consequences
 

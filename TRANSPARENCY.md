@@ -459,7 +459,7 @@ transparency or privacy hole rather than a feature gap.
 
 ## Appendix — the FLOW analysis prompt
 
-For full transparency about the assessment itself, you can find the system prompt that drives a FLOW analysis in`supabase/functions/analysis/index.ts`.
+For full transparency about the assessment itself, you can find the system prompt that drives a FLOW analysis in`supabase/functions/analysis/prompts.ts`.
 
 *Sylou is open-source software released under AGPL-3.0. The FLOW methodology is
 published under CC BY-SA 4.0. This document is the project's description of how
