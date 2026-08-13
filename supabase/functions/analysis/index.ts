@@ -25,6 +25,7 @@ import {
 } from "./sections.ts";
 import { formatCreativeDataForAnalysis } from "./creative.ts";
 import { attemptFlowCall, billFailedAttempt, isValidPillar } from "./attempt.ts";
+import { resolveImportedDocs } from "./docs-budget.ts";
 
 // Cost-policy ceiling for imported documents in a FLOW prompt, in tokens
 // (~4 chars each; 2026-07 maintainer decision). Deliberately below every
@@ -381,44 +382,11 @@ ${writePillarNotice}`;
       Math.floor(windowRemainingChars * 0.8),
     );
 
-    let importedDocsSection = "";
-    let importedDocsMode: "full_text" | "summaries" | "excluded" | "none" = "none";
-    let importedDocsTotalChars = 0;
-
-    if (importedDocs.length > 0) {
-      // Calculate full text size
-      const fullTextEntries = importedDocs.map(d => {
-        const text = d.extracted_text ?? "(no text extracted)";
-        importedDocsTotalChars += text.length;
-        return `--- ${d.file_name} ---\n${text}`;
-      });
-      const fullTextSection = fullTextEntries.join("\n\n");
-
-      // Calculate summary size
-      const summaryEntries = importedDocs.map(d => {
-        const sum = d.summary ?? "(no summary available)";
-        return `--- ${d.file_name} ---\n${sum}`;
-      });
-      const summarySection = summaryEntries.join("\n\n");
-
-      if (fullTextSection.length <= docsAllowanceChars) {
-        // Tier 1: full text fits
-        importedDocsMode = "full_text";
-        importedDocsSection = fullTextSection;
-      } else if (summarySection.length <= docsAllowanceChars) {
-        // Tier 2: summaries fit
-        importedDocsMode = "summaries";
-        const wordEstimate = Math.round(importedDocsTotalChars / 5);
-        importedDocsSection = `Note: The full text of imported documents (~${wordEstimate.toLocaleString()} words total) exceeded the space available for imported documents in this analysis. Summaries are provided instead.\n\n${summarySection}`;
-      } else {
-        // Tier 3: exclude
-        importedDocsMode = "excluded";
-        const wordEstimate = Math.round(importedDocsTotalChars / 5);
-        importedDocsSection = `Note: ${importedDocs.length} imported document(s) (~${wordEstimate.toLocaleString()} words total) were excluded from this analysis because they exceed the space available for imported documents, even as summaries. The documents' titles are: ${importedDocs.map(d => `"${d.file_name}"`).join(", ")}.`;
-      }
-    } else {
-      importedDocsSection = "None";
-    }
+    const {
+      section: importedDocsSection,
+      mode: importedDocsMode,
+      totalChars: importedDocsTotalChars,
+    } = resolveImportedDocs(importedDocs, docsAllowanceChars);
 
     // --- Build full prompt ---
     const userPrompt = buildUserPrompt(importedDocsSection);
