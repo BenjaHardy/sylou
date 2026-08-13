@@ -625,8 +625,9 @@ ${writePillarNotice}`;
       reasoningProvider = "mistral";
       reasoningThinking = null;
       // Raw configured effort for disclosure — diverges from the wire-call
-      // value (mistralEffort, line 989) which resolves "none" to undefined
-      // so the field is omitted from the Mistral API request body.
+      // value (mistralEffort, baked into baseLlmArgs above) which resolves
+      // "none" to undefined so the field is omitted from the Mistral API
+      // request body.
       // Fallback to "none" defends against a future model being added to
       // MISTRAL_REASONING_MODELS without a corresponding FLOW_MISTRAL_EFFORT
       // entry — silent missing disclosure would be worse than a sane default.

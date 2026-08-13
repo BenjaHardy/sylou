@@ -6,7 +6,7 @@
 // block that feeds buildSummaryPrompt's creativeDataSection parameter.
 // Pure functions of their arguments; zero imports.
 //
-// NOTE: analysis/index.ts carries its own stripHtmlDeno twin and its own
+// NOTE: analysis/creative.ts carries its own stripHtmlDeno twin and its own
 // creative formatting — cross-function dedupe is a tracked backlog item,
 // deliberately not part of this split.
 
