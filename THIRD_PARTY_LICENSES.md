@@ -45,7 +45,7 @@ Packages bundled into (or supporting) the shipped application.
 
 ### BlueOak-1.0.0 (1)
 
-- sax@1.6.0
+- sax@1.6.1
 
 ### BSD-2-Clause (1)
 
@@ -275,7 +275,7 @@ Packages bundled into (or supporting) the shipped application.
 - mdast-util-to-hast@13.2.1
 - mdast-util-to-markdown@2.1.2
 - mdast-util-to-string@4.0.0
-- mdurl@2.0.0
+- mdurl@2.1.0
 - merge2@1.4.1
 - micromark-core-commonmark@2.0.3
 - micromark-extension-gfm-autolink-literal@2.1.0
@@ -308,7 +308,7 @@ Packages bundled into (or supporting) the shipped application.
 - micromatch@4.0.8
 - ms@2.1.3
 - mz@2.7.0
-- nanoid@3.3.16
+- nanoid@3.3.18
 - nanoid@5.1.16
 - next-themes@0.3.0
 - normalize-path@3.0.0
@@ -431,12 +431,12 @@ part of the shipped application.
 - @humanfs/types@0.15.0
 - @humanwhocodes/module-importer@1.0.1
 - @humanwhocodes/retry@0.4.3
-- @swc/core-linux-arm-gnueabihf@1.15.43
-- @swc/core@1.15.43
+- @swc/core-linux-arm-gnueabihf@1.16.0
+- @swc/core@1.16.0
 - @swc/counter@0.1.3
-- @swc/types@0.1.27
+- @swc/types@0.1.28
 - aria-query@5.3.0
-- baseline-browser-mapping@2.10.43
+- baseline-browser-mapping@2.11.14
 - detect-libc@2.1.2
 - eslint-visitor-keys@3.4.3
 - eslint-visitor-keys@4.2.1
@@ -447,21 +447,21 @@ part of the shipped application.
 
 ### Apache-2.0 AND MIT (11)
 
-- @swc/core-darwin-arm64@1.15.43
-- @swc/core-darwin-x64@1.15.43
-- @swc/core-linux-arm64-gnu@1.15.43
-- @swc/core-linux-arm64-musl@1.15.43
-- @swc/core-linux-ppc64-gnu@1.15.43
-- @swc/core-linux-s390x-gnu@1.15.43
-- @swc/core-linux-x64-gnu@1.15.43
-- @swc/core-linux-x64-musl@1.15.43
-- @swc/core-win32-arm64-msvc@1.15.43
-- @swc/core-win32-ia32-msvc@1.15.43
-- @swc/core-win32-x64-msvc@1.15.43
+- @swc/core-darwin-arm64@1.16.0
+- @swc/core-darwin-x64@1.16.0
+- @swc/core-linux-arm64-gnu@1.16.0
+- @swc/core-linux-arm64-musl@1.16.0
+- @swc/core-linux-ppc64-gnu@1.16.0
+- @swc/core-linux-s390x-gnu@1.16.0
+- @swc/core-linux-x64-gnu@1.16.0
+- @swc/core-linux-x64-musl@1.16.0
+- @swc/core-win32-arm64-msvc@1.16.0
+- @swc/core-win32-ia32-msvc@1.16.0
+- @swc/core-win32-x64-msvc@1.16.0
 
 ### BlueOak-1.0.0 (1)
 
-- minimatch@10.2.5
+- minimatch@10.2.6
 
 ### BSD-2-Clause (10)
 
@@ -485,12 +485,12 @@ part of the shipped application.
 
 ### CC-BY-4.0 (1)
 
-- caniuse-lite@1.0.30001806
+- caniuse-lite@1.0.30001809
 
 ### ISC (8)
 
-- electron-to-chromium@1.5.393
-- flatted@3.4.2
+- electron-to-chromium@1.5.408
+- flatted@3.4.4
 - isexe@2.0.0
 - minimatch@3.1.5
 - saxes@6.0.0
@@ -507,11 +507,11 @@ part of the shipped application.
 - @emnapi/core@1.11.1
 - @emnapi/runtime@1.11.1
 - @emnapi/wasi-threads@1.2.2
-- @eslint-community/eslint-utils@4.9.1
+- @eslint-community/eslint-utils@4.10.1
 - @eslint-community/regexpp@4.12.2
 - @eslint/eslintrc@3.3.6
 - @eslint/js@9.39.4
-- @napi-rs/wasm-runtime@1.1.6
+- @napi-rs/wasm-runtime@1.2.3
 - @oxc-project/types@0.139.0
 - @rolldown/binding-android-arm64@1.1.5
 - @rolldown/binding-darwin-arm64@1.1.5
@@ -562,7 +562,7 @@ part of the shipped application.
 - acorn-globals@7.0.1
 - acorn-jsx@5.3.2
 - acorn-walk@8.3.5
-- acorn@8.17.0
+- acorn@8.18.0
 - agent-base@6.0.2
 - ajv@6.15.0
 - ansi-regex@5.0.1
@@ -573,9 +573,9 @@ part of the shipped application.
 - autoprefixer@10.5.2
 - balanced-match@1.0.2
 - balanced-match@4.0.4
-- brace-expansion@1.1.16
-- brace-expansion@5.0.7
-- browserslist@4.28.6
+- brace-expansion@1.1.18
+- brace-expansion@5.0.9
+- browserslist@4.28.8
 - call-bind-apply-helpers@1.0.2
 - callsites@3.1.0
 - chai@6.2.2
@@ -599,7 +599,7 @@ part of the shipped application.
 - domexception@4.0.0
 - dunder-proto@1.0.1
 - es-define-property@1.0.1
-- es-module-lexer@2.3.1
+- es-module-lexer@2.3.2
 - es-object-atoms@1.1.2
 - es-set-tostringtag@2.1.0
 - escalade@3.2.0
@@ -632,7 +632,7 @@ part of the shipped application.
 - imurmurhash@0.1.4
 - indent-string@4.0.0
 - is-potential-custom-element-name@1.0.1
-- js-yaml@4.3.0
+- js-yaml@4.3.1
 - jsdom@20.0.3
 - json-buffer@3.0.1
 - json-schema-traverse@0.4.1
@@ -648,7 +648,7 @@ part of the shipped application.
 - mime-types@2.1.35
 - min-indent@1.0.1
 - natural-compare@1.4.0
-- node-releases@2.0.51
+- node-releases@2.0.53
 - nwsapi@2.2.24
 - obug@2.1.4
 - optionator@0.9.4
@@ -680,15 +680,15 @@ part of the shipped application.
 - supports-color@7.2.0
 - symbol-tree@3.2.4
 - tinybench@2.9.0
-- tinyexec@1.2.4
-- tinyrainbow@3.1.0
+- tinyexec@1.3.0
+- tinyrainbow@3.1.1
 - tr46@3.0.0
 - ts-api-utils@2.5.0
 - type-check@0.4.0
 - typescript-eslint@8.62.1
 - undici-types@6.21.0
 - universalify@0.2.0
-- update-browserslist-db@1.2.3
+- update-browserslist-db@1.3.1
 - url-parse@1.5.10
 - vite@8.1.3
 - vitest@4.1.9
@@ -698,21 +698,21 @@ part of the shipped application.
 - whatwg-url@11.0.0
 - why-is-node-running@2.3.0
 - word-wrap@1.2.5
-- ws@8.21.1
+- ws@8.21.3
 - xmlchars@2.2.0
 - yocto-queue@0.1.0
 
 ### MPL-2.0 (12)
 
-- lightningcss-android-arm64@1.32.0
-- lightningcss-darwin-arm64@1.32.0
-- lightningcss-darwin-x64@1.32.0
-- lightningcss-freebsd-x64@1.32.0
-- lightningcss-linux-arm-gnueabihf@1.32.0
-- lightningcss-linux-arm64-gnu@1.32.0
-- lightningcss-linux-arm64-musl@1.32.0
-- lightningcss-linux-x64-gnu@1.32.0
-- lightningcss-linux-x64-musl@1.32.0
-- lightningcss-win32-arm64-msvc@1.32.0
-- lightningcss-win32-x64-msvc@1.32.0
-- lightningcss@1.32.0
+- lightningcss-android-arm64@1.33.0
+- lightningcss-darwin-arm64@1.33.0
+- lightningcss-darwin-x64@1.33.0
+- lightningcss-freebsd-x64@1.33.0
+- lightningcss-linux-arm-gnueabihf@1.33.0
+- lightningcss-linux-arm64-gnu@1.33.0
+- lightningcss-linux-arm64-musl@1.33.0
+- lightningcss-linux-x64-gnu@1.33.0
+- lightningcss-linux-x64-musl@1.33.0
+- lightningcss-win32-arm64-msvc@1.33.0
+- lightningcss-win32-x64-msvc@1.33.0
+- lightningcss@1.33.0
