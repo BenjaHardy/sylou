@@ -8,7 +8,7 @@
 **Process-based AI-use transparency - an open-source writing environment that makes human-AI collaboration visible.**
 
 Sylou is a text editor that helps you write with AI assistance and analyses your collaboration with AI using a standardized framework that looks into the processes of writing: where ideas came from, what got structured by whom, how the prose itself was shaped, etc.
-As it's becoming ever more difficult to identify whether AI was used in a text and *how* it was used, with standard detection tools being unreliable, Sylou aims to flip the problem: helping users gather evidence and proactively demonstrate how they have used AI, using a standardized framework that looks into the processes of writing, producing visual and shareable reports along the way.
+As it's becoming ever more difficult to understand *how* AI was used to produce a writing, with standard detection tools being occasionally unreliable and missing the full picture, Sylou aims to flip the problem: helping users gather evidence and proactively demonstrate how they have used AI, using a standardized framework that looks into the processes of writing, producing visual and shareable reports along the way.
 
 Sylou's whole point is to make human-AI collaboration visible for users willing to show this transparency. It's designed for writers, students, educators, researchers, and anyone who cares about AI-use transparency and is looking to proactively demonstrate how they have used AI, in a clear, visual and insightful way.
 
