@@ -16,6 +16,6 @@
     // deno test collects only *.test.ts from listed directories; the
     // functions' index.ts files are never imported (importing one would
     // execute Deno.serve).
-    "test": "deno test --allow-read _shared/ context-prompt/ analysis/"
+    "test": "deno test --allow-read _shared/ context-prompt/ analysis/ chat/"
   }
 }

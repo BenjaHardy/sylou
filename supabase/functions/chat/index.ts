@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
 import { makeSSEHelpers, readProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
-import { searchWeb, buildDocumentTool, buildWebSearchTool, formatWebSearchResults } from "../_shared/_tools.ts";
+import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
