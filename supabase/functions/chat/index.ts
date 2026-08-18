@@ -24,6 +24,7 @@ import {
 } from "../_shared/_prompts.ts";
 import { buildDocIndex, buildFavBlock, WEB_SEARCH_PROMPT } from "./context.ts";
 import { runToolLoop } from "./tool-loop.ts";
+import { persistChatExchange } from "./persist.ts";
 
 
 // --- CORS allow-list (parsed once at module load) ---
@@ -243,6 +244,24 @@ Deno.serve(async (req) => {
     if (hasDocuments) tools.push(buildDocumentTool());
     if (webSearchActive) tools.push(buildWebSearchTool());
 
+    // Per-request context for the unified persistence sequence
+    // (persist.ts) — shared by all four completion tails. The prompt
+    // count inside it is awaited on every path (checkpoint D3a; the
+    // countPromptOnce fire-and-forget form and its once-guard are gone —
+    // each request runs exactly one tail).
+    const persistCtx = {
+      admin: adminSupabase,
+      threadId,
+      projectId: thread.project_id,
+      userId: user.id,
+      monthlyTokenBudget: profile.monthly_token_budget,
+      tokensUsedThisPeriod: profile.tokens_used_this_period,
+      chatModel,
+      conciseMode,
+      tutorMode,
+      message,
+    };
+
     // =========================================================
     // STREAMING PATH — with tool-use support
     // =========================================================
@@ -250,37 +269,6 @@ Deno.serve(async (req) => {
       console.log("[stream] entering streaming path for thread", threadId, "hasTools:", hasTools);
 
       const { sseEvent, createSSEResponse } = makeSSEHelpers(corsHeaders);
-
-      // Fire-and-forget prompt-count increment: runs once per request,
-      // called from each streaming tail once the provider stream has
-      // completed. Deliberately NOT hung off the provider's [DONE] marker —
-      // only OpenAI-shape providers (Mistral/DeepSeek) send that sentinel;
-      // Anthropic streams end with message_stop, which left Claude-model
-      // chats uncounted. The tools-unused replay path counts differently —
-      // an awaited update in its tail.
-      let promptCounted = false;
-      const countPromptOnce = () => {
-        if (promptCounted) return;
-        promptCounted = true;
-        const promptColumn = tutorMode ? "chat_prompt_count_tutor" : "chat_prompt_count_normal";
-        adminSupabase
-          .from("project_stats")
-          .select(promptColumn)
-          .eq("project_id", thread.project_id)
-          .single()
-          .then(({ data: cs }) => {
-            if (cs) {
-              const cnt = (cs as Record<string, number>)[promptColumn] || 0;
-              adminSupabase
-                .from("project_stats")
-                .update({ [promptColumn]: cnt + 1 })
-                .eq("project_id", thread.project_id)
-                .then(() =>
-                  console.log("[stream] prompt count incremented for", thread.project_id)
-                );
-            }
-          });
-      };
 
       // ---- TWO-PASS FLOW when tools exist ----
       if (hasTools) {
@@ -330,68 +318,21 @@ Deno.serve(async (req) => {
               try {
                 await replayTokenBurst(responseText, (chunk) => controller.enqueue(sseEvent({ token: chunk })));
 
-                const userMsgRow = {
-                  thread_id: threadId,
-                  role: "user",
-                  content: message.trim(),
-                  source_type: "chat",
-                  flow_flag: "normal",
-                  concise_mode: conciseMode,
-                  tutor_mode: tutorMode,
-                };
-                const assistantMsgRow: Record<string, unknown> = {
-                  thread_id: threadId,
-                  role: "assistant",
-                  content: responseText,
-                  source_type: "chat",
-                  flow_flag: "normal",
-                  concise_mode: conciseMode,
-                  tutor_mode: tutorMode,
-                  model_used: chatModel,
-                };
-
-
-
-                const { data: insertedUser, error: userMsgErr } = await adminSupabase
-                  .from("chat_messages")
-                  .insert(userMsgRow)
-                  .select()
-                  .single();
-                if (userMsgErr) console.error("[chat] user message insert failed:", JSON.stringify(userMsgErr));
-
-                const { data: insertedAssistant, error: assistantMsgErr } = await adminSupabase
-                  .from("chat_messages")
-                  .insert(assistantMsgRow)
-                  .select()
-                  .single();
-                if (assistantMsgErr) console.error("[chat] assistant message insert failed:", JSON.stringify(assistantMsgErr));
-
-                const estimatedTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
-                const newTotal = profile.tokens_used_this_period + estimatedTokens;
-                const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
-                  user_uuid: user.id,
-                  amount: estimatedTokens,
-                });
-                if (rpcErr) console.error("[chat] increment_tokens_used failed:", JSON.stringify(rpcErr));
-
-                const promptColumn = tutorMode ? "chat_prompt_count_tutor" : "chat_prompt_count_normal";
-                const { data: cs } = await adminSupabase
-                  .from("project_stats")
-                  .select(promptColumn)
-                  .eq("project_id", thread.project_id)
-                  .single();
-                if (cs) {
-                  const cnt = (cs as Record<string, number>)[promptColumn] || 0;
-                  const { error: statsErr } = await adminSupabase
-                    .from("project_stats")
-                    .update({ [promptColumn]: cnt + 1 })
-                    .eq("project_id", thread.project_id);
-                  if (statsErr) console.error("[chat] project_stats update failed:", JSON.stringify(statsErr));
-                }
+                const {
+                  insertedUser,
+                  insertedAssistant,
+                  persistenceFailed,
+                  newTotal,
+                } = await persistChatExchange(
+                  persistCtx,
+                  responseText,
+                  totalInputChars,
+                  totalOutputChars,
+                );
 
                 // Failed message writes take the same path a thrown persistence
                 // error does — never report success over missing rows.
-                if (userMsgErr || assistantMsgErr) {
+                if (persistenceFailed) {
                   controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
                 } else {
                   controller.enqueue(
@@ -499,59 +440,21 @@ Deno.serve(async (req) => {
               fullResponse = cleanLLMContent(fullResponse);
               totalOutputChars += fullResponse.length;
 
-              const userMsgRow = {
-                thread_id: threadId,
-                role: "user",
-                content: message.trim(),
-                source_type: "chat",
-                flow_flag: "normal",
-                concise_mode: conciseMode,
-                tutor_mode: tutorMode,
-              };
-              const assistantMsgRow: Record<string, unknown> = {
-                thread_id: threadId,
-                role: "assistant",
-                content: fullResponse || "No response generated.",
-                source_type: "chat",
-                flow_flag: "normal",
-                concise_mode: conciseMode,
-                tutor_mode: tutorMode,
-                model_used: chatModel,
-              };
-
-              if (documentsReferenced.length > 0) {
-                assistantMsgRow.documents_referenced = documentsReferenced;
-              }
-              if (webSearchesPerformed.length > 0) {
-                assistantMsgRow.web_searches_performed = webSearchesPerformed;
-              }
-
-              const { data: insertedUser, error: userMsgErr } = await adminSupabase
-                .from("chat_messages")
-                .insert(userMsgRow)
-                .select()
-                .single();
-              if (userMsgErr) console.error("[chat] user message insert failed:", JSON.stringify(userMsgErr));
-
-              const { data: insertedAssistant, error: assistantMsgErr } = await adminSupabase
-                .from("chat_messages")
-                .insert(assistantMsgRow)
-                .select()
-                .single();
-              if (assistantMsgErr) console.error("[chat] assistant message insert failed:", JSON.stringify(assistantMsgErr));
-
-              const estimatedTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
-              const newTotal = profile.tokens_used_this_period + estimatedTokens;
-              const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
-                user_uuid: user.id,
-                amount: estimatedTokens,
-              });
-              if (rpcErr) console.error("[chat] increment_tokens_used failed:", JSON.stringify(rpcErr));
-
-              countPromptOnce();
+              const {
+                insertedUser,
+                insertedAssistant,
+                persistenceFailed,
+                newTotal,
+              } = await persistChatExchange(
+                persistCtx,
+                fullResponse || "No response generated.",
+                totalInputChars,
+                totalOutputChars,
+                { documentsReferenced, webSearchesPerformed },
+              );
 
               try {
-                if (userMsgErr || assistantMsgErr) {
+                if (persistenceFailed) {
                   controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
                 } else {
                   controller.enqueue(
@@ -630,58 +533,25 @@ Deno.serve(async (req) => {
             console.log("[stream] flush() started");
             fullResponse = cleanLLMContent(fullResponse);
 
-            const userMsg = {
-              thread_id: threadId,
-              role: "user",
-              content: message.trim(),
-              source_type: "chat",
-              flow_flag: "normal",
-              concise_mode: conciseMode,
-              tutor_mode: tutorMode,
-            };
-            const assistantMsg = {
-              thread_id: threadId,
-              role: "assistant",
-              content: fullResponse || "No response generated.",
-              source_type: "chat",
-              flow_flag: "normal",
-              concise_mode: conciseMode,
-              tutor_mode: tutorMode,
-              model_used: chatModel,
-            };
-
-            const { data: insertedUser, error: userMsgErr } = await adminSupabase
-              .from("chat_messages")
-              .insert(userMsg)
-              .select()
-              .single();
-            if (userMsgErr) console.error("[chat] user message insert failed:", JSON.stringify(userMsgErr));
-
-            const { data: insertedAssistant, error: assistantMsgErr } = await adminSupabase
-              .from("chat_messages")
-              .insert(assistantMsg)
-              .select()
-              .single();
-            if (assistantMsgErr) console.error("[chat] assistant message insert failed:", JSON.stringify(assistantMsgErr));
-
             const inputChars = llmMessages.reduce(
               (sum, m) => sum + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length),
               0
             );
             const outputChars = fullResponse.length;
-            const estimatedTokens = Math.ceil((inputChars + outputChars) / 4);
-            const newTotal = profile.tokens_used_this_period + estimatedTokens;
-
-            const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
-              user_uuid: user.id,
-              amount: estimatedTokens,
-            });
-            if (rpcErr) console.error("[chat] increment_tokens_used failed:", JSON.stringify(rpcErr));
-
-            countPromptOnce();
+            const {
+              insertedUser,
+              insertedAssistant,
+              persistenceFailed,
+              newTotal,
+            } = await persistChatExchange(
+              persistCtx,
+              fullResponse || "No response generated.",
+              inputChars,
+              outputChars,
+            );
 
             try {
-              if (userMsgErr || assistantMsgErr) {
+              if (persistenceFailed) {
                 controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
               } else {
                 controller.enqueue(
@@ -760,78 +630,29 @@ Deno.serve(async (req) => {
     const assistantText = cleanLLMContent(norm.text || "No response generated.");
 
     // --- Persist messages ---
-    const userMsg = {
-      thread_id: threadId,
-      role: "user",
-      content: message.trim(),
-      source_type: "chat",
-      flow_flag: "normal",
-      concise_mode: conciseMode,
-      tutor_mode: tutorMode,
-    };
-    const assistantMsg = {
-      thread_id: threadId,
-      role: "assistant",
-      content: assistantText,
-      source_type: "chat",
-      flow_flag: "normal",
-      concise_mode: conciseMode,
-      tutor_mode: tutorMode,
-      model_used: chatModel,
-    };
-
-    // Service-role writes (user write policies dropped — write-surface
-    // lockdown); thread ownership was verified at request entry.
-    const { data: insertedUser, error: userMsgErr } = await adminSupabase
-      .from("chat_messages")
-      .insert(userMsg)
-      .select()
-      .single();
-    if (userMsgErr) console.error("[chat] user message insert failed:", JSON.stringify(userMsgErr));
-
-    const { data: insertedAssistant, error: assistantMsgErr } = await adminSupabase
-      .from("chat_messages")
-      .insert(assistantMsg)
-      .select()
-      .single();
-    if (assistantMsgErr) console.error("[chat] assistant message insert failed:", JSON.stringify(assistantMsgErr));
-
-    // --- Estimate tokens & update budget ---
+    // --- Estimate tokens & persist (persist.ts) ---
+    // Service-role writes (write-surface lockdown); thread ownership was
+    // verified at request entry. Disclosed D3 normalization: the prompt
+    // count here previously ran on the USER-context client — persist.ts
+    // uses the admin client on every path (outcome-identical: the
+    // project_stats owner UPDATE policy grants the same write).
     const inputChars = llmMessages.reduce(
       (sum, m) => sum + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length),
       0
     );
     const outputChars = assistantText.length;
-    const estimatedTokens = Math.ceil((inputChars + outputChars) / 4);
-
-    const newTotal =
-      profile.tokens_used_this_period + estimatedTokens;
-
-    const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
-      user_uuid: user.id,
-      amount: estimatedTokens,
-    });
-    if (rpcErr) console.error("[chat] increment_tokens_used failed:", JSON.stringify(rpcErr));
-
-    // --- Increment prompt count in project_stats ---
-    const promptColumn = tutorMode
-      ? "chat_prompt_count_tutor"
-      : "chat_prompt_count_normal";
-
-    const { data: currentStats } = await supabase
-      .from("project_stats")
-      .select(promptColumn)
-      .eq("project_id", thread.project_id)
-      .single();
-
-    if (currentStats) {
-      const currentCount = (currentStats as Record<string, number>)[promptColumn] || 0;
-      const { error: statsErr } = await supabase
-        .from("project_stats")
-        .update({ [promptColumn]: currentCount + 1 })
-        .eq("project_id", thread.project_id);
-      if (statsErr) console.error("[chat] project_stats update failed:", JSON.stringify(statsErr));
-    }
+    const {
+      insertedUser,
+      insertedAssistant,
+      persistenceFailed,
+      estimatedTokens,
+      newTotal,
+    } = await persistChatExchange(
+      persistCtx,
+      assistantText,
+      inputChars,
+      outputChars,
+    );
 
     return jsonResponse({
       reply: assistantText,
@@ -841,7 +662,7 @@ Deno.serve(async (req) => {
       assistant_message: insertedAssistant,
       // Same contract as the streaming paths: a failed message write is
       // reported, never presented as success (client shows data.error).
-      ...(userMsgErr || assistantMsgErr ? { error: "Messages may not have been saved." } : {}),
+      ...(persistenceFailed ? { error: "Messages may not have been saved." } : {}),
     });
   } catch (err) {
     console.error("Chat function error:", err);
