@@ -17,7 +17,11 @@ particular implementation:
 - The four pillar definitions (Find / Lead / Organize / Write), the 0.0–5.0
   scoring scale, its calibration anchors, and the null-evidence rule
 - The six display bands and the sixteen work-profile taxonomy
-- The FLOW analysis prompt text (the instructions given to the scoring model)
+- The FLOW analysis prompt text (the instructions given to the scoring model),
+  including the attribution-doctrine passages embedded in the request
+  assembly (enumerated below)
+- The tutor-mode teaching behavior (the pillar-by-pillar guidance in
+  `TUTOR_MODE_SYSTEM_PROMPT`)
 - The methodology descriptions in [TRANSPARENCY.md](TRANSPARENCY.md)
   (Sections 2–3)
 
@@ -29,12 +33,47 @@ embedded in code files:
 | Location | What's there | License situation |
 |---|---|---|
 | `supabase/functions/analysis/prompts.ts` | The FLOW analysis prompt text (embedded string constants) | The file is AGPL code; the embedded prompt text is CC BY-SA methodology |
+| `supabase/functions/analysis/index.ts` | The attribution-doctrine passages embedded in the request assembly (enumerated below, marked inline) | The file is AGPL code; the listed passages are CC BY-SA methodology |
+| `supabase/functions/context-prompt/prompts.ts` | `TUTOR_MODE_SYSTEM_PROMPT` (pillar-by-pillar teaching behavior) | The file is AGPL code; the tutor prompt text is CC BY-SA methodology |
+| `supabase/functions/chat/index.ts` | The byte-identical request-scoped copy of the tutor prompt | Same as above |
 | `src/lib/flow-work-profiles.ts` | The 16 work-profile taxonomy (codes, names, descriptions, domain palette) | The data is CC BY-SA methodology; the surrounding TypeScript is AGPL |
 | `src/lib/flowBands.ts` | The six display bands (thresholds, labels, domain palette) | Same as above |
 | `TRANSPARENCY.md` §2–§3 | Prose definition of the pillars and the scale | CC BY-SA methodology |
 
 The analysis prompt was extracted into `analysis/prompts.ts` as part of the
 2026 edge-function refactor; the map above points at its current home.
+
+### Attribution-doctrine passages in `analysis/index.ts`
+
+Beyond the prompt templates, the FLOW analysis request embeds a small number
+of instruction passages that tell the scoring model how to *attribute*
+contributions. These are CC BY-SA methodology even though they live inline
+in AGPL handler code; each is marked with a `CC BY-SA` comment at the
+literal:
+
+- the provenance-tag definitions ([t]/[cc]/[ce]/[ai]) in the
+  "WRITING CONTENT" section introduction
+- the writing-summary "[NOT ASSESSED]" attribution rule in the
+  "CHAT HISTORY" section introduction (standard and creative variants)
+- the imported-documents neutrality rule in the "IMPORTED DOCUMENTS"
+  section introduction
+- the creative-tools pillar-relevance rule in the "CREATIVE TOOLS CONTENT"
+  section introduction
+- the similarity notice ("WRITE PILLAR NOTICE") and the Write-score-cap
+  disclosure note
+
+Everything else the request assembles around user data — the language
+instruction, section scaffolding, document-budget notices, the retry nudge,
+and the formatter-rendered evidence blocks — is operational plumbing,
+licensed AGPL like the rest of the code.
+
+Deliberately **not** methodology (considered and excluded): the profile
+painting selections and rationale texts in
+`src/lib/flow-profile-paintings.ts` (editorial presentation about the
+taxonomy, not the framework); `CLASSIC_MODE_SYSTEM_PROMPT` and the
+concise-mode modifier (generic assistant instructions); and the
+"AI EDITOR ACTIVITY" section explanation (a description of what the
+platform logged, not attribution doctrine).
 
 ## Practical consequences
 

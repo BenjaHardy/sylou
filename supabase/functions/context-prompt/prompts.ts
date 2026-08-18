@@ -152,8 +152,10 @@ ${taskInstruction}`;
 // template addition, concise append) deliberately stays in index.ts.
 // NOTE: this block is byte-identical to chat/index.ts's copy — a
 // future _shared prompts seam (own checkpoint; touches chat).
-// TUTOR_MODE_SYSTEM_PROMPT is FLOW-methodology content — flagged for
-// the CC-BY-SA licensing-delineation pass.
+// Licensing (see LICENSING.md): TUTOR_MODE_SYSTEM_PROMPT's text is
+// CC BY-SA 4.0 FLOW methodology (pillar-by-pillar teaching behavior);
+// CLASSIC_MODE_SYSTEM_PROMPT and the other mode texts here are ordinary
+// AGPL application content, deliberately NOT methodology.
 export const CLASSIC_MODE_SYSTEM_PROMPT = `You are an AI assistant working in the Sylou environment, designed to help users create high-quality work through thoughtful human-AI collaboration.
 
 Your role is to assist the user with their writing project by providing helpful feedback, generating ideas, answering questions, and supporting their creative or analytical process. You should be knowledgeable, supportive, and responsive to the user's needs.
