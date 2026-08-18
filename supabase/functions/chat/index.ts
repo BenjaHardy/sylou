@@ -22,6 +22,7 @@ import {
   TEMPLATE_PROMPTS,
   TUTOR_MODE_SYSTEM_PROMPT,
 } from "../_shared/_prompts.ts";
+import { buildDocIndex, buildFavBlock, WEB_SEARCH_PROMPT } from "./context.ts";
 
 
 // --- CORS allow-list (parsed once at module load) ---
@@ -167,23 +168,12 @@ Deno.serve(async (req) => {
 
     // Append document index to system prompt for NON-favourites only
     if (hasNonFavDocs) {
-      let docIndex = `\n\n# IMPORTED DOCUMENTS\n\nThe user has imported the following reference documents into this project. You can see their titles and summaries below. If you need the full text of any document to answer the user's question, use the read_imported_document tool. Only retrieve documents that are directly relevant to the user's query.\n\n`;
-      for (const doc of nonFavourites) {
-        docIndex += `- Document: "${doc.file_name}" (ID: ${doc.id})\n  Summary: ${doc.summary ?? "No summary available"}\n\n`;
-      }
-      systemPrompt += docIndex;
+      systemPrompt += buildDocIndex(nonFavourites);
     }
 
     // Append full text of FAVOURITE documents — always available, no tool call needed
     if (favourites.length > 0) {
-      let favBlock = `\n\n# REFERENCE DOCUMENTS (ALWAYS AVAILABLE)\n\nThe following documents have been provided by the user as key reference material. Their full content is included below. Use them to inform your responses without needing to call the read_imported_document tool.\n\n`;
-      for (const doc of favourites) {
-        favBlock += `=== ${doc.file_name} ===\n\n${doc.extracted_text}\n\n`;
-      }
-      if (hasNonFavDocs) {
-        favBlock += `Note: You also have access to additional imported documents via the read_imported_document tool. Prefer the reference documents above when they contain relevant information; use the tool for the others.\n\n`;
-      }
-      systemPrompt += favBlock;
+      systemPrompt += buildFavBlock(favourites, hasNonFavDocs);
     }
 
     // Gate web search on both user toggle AND BRAVE_SEARCH_API_KEY presence.
@@ -194,17 +184,7 @@ Deno.serve(async (req) => {
 
     // Append web search instructions to system prompt
     if (webSearchActive) {
-      systemPrompt += `\n\n# WEB SEARCH
-
-You have access to a web_search tool. Use it according to these rules:
-
-Always search when the user asks about: current events, recent news and developments, anything time-sensitive (prices, scores, weather, standings, elections), specific claims or facts you're not fully confident about, people's current roles or status, or any question where being up-to-date matters.
-
-Never search for: simple conversational messages (greetings, thanks, acknowledgments), questions about well-established facts, concepts, or definitions, requests for creative writing or brainstorming, follow-up questions where the answer is already in the conversation history, or opinions and advice based on general knowledge.
-
-When in doubt, prefer searching - an unnecessary search is better than an outdated answer.
-
-When citing information from web search results, always include the source URL inline in your response text (e.g. "According to [Source Title](URL), ..."). This ensures the user can verify and revisit the sources later.`;
+      systemPrompt += WEB_SEARCH_PROMPT;
     }
 
     // --- Fetch the 50 most recent messages ---
