@@ -68,7 +68,7 @@ Packages bundled into (or supporting) the shipped application.
 - picocolors@1.1.1
 - qrcode.react@4.2.0
 
-### MIT (339)
+### MIT (340)
 
 - @alloc/quick-lru@5.2.0
 - @dnd-kit/accessibility@3.1.1
@@ -130,7 +130,6 @@ Packages bundled into (or supporting) the shipped application.
 - @radix-ui/react-visually-hidden@1.2.7
 - @radix-ui/rect@1.1.2
 - @remirror/core-constants@3.0.0
-- @remix-run/router@1.23.3
 - @supabase/auth-js@2.110.0
 - @supabase/functions-js@2.110.0
 - @supabase/phoenix@0.4.4
@@ -205,6 +204,7 @@ Packages bundled into (or supporting) the shipped application.
 - clsx@2.1.1
 - comma-separated-tokens@2.0.3
 - commander@4.1.1
+- cookie@1.1.1
 - core-util-is@1.0.3
 - crelt@1.0.7
 - cssesc@3.0.0
@@ -355,8 +355,8 @@ Packages bundled into (or supporting) the shipped application.
 - react-remove-scroll-bar@2.3.8
 - react-remove-scroll@2.7.2
 - react-resizable-panels@2.1.9
-- react-router-dom@6.30.4
-- react-router@6.30.4
+- react-router-dom@7.18.2
+- react-router@7.18.2
 - react-style-singleton@2.2.3
 - react@18.3.1
 - read-cache@1.0.0
@@ -372,6 +372,7 @@ Packages bundled into (or supporting) the shipped application.
 - run-parallel@1.2.0
 - safe-buffer@5.1.2
 - scheduler@0.23.2
+- set-cookie-parser@2.7.2
 - setimmediate@1.0.5
 - sonner@1.7.4
 - space-separated-tokens@2.0.2
@@ -436,7 +437,7 @@ part of the shipped application.
 - @swc/counter@0.1.3
 - @swc/types@0.1.28
 - aria-query@5.3.0
-- baseline-browser-mapping@2.11.14
+- baseline-browser-mapping@2.11.15
 - detect-libc@2.1.2
 - eslint-visitor-keys@3.4.3
 - eslint-visitor-keys@4.2.1
@@ -489,7 +490,7 @@ part of the shipped application.
 
 ### ISC (8)
 
-- electron-to-chromium@1.5.408
+- electron-to-chromium@1.5.409
 - flatted@3.4.4
 - isexe@2.0.0
 - minimatch@3.1.5
