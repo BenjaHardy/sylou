@@ -4,6 +4,10 @@
  * Numeric scores (0.0–5.0) remain the internal representation used for
  * computation, radar geometry, and storage. The user-facing UI must always
  * render the descriptive band label rather than the raw number.
+ *
+ * Licensing (see LICENSING.md): this file is AGPL-3.0-only code; the band
+ * data below — thresholds, labels, and the domain palette — is CC BY-SA 4.0
+ * FLOW methodology.
  */
 
 export type FlowBand = {

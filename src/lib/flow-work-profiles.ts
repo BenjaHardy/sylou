@@ -1,3 +1,7 @@
+// Licensing (see LICENSING.md): this file is AGPL-3.0-only code; the
+// 16-profile taxonomy data below — codes, names, taglines, descriptions,
+// and pillar highlights — is CC BY-SA 4.0 FLOW methodology.
+
 export type FlowProfile = {
   code: string;
   name: string;

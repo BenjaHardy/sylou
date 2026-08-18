@@ -316,6 +316,8 @@ Character-count breakdown by provenance type:
     // Build Write Pillar Notice if similarity >= 35%
     let writePillarNotice = "";
     if (similarityPct >= 35) {
+      // CC BY-SA 4.0 methodology text (attribution doctrine: similarity
+      // notice for the Write pillar) — see LICENSING.md.
       writePillarNotice = `\n# === WRITE PILLAR NOTICE ===\n\nAutomated similarity analysis detected that ${similarityPct}% of the writing content closely matches AI assistant responses from the chat history. This is a significant indicator for Write pillar scoring. Consider this alongside the provenance annotations ([t], [cc], [ce], [ai] tags) in the writing content.`;
     }
 
@@ -328,23 +330,36 @@ Character-count breakdown by provenance type:
     // template's length.
     const basePromptParts = [
       `# LANGUAGE\n\nRespond entirely in ${project.language}. All summaries, analyses, evidence items, reasoning, and narratives must be written in ${project.language}. Only JSON structure and field names remain in English.`,
+      // CC BY-SA 4.0 methodology text (attribution doctrine: the
+      // provenance-tag definitions) — see LICENSING.md.
       `# WRITING CONTENT (PROVENANCE-ANNOTATED)\n\nThe writing content below is annotated with provenance tags indicating the origin of each text segment. Use these annotations to inform your assessment, particularly for the Write pillar:\n\n- [t] = typed by the external third-party user (original user writing, including text copied from the user's own chat messages)\n- [cc] = copied from AI assistant chat messages (AI-originated text)\n- [ce] = copied from an external source (neither user nor AI contribution; pay attention not to wrongly attribute to user)\n- [ai] = AI-generated text accepted from the text selection window (the user selected text in their editor and requested an AI rewrite, expansion, simplification, or proposal, then accepted the result)\n\n${annotatedWriting}\n\n${provenanceSection}`,
+      // CC BY-SA 4.0 methodology text (attribution doctrine: the
+      // writing-summary "[NOT ASSESSED]" rule) — see LICENSING.md.
       `# CHAT HISTORY\n\nThe following chat messages between the AI and the external third-party user are from all project threads, merged in chronological order. Each message is prefixed with a timestamp and thread label.\n\nSome messages originate from the text selection window, a feature that allows the user to select text in their editor and either ask the AI a question about it (Ask) or request the AI to propose a rewritten version (Propose). These messages are flagged with their source type below.\n\nWriting summaries are marked "[NOT ASSESSED]" — they provide context for the subsequent discussion but should not be scored as either party's contribution, because they are AI-generated condensations of the writing and creative tools data at that point in time that may include contributions from any party. Consider the whole chat log and other contents to properly identify the respective contributions of each party, noting that new ideas or contributions appearing for the first time in a writing summary and not found in earlier chat messages would normally be user contributions unless copied from external sources.\n\n${chatHistoryStr}`,
     ];
     // --- Build creative tools section (if applicable) ---
     let creativeToolsSection = "";
     if (isCreativeProject && creativeDataRes.data && creativeDataRes.data.length > 0) {
+      // CC BY-SA 4.0 methodology text (attribution doctrine: creative-tools
+      // relevance to the Lead and Organize pillars) — see LICENSING.md.
       creativeToolsSection = `\n\n# === CREATIVE TOOLS CONTENT ===\n\nThe following content comes from the creative tools accessible by the external third-party user to help develop key story elements: world-building notes, character diagram, timeline. This content is critical for assessing the L – Lead pillar (directly) and O – Organize pillar (indirectly).\n\n${formatCreativeDataForAnalysis(creativeDataRes.data as any)}`;
     }
 
     const systemPromptTemplate = isCreativeProject ? CREATIVE_FLOW_PROMPT_TEMPLATE : FLOW_PROMPT_TEMPLATE;
 
+    // CC BY-SA 4.0 methodology text in the creative arm below (attribution
+    // doctrine: the same "[NOT ASSESSED]" rule, creative variant) — see
+    // LICENSING.md.
     const chatHistoryNote = isCreativeProject
       ? `# CHAT HISTORY\n\nThe following chat messages are from all project threads, merged in chronological order. Each message is prefixed with a timestamp and thread label.\n\nSome messages originate from the text selection window, a feature that allows the user to select text in their editor or in the creative tools and either ask the AI a question about it (Ask – available for both the editor and the creative tools) or request the AI to propose a rewritten version (Propose – available solely for the editor). These messages are flagged with their source type below.\n\nWriting summaries are marked "[NOT ASSESSED]" — they provide context for the subsequent discussion but should not be scored as either party's contribution, because they are AI-generated condensations of the writing and creative tools data at that point in time that may include contributions from any party. Consider the whole chat log and other contents to properly identify the respective contributions of each party, noting that new ideas or contributions appearing for the first time in a writing summary and not found in earlier chat messages would normally be user contributions unless copied from external sources.\n\n${chatHistoryStr}`
       : basePromptParts[2]; // original chat history section
 
     // Whole user prompt minus the imported-docs payload; the docs decision
     // below slots into the IMPORTED DOCUMENTS section.
+    // The IMPORTED DOCUMENTS section intro inside this template carries
+    // CC BY-SA 4.0 methodology text (attribution doctrine: imported
+    // documents are neither party's contribution) — see LICENSING.md. The
+    // surrounding scaffolding is ordinary AGPL plumbing.
     const buildUserPrompt = (docs: string) => `${basePromptParts[0]}\n\n${basePromptParts[1]}${creativeToolsSection}\n\n${chatHistoryNote}
 
 # === IMPORTED DOCUMENTS ===
@@ -579,6 +594,8 @@ ${writePillarNotice}`;
       flowResult.write.score > 2.0
     ) {
       flowResult.write.score = 2.0;
+      // CC BY-SA 4.0 methodology text (attribution doctrine: the Write-score
+      // cap disclosure) — see LICENSING.md.
       flowResult.write.narrative +=
         ` [Note: Write score capped at 2.0 due to automated similarity detection finding ${similarityPct}% overlap with AI chat responses.]`;
     }
