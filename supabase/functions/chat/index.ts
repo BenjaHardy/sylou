@@ -23,6 +23,7 @@ import {
   TUTOR_MODE_SYSTEM_PROMPT,
 } from "../_shared/_prompts.ts";
 import { buildDocIndex, buildFavBlock, WEB_SEARCH_PROMPT } from "./context.ts";
+import { runToolLoop } from "./tool-loop.ts";
 
 
 // --- CORS allow-list (parsed once at module load) ---
@@ -442,111 +443,29 @@ Deno.serve(async (req) => {
                 norm1.assistantMessage,
               ];
 
-              // Resolve tool calls iteratively (up to 5 iterations)
-              let iteration = 0;
-              const MAX_ITERATIONS = 5;
-              // Real executions per assistant turn; calls past this (and
-              // unknown tool names) still get a stub result — every echoed
-              // tool_call MUST be answered or the follow-up request 400s
-              // for the unpaired ids (P3-7e).
-              const TOOL_CALL_LIMIT = 5;
-              let currentToolCalls = toolCalls;
-
-              while (currentToolCalls.length > 0 && iteration < MAX_ITERATIONS) {
-                iteration++;
-                console.log(`[stream] tool iteration ${iteration}, ${currentToolCalls.length} calls`);
-
-                for (const [tcIndex, tc] of currentToolCalls.entries()) {
-                  if (tcIndex >= TOOL_CALL_LIMIT) {
-                    toolMessages.push({
-                      role: "tool",
-                      tool_call_id: tc.id,
-                      content: "Not executed: per-turn tool-call limit reached. Ask again in a follow-up if still needed.",
-                    });
-                  } else if (tc.name === "read_imported_document") {
-                    const docId = tc.arguments.document_id as string;
-                    console.log("[stream] reading document:", docId);
-                    documentsReferenced.push(docId);
-
-                    try { controller.enqueue(sseEvent({ phase: "reading_documents" })); } catch { /* */ }
-
-                    const { data: docData } = await adminSupabase
-                      .from("imported_documents")
-                      .select("extracted_text, file_name")
-                      .eq("id", docId)
-                      .eq("project_id", thread.project_id)
-                      .maybeSingle();
-
-                    const toolResult = docData?.extracted_text
-                      ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
-                      : `Document not found in this project or text not yet extracted.`;
-
-                    totalInputChars += toolResult.length;
-
-                    toolMessages.push({
-                      role: "tool",
-                      tool_call_id: tc.id,
-                      content: toolResult,
-                    });
-                  } else if (tc.name === "web_search") {
-                    const query = tc.arguments.query as string;
-                    console.log("[stream] web search:", query);
-                    webSearchesPerformed.push(query);
-
-                    try { controller.enqueue(sseEvent({ phase: "searching_web" })); } catch { /* */ }
-
-                    const results = await searchWeb(query);
-                    const toolResult = formatWebSearchResults(query, results);
-                    totalInputChars += toolResult.length;
-
-                    toolMessages.push({
-                      role: "tool",
-                      tool_call_id: tc.id,
-                      content: toolResult,
-                    });
-                  } else {
-                    toolMessages.push({
-                      role: "tool",
-                      tool_call_id: tc.id,
-                      content: `Unknown tool "${tc.name}" — not executed.`,
-                    });
-                  }
-                }
-
-                // Check if the LLM wants to make more tool calls
-                if (iteration < MAX_ITERATIONS) {
-                  const nextRes = await callLLM({
-                      model: chatModel,
-                      messages: toolMessages,
-                      max_tokens: chatMaxTokens,
-                      tools,
-                      temperature,
-                      thinking,
-                      effort,
-                      mistral_effort: mistralEffort,
-                    });
-
-                  if (!nextRes.ok) {
-                    currentToolCalls = [];
-                    break;
-                  }
-
-                  const nextData = await nextRes.json();
-                  const nextNorm = normaliseResponse(providerFor(chatModel), nextData);
-                  const nextContent = cleanLLMContent(nextNorm.text);
-                  totalOutputChars += nextContent.length;
-                  currentToolCalls = nextNorm.toolCalls;
-
-                  if (currentToolCalls.length > 0) {
-                    toolMessages.push(nextNorm.assistantMessage);
-                  } else {
-                    // No more tool calls — discard any text from intermediate call
-                    // and fall through to a proper streaming Call #2
-                    break;
-                  }
-                }
-              }
-
+              // Resolve tool calls iteratively (tool-loop.ts); the char
+              // counters return as VALUES and must be folded in — numbers
+              // cannot mutate across the module boundary.
+              const { inputCharsAdded, outputCharsAdded } = await runToolLoop({
+                toolMessages,
+                toolCalls,
+                documentsReferenced,
+                webSearchesPerformed,
+                emitPhase: (phase) => {
+                  try { controller.enqueue(sseEvent({ phase })); } catch { /* */ }
+                },
+                adminSupabase,
+                projectId: thread.project_id,
+                chatModel,
+                chatMaxTokens,
+                tools,
+                temperature,
+                thinking,
+                effort,
+                mistralEffort,
+              });
+              totalInputChars += inputCharsAdded;
+              totalOutputChars += outputCharsAdded;
 
               // LLM Call #2: streaming with tool results (no tools this time)
               console.log("[stream] starting Call #2 streaming");
