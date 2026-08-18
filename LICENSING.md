@@ -34,8 +34,7 @@ embedded in code files:
 |---|---|---|
 | `supabase/functions/analysis/prompts.ts` | The FLOW analysis prompt text (embedded string constants) | The file is AGPL code; the embedded prompt text is CC BY-SA methodology |
 | `supabase/functions/analysis/index.ts` | The attribution-doctrine passages embedded in the request assembly (enumerated below, marked inline) | The file is AGPL code; the listed passages are CC BY-SA methodology |
-| `supabase/functions/context-prompt/prompts.ts` | `TUTOR_MODE_SYSTEM_PROMPT` (pillar-by-pillar teaching behavior) | The file is AGPL code; the tutor prompt text is CC BY-SA methodology |
-| `supabase/functions/chat/index.ts` | The byte-identical request-scoped copy of the tutor prompt | Same as above |
+| `supabase/functions/_shared/_prompts.ts` | `TUTOR_MODE_SYSTEM_PROMPT` (pillar-by-pillar teaching behavior) — the single copy shared by the chat and context-prompt functions | The file is AGPL code; the tutor prompt text is CC BY-SA methodology |
 | `src/lib/flow-work-profiles.ts` | The 16 work-profile taxonomy (codes, names, descriptions, domain palette) | The data is CC BY-SA methodology; the surrounding TypeScript is AGPL |
 | `src/lib/flowBands.ts` | The six display bands (thresholds, labels, domain palette) | Same as above |
 | `TRANSPARENCY.md` §2–§3 | Prose definition of the pillars and the scale | CC BY-SA methodology |

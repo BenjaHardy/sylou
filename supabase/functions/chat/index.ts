@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
 import { makeSSEHelpers, readProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
-import { searchWeb, buildDocumentTool, buildWebSearchTool, formatWebSearchResults } from "../_shared/_tools.ts";
+import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
@@ -16,6 +16,15 @@ import {
 } from "../_shared/_conversation_memory.ts";
 
 import { isOverBudget, getBudgetedProfile } from "../_shared/_billing.ts";
+import {
+  CLASSIC_MODE_SYSTEM_PROMPT,
+  CONCISE_MODE_MODIFIER,
+  TEMPLATE_PROMPTS,
+  TUTOR_MODE_SYSTEM_PROMPT,
+} from "../_shared/_prompts.ts";
+import { buildDocIndex, buildFavBlock, WEB_SEARCH_PROMPT } from "./context.ts";
+import { runToolLoop } from "./tool-loop.ts";
+import { persistChatExchange } from "./persist.ts";
 
 
 // --- CORS allow-list (parsed once at module load) ---
@@ -130,80 +139,11 @@ Deno.serve(async (req) => {
     const tutorMode = project?.tutor_mode ?? false;
 
     // --- Build system prompt ---
-    const CLASSIC_MODE_SYSTEM_PROMPT = `You are an AI assistant working in the Sylou environment, designed to help users create high-quality work through thoughtful human-AI collaboration.
-
-Your role is to assist the user with their writing project by providing helpful feedback, generating ideas, answering questions, and supporting their creative or analytical process. You should be knowledgeable, supportive, and responsive to the user's needs.
-
-# GUIDELINES:
-
-- Provide substantive, thoughtful responses that genuinely help the user
-- When asked for opinions or feedback, be honest and constructive
-- Adapt your communication style to the user's needs and the project type
-- If the user asks you to write content, provide high-quality drafts that the user can then review, edit, and make their own
-- Support the user's learning and thinking process, not just their output
-- Be aware that your conversation is part of a collaborative writing project that will be assessed for the balance of human and AI contributions
-
-# CONTEXT AWARENESS:
-
-- If the user asks about specific parts of their writing without providing the text, suggest they use the "Interact with AI" button when selecting text in the editor for the most accurate and context-aware response.
-- When responding to Ask or Propose requests from the text selection window, you will receive a writing summary providing relevant context about the user's work. Use this context to give informed, specific feedback rather than generic advice.
-- For projects using the Creative template, you may also receive context from creative writing tools (character diagrams, timelines, world-building notes). Use this structured data to ensure consistency in your suggestions.
-
-# TRANSPARENCY:
-
-- Your interactions with the user are recorded and may be analyzed as part of the FLOW assessment of this project
-- Be genuine in your assistance — do not try to influence the FLOW assessment by changing your behavior`;
-
-    // Licensing (see LICENSING.md): this prompt's text is CC BY-SA 4.0 FLOW
-    // methodology — the annotated byte-identical twin lives in
-    // context-prompt/prompts.ts (dedupe = the parked _shared prompts seam).
-    const TUTOR_MODE_SYSTEM_PROMPT = `You are an AI assistant working in the Sylou environment, operating in Tutor Mode. You are a patient teaching assistant who should prioritize learning over giving direct answers, on a reasonable basis.
-
-You may provide generic information and share facts that are helpful for the user to complete their intellectual work, but you should avoid producing said intellectual work yourself. Before responding in a way that produces intellectual work (instead of just sharing information or data), ask the user one or two reflective questions to incite the user to work by himself and to guide them.
-
-Guide the user to think, reflect, and structure ideas on their own.
-
-In doing so, consider the following behavior with regards to the four FLOW pillars showcasing the necessary steps to complete an intellectual work:
-
-- F - Find (Research & Critical Thinking): You may provide facts and generic information that are helpful for the user to complete their intellectual work, while giving tips on how to find other relevant and useful information, and reminding to complete fact-checking.
-- L - Lead (Ideas & Opinions): Encourage the user to think and reflect on their own ideas and opinions, and to share them with you. You may provide tips on how to develop and refine their ideas and opinions, and provide feedback on said ideas and opinions if requested.
-- O - Organize (Structure & Argumentation): You should avoid providing directly a full outline or structure of the work, but you may provide guidance to help the user achieve this goal and to help develop the structure of their argumentation.
-- W - Write (Writing & Text Production): You should avoid providing directly a full draft of the final / intellectual work, but you may provide tips, guidance, or orthographic/grammatical corrections.
-
-Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
-
-# CONTEXT AWARENESS:
-
-- If the user asks about specific parts of their writing without providing the text, suggest they select the text and use the "Ask" button for context-aware guidance.
-- In Tutor Mode, only "Fix grammar", "Translate", and "Ask" are available from the text selection window. This is intentional — the user should write and revise independently.
-- When responding to Ask requests from the text selection window, use the writing summary to give targeted questions and guidance rather than answers.
-- For Creative template projects, use character diagrams and timelines to ask probing questions about consistency and character development.
-
-# TRANSPARENCY:
-
-- Your interactions are recorded and analyzed as part of the FLOW assessment.
-- Tutor Mode is designed to help the user achieve higher FLOW scores by developing genuine ownership of their work.`;
-
-    const CONCISE_MODE_MODIFIER = `CONCISE MODE ACTIVE: Keep your responses brief and focused.
-
-- Use short paragraphs (2-3 sentences maximum)
-- Get to the point quickly — no lengthy preambles
-- Use bullet points only when listing specific items
-- If the user needs more detail, they will ask
-- In tutor mode: ask 1-2 focused questions rather than multiple
-- Do not give examples unless specifically requested
-- Aim for responses under 150 words unless the topic requires more`;
-
     let systemPrompt = tutorMode
       ? TUTOR_MODE_SYSTEM_PROMPT
       : CLASSIC_MODE_SYSTEM_PROMPT;
 
     // --- Append template-specific context ---
-    const TEMPLATE_PROMPTS: Record<string, string> = {
-      academic: "This is an academic writing project. The user may be working on essays, papers, or research work. Importance of using reputable or reliable information and sources.",
-      creative: "This is a creative writing project. The user may be working on fiction, poetry, or narrative work.",
-      professional: "This is a professional writing project. The user may be working on business documents, reports, or communications. Focus on clarity, precision, and professional tone.",
-    };
     const templateAddition = TEMPLATE_PROMPTS[project?.template ?? ""];
     if (templateAddition) {
       systemPrompt += `\n\n# PROJECT TEMPLATE\n\n${templateAddition}`;
@@ -230,23 +170,12 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
     // Append document index to system prompt for NON-favourites only
     if (hasNonFavDocs) {
-      let docIndex = `\n\n# IMPORTED DOCUMENTS\n\nThe user has imported the following reference documents into this project. You can see their titles and summaries below. If you need the full text of any document to answer the user's question, use the read_imported_document tool. Only retrieve documents that are directly relevant to the user's query.\n\n`;
-      for (const doc of nonFavourites) {
-        docIndex += `- Document: "${doc.file_name}" (ID: ${doc.id})\n  Summary: ${doc.summary ?? "No summary available"}\n\n`;
-      }
-      systemPrompt += docIndex;
+      systemPrompt += buildDocIndex(nonFavourites);
     }
 
     // Append full text of FAVOURITE documents — always available, no tool call needed
     if (favourites.length > 0) {
-      let favBlock = `\n\n# REFERENCE DOCUMENTS (ALWAYS AVAILABLE)\n\nThe following documents have been provided by the user as key reference material. Their full content is included below. Use them to inform your responses without needing to call the read_imported_document tool.\n\n`;
-      for (const doc of favourites) {
-        favBlock += `=== ${doc.file_name} ===\n\n${doc.extracted_text}\n\n`;
-      }
-      if (hasNonFavDocs) {
-        favBlock += `Note: You also have access to additional imported documents via the read_imported_document tool. Prefer the reference documents above when they contain relevant information; use the tool for the others.\n\n`;
-      }
-      systemPrompt += favBlock;
+      systemPrompt += buildFavBlock(favourites, hasNonFavDocs);
     }
 
     // Gate web search on both user toggle AND BRAVE_SEARCH_API_KEY presence.
@@ -257,17 +186,7 @@ Do not hallucinate facts. Encourage reasoning, explanation, and personal input.
 
     // Append web search instructions to system prompt
     if (webSearchActive) {
-      systemPrompt += `\n\n# WEB SEARCH
-
-You have access to a web_search tool. Use it according to these rules:
-
-Always search when the user asks about: current events, recent news and developments, anything time-sensitive (prices, scores, weather, standings, elections), specific claims or facts you're not fully confident about, people's current roles or status, or any question where being up-to-date matters.
-
-Never search for: simple conversational messages (greetings, thanks, acknowledgments), questions about well-established facts, concepts, or definitions, requests for creative writing or brainstorming, follow-up questions where the answer is already in the conversation history, or opinions and advice based on general knowledge.
-
-When in doubt, prefer searching - an unnecessary search is better than an outdated answer.
-
-When citing information from web search results, always include the source URL inline in your response text (e.g. "According to [Source Title](URL), ..."). This ensures the user can verify and revisit the sources later.`;
+      systemPrompt += WEB_SEARCH_PROMPT;
     }
 
     // --- Fetch the 50 most recent messages ---
@@ -325,6 +244,24 @@ When citing information from web search results, always include the source URL i
     if (hasDocuments) tools.push(buildDocumentTool());
     if (webSearchActive) tools.push(buildWebSearchTool());
 
+    // Per-request context for the unified persistence sequence
+    // (persist.ts) — shared by all four completion tails. The prompt
+    // count inside it is awaited on every path (checkpoint D3a; the
+    // countPromptOnce fire-and-forget form and its once-guard are gone —
+    // each request runs exactly one tail).
+    const persistCtx = {
+      admin: adminSupabase,
+      threadId,
+      projectId: thread.project_id,
+      userId: user.id,
+      monthlyTokenBudget: profile.monthly_token_budget,
+      tokensUsedThisPeriod: profile.tokens_used_this_period,
+      chatModel,
+      conciseMode,
+      tutorMode,
+      message,
+    };
+
     // =========================================================
     // STREAMING PATH — with tool-use support
     // =========================================================
@@ -332,37 +269,6 @@ When citing information from web search results, always include the source URL i
       console.log("[stream] entering streaming path for thread", threadId, "hasTools:", hasTools);
 
       const { sseEvent, createSSEResponse } = makeSSEHelpers(corsHeaders);
-
-      // Fire-and-forget prompt-count increment: runs once per request,
-      // called from each streaming tail once the provider stream has
-      // completed. Deliberately NOT hung off the provider's [DONE] marker —
-      // only OpenAI-shape providers (Mistral/DeepSeek) send that sentinel;
-      // Anthropic streams end with message_stop, which left Claude-model
-      // chats uncounted. The tools-unused replay path counts differently —
-      // an awaited update in its tail.
-      let promptCounted = false;
-      const countPromptOnce = () => {
-        if (promptCounted) return;
-        promptCounted = true;
-        const promptColumn = tutorMode ? "chat_prompt_count_tutor" : "chat_prompt_count_normal";
-        adminSupabase
-          .from("project_stats")
-          .select(promptColumn)
-          .eq("project_id", thread.project_id)
-          .single()
-          .then(({ data: cs }) => {
-            if (cs) {
-              const cnt = (cs as Record<string, number>)[promptColumn] || 0;
-              adminSupabase
-                .from("project_stats")
-                .update({ [promptColumn]: cnt + 1 })
-                .eq("project_id", thread.project_id)
-                .then(() =>
-                  console.log("[stream] prompt count incremented for", thread.project_id)
-                );
-            }
-          });
-      };
 
       // ---- TWO-PASS FLOW when tools exist ----
       if (hasTools) {
@@ -412,68 +318,21 @@ When citing information from web search results, always include the source URL i
               try {
                 await replayTokenBurst(responseText, (chunk) => controller.enqueue(sseEvent({ token: chunk })));
 
-                const userMsgRow = {
-                  thread_id: threadId,
-                  role: "user",
-                  content: message.trim(),
-                  source_type: "chat",
-                  flow_flag: "normal",
-                  concise_mode: conciseMode,
-                  tutor_mode: tutorMode,
-                };
-                const assistantMsgRow: Record<string, unknown> = {
-                  thread_id: threadId,
-                  role: "assistant",
-                  content: responseText,
-                  source_type: "chat",
-                  flow_flag: "normal",
-                  concise_mode: conciseMode,
-                  tutor_mode: tutorMode,
-                  model_used: chatModel,
-                };
-
-
-
-                const { data: insertedUser, error: userMsgErr } = await adminSupabase
-                  .from("chat_messages")
-                  .insert(userMsgRow)
-                  .select()
-                  .single();
-                if (userMsgErr) console.error("[chat] user message insert failed:", JSON.stringify(userMsgErr));
-
-                const { data: insertedAssistant, error: assistantMsgErr } = await adminSupabase
-                  .from("chat_messages")
-                  .insert(assistantMsgRow)
-                  .select()
-                  .single();
-                if (assistantMsgErr) console.error("[chat] assistant message insert failed:", JSON.stringify(assistantMsgErr));
-
-                const estimatedTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
-                const newTotal = profile.tokens_used_this_period + estimatedTokens;
-                const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
-                  user_uuid: user.id,
-                  amount: estimatedTokens,
-                });
-                if (rpcErr) console.error("[chat] increment_tokens_used failed:", JSON.stringify(rpcErr));
-
-                const promptColumn = tutorMode ? "chat_prompt_count_tutor" : "chat_prompt_count_normal";
-                const { data: cs } = await adminSupabase
-                  .from("project_stats")
-                  .select(promptColumn)
-                  .eq("project_id", thread.project_id)
-                  .single();
-                if (cs) {
-                  const cnt = (cs as Record<string, number>)[promptColumn] || 0;
-                  const { error: statsErr } = await adminSupabase
-                    .from("project_stats")
-                    .update({ [promptColumn]: cnt + 1 })
-                    .eq("project_id", thread.project_id);
-                  if (statsErr) console.error("[chat] project_stats update failed:", JSON.stringify(statsErr));
-                }
+                const {
+                  insertedUser,
+                  insertedAssistant,
+                  persistenceFailed,
+                  newTotal,
+                } = await persistChatExchange(
+                  persistCtx,
+                  responseText,
+                  totalInputChars,
+                  totalOutputChars,
+                );
 
                 // Failed message writes take the same path a thrown persistence
                 // error does — never report success over missing rows.
-                if (userMsgErr || assistantMsgErr) {
+                if (persistenceFailed) {
                   controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
                 } else {
                   controller.enqueue(
@@ -525,111 +384,29 @@ When citing information from web search results, always include the source URL i
                 norm1.assistantMessage,
               ];
 
-              // Resolve tool calls iteratively (up to 5 iterations)
-              let iteration = 0;
-              const MAX_ITERATIONS = 5;
-              // Real executions per assistant turn; calls past this (and
-              // unknown tool names) still get a stub result — every echoed
-              // tool_call MUST be answered or the follow-up request 400s
-              // for the unpaired ids (P3-7e).
-              const TOOL_CALL_LIMIT = 5;
-              let currentToolCalls = toolCalls;
-
-              while (currentToolCalls.length > 0 && iteration < MAX_ITERATIONS) {
-                iteration++;
-                console.log(`[stream] tool iteration ${iteration}, ${currentToolCalls.length} calls`);
-
-                for (const [tcIndex, tc] of currentToolCalls.entries()) {
-                  if (tcIndex >= TOOL_CALL_LIMIT) {
-                    toolMessages.push({
-                      role: "tool",
-                      tool_call_id: tc.id,
-                      content: "Not executed: per-turn tool-call limit reached. Ask again in a follow-up if still needed.",
-                    });
-                  } else if (tc.name === "read_imported_document") {
-                    const docId = tc.arguments.document_id as string;
-                    console.log("[stream] reading document:", docId);
-                    documentsReferenced.push(docId);
-
-                    try { controller.enqueue(sseEvent({ phase: "reading_documents" })); } catch { /* */ }
-
-                    const { data: docData } = await adminSupabase
-                      .from("imported_documents")
-                      .select("extracted_text, file_name")
-                      .eq("id", docId)
-                      .eq("project_id", thread.project_id)
-                      .maybeSingle();
-
-                    const toolResult = docData?.extracted_text
-                      ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
-                      : `Document not found in this project or text not yet extracted.`;
-
-                    totalInputChars += toolResult.length;
-
-                    toolMessages.push({
-                      role: "tool",
-                      tool_call_id: tc.id,
-                      content: toolResult,
-                    });
-                  } else if (tc.name === "web_search") {
-                    const query = tc.arguments.query as string;
-                    console.log("[stream] web search:", query);
-                    webSearchesPerformed.push(query);
-
-                    try { controller.enqueue(sseEvent({ phase: "searching_web" })); } catch { /* */ }
-
-                    const results = await searchWeb(query);
-                    const toolResult = formatWebSearchResults(query, results);
-                    totalInputChars += toolResult.length;
-
-                    toolMessages.push({
-                      role: "tool",
-                      tool_call_id: tc.id,
-                      content: toolResult,
-                    });
-                  } else {
-                    toolMessages.push({
-                      role: "tool",
-                      tool_call_id: tc.id,
-                      content: `Unknown tool "${tc.name}" — not executed.`,
-                    });
-                  }
-                }
-
-                // Check if the LLM wants to make more tool calls
-                if (iteration < MAX_ITERATIONS) {
-                  const nextRes = await callLLM({
-                      model: chatModel,
-                      messages: toolMessages,
-                      max_tokens: chatMaxTokens,
-                      tools,
-                      temperature,
-                      thinking,
-                      effort,
-                      mistral_effort: mistralEffort,
-                    });
-
-                  if (!nextRes.ok) {
-                    currentToolCalls = [];
-                    break;
-                  }
-
-                  const nextData = await nextRes.json();
-                  const nextNorm = normaliseResponse(providerFor(chatModel), nextData);
-                  const nextContent = cleanLLMContent(nextNorm.text);
-                  totalOutputChars += nextContent.length;
-                  currentToolCalls = nextNorm.toolCalls;
-
-                  if (currentToolCalls.length > 0) {
-                    toolMessages.push(nextNorm.assistantMessage);
-                  } else {
-                    // No more tool calls — discard any text from intermediate call
-                    // and fall through to a proper streaming Call #2
-                    break;
-                  }
-                }
-              }
-
+              // Resolve tool calls iteratively (tool-loop.ts); the char
+              // counters return as VALUES and must be folded in — numbers
+              // cannot mutate across the module boundary.
+              const { inputCharsAdded, outputCharsAdded } = await runToolLoop({
+                toolMessages,
+                toolCalls,
+                documentsReferenced,
+                webSearchesPerformed,
+                emitPhase: (phase) => {
+                  try { controller.enqueue(sseEvent({ phase })); } catch { /* */ }
+                },
+                adminSupabase,
+                projectId: thread.project_id,
+                chatModel,
+                chatMaxTokens,
+                tools,
+                temperature,
+                thinking,
+                effort,
+                mistralEffort,
+              });
+              totalInputChars += inputCharsAdded;
+              totalOutputChars += outputCharsAdded;
 
               // LLM Call #2: streaming with tool results (no tools this time)
               console.log("[stream] starting Call #2 streaming");
@@ -663,59 +440,21 @@ When citing information from web search results, always include the source URL i
               fullResponse = cleanLLMContent(fullResponse);
               totalOutputChars += fullResponse.length;
 
-              const userMsgRow = {
-                thread_id: threadId,
-                role: "user",
-                content: message.trim(),
-                source_type: "chat",
-                flow_flag: "normal",
-                concise_mode: conciseMode,
-                tutor_mode: tutorMode,
-              };
-              const assistantMsgRow: Record<string, unknown> = {
-                thread_id: threadId,
-                role: "assistant",
-                content: fullResponse || "No response generated.",
-                source_type: "chat",
-                flow_flag: "normal",
-                concise_mode: conciseMode,
-                tutor_mode: tutorMode,
-                model_used: chatModel,
-              };
-
-              if (documentsReferenced.length > 0) {
-                assistantMsgRow.documents_referenced = documentsReferenced;
-              }
-              if (webSearchesPerformed.length > 0) {
-                assistantMsgRow.web_searches_performed = webSearchesPerformed;
-              }
-
-              const { data: insertedUser, error: userMsgErr } = await adminSupabase
-                .from("chat_messages")
-                .insert(userMsgRow)
-                .select()
-                .single();
-              if (userMsgErr) console.error("[chat] user message insert failed:", JSON.stringify(userMsgErr));
-
-              const { data: insertedAssistant, error: assistantMsgErr } = await adminSupabase
-                .from("chat_messages")
-                .insert(assistantMsgRow)
-                .select()
-                .single();
-              if (assistantMsgErr) console.error("[chat] assistant message insert failed:", JSON.stringify(assistantMsgErr));
-
-              const estimatedTokens = Math.ceil((totalInputChars + totalOutputChars) / 4);
-              const newTotal = profile.tokens_used_this_period + estimatedTokens;
-              const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
-                user_uuid: user.id,
-                amount: estimatedTokens,
-              });
-              if (rpcErr) console.error("[chat] increment_tokens_used failed:", JSON.stringify(rpcErr));
-
-              countPromptOnce();
+              const {
+                insertedUser,
+                insertedAssistant,
+                persistenceFailed,
+                newTotal,
+              } = await persistChatExchange(
+                persistCtx,
+                fullResponse || "No response generated.",
+                totalInputChars,
+                totalOutputChars,
+                { documentsReferenced, webSearchesPerformed },
+              );
 
               try {
-                if (userMsgErr || assistantMsgErr) {
+                if (persistenceFailed) {
                   controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
                 } else {
                   controller.enqueue(
@@ -794,58 +533,25 @@ When citing information from web search results, always include the source URL i
             console.log("[stream] flush() started");
             fullResponse = cleanLLMContent(fullResponse);
 
-            const userMsg = {
-              thread_id: threadId,
-              role: "user",
-              content: message.trim(),
-              source_type: "chat",
-              flow_flag: "normal",
-              concise_mode: conciseMode,
-              tutor_mode: tutorMode,
-            };
-            const assistantMsg = {
-              thread_id: threadId,
-              role: "assistant",
-              content: fullResponse || "No response generated.",
-              source_type: "chat",
-              flow_flag: "normal",
-              concise_mode: conciseMode,
-              tutor_mode: tutorMode,
-              model_used: chatModel,
-            };
-
-            const { data: insertedUser, error: userMsgErr } = await adminSupabase
-              .from("chat_messages")
-              .insert(userMsg)
-              .select()
-              .single();
-            if (userMsgErr) console.error("[chat] user message insert failed:", JSON.stringify(userMsgErr));
-
-            const { data: insertedAssistant, error: assistantMsgErr } = await adminSupabase
-              .from("chat_messages")
-              .insert(assistantMsg)
-              .select()
-              .single();
-            if (assistantMsgErr) console.error("[chat] assistant message insert failed:", JSON.stringify(assistantMsgErr));
-
             const inputChars = llmMessages.reduce(
               (sum, m) => sum + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length),
               0
             );
             const outputChars = fullResponse.length;
-            const estimatedTokens = Math.ceil((inputChars + outputChars) / 4);
-            const newTotal = profile.tokens_used_this_period + estimatedTokens;
-
-            const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
-              user_uuid: user.id,
-              amount: estimatedTokens,
-            });
-            if (rpcErr) console.error("[chat] increment_tokens_used failed:", JSON.stringify(rpcErr));
-
-            countPromptOnce();
+            const {
+              insertedUser,
+              insertedAssistant,
+              persistenceFailed,
+              newTotal,
+            } = await persistChatExchange(
+              persistCtx,
+              fullResponse || "No response generated.",
+              inputChars,
+              outputChars,
+            );
 
             try {
-              if (userMsgErr || assistantMsgErr) {
+              if (persistenceFailed) {
                 controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
               } else {
                 controller.enqueue(
@@ -924,78 +630,29 @@ When citing information from web search results, always include the source URL i
     const assistantText = cleanLLMContent(norm.text || "No response generated.");
 
     // --- Persist messages ---
-    const userMsg = {
-      thread_id: threadId,
-      role: "user",
-      content: message.trim(),
-      source_type: "chat",
-      flow_flag: "normal",
-      concise_mode: conciseMode,
-      tutor_mode: tutorMode,
-    };
-    const assistantMsg = {
-      thread_id: threadId,
-      role: "assistant",
-      content: assistantText,
-      source_type: "chat",
-      flow_flag: "normal",
-      concise_mode: conciseMode,
-      tutor_mode: tutorMode,
-      model_used: chatModel,
-    };
-
-    // Service-role writes (user write policies dropped — write-surface
-    // lockdown); thread ownership was verified at request entry.
-    const { data: insertedUser, error: userMsgErr } = await adminSupabase
-      .from("chat_messages")
-      .insert(userMsg)
-      .select()
-      .single();
-    if (userMsgErr) console.error("[chat] user message insert failed:", JSON.stringify(userMsgErr));
-
-    const { data: insertedAssistant, error: assistantMsgErr } = await adminSupabase
-      .from("chat_messages")
-      .insert(assistantMsg)
-      .select()
-      .single();
-    if (assistantMsgErr) console.error("[chat] assistant message insert failed:", JSON.stringify(assistantMsgErr));
-
-    // --- Estimate tokens & update budget ---
+    // --- Estimate tokens & persist (persist.ts) ---
+    // Service-role writes (write-surface lockdown); thread ownership was
+    // verified at request entry. Disclosed D3 normalization: the prompt
+    // count here previously ran on the USER-context client — persist.ts
+    // uses the admin client on every path (outcome-identical: the
+    // project_stats owner UPDATE policy grants the same write).
     const inputChars = llmMessages.reduce(
       (sum, m) => sum + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length),
       0
     );
     const outputChars = assistantText.length;
-    const estimatedTokens = Math.ceil((inputChars + outputChars) / 4);
-
-    const newTotal =
-      profile.tokens_used_this_period + estimatedTokens;
-
-    const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
-      user_uuid: user.id,
-      amount: estimatedTokens,
-    });
-    if (rpcErr) console.error("[chat] increment_tokens_used failed:", JSON.stringify(rpcErr));
-
-    // --- Increment prompt count in project_stats ---
-    const promptColumn = tutorMode
-      ? "chat_prompt_count_tutor"
-      : "chat_prompt_count_normal";
-
-    const { data: currentStats } = await supabase
-      .from("project_stats")
-      .select(promptColumn)
-      .eq("project_id", thread.project_id)
-      .single();
-
-    if (currentStats) {
-      const currentCount = (currentStats as Record<string, number>)[promptColumn] || 0;
-      const { error: statsErr } = await supabase
-        .from("project_stats")
-        .update({ [promptColumn]: currentCount + 1 })
-        .eq("project_id", thread.project_id);
-      if (statsErr) console.error("[chat] project_stats update failed:", JSON.stringify(statsErr));
-    }
+    const {
+      insertedUser,
+      insertedAssistant,
+      persistenceFailed,
+      estimatedTokens,
+      newTotal,
+    } = await persistChatExchange(
+      persistCtx,
+      assistantText,
+      inputChars,
+      outputChars,
+    );
 
     return jsonResponse({
       reply: assistantText,
@@ -1005,7 +662,7 @@ When citing information from web search results, always include the source URL i
       assistant_message: insertedAssistant,
       // Same contract as the streaming paths: a failed message write is
       // reported, never presented as success (client shows data.error).
-      ...(userMsgErr || assistantMsgErr ? { error: "Messages may not have been saved." } : {}),
+      ...(persistenceFailed ? { error: "Messages may not have been saved." } : {}),
     });
   } catch (err) {
     console.error("Chat function error:", err);

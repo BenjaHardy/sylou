@@ -46,7 +46,9 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 - `supabase/functions/_shared/` — `_llm.ts` (provider router), `_repair.ts`,
   `_temperatures.ts`, `_thinking.ts`, `_models.ts` (model allowlist,
   input caps, per-model context limits), `_provenance.ts`, `_similarity.ts`,
-  `_conversation_memory.ts` (rolling per-thread chat summary).
+  `_conversation_memory.ts` (rolling per-thread chat summary),
+  `_prompts.ts` (mode/template system prompts shared by chat +
+  context-prompt).
 - Edge functions (8): `chat`, `analysis`, `editor-action`, `context-prompt`,
   `extract-text`, `share-report`, `config`, `delete-account`.
 
@@ -242,8 +244,8 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 - No new backend server code — Edge Functions only.
 - Keep components small; extract hooks rather than growing components.
   (Known oversized offender flagged for the refactor audit:
-  `ProjectContentArea.tsx`. `context-prompt/` and `analysis/` were split
-  into sibling modules in the P4-1 campaign.)
+  `ProjectContentArea.tsx`. `context-prompt/`, `analysis/` and `chat/`
+  were split into sibling modules in the P4-1 campaign.)
 - Confirm debounced-save + flush-on-navigation paths still hold for any
   new persisted state.
 - Builds are auto-triggered by Vercel on push to main. Don't run
