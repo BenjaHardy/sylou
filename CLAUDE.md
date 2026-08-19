@@ -25,7 +25,9 @@ Apply strict coding standards to avoid future code liabilities for the open-sour
 - React 18, Vite 8 (Rolldown), TypeScript 5, Tailwind v3, shadcn/ui
 - React Router, TipTap v2 (custom font-size + pagination extensions)
 - Supabase via Lovable Cloud; Edge Functions in `supabase/functions/`
-- Vitest 4 (frontend units) + `deno test` (edge-function units in `_shared/`)
+- Vitest 4 (frontend units) + `deno test` (edge-function units beside their
+  modules: `_shared/` plus the split function directories — the `deno.json`
+  test task holds the collected list)
 - LLM providers: Anthropic (Sonnet 4.6, Opus 4.8), Mistral (Large 3,
   Medium 3.5, Small 4), DeepSeek (deepseek-v4-flash).
 
@@ -192,7 +194,10 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   the context-limit thresholds.
 
 ## 6. Commands
-- Tests: `npx vitest run` (or a specific file path).
+- Tests: `npx vitest run` (or a specific file path); edge-function units:
+  `cd supabase/functions && deno task test`. ⚠️ The test task collects an
+  explicit directory list — a function directory gaining its first tests
+  must be added there, or they silently never run.
 - Typecheck (frontend): `npm run typecheck` (`tsc --noEmit -p tsconfig.app.json`;
   `strict` is on). NOTE: bare `tsc --noEmit` is a no-op here — the root
   `tsconfig.json` is solution-style (`files: []`) so it checks **zero** `src/`

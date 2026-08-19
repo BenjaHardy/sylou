@@ -304,10 +304,16 @@ can have; changes require an explicit transparency-impact note in the PR.
 
 ## 8. Testing & verification
 
-- New pure logic gets tests: vitest (`src/**/__tests__/`) or
-  `deno test` (`_shared/*.test.ts`).
+- New pure logic gets tests: vitest (`src/**/__tests__/`) or `deno test`
+  (`*.test.ts` beside the module — in `_shared/` or the function's own
+  directory). Two hard-won rules: the `deno.json` test task collects an
+  explicit directory list, so a directory gaining its first tests must be
+  added there or they silently never run; and a test must never import a
+  function's `index.ts` (module load executes `Deno.serve`) — testable
+  logic lives in sibling or `_shared/` modules.
 - Before any PR: `npm run typecheck && npm run lint && npm test`, and for edge
-  changes `cd supabase/functions && deno task check`. ⚠️ Bare `tsc --noEmit`
+  changes `cd supabase/functions && deno task check` + `deno task test`.
+  ⚠️ Bare `tsc --noEmit`
   is a **no-op** in this repo (solution-style root tsconfig) — always use
   `npm run typecheck`.
 - Fixes for data-corruption or race bugs need a **manual repro** before and
