@@ -1,5 +1,7 @@
 import { Fragment, useState, useRef, useEffect, KeyboardEvent, useCallback, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
+import type { ComponentProps } from "react";
+import { useSmoothedText } from "@/hooks/useSmoothedText";
 import remarkGfm from "remark-gfm";
 import { MessageSquare, Send, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp, BookmarkIcon, Globe, Paperclip } from "lucide-react";
 import sylouShiba from "@/assets/sylou-shiba.png";
@@ -57,6 +59,66 @@ const SOURCE_LABELS: Record<string, string> = {
   propose_response: "Propose · AI Response",
   writing_summary: "Writing Summary Update",
 };
+
+// Markdown renderer config for assistant bubbles — static (zero captures),
+// hoisted so the streaming and persisted branches share one object.
+const markdownComponents: ComponentProps<typeof ReactMarkdown>["components"] = {
+  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  ul: ({ children }) => <ul className="list-disc pl-4 mb-2 last:mb-0 space-y-1">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 last:mb-0 space-y-1">{children}</ol>,
+  li: ({ children }) => <li>{children}</li>,
+  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+  em: ({ children }) => <em>{children}</em>,
+  code: ({ children, className }) => {
+    const isBlock = className?.includes("language-");
+    return isBlock ? (
+      <code className={`block bg-muted/60 rounded px-2 py-1.5 text-xs my-2 overflow-x-auto ${className}`}>{children}</code>
+    ) : (
+      <code className="bg-muted/60 rounded px-1 py-0.5 text-xs">{children}</code>
+    );
+  },
+  pre: ({ children }) => <pre className="mb-2 last:mb-0">{children}</pre>,
+  h1: ({ children }) => <p className="font-bold mb-2">{children}</p>,
+  h2: ({ children }) => <p className="font-bold mb-2">{children}</p>,
+  h3: ({ children }) => <p className="font-semibold mb-1.5">{children}</p>,
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">{children}</a>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-2 border-primary/30 pl-3 my-2 text-muted-foreground italic">{children}</blockquote>
+  ),
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-2">
+      <table className="w-full text-xs border-collapse">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className="border-b border-border">{children}</thead>,
+  tbody: ({ children }) => <tbody>{children}</tbody>,
+  tr: ({ children }) => <tr className="border-b border-border/50 last:border-0">{children}</tr>,
+  th: ({ children }) => <th className="text-left font-semibold px-2 py-1.5 align-top">{children}</th>,
+  td: ({ children }) => <td className="px-2 py-1.5 align-top">{children}</td>,
+};
+
+function AssistantMarkdown({ content }: { content: string }) {
+  return (
+    <div className="prose-chat break-words">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+// The LIVE streaming bubble reveals its text through useSmoothedText:
+// Anthropic streams multi-word delta clumps (verified 2026-08; Mistral
+// drips near-token fragments), and the adaptive reveal repaints the clumps
+// smoothly without touching content, persistence, or the SSE lifecycle
+// (see src/lib/stream-smoothing.ts). Persisted bubbles and the Ask flow's
+// "streaming-ask" bubble render direct — today's behavior.
+function StreamingAssistantMarkdown({ content }: { content: string }) {
+  const displayed = useSmoothedText(content);
+  return <AssistantMarkdown content={displayed} />;
+}
 
 function WritingSummaryBubble({ message }: { message: ChatMessage }) {
   const [collapsed, setCollapsed] = useState(true);
@@ -175,50 +237,10 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
           )}
           {isUser ? (
             <p className="whitespace-pre-wrap break-words">{message.content}</p>
+          ) : message.id === "streaming-assistant" ? (
+            <StreamingAssistantMarkdown content={message.content} />
           ) : (
-            <div className="prose-chat break-words">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                  ul: ({ children }) => <ul className="list-disc pl-4 mb-2 last:mb-0 space-y-1">{children}</ul>,
-                  ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 last:mb-0 space-y-1">{children}</ol>,
-                  li: ({ children }) => <li>{children}</li>,
-                  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                  em: ({ children }) => <em>{children}</em>,
-                  code: ({ children, className }) => {
-                    const isBlock = className?.includes("language-");
-                    return isBlock ? (
-                      <code className={`block bg-muted/60 rounded px-2 py-1.5 text-xs my-2 overflow-x-auto ${className}`}>{children}</code>
-                    ) : (
-                      <code className="bg-muted/60 rounded px-1 py-0.5 text-xs">{children}</code>
-                    );
-                  },
-                  pre: ({ children }) => <pre className="mb-2 last:mb-0">{children}</pre>,
-                  h1: ({ children }) => <p className="font-bold mb-2">{children}</p>,
-                  h2: ({ children }) => <p className="font-bold mb-2">{children}</p>,
-                  h3: ({ children }) => <p className="font-semibold mb-1.5">{children}</p>,
-                  a: ({ href, children }) => (
-                    <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">{children}</a>
-                  ),
-                  blockquote: ({ children }) => (
-                    <blockquote className="border-l-2 border-primary/30 pl-3 my-2 text-muted-foreground italic">{children}</blockquote>
-                  ),
-                  table: ({ children }) => (
-                    <div className="overflow-x-auto my-2">
-                      <table className="w-full text-xs border-collapse">{children}</table>
-                    </div>
-                  ),
-                  thead: ({ children }) => <thead className="border-b border-border">{children}</thead>,
-                  tbody: ({ children }) => <tbody>{children}</tbody>,
-                  tr: ({ children }) => <tr className="border-b border-border/50 last:border-0">{children}</tr>,
-                  th: ({ children }) => <th className="text-left font-semibold px-2 py-1.5 align-top">{children}</th>,
-                  td: ({ children }) => <td className="px-2 py-1.5 align-top">{children}</td>,
-                }}
-              >
-                {message.content}
-              </ReactMarkdown>
-            </div>
+            <AssistantMarkdown content={message.content} />
           )}
 
           <span
