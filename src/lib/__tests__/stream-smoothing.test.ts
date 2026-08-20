@@ -3,6 +3,8 @@
 // reveal contract changed — check the hook's consumers before editing.
 import { describe, expect, it } from "vitest";
 import {
+  FOLLOW_BOTTOM_THRESHOLD_PX,
+  isNearBottom,
   isStreamReset,
   nextRevealLength,
   SMOOTH_CATCH_UP,
@@ -60,6 +62,21 @@ describe("nextRevealLength", () => {
     expect(next).toBe(2); // waits
     const completed = "ab\u{1F600}";
     expect(nextRevealLength(2, completed)).toBe(4);
+  });
+});
+
+describe("isNearBottom", () => {
+  it("exactly at the bottom counts as near", () => {
+    expect(isNearBottom(1000, 1600, 600)).toBe(true);
+  });
+
+  it("within the threshold still counts as near (fractional wobble tolerated)", () => {
+    expect(isNearBottom(1000 - FOLLOW_BOTTOM_THRESHOLD_PX, 1600, 600)).toBe(true);
+  });
+
+  it("scrolled up past the threshold is not near — the view holds", () => {
+    expect(isNearBottom(1000 - FOLLOW_BOTTOM_THRESHOLD_PX - 1, 1600, 600)).toBe(false);
+    expect(isNearBottom(0, 1600, 600)).toBe(false);
   });
 });
 
