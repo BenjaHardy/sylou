@@ -2,6 +2,7 @@ import { Fragment, useState, useRef, useEffect, KeyboardEvent, useCallback, useM
 import ReactMarkdown from "react-markdown";
 import type { ComponentProps } from "react";
 import { useSmoothedText } from "@/hooks/useSmoothedText";
+import { isNearBottom } from "@/lib/stream-smoothing";
 import remarkGfm from "remark-gfm";
 import { MessageSquare, Send, User, X, Info, ChevronLeft, ChevronRight, FileText, ChevronDown, ChevronUp, BookmarkIcon, Globe, Paperclip } from "lucide-react";
 import sylouShiba from "@/assets/sylou-shiba.png";
@@ -109,12 +110,13 @@ function AssistantMarkdown({ content }: { content: string }) {
   );
 }
 
-// The LIVE streaming bubble reveals its text through useSmoothedText:
-// Anthropic streams multi-word delta clumps (verified 2026-08; Mistral
-// drips near-token fragments), and the adaptive reveal repaints the clumps
+// LIVE streaming bubbles ("streaming-assistant" + the Ask flow's
+// "streaming-ask") reveal their text through useSmoothedText: Anthropic
+// streams multi-word delta clumps (verified 2026-08; Mistral drips
+// near-token fragments), and the adaptive reveal repaints the clumps
 // smoothly without touching content, persistence, or the SSE lifecycle
-// (see src/lib/stream-smoothing.ts). Persisted bubbles and the Ask flow's
-// "streaming-ask" bubble render direct — today's behavior.
+// (see src/lib/stream-smoothing.ts). Persisted bubbles render direct;
+// the TextSelectionWindow's own panes are deliberately not covered.
 function StreamingAssistantMarkdown({ content }: { content: string }) {
   const displayed = useSmoothedText(content);
   return <AssistantMarkdown content={displayed} />;
@@ -237,7 +239,7 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
           )}
           {isUser ? (
             <p className="whitespace-pre-wrap break-words">{message.content}</p>
-          ) : message.id === "streaming-assistant" ? (
+          ) : message.id === "streaming-assistant" || message.id === "streaming-ask" ? (
             <StreamingAssistantMarkdown content={message.content} />
           ) : (
             <AssistantMarkdown content={message.content} />
@@ -446,12 +448,45 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
     }
   }, [refreshTrigger, refreshMessages]);
 
-  // Scroll to bottom on new messages
+  // Scroll-follow: pin to the bottom only while the user IS at the bottom.
+  // Scrolling up during a stream "holds" the view (no more shove-back);
+  // scrolling back down, switching threads, or sending a message
+  // re-engages the follow.
+  const followStreamRef = useRef(true);
+
   useEffect(() => {
-    if (scrollRef.current) {
+    followStreamRef.current = true;
+  }, [activeThreadId]);
+
+  useEffect(() => {
+    if (sending) followStreamRef.current = true;
+  }, [sending]);
+
+  // Scroll to bottom on new messages (when following)
+  useEffect(() => {
+    if (followStreamRef.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, sending]);
+
+  // While a bubble is streaming, the smoothed reveal grows the content
+  // BETWEEN commits of `messages` (useSmoothedText repaints ~30Hz inside
+  // the bubble), so the per-message effect above jumps in provider-clump
+  // rhythm. Follow per animation frame instead, so the pane slides as
+  // smoothly as the text pours — and holds when the user scrolled up.
+  const hasStreamingBubble = messages.some(
+    (m) => m.id === "streaming-assistant" || m.id === "streaming-ask",
+  );
+  useEffect(() => {
+    if (!hasStreamingBubble) return;
+    let raf = requestAnimationFrame(function loop() {
+      if (followStreamRef.current && scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+      raf = requestAnimationFrame(loop);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [hasStreamingBubble]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -576,7 +611,14 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
       )}
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
+      <div
+        ref={scrollRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          followStreamRef.current = isNearBottom(el.scrollTop, el.scrollHeight, el.clientHeight);
+        }}
+        className="flex-1 overflow-y-auto px-3 py-4 space-y-4"
+      >
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

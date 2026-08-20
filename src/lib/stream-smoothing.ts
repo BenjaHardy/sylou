@@ -54,3 +54,21 @@ export function nextRevealLength(revealed: number, target: string): number {
 export function isStreamReset(prevTarget: string, target: string): boolean {
   return target.length < prevTarget.length || !target.startsWith(prevTarget);
 }
+
+/** How close to the bottom (px) still counts as "at the bottom" for the
+ *  chat pane's scroll-follow. Generous enough that sub-line wobble and
+ *  fractional scroll positions never break the follow, small enough that
+ *  a deliberate scroll-up immediately holds the view. */
+export const FOLLOW_BOTTOM_THRESHOLD_PX = 64;
+
+/** True while the viewport is (near) the bottom of its scroll content —
+ *  the condition under which the chat pane keeps auto-following a stream.
+ *  Scrolling up makes this false, which "holds" the view; scrolling back
+ *  down re-engages the follow. */
+export function isNearBottom(
+  scrollTop: number,
+  scrollHeight: number,
+  clientHeight: number,
+): boolean {
+  return scrollHeight - scrollTop - clientHeight <= FOLLOW_BOTTOM_THRESHOLD_PX;
+}
