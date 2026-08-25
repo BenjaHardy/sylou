@@ -410,8 +410,7 @@ Transparency includes being clear about what these mechanisms *don't* do:
 
 - **The FLOW assessment analyzes the activity that happens inside Sylou**: the more of the writing process took place within the platform, the more comprehensive the assessment.
 
-- **The assessment can be a target, and we treat its resistance as an open
-  area.** Because a FLOW analysis reads the user's own writing, chat, and
+- **The assessment can be a target.** Because a FLOW analysis reads the user's own writing, chat, and
   imported documents, that material can in principle contain text crafted to
   steer the result: for example, an instruction hidden in the writing telling
   the model to award a maximum "human" score, including when disguised as a
@@ -420,9 +419,7 @@ Transparency includes being clear about what these mechanisms *don't* do:
   instructions, to weight the objective provenance and similarity signals above
   any claim in the text, and to note manipulation attempts rather than reward
   them. We are actively testing this resistance and expect to strengthen it over
-  time. It is also bounded by the point above: Sylou measures collaboration that
-  takes place inside the platform, so it cannot detect work produced entirely
-  outside Sylou and pasted in, a limit no in-app safeguard can remove.
+  time. 
 
 - **Provenance doesn't survive leaving Sylou.** Copy your text into Word, Google
   Docs, or an email and the origin tags are gone. 
