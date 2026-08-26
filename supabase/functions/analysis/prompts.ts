@@ -13,8 +13,6 @@
 
 // ---------------------------------------------------------------------------
 // FLOW Prompt v1.1_260826 – read transparency.md for guidance and calibration notes
-// (v1.1, 2026-08-26: calibration tables — 3.0 example sentence removed;
-// 1.0 refinement wording broadened. Maintainer edit.)
 // ---------------------------------------------------------------------------
 export const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a writing project. Your task is to assess how an external third-party human user (occasionally simply referred to as "the user") collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework).
 
@@ -87,7 +85,6 @@ Then, when scoring:
 
 // ---------------------------------------------------------------------------
 // Creative FLOW Prompt v1.1_260826 — for creative template projects
-// (v1.1, 2026-08-26: same calibration-table edits as the standard prompt.)
 // ---------------------------------------------------------------------------
 export const CREATIVE_FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a creative writing project. Your task is to assess how an external third-party human user (occasionally simply referred to as "the user") collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework).
 
