@@ -8,7 +8,7 @@ import {
   INPUT_LIMITS,
 } from "./_models.ts";
 
-Deno.test("allowlist contains exactly the six registry models", () => {
+Deno.test("allowlist contains exactly the seven registry models", () => {
   assertEquals([...ALLOWED_MODELS].sort(), [
     "claude-opus-4-8",
     "claude-sonnet-4-6",
@@ -16,6 +16,7 @@ Deno.test("allowlist contains exactly the six registry models", () => {
     "mistral-large-2512",
     "mistral-medium-3-5",
     "mistral-small-2603",
+    "zai-glm-5-2",
   ]);
 });
 

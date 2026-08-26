@@ -54,6 +54,20 @@ export const MODELS: ModelInfo[] = [
     contextLimit: 256_000,
   },
   {
+    id: "zai-glm-5-2",
+    label: "Z.ai GLM 5.2 (via Mistral)",
+    provider: "mistral",
+    pricing: { input: 1.40, output: 4.40 },
+    contextLimit: 1_000_000,
+    isExperimental: true,
+    // Third-party open model (Z.ai) hosted unmodified on the Mistral API —
+    // EU infrastructure, public preview since 2026-08. Routed through the
+    // Mistral path (id has no claude-/deepseek- prefix). Reasoning (High/
+    // Max) deliberately NOT enabled at launch; planned follow-up after
+    // acceptance testing (see docs/model-configuration.md).
+    note: "Third-party open model (Z.ai), hosted on the Mistral API — public preview",
+  },
+  {
     id: "claude-sonnet-4-6",
     label: "Claude Sonnet 4.6",
     provider: "anthropic",
