@@ -515,10 +515,35 @@ export function normaliseResponse(
         arguments: safeJSON(tc.function?.arguments ?? "{}"),
       }))
     : [];
+  // Echo back ONLY the contract fields — never the provider's raw message.
+  // Response messages arrive decorated with extra fields (GLM 5.2 via the
+  // Mistral API adds `index`), and Mistral's third-party serving stack
+  // 422-rejects them (`extra_forbidden`) when the assistant turn is echoed
+  // into the follow-up request of a tool loop; native Mistral models merely
+  // tolerated their own decorations, which is why the raw pass-through
+  // survived until GLM landed. `content` is passed through UNCHANGED apart
+  // from an undefined/null -> "" normalization (Medium 3.5 reasoning
+  // replies are chunk ARRAYS and must round-trip as such); tool_calls
+  // entries are rebuilt with their raw STRING `arguments` preserved (the
+  // parsed variants in `toolCalls` above are for OUR consumption only).
+  const echoToolCalls = Array.isArray(msg.tool_calls)
+    ? msg.tool_calls.map((tc) => ({
+        id: tc.id ?? "",
+        type: "function" as const,
+        function: {
+          name: tc.function?.name ?? "",
+          arguments: tc.function?.arguments ?? "{}",
+        },
+      }))
+    : [];
   return {
     text,
     toolCalls,
-    assistantMessage: msg as unknown as LLMMessage,
+    assistantMessage: {
+      role: "assistant",
+      content: msg.content ?? "",
+      ...(echoToolCalls.length ? { tool_calls: echoToolCalls } : {}),
+    },
     usage: r.usage
       ? {
           input_tokens: r.usage.prompt_tokens ?? r.usage.input_tokens,

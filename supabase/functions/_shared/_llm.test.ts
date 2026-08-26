@@ -272,6 +272,54 @@ Deno.test("normaliseResponse (OpenAI shape): tool_calls alongside a reasoning ar
   assertEquals(norm.toolCalls, [{ id: "abc", name: "web_search", arguments: { query: "x" } }]);
 });
 
+Deno.test("normaliseResponse (OpenAI shape): assistantMessage echoes ONLY the contract fields", () => {
+  // GLM 5.2 (via the Mistral API) decorates its response message with
+  // `index` and 422-rejects it (`extra_forbidden`) when the assistant turn
+  // is echoed back in a tool loop. The echo must be a whitelisted rebuild,
+  // never the provider's raw object.
+  const norm = normaliseResponse("mistral", {
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: "calling a tool",
+        index: 0,
+        reasoning_content: "provider-side decoration",
+        tool_calls: [{
+          id: "abc",
+          index: 0,
+          function: { name: "web_search", arguments: '{"query":"x"}' },
+        }],
+      },
+    }],
+  });
+  assertEquals(norm.assistantMessage, {
+    role: "assistant",
+    content: "calling a tool",
+    tool_calls: [{
+      id: "abc",
+      type: "function",
+      function: { name: "web_search", arguments: '{"query":"x"}' },
+    }],
+  });
+});
+
+Deno.test("normaliseResponse (OpenAI shape): reasoning-array content round-trips unchanged in the echo", () => {
+  const chunks = [{ type: "thinking", thinking: [{ type: "text", text: "…" }] }];
+  const norm = normaliseResponse("mistral", {
+    choices: [{ message: { role: "assistant", content: chunks } }],
+  });
+  assertEquals(norm.assistantMessage, { role: "assistant", content: chunks });
+});
+
+Deno.test("normaliseResponse (OpenAI shape): null content echoes as empty string, no tool_calls key when none", () => {
+  const norm = normaliseResponse("mistral", {
+    choices: [{ message: { role: "assistant", content: null } }],
+  });
+  assertEquals(norm.assistantMessage, { role: "assistant", content: "" });
+  assertEquals("tool_calls" in norm.assistantMessage, false);
+});
+
 Deno.test("extractDeltaText: array-of-chunks delta joins only the text chunks", () => {
   const delta = extractDeltaText({
     choices: [{
