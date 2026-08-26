@@ -6,13 +6,15 @@
 // product decisions, not implementation details) and are the CC BY-SA
 // side of the licensing map (LICENSING.md); the surrounding TypeScript,
 // including the tool schema below, is AGPL code. Both templates are
-// versioned (v1.0_080626) and carry escaped backticks plus deliberate
+// versioned (v1.1_260826) and carry escaped backticks plus deliberate
 // en-/em-dash typography — treat any byte change as a methodology
 // version change, never as cleanup (prompts.test.ts pins the exact
 // runtime bytes of both).
 
 // ---------------------------------------------------------------------------
-// FLOW Prompt v1.0_080626 – read transparency.md for guidance and calibration notes
+// FLOW Prompt v1.1_260826 – read transparency.md for guidance and calibration notes
+// (v1.1, 2026-08-26: calibration tables — 3.0 example sentence removed;
+// 1.0 refinement wording broadened. Maintainer edit.)
 // ---------------------------------------------------------------------------
 export const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a writing project. Your task is to assess how an external third-party human user (occasionally simply referred to as "the user") collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework).
 
@@ -84,7 +86,8 @@ Then, when scoring:
 `;
 
 // ---------------------------------------------------------------------------
-// Creative FLOW Prompt v1.0_080626 — for creative template projects
+// Creative FLOW Prompt v1.1_260826 — for creative template projects
+// (v1.1, 2026-08-26: same calibration-table edits as the standard prompt.)
 // ---------------------------------------------------------------------------
 export const CREATIVE_FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a creative writing project. Your task is to assess how an external third-party human user (occasionally simply referred to as "the user") collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework).
 
