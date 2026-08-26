@@ -20,13 +20,14 @@ export type ProviderId = "mistral" | "anthropic" | "deepseek";
 
 // Effort taxonomy is provider-specific:
 //   - Anthropic (Claude): "low" | "medium" | "high" | "xhigh"
-//   - Mistral reasoning models (Medium 3.5, Small): "high" | "none"
+//   - Mistral reasoning models (Medium 3.5, Small): "high" | "none";
+//     GLM 5.2 (third-party via Mistral) additionally accepts "max"
 // See _shared/_thinking.ts for the canonical types and the per-function
 // tables. We re-declare the literal unions here only to keep _llm.ts
 // free of cross-imports from _thinking.ts (avoids a circular dep risk
 // as both files grow).
 export type ClaudeEffort  = "low" | "medium" | "high" | "xhigh";
-export type MistralEffort = "high" | "none";
+export type MistralEffort = "high" | "max" | "none";
 
 export interface LLMTool {
   // OpenAI-style tool definition

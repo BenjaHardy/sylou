@@ -30,11 +30,15 @@ This document tracks how Sylou configures each LLM model across the four edge fu
 unmodified on the Mistral API on EU infrastructure — **public preview since
 2026-08**. It routes through Sylou's Mistral path (the id carries no
 `claude-`/`deepseek-` prefix) and uses the operator's `MISTRAL_API_KEY`.
-Reasoning (GLM's High/Max thinking-effort levels) is deliberately **not
-enabled at launch**: the Mistral-hosted wire's reasoning contract is
-undocumented, and this codebase has precedent for unexpected
-reasoning params being rejected (Mistral Large 3 → 422). Enabling it is a
-planned follow-up gated on acceptance testing.
+Reasoning (GLM's native High/Max thinking-effort levels) was enabled
+**after** the launch acceptance pass came back green (2026-08, maintainer
+decision): `reasoning_effort: "max"` for FLOW, chat and context-prompt,
+`"none"` for editor actions (latency-sensitive, same rationale as
+Medium 3.5). Note "max" is **GLM-only** — Mistral's own reasoning models
+top out at "high" and must never be configured with "max". The
+Mistral-hosted wire's acceptance of `"max"` is verified empirically at
+deploy (watch `[callLLM]` logs); if it is ever rejected, drop the
+`_thinking.ts` tables to `"high"`.
 
 > **DeepSeek model-id note:** Sylou uses the pinned `deepseek-v4-flash` id
 > (non-thinking mode — context 1M, max output 384K). The legacy rolling
@@ -58,7 +62,7 @@ The most analytically demanding function. All models targeted for determinism (t
 | Mistral Medium 3.5 | 0.0                          | reasoning_effort: off                                  | 8192                | *Not* recommended, or with extreme care. Good repeatability, but strong Write pillar and provenance data lead to user-bias on other pillars. |
 | Mistral Small 4    | 0.0                          | reasoning_effort: high                                 | 16000               | *Not* recommended, bias towards the user, poor repeatability.  |
 | DeepSeek V4 Flash  | 0.0                          | n/a                                                    | 8192                | *Not* recommended, bias towards the user, poor repeatability.  |
-| Z.ai GLM 5.2       | 0.0                          | not sent (launch posture — see overview note)          | 8192                | *Not* recommended pending field testing (untested for FLOW; forced tool-calling behavior to be verified). |
+| Z.ai GLM 5.2       | 0.0                          | reasoning_effort: max (GLM-native level)               | 16000               | *Not* recommended pending field testing. Max-effort speed experiment (maintainer, 2026-08): watch the 145s in-contract timeout — guardrails in _thinking.ts. |
 
 **Rationale for FLOW settings:**
 
@@ -80,7 +84,7 @@ Conversational responses. Quality matters; reasoning effort calibrated per model
 | Mistral Medium 3.5 | 0.7                          | reasoning_effort: high           | 4000                | Mistral "Quality tier" — reasoning enabled.                           |
 | Mistral Small 4    | 0.7                          | reasoning_effort: none           | 2000                | Mistral "Speed tier" — no thinking chunk; ideal for cheap, fast chat. |
 | DeepSeek V4 Flash  | 1.0                          | n/a                              | 2000                | Standard, cheap chat.                                                 |
-| Z.ai GLM 5.2       | 0.7                          | not sent (launch posture)        | 2000                | Third-party (Z.ai) via Mistral API, public preview; 1M context.       |
+| Z.ai GLM 5.2       | 0.7                          | reasoning_effort: max            | 4000                | Third-party (Z.ai) via Mistral API, public preview; 1M context.       |
 
 **Rationale for Chat settings:**
 
@@ -102,7 +106,7 @@ Inline rewrites and proposals from within the editor. Latency-sensitive.
 | Mistral Medium 3.5 | 0.7                          | reasoning_effort: none           | 1000                | No reasoning — editor actions should be snappy. |
 | Mistral Small 4    | 0.7                          | reasoning_effort: none           | 1000                | Same as Medium for editor.                      |
 | DeepSeek V4 Flash  | 1.0                          | n/a                              | 1000                | Standard.                                       |
-| Z.ai GLM 5.2       | 0.7                          | not sent (launch posture)        | 1000                | Third-party via Mistral API, public preview.    |
+| Z.ai GLM 5.2       | 0.7                          | reasoning_effort: none           | 1000                | Third-party via Mistral API; reasoning off — editor actions stay snappy. |
 
 **Rationale for Editor settings:**
 
@@ -123,7 +127,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 | Mistral Medium 3.5 | 0.7 | reasoning_effort: high | 2500 | 4000 | Mistral quality tier — reasoning helps with nuanced AI features. |
 | Mistral Small 4 | 0.7 | reasoning_effort: none | 1000 | 2000 | Mistral speed tier. |
 | DeepSeek V4 Flash | 1.0 | n/a | 1000 | 2000 | Standard. |
-| Z.ai GLM 5.2 | 0.7 | not sent (launch posture) | 1000 | 2000 | Third-party via Mistral API, public preview. |
+| Z.ai GLM 5.2 | 0.7 | reasoning_effort: max | 2500 | 4000 | Third-party via Mistral API, public preview. |
 
 **Rationale for Context-prompt settings:**
 

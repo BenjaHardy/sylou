@@ -34,6 +34,9 @@
 //   single allowlist: resolveMistralEffort returns undefined for any model
 //   not in this set, and the OpenAI-body builder only emits the field when
 //   the value is defined and non-"none".
+//   `zai-glm-5-2` (third-party, GLM-native thinking) has TWO levels,
+//   "high" | "max" — "max" is GLM-only; Mistral's own models top out at
+//   "high" and must never be configured with "max".
 //
 // DeepSeek:
 //   `deepseek-v4-flash` (non-thinking mode) has no thinking toggle.
@@ -65,10 +68,14 @@
 //         reducing effort).
 //   * Average FLOW elapsed > 100s on Mistral Medium 3.5 across ≥5 runs
 //       → flip FLOW_MISTRAL_EFFORT["mistral-medium-3-5"] to "none".
+//   * Average FLOW elapsed > 100s on GLM 5.2 at "max" across ≥5 runs
+//       → drop FLOW_MISTRAL_EFFORT["zai-glm-5-2"] to "high"; any single
+//         run past the 145s in-contract timeout → "high" immediately,
+//         then "none" if it persists.
 // ============================================================
 
 export type ClaudeEffort  = "low" | "medium" | "high" | "xhigh";
-export type MistralEffort = "high" | "none";
+export type MistralEffort = "high" | "max" | "none";
 
 export type ThinkingTable       = Record<string, boolean>;
 export type EffortTable         = Record<string, ClaudeEffort>;
@@ -84,6 +91,7 @@ export type EffortLevel = ClaudeEffort;
 export const MISTRAL_REASONING_MODELS = new Set<string>([
   "mistral-medium-3-5",
   "mistral-small-2603",
+  "zai-glm-5-2",
 ]);
 
 // Defaults: adaptive thinking ON for Opus only. Sonnet stays OFF
@@ -101,10 +109,10 @@ export const CONTEXT_EFFORT: EffortTable = { "claude-sonnet-4-6": "high", "claud
 // Mistral reasoning effort — only models in MISTRAL_REASONING_MODELS
 // are eligible. Determinism wins for FLOW; chat-style functions prefer
 // Small at "none" for latency.
-export const FLOW_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "high" };
-export const CHAT_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "none" };
-export const EDITOR_MISTRAL_EFFORT:  MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "none" };
-export const CONTEXT_MISTRAL_EFFORT: MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "none" };
+export const FLOW_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "high", "zai-glm-5-2": "max" };
+export const CHAT_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "none", "zai-glm-5-2": "max" };
+export const EDITOR_MISTRAL_EFFORT:  MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "none", "zai-glm-5-2": "none" };
+export const CONTEXT_MISTRAL_EFFORT: MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "none", "zai-glm-5-2": "max" };
 
 export function resolveThinking(table: ThinkingTable, modelId: string): boolean {
   if (!modelId.startsWith("claude-")) return false;
@@ -135,7 +143,7 @@ export function resolveEffort(table: EffortTable, modelId: string): ClaudeEffort
  * Resolve the Mistral `reasoning_effort` value for a given model.
  *
  * Returns undefined unless the model is in MISTRAL_REASONING_MODELS AND
- * the table maps it to "high". When it returns undefined, callers must
+ * the table maps it to a non-"none" level. When it returns undefined, callers must
  * NOT include `reasoning_effort` in the outbound body — sending it to a
  * non-reasoning Mistral model is a hard 422 from the API. Returning
  * "none" is also handled as undefined here so the field is simply
@@ -155,8 +163,9 @@ export function resolveMistralEffort(
 // Adaptive thinking consumes the SAME output budget as response text
 // (max_tokens is a hard limit on total output). Claude+thinking paths
 // therefore need more headroom than the bare prompt would suggest.
-// Mistral reasoning models (Medium 3.5, Small) at "high" effort emit
-// reasoning tokens into the same budget and need the same headroom.
+// Mistral reasoning models (Medium 3.5, Small, GLM 5.2) at "high"/"max"
+// effort emit reasoning tokens into the same budget and need the same
+// headroom.
 // Non-reasoning callers keep their base.
 export function resolveMaxTokens(
   base: number,
