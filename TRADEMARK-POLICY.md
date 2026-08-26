@@ -18,7 +18,7 @@ If you're reading this and wondering whether your planned use is OK, the short a
 
 This policy applies to:
 
-- **The word mark Sylou.** Held by Benjamin Hardy, with an application pending at the European Union Intellectual Property Office (EUIPO application no. 019364202, pending registration).
+- **The word mark Sylou.** Held by Benjamin Hardy, registered as an EU trade mark with the European Union Intellectual Property Office (EUTM No. 019364202).
 - **The Sylou logo** (the stylized shiba icon and accompanying wordmark). Protected under copyright and through use as an unregistered mark.
 - **The FLOW Pledge Badges format.** Protected under copyright as a creative work, and as the distinctive visual artifact identifying the official Sylou platform.
 
@@ -142,4 +142,4 @@ This policy aims to be practical and pragmatic. Sylou's goal is a healthy open-s
 
 ---
 
-*Sylou™ is a trademark of Benjamin Hardy (EUIPO application no. 019364202, pending registration). The Sylou logo and the FLOW Pledge Badges format are protected under copyright and through use as identifying artifacts of the official Sylou project.*
+*Sylou™ is a trademark of Benjamin Hardy, registered as an EU trade mark (EUTM No. 019364202). The Sylou logo and the FLOW Pledge Badges format are protected under copyright and through use as identifying artifacts of the official Sylou project.*
