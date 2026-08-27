@@ -30,15 +30,8 @@ This document tracks how Sylou configures each LLM model across the four edge fu
 unmodified on the Mistral API on EU infrastructure — **public preview since
 2026-08**. It routes through Sylou's Mistral path (the id carries no
 `claude-`/`deepseek-` prefix) and uses the operator's `MISTRAL_API_KEY`.
-Reasoning (GLM's native High/Max thinking-effort levels) was enabled
-**after** the launch acceptance pass came back green (2026-08, maintainer
-decision): `reasoning_effort: "max"` for FLOW, chat and context-prompt,
-`"none"` for editor actions (latency-sensitive, same rationale as
-Medium 3.5). Note "max" is **GLM-only** — Mistral's own reasoning models
-top out at "high" and must never be configured with "max". The
-Mistral-hosted wire's acceptance of `"max"` is verified empirically at
-deploy (watch `[callLLM]` logs); if it is ever rejected, drop the
-`_thinking.ts` tables to `"high"`.
+Note: "max" reasoning is **GLM-only** — Mistral's own reasoning models
+top out at "high" and must never be configured with "max".
 
 > **DeepSeek model-id note:** Sylou uses the pinned `deepseek-v4-flash` id
 > (non-thinking mode — context 1M, max output 384K). The legacy rolling
