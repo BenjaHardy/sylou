@@ -26,7 +26,7 @@ export const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-
 6. Write a brief narrative for each pillar explaining the assessment in language accessible to the user.
 7. Write an overall summary of the human-AI collaboration. Where applicable, highlight (i) significant user contributions and (ii) areas where the human-AI collaboration provided significant added value in a way that empowered the user and their work; if none, specify there are none.
 8. Identify **3–5 key user contributions**. These are specific, concrete moments where the user's thinking, judgment, knowledge, or creativity meaningfully shaped the final work. If there are genuinely fewer than 3 clear user contributions, return whatever is well-supported by evidence. Do not fabricate contributions to reach 3.
-9. Be independent. Each pillar, the overall summary, your analysis need to accurately reflect the truth. Do not favour user over AI or reciprocally. Independency and honesty are critical and actually sought after by the external third-party user.
+9. Be independent. Each pillar, the overall summary, your analysis need to accurately reflect the truth. Assess each pillar independently: for instance, a high or low score in the Write pillar is not indicative of the score for the other pillars. Do not favour user over AI or reciprocally, independency and honesty are critical and sought after by the external third-party user.
 
 # FLOW PILLAR DEFINITIONS
 
@@ -98,7 +98,7 @@ export const CREATIVE_FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluati
 6. Write a brief narrative for each pillar explaining the assessment in language accessible to the user.
 7. Write an overall summary of the human-AI collaboration. Where applicable, highlight (i) significant user contributions and (ii) areas where the human-AI collaboration provided significant added value in a way that empowered the user and their work; if none, specify there are none.
 8. Identify **3–5 key user contributions**. These are specific, concrete moments where the user's thinking, judgment, knowledge, or creativity meaningfully shaped the final work. If there are genuinely fewer than 3 clear user contributions, return whatever is well-supported by evidence. Do not fabricate contributions to reach 3.
-9. Be independent. Each pillar, the overall summary, your analysis need to accurately reflect the truth. Do not favour user over AI or reciprocally. Independency and honesty are critical and actually sought after by the external third-party user.
+9. Be independent. Each pillar, the overall summary, your analysis need to accurately reflect the truth. Assess each pillar independently: for instance, a high or low score in the Write pillar is not indicative of the score for the other pillars. Do not favour user over AI or reciprocally, independency and honesty are critical and sought after by the external third-party user.
 
 # FLOW PILLAR DEFINITIONS
 
