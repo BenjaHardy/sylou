@@ -183,5 +183,41 @@ export function buildEditorStatsString(
     }
   }
 
+  // Actions beyond the newest 20 keep a COMPACT line each (2026-08
+  // maintainer decision): the selection's provenance/source label and the
+  // size signal must survive for EVERY action. An accepted grammar pass
+  // over a large user-written ([t]) or external-source ([ce]) selection
+  // leaves [ai] spans in the writing, and without the source label FLOW
+  // could not tell those apart once the action aged out of the detailed
+  // log. ~25 tokens per compact line (vs ~250 for a detailed entry) keeps
+  // the prompt bounded; a near-equal size pair substitutes for the verbatim
+  // original-vs-result comparison. Propose rows keep their standard compact
+  // shape — their content lives in the timestamped Chat History at any age.
+  if (actions.length > 20) {
+    lines.push("");
+    lines.push("--- Older actions (compact: type, outcome, size, selection source) ---");
+    for (let i = 20; i < actions.length; i++) {
+      const a = actions[i];
+      if (a.action_type === "propose") {
+        lines.push(`--- Action ${i + 1}: propose (${a.outcome})${a.created_at ? ` at ${a.created_at}` : ""} — content in Chat History above ---`);
+        continue;
+      }
+      let sizeSegment = "";
+      if (a.char_count_original && a.char_count_result) {
+        sizeSegment = `, ${a.char_count_original.toLocaleString("en-US")}→${a.char_count_result.toLocaleString("en-US")} chars`;
+      } else if (a.char_count_original) {
+        sizeSegment = `, ${a.char_count_original.toLocaleString("en-US")} chars original`;
+      }
+      let sourceSegment = "";
+      if (a.instruction_text) {
+        const sourceMatch = a.instruction_text.match(/(?:\|\s*)?Source:\s*(.+?)$/);
+        if (sourceMatch) {
+          sourceSegment = `, source: ${sourceMatch[1].trim()}`;
+        }
+      }
+      lines.push(`--- Action ${i + 1}: ${a.action_type} (${a.outcome})${sizeSegment}${sourceSegment} ---`);
+    }
+  }
+
   return lines.join("\n");
 }
