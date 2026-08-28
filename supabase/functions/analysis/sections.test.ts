@@ -118,7 +118,7 @@ Deno.test("editor stats: counts, acceptance estimate, detailed log with source p
   assert(out.includes("propose (rejected) at 2026-08-01T10:00:00.000Z — content in Chat History above"));
 });
 
-Deno.test("editor stats: detailed log caps at the 20 most recent actions", () => {
+Deno.test("editor stats: full detail caps at 20; older actions get compact lines (no previews)", () => {
   const actions = Array.from({ length: 25 }, (_, i) => ({
     action_type: "grammar", outcome: "accepted",
     char_count_original: 10, char_count_result: 10,
@@ -127,5 +127,52 @@ Deno.test("editor stats: detailed log caps at the 20 most recent actions", () =>
   const out = buildEditorStatsString(actions);
   assert(out.includes("--- Detailed action log (most recent 20) ---"));
   assert(out.includes("--- Action 20:"));
-  assert(!out.includes("--- Action 21:"));
+  assert(out.includes("--- Older actions (compact: type, outcome, size, selection source) ---"));
+  assert(out.includes("--- Action 21: grammar (accepted), 10→10 chars ---"));
+  assert(out.includes("--- Action 25: grammar (accepted), 10→10 chars ---"));
+  // Older actions never leak their preview text — compact means compact.
+  assert(!out.includes('"sel-20"'));
+  assert(!out.includes('"res-24"'));
+});
+
+Deno.test("editor stats: compact tail carries the selection source label and en-US sizes", () => {
+  const actions: Parameters<typeof buildEditorStatsString>[0] = Array.from(
+    { length: 21 },
+    (_, i) => ({
+      action_type: "grammar", outcome: "accepted",
+      char_count_original: 10, char_count_result: 10,
+      selected_text_preview: `sel-${i}`, ai_response_preview: `res-${i}`,
+    }),
+  );
+  actions[20] = {
+    action_type: "grammar", outcome: "accepted",
+    char_count_original: 1842, char_count_result: 1850,
+    selected_text_preview: "large user-written passage…",
+    ai_response_preview: "corrected passage…",
+    instruction_text: "Fix grammar | Source: 100% [t]",
+  };
+  const out = buildEditorStatsString(actions);
+  assert(out.includes(
+    "--- Action 21: grammar (accepted), 1,842→1,850 chars, source: 100% [t] ---",
+  ));
+});
+
+Deno.test("editor stats: propose rows beyond 20 keep their standard compact shape", () => {
+  const actions: Parameters<typeof buildEditorStatsString>[0] = Array.from(
+    { length: 21 },
+    (_, i) => ({
+      action_type: "grammar", outcome: "accepted",
+      char_count_original: 10, char_count_result: 10,
+      selected_text_preview: `sel-${i}`, ai_response_preview: `res-${i}`,
+    }),
+  );
+  actions[20] = {
+    action_type: "propose", outcome: "rejected",
+    char_count_original: 500, char_count_result: null,
+    created_at: "2026-08-01T10:00:00.000Z",
+  };
+  const out = buildEditorStatsString(actions);
+  assert(out.includes(
+    "--- Action 21: propose (rejected) at 2026-08-01T10:00:00.000Z — content in Chat History above ---",
+  ));
 });
