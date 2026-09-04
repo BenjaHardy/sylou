@@ -1,0 +1,13 @@
+-- chat_threads: drop direct thread deletion. A thread delete cascades to
+-- chat_messages (FLOW-input evidence), letting a user prune FLOW signals
+-- via a direct PostgREST call — a side door around the 20260709120000
+-- user-read-only lockdown (the cascade is a server-side FK action, not a
+-- user write on chat_messages, so dropping the write policies there did
+-- not close it). The UI has never offered thread deletion (the client
+-- does select/insert/rename only).
+--
+-- Project and account deletion are unaffected: ON DELETE CASCADE actions
+-- (projects → chat_threads → chat_messages) are referential-integrity
+-- actions performed by the engine and bypass RLS by design, and the
+-- delete-account function runs service-role.
+DROP POLICY "Users delete own chat_threads" ON public.chat_threads;
