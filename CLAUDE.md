@@ -87,7 +87,11 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   are **user-read-only** (write policies dropped, `20260709120000`): all
   writes go through the edge functions' service-role clients behind
   upfront ownership checks, so FLOW signals can't be self-forged via
-  direct PostgREST writes. The per-thread **conversation memory**
+  direct PostgREST writes. `chat_threads` is likewise **user-undeletable**
+  (DELETE policy dropped, `20260904120000`): a direct thread delete would
+  cascade away that thread's `chat_messages`, side-stepping the lockdown.
+  The UI never offered thread deletion; project deletion still cascades
+  normally (FK referential actions bypass RLS). The per-thread **conversation memory**
   (`chat_thread_summaries`, maintained by `_shared/_conversation_memory.ts`
   in the chat/context-prompt stream tails) follows the same pattern —
   user-read-only, service-role writes, injected into chat and
