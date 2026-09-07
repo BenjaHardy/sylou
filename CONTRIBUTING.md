@@ -20,7 +20,7 @@ There's no hierarchy here — all of these are useful:
 - **Suggest features** by opening an issue and choosing the **Feature request** template. The use case matters more than the implementation idea, and so the template is structured to help you describe the problem first.
 - **Submit code** via pull request. Small PRs are easier to review and land than large ones; if you're planning something substantial, opening an issue first to discuss the approach saves everyone time. When you open a PR, a template will pre-fill with a short checklist (including the DCO sign-off and the transparency-impact note described below).
 - **Improve documentation**: README clarifications, setup guide fixes, typo corrections, better examples. These are among the most valuable contributions and the easiest to review.
-- **Discuss the FLOW methodology**: the prompts, scoring rubric, pillar definitions, and Work Profile taxonomy are open to debate and refinement. Methodology observations have their own structured template (see the "Methodology contributions" section below).
+- **Discuss the FLOW methodology**: the prompts, scoring rubric, pillar definitions, and Work Style taxonomy are open to debate and refinement. Methodology observations have their own structured template (see the "Methodology contributions" section below).
 - **Share your experience**: write about how you use Sylou, what works, what doesn't, what you wish were different. Blog posts, academic write-ups, social media, all are welcome.
 
 ## Developer Certificate of Origin (DCO)
@@ -175,7 +175,7 @@ A "not this way" isn't a rejection of the contributor, but instead a conversatio
 
 ## Methodology contributions
 
-The FLOW methodology - the prompts, scoring rubric, pillar definitions, Work Profile taxonomy - is licensed under CC BY-SA 4.0, separately from the code. Contributions here are especially welcome but go through a slightly different process.
+The FLOW methodology - the prompts, scoring rubric, pillar definitions, Work Style taxonomy - is licensed under CC BY-SA 4.0, separately from the code. Contributions here are especially welcome but go through a slightly different process.
 
 ### Methodology observations and feedback
 
@@ -227,7 +227,7 @@ If you're submitting methodology changes via PR (not just observations), additio
 
 - Open an issue tagged `methodology` to start the discussion before writing the PR
 - Methodology changes often benefit from concrete examples (test cases where the current methodology produces the wrong answer, and your proposed change produces a better one)
-- Changes to the public-facing aspects of the methodology (the four pillars, the scoring scale, the Work Profile logic) are conservative; these are part of how users understand the framework, so stability matters
+- Changes to the public-facing aspects of the methodology (the four pillars, the scoring scale, the Work Style logic) are conservative; these are part of how users understand the framework, so stability matters
 - Changes to the internal aspects (prompt wording, evidence requirements, calibration anchors) are more flexible and benefit from iteration
 
 The CC BY-SA license means any methodology changes you contribute will be released under the same license. Your DCO sign-off on the commits applies the same way as for code.

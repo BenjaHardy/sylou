@@ -11,7 +11,7 @@ marked `(not yet implemented)` so they're not mistaken for current state.
 Sylou is a writing + reflection app built around the FLOW methodology
 (Find / Lead / Organize / Write). Users draft in a TipTap editor, chat
 with an AI assistant, and run FLOW analyses that score their process
-across four pillars (0.0–5.0) and assign one of 16 work-profile codes.
+across four pillars (0.0–5.0) and assign one of 16 work-style codes.
 See `README.md` and `docs/` for product depth.
 
 ## 1b. Open source
@@ -252,8 +252,8 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   transactions (v3 suppresses them; the provenance pending signal must still
   be consumed) — see `editor-update-guard.test.ts`.
 - FLOW methodology, FLOW prompt, FLOW scoring (4 pillars, 0.0–5.0) and the
-  16 four-character work-profile codes — product decisions, not
-  implementation details. Profile code = each pillar's score thresholded at
+  16 four-character work-style codes — product decisions, not
+  implementation details. Style code = each pillar's score thresholded at
   ≥3.0 (`flow-work-profiles.ts`); the 6 display bands live in `flowBands.ts`
   (UI shows the band label, never the raw number).
 

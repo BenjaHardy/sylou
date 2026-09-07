@@ -33,9 +33,9 @@ AI-generated content needs to be detectable as such, in a machine-readable way. 
 **AI chat messages** carry `data-ai-generated="true"` and `data-ai-model` attributes in the rendered HTML. The JSON export of chat threads preserves AI origin through the following standard fields: look for `role` "assistant" as well as `model_used`.
 AI editor actions that are not displayed in the chat (Fix Grammar, Translate, Rewrite, Simplify, Expand) are also logged into the JSON export as `ai_response`.
 
-**Shared FLOW reports** carry `<meta>` tags at the document level identifying the page as containing AI-generated content and naming the model. The AI-generated sections (the radar chart, scores, summary, key contributions on the Report tab; the AI-selected profile on the Profile tab) are wrapped in `<section>` elements with `data-ai-generated="true"`, `data-ai-model`, and accessibility labels.
+**Shared FLOW reports** carry `<meta>` tags at the document level identifying the page as containing AI-generated content and naming the model. The AI-generated sections (the radar chart, scores, summary, key contributions on the Report tab; the AI-selected collaboration style on the FLOW Collaboration Style tab) are wrapped in `<section>` elements with `data-ai-generated="true"`, `data-ai-model`, and accessibility labels.
 
-**Human-authored content is not marked.** The user's writing, self-assessment, post-its, or replay of their own activity carry no AI-generated markers. Where a non-AI element sits inside an AI-marked section (notably the public-domain artworks in the FLOW Profile), it carries an explicit `data-ai-generated="false"` marker.
+**Human-authored content is not marked.** The user's writing, self-assessment, post-its, or replay of their own activity carry no AI-generated markers. Where a non-AI element sits inside an AI-marked section (notably the public-domain artworks in the FLOW Collaboration Style), it carries an explicit `data-ai-generated="false"` marker.
 
 **Editor provenance.** Sylou's editor tracks the origin of every paragraph through provenance tags: `[t]` typed by the user, `[cc]` copied from chat, `[ce]` copied from elsewhere, `[ai]` inserted via AI tools. This is preserved in Sylou's data and shown in the FLOW report.
 

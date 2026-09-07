@@ -125,7 +125,7 @@ export default function FlowWorkProfile({ profile, scores }: FlowWorkProfileProp
 
         {/* Contextual Note */}
         <p className="text-xs text-muted-foreground/60 text-center">
-          This profile reflects your collaboration style on this project.
+          This collaboration style reflects how you worked with the AI on this project.
         </p>
       </CardContent>
     </Card>

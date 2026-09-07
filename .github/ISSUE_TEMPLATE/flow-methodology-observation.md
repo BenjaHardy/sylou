@@ -1,6 +1,6 @@
 ---
 name: FLOW Methodology Observation
-about: Report an observation, concern, or suggestion about the FLOW analytical methodology (scoring, prompts, pillar definitions, Work Profiles).
+about: Report an observation, concern, or suggestion about the FLOW analytical methodology (scoring, prompts, pillar definitions, Work Styles).
 title: "[FLOW] "
 labels: methodology
 assignees: ''

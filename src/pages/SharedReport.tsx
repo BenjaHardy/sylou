@@ -293,7 +293,7 @@ export default function SharedReport() {
                   className="h-7 text-xs px-3"
                   onClick={() => setActiveTab("profile")}
                 >
-                  FLOW Profile
+                  FLOW Collaboration Style
                 </Button>
               )}
               {replayAvailable && (
@@ -328,7 +328,7 @@ export default function SharedReport() {
             </div>
           )}
 
-          {/* FLOW Profile Tab */}
+          {/* FLOW Collaboration Style Tab */}
           {activeTab === "profile" && profileAvailable && (
             <div key="profile" className="animate-card-flip">
               <ProfileTabContent
@@ -438,7 +438,7 @@ export default function SharedReport() {
             </>
           )}
 
-          {/* Metadata footer + Sylou footer (FLOW Report and FLOW Profile tabs only) */}
+          {/* Metadata footer + Sylou footer (FLOW Report and FLOW Collaboration Style tabs only) */}
           {(activeTab === "report" || activeTab === "profile") && (
             <>
               <div className="text-[10px] text-muted-foreground text-center space-y-0.5">

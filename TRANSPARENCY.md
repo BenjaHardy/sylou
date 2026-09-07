@@ -70,9 +70,9 @@ in one.
 
 Each pillar is scored independently from 0.0 to 5.0 in half-point increments, or
 `null` where there isn't enough evidence to judge. The four scores together also
-map to one of **16 work-profile codes** (a four-letter code, one letter per
+map to one of **16 work-style codes** (a four-letter code, one letter per
 pillar above a threshold; see Section 3), a personality-type-style summary of
-the collaboration. The profile is a convenience on top of the scores, not a
+the collaboration. The collaboration style is a convenience on top of the scores, not a
 separate judgment.
 
 The FLOW methodology is open-source, published under [**CC BY-SA 4.0**](https://github.com/BenjaHardy/sylou/blob/main/LICENSE-METHODOLOGY).

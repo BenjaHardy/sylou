@@ -345,7 +345,7 @@ export function FlowReportView({
               className="h-7 text-xs px-3"
               onClick={() => setActiveTab("profile")}
             >
-              FLOW Profile
+              FLOW Collaboration Style
             </Button>
             <Button
               variant={activeTab === "replay" ? "default" : "outline"}
@@ -370,7 +370,7 @@ export function FlowReportView({
             </Button>
           </div>
 
-          {/* FLOW Profile Tab */}
+          {/* FLOW Collaboration Style Tab */}
           {activeTab === "profile" && (
             <div key="profile" className="animate-card-flip space-y-8">
               <ProfileTabContent
