@@ -14,7 +14,7 @@
 // (per-event try/catch vs editor-action's clientDisconnected latch),
 // stream-first persistence tails, and controller.close() placement.
 
-import { extractDeltaText, type ProviderId } from "./_llm.ts";
+import { extractDeltaText, extractStopReason, type ProviderId } from "./_llm.ts";
 
 /** Per-request factory for the SSE envelope helpers. corsHeaders is the
  *  only request-scoped dependency; the two helpers were byte-identical
@@ -63,12 +63,18 @@ export function makeSSEHelpers(corsHeaders: Record<string, string>) {
  *     deliberately dropped, exactly as before the extraction.
  *   - res.body!.getReader() is acquired here; callers must await inside
  *     their existing try so a null body lands in the same catch as before.
+ *   - onStop (optional, additive 2026-09) receives the provider's stop /
+ *     finish reason when a chunk carries one (Anthropic message_delta
+ *     stop_reason, OpenAI-shape finish_reason) — the only way to learn a
+ *     reply was cut off at max_tokens (isTruncatedStop in _llm.ts). It
+ *     fires inside the per-line try like onToken; it never ends the loop.
  */
 export async function readProviderStream(
   res: Response,
   provider: ProviderId,
   handlers: {
     onToken: (delta: string) => void;
+    onStop?: (reason: string) => void;
   },
 ): Promise<string> {
   let fullResponse = "";
@@ -97,6 +103,8 @@ export async function readProviderStream(
           fullResponse += delta;
           handlers.onToken(delta);
         }
+        const stop = extractStopReason(parsed);
+        if (stop) handlers.onStop?.(stop);
       } catch { /* skip malformed chunk */ }
     }
   }

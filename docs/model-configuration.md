@@ -104,7 +104,7 @@ Inline rewrites and proposals from within the editor. Latency-sensitive.
 **Rationale for Editor settings:**
 
 - Reasoning disabled for Mistral — editor actions are short, latency-sensitive; thinking-chunk overhead isn't justified.
-- Lower max_tokens (1000) — proposals are inherently short.
+- Lower max_tokens (1000) — proposals are inherently short. The budget lives in `_shared/_models.ts` (`OUTPUT_BUDGETS.EDITOR_ACTION_TOKENS`) and is mirrored by `src/lib/editor-limits.ts`: the selection window shows a notice (acknowledge to proceed) for selections beyond ~3,400 characters, and a reply the provider cut off at max_tokens arrives flagged `truncated` — Accept then asks for confirmation (Ctrl+Z restores). Ask/Propose replies carry the same flag; they get no pre-check, since their length follows the request rather than the selection.
 
 ---
 

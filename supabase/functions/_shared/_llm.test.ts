@@ -4,6 +4,8 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   extractDeltaText,
+  extractStopReason,
+  isTruncatedStop,
   fetchWithTimeout,
   normaliseResponse,
   sanitizeAnthropicSchema,
@@ -373,4 +375,26 @@ Deno.test("fetchWithTimeout: non-abort errors pass through unchanged", async () 
     message = (err as Error).message;
   }
   assertEquals(message, "ECONNREFUSED");
+});
+
+// ── stop reasons (2026-09, large-selection safety) ────────────────────
+
+Deno.test("extractStopReason: OpenAI finish_reason and Anthropic message_delta stop_reason; null otherwise", () => {
+  assertEquals(extractStopReason({ choices: [{ delta: { content: "x" }, finish_reason: "length" }] }), "length");
+  assertEquals(extractStopReason({ choices: [{ delta: { content: "x" } }] }), null);
+  assertEquals(extractStopReason({ type: "message_delta", delta: { stop_reason: "max_tokens" } }), "max_tokens");
+  assertEquals(extractStopReason({ type: "content_block_delta", delta: { text: "x" } }), null);
+  assertEquals(extractStopReason(null), null);
+  assertEquals(isTruncatedStop("length"), true);
+  assertEquals(isTruncatedStop("max_tokens"), true);
+  assertEquals(isTruncatedStop("stop"), false);
+});
+
+Deno.test("normaliseResponse: exposes the provider stop reason for both wire shapes", () => {
+  const anthropic = normaliseResponse("anthropic", { content: [{ type: "text", text: "hi" }], stop_reason: "max_tokens" });
+  assertEquals(anthropic.stopReason, "max_tokens");
+  const openai = normaliseResponse("mistral", { choices: [{ message: { content: "hi" }, finish_reason: "stop" }] });
+  assertEquals(openai.stopReason, "stop");
+  const none = normaliseResponse("mistral", { choices: [{ message: { content: "hi" } }] });
+  assertEquals(none.stopReason, null);
 });
