@@ -10,7 +10,7 @@
 // transaction-mapping path must keep these green.
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Editor } from "@tiptap/core";
-import StarterKit from "@tiptap/starter-kit";
+import { sylouStarterKit } from "@/lib/editor-extensions/sylou-starter";
 import type { Transaction } from "@tiptap/pm/state";
 import type { Slice } from "@tiptap/pm/model";
 import * as pmView from "@tiptap/pm/view";
@@ -45,7 +45,8 @@ describe("ProvenanceTracker.applyTransaction — real TipTap transactions", () =
   function makeEditor(content: string) {
     editor = new Editor({
       element: document.createElement("div"),
-      extensions: [StarterKit],
+      // WritingEditor's StarterKit configuration (parity with the app).
+      extensions: sylouStarterKit(),
       content,
     });
     editor.on("transaction", ({ transaction }) => {
@@ -214,14 +215,25 @@ describe("ProvenanceTracker.applyTransaction — real TipTap transactions", () =
     ]);
   });
 
-  it("paste into an empty paragraph with trailing content (closed-slice fit): the breakdown survives the structural delta", () => {
+  it("paste into an empty paragraph with trailing content (closed-slice fit): the breakdown replays exactly across the re-parsed block", () => {
     // Field bug (P3-11 investigation, reproduced from the user's exact
     // Firefox clipboard payload): when the cursor sits in an EMPTY paragraph
     // that has content after it, prosemirror-view's clipboard parser
-    // re-parses the data-pm-slice payload as a CLOSED block, and the
-    // insertion carries rebuilt structure — 43 positions for the 36 copied
-    // ones (delta +7). The tracker must replay the multi-source breakdown
-    // across that gap, never collapse it to the dominant source.
+    // re-parses the data-pm-slice payload as a CLOSED block. Under
+    // prosemirror-model <= 1.25.9 the insertion was 43 positions for the
+    // 36 copied ones (delta +7): the parser's blockTags lacked `body`, so
+    // the "\n" text around the fragment comments became THREE phantom
+    // hardBreak nodes — every such paste silently added <p><br></p> before
+    // and <p><br><br></p> after the pasted paragraph — and the tracker had
+    // to replay the multi-source breakdown across that gap.
+    //
+    // Since prosemirror-model 1.25.11 (TipTap v3 migration, 2026-09 —
+    // changelog: "Fix parsing of trailing/leading whitespace when the
+    // element given to parseSlice is a body element"; bisected on a v2
+    // install: swapping only prosemirror-model moves 90 → 83), the same
+    // payload inserts exactly 36 positions and the breakdown lands on the
+    // ideal boundaries (the 31-character chat_ai span intact). Either way
+    // the invariant is the same: never collapse to the dominant source.
     makeEditor("<p>Test:What can I help you with today?</p><p></p><p>after</p>");
     seed(
       [
@@ -258,15 +270,17 @@ describe("ProvenanceTracker.applyTransaction — real TipTap transactions", () =
     editor.view.dispatch(editor.state.tr.replaceSelection(slice));
     applyCaptured();
 
-    // Breakdown replayed; the typed piece absorbs ~2 leading tokens and the
-    // final chat_ai piece stretches over the rebuilt trailing structure —
-    // token-scale boundary fuzz instead of a total collapse.
+    // Exactly the 36 copied positions were inserted (47 + 36).
+    expect(editor.state.doc.content.size).toBe(83);
+    // Breakdown replayed on the ideal boundaries: p1 close + p2 open +
+    // "Test:" merge into one typed run, the AI sentence keeps its 31
+    // positions, and the trailing structure (p2 close, "after") is typed.
     expect(tracker.getSegments()).toEqual([
       { start: 0, end: 6, source: "typed" },
       { start: 6, end: 37, source: "chat_ai" },
       { start: 37, end: 44, source: "typed" },
-      { start: 44, end: 82, source: "chat_ai" },
-      { start: 82, end: 90, source: "typed" },
+      { start: 44, end: 75, source: "chat_ai" },
+      { start: 75, end: 83, source: "typed" },
     ]);
   });
 });

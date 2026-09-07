@@ -1,5 +1,5 @@
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
+import { sylouStarterKit } from "@/lib/editor-extensions/sylou-starter";
 import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
@@ -14,7 +14,9 @@ export function MiniTipTapEditor({ value, onChange, placeholder, className }: Pr
   const isInternalUpdate = useRef(false);
 
   const editor = useEditor({
-    extensions: [StarterKit],
+    // Plain v2-equivalent StarterKit (v3-only behaviors opted out — see
+    // sylou-starter.ts); this editor never had link/underline.
+    extensions: sylouStarterKit(),
     content: value || "",
     editorProps: {
       attributes: {
@@ -39,7 +41,7 @@ export function MiniTipTapEditor({ value, onChange, placeholder, className }: Pr
     }
     const current = editor.getHTML();
     if (current !== value) {
-      editor.commands.setContent(value || "", false);
+      editor.commands.setContent(value || "", { emitUpdate: false });
     }
   }, [value, editor]);
 

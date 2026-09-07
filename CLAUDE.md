@@ -23,7 +23,15 @@ Apply strict coding standards to avoid future code liabilities for the open-sour
 
 ## 2. Stack
 - React 18, Vite 8 (Rolldown), TypeScript 5, Tailwind v3, shadcn/ui
-- React Router, TipTap v2 (custom font-size + pagination extensions)
+- React Router, TipTap v3 (custom font-size + pagination extensions).
+  The v2→v3 migration (2026-09) was behavior-preserving: every editor takes
+  its StarterKit from `src/lib/editor-extensions/sylou-starter.ts`, which
+  opts out of v3's new editing behaviors (bundled Link/Underline/ListKeymap/
+  TrailingNode, Blockquote Backspace, ListItem branching-Delete, OrderedList
+  plain-text paste-to-list, CodeBlock exitOnArrowUp; WritingEditor also keeps
+  TextStyle's `mergeNestedSpanStyles: false`). Adopting any of them is a UX
+  decision to take deliberately — pinned by `v2-keymap-parity.test.ts`,
+  serialization by `editor-html-roundtrip.test.ts`.
 - Supabase via Lovable Cloud; Edge Functions in `supabase/functions/`
 - Vitest 4 (frontend units) + `deno test` (edge-function units beside their
   modules: `_shared/` plus the split function directories — the `deno.json`
@@ -236,7 +244,13 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 - Editor stable-ref flush pattern in `useWritingContent` / `WritingEditor`.
   The client **must flush editor + provenance before `runAnalysis`** — the
   `analysis` function reads writing/provenance from the DB, not the request,
-  so an un-flushed edit would be scored stale.
+  so an un-flushed edit would be scored stale. TipTap v3 `destroy()` nulls
+  the editor's schema/commands: any code touching `editor.*` after an
+  `await` (or from a closure that can outlive the editor) checks
+  `editor.isDestroyed` first — v2 silently no-op'd there, v3 throws.
+  WritingEditor's `onTransaction` re-emits `update` for identical-document
+  transactions (v3 suppresses them; the provenance pending signal must still
+  be consumed) — see `editor-update-guard.test.ts`.
 - FLOW methodology, FLOW prompt, FLOW scoring (4 pillars, 0.0–5.0) and the
   16 four-character work-profile codes — product decisions, not
   implementation details. Profile code = each pillar's score thresholded at
