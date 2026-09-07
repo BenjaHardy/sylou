@@ -240,8 +240,8 @@ Feedback derived from such tests will help guide the development of future dedic
 
 ### Note on LLM calibration
 
-Based on our tests (Claude/Mistral/DeepSeek), Claude consistently delivers the most accurate FLOW analysis outputs: it showed strong repeatability (i.e. consistent outcomes from one run to another), less bias toward the user, did not mix up different pillars, and was consistently in line with the tester's own critical self-evaluation. The other LLMs tend to overscore the user's involvement, or show less repeatability.
-Claude Sonnet (4.6 as of the date of this memo) is a strong default option, but occasionally encounters issues with JSON parsing; if that is the case, it is recommended to first switch to Claude Opus (4.8 as of the date of this memo).
+Based on our tests (Claude/Mistral/DeepSeek, and Z.ai GLM 5.2 via the Mistral API since August 2026), two models deliver accurate FLOW analysis outputs: Claude Sonnet 4.6 and Z.ai GLM 5.2. Both showed strong repeatability (i.e. consistent outcomes from one run to another), less bias toward the user, did not mix up different pillars, and were consistently in line with the tester's own critical self-evaluation. The other LLMs tend to overscore the user's involvement, or show less repeatability.
+The two recommended models are not ranked against each other: the choice depends on the provider you prefer to work with (Anthropic API, Mistral API, or both). Claude Sonnet (4.6 as of the date of this memo) occasionally encounters issues with JSON parsing; if that is the case, it is recommended to first switch to Claude Opus (4.8 as of the date of this memo).
 Where this is possible, temperature for the FLOW analysis is set at 0.0, which does appear to make the grounding slightly better for some models; temperature is set in a dedicated file: supabase/functions/_shared/_temperatures.ts
 Whatever the feedback, it is important to be careful not to propose calibration changes to the FLOW prompt that may improve the outputs of one LLM at the detriment of the others.
 

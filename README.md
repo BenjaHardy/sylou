@@ -60,7 +60,7 @@ It is open-source software designed for self-managed deployment on Supabase plus
 Setup is documented in [**docs/setup.md**](docs/setup.md). At a high level, you'll need:
 
 - A Supabase project (free tier works for personal use)
-- API keys for at least one LLM provider (currently works with Anthropic or Mistral - with DeepSeek currently in beta -, and with Anthropic's Claude API recommended as the default option to run the FLOW analysis)
+- API keys for at least one LLM provider (currently works with Anthropic or Mistral - with DeepSeek currently in beta). For the FLOW analysis, both Claude Sonnet 4.6 (Anthropic API) and Z.ai GLM 5.2 (hosted on the Mistral API) are recommended options, without ranking one against the other: pick according to the provider you prefer to work with, or try both
 - A few environment variables
 - About 15–30 minutes for first-time setup
 
