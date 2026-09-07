@@ -27,9 +27,13 @@ This document tracks how Sylou configures each LLM model across the four edge fu
 *Pricing as of July 2026 (GLM 5.2: August 2026); verify against provider pricing pages before publishing.*
 
 \* Z.ai GLM 5.2 is a **third-party open model** (Z.ai, MoE 744B/40B) hosted
-unmodified on the Mistral API on EU infrastructure — **public preview since
-2026-08**. It routes through Sylou's Mistral path (the id carries no
+unmodified on the Mistral API on EU infrastructure, available since
+2026-08. It routes through Sylou's Mistral path (the id carries no
 `claude-`/`deepseek-` prefix) and uses the operator's `MISTRAL_API_KEY`.
+After the maintainer's field tests (August–September 2026) it is
+**recommended for FLOW alongside Claude Sonnet 4.6**; the two are not
+ranked against each other — pick by the provider you prefer to work with
+(Anthropic API, Mistral API, or both).
 Note: "max" reasoning is **GLM-only** — Mistral's own reasoning models
 top out at "high" and must never be configured with "max".
 
@@ -49,13 +53,13 @@ The most analytically demanding function. All models targeted for determinism (t
 
 | Model              | Temperature                  | Thinking / Effort                                      | max_tokens (output) | Notes                                                                                           |
 | ------------------ | ---------------------------- | ------------------------------------------------------ | ------------------- | ----------------------------------------------------------------------------------------------- |
-| Claude Sonnet 4.6  | 0.0                          | thinking: off, effort: high (matches provider default) | 8192                | *Recommended* model for FLOW; quality and repeatability.                                          |
+| Claude Sonnet 4.6  | 0.0                          | thinking: off, effort: high (matches provider default) | 8192                | *Recommended* for FLOW (with GLM 5.2 — not ranked against each other); quality and repeatability. |
 | Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high                       | 16000               | Adaptive thinking; consumes more tokens, not recommended except for specific scenarios.         |
 | Mistral Large 3    | 0.0                          | n/a (no reasoning support)                             | 8192                | *Not* recommended, strong inherent bias towards the user.                                       |
 | Mistral Medium 3.5 | 0.0                          | reasoning_effort: off                                  | 8192                | *Not* recommended, or with extreme care. Good repeatability, but strong Write pillar and provenance data lead to user-bias on other pillars. |
 | Mistral Small 4    | 0.0                          | reasoning_effort: high                                 | 16000               | *Not* recommended, bias towards the user, poor repeatability.  |
 | DeepSeek V4 Flash  | 0.0                          | n/a                                                    | 8192                | *Not* recommended, bias towards the user, poor repeatability.  |
-| Z.ai GLM 5.2       | 0.0                          | reasoning_effort: max (GLM-native level)               | 16000               | *Not* recommended pending field testing. Max-effort speed experiment (maintainer, 2026-08): watch the 145s in-contract timeout — guardrails in _thinking.ts. |
+| Z.ai GLM 5.2       | 0.0                          | reasoning_effort: max (GLM-native level)               | 16000               | *Recommended* for FLOW (with Claude Sonnet 4.6 — not ranked against each other): maintainer field tests, Aug–Sep 2026, at max effort. The 145s in-contract timeout guardrails in _thinking.ts stay in place. |
 
 **Rationale for FLOW settings:**
 
@@ -77,7 +81,7 @@ Conversational responses. Quality matters; reasoning effort calibrated per model
 | Mistral Medium 3.5 | 0.7                          | reasoning_effort: high           | 4000                | Mistral "Quality tier" — reasoning enabled.                           |
 | Mistral Small 4    | 0.7                          | reasoning_effort: none           | 2000                | Mistral "Speed tier" — no thinking chunk; ideal for cheap, fast chat. |
 | DeepSeek V4 Flash  | 1.0                          | n/a                              | 2000                | Standard, cheap chat.                                                 |
-| Z.ai GLM 5.2       | 0.7                          | reasoning_effort: max            | 4000                | Third-party (Z.ai) via Mistral API, public preview; 1M context.       |
+| Z.ai GLM 5.2       | 0.7                          | reasoning_effort: max            | 4000                | Third-party (Z.ai) via Mistral API; 1M context.                       |
 
 **Rationale for Chat settings:**
 
@@ -120,7 +124,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 | Mistral Medium 3.5 | 0.7 | reasoning_effort: high | 2500 | 4000 | Mistral quality tier — reasoning helps with nuanced AI features. |
 | Mistral Small 4 | 0.7 | reasoning_effort: none | 1000 | 2000 | Mistral speed tier. |
 | DeepSeek V4 Flash | 1.0 | n/a | 1000 | 2000 | Standard. |
-| Z.ai GLM 5.2 | 0.7 | reasoning_effort: max | 2500 | 4000 | Third-party via Mistral API, public preview. |
+| Z.ai GLM 5.2 | 0.7 | reasoning_effort: max | 2500 | 4000 | Third-party via Mistral API. |
 
 **Rationale for Context-prompt settings:**
 

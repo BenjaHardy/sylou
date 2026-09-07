@@ -30,8 +30,14 @@ describe("MODELS registry", () => {
     for (const m of MODELS) expect(m.isRollingLatest, m.id).toBeFalsy();
   });
 
-  it("exactly one model is recommended for FLOW: Claude Sonnet 4.6 (maintainer ruling 2026-07)", () => {
+  it("exactly two models are recommended for FLOW: GLM 5.2 and Claude Sonnet 4.6 (maintainer rulings 2026-07 + 2026-09)", () => {
     const recommended = MODELS.filter((m) => m.note?.includes("Recommended for FLOW"));
-    expect(recommended.map((m) => m.id)).toEqual(["claude-sonnet-4-6"]);
+    expect(recommended.map((m) => m.id)).toEqual(["zai-glm-5-2", "claude-sonnet-4-6"]);
+  });
+
+  it("no recommended model carries the experimental badge", () => {
+    for (const m of MODELS) {
+      if (m.note?.includes("Recommended for FLOW")) expect(m.isExperimental, m.id).toBeFalsy();
+    }
   });
 });

@@ -59,14 +59,15 @@ export const MODELS: ModelInfo[] = [
     provider: "mistral",
     pricing: { input: 1.40, output: 4.40 },
     contextLimit: 1_000_000,
-    isExperimental: true,
     // Third-party open model (Z.ai) hosted unmodified on the Mistral API —
-    // EU infrastructure, public preview since 2026-08. Routed through the
+    // EU infrastructure, available since 2026-08. Routed through the
     // Mistral path (id has no claude-/deepseek- prefix). Reasoning enabled
     // 2026-08 after green launch acceptance: GLM-native "max" for FLOW,
     // chat and context-prompt, "none" for editor actions (see
-    // docs/model-configuration.md and _shared/_thinking.ts).
-    note: "Third-party open model (Z.ai), hosted on the Mistral API — public preview",
+    // docs/model-configuration.md and _shared/_thinking.ts). Recommended
+    // for FLOW alongside Claude Sonnet 4.6 after the maintainer's field
+    // tests (2026-08/09) — the two are not ranked against each other.
+    note: "Recommended for FLOW analysis — hosted on the Mistral API",
   },
   {
     id: "claude-sonnet-4-6",
