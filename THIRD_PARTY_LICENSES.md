@@ -489,13 +489,18 @@ part of the shipped application.
 - siginfo@2.0.0
 - which@2.0.2
 
-### MIT (201)
+### MIT (206)
 
 - @adobe/css-tools@4.5.0
 - @babel/code-frame@7.29.7
 - @babel/helper-validator-identifier@7.29.7
 - @babel/runtime@7.29.7
+- @emnapi/core@1.11.1
+- @emnapi/core@1.11.3
+- @emnapi/runtime@1.11.1
+- @emnapi/runtime@1.11.3
 - @emnapi/wasi-threads@1.2.2
+- @emnapi/wasi-threads@1.2.3
 - @eslint-community/eslint-utils@4.10.1
 - @eslint-community/regexpp@4.12.2
 - @eslint/eslintrc@3.3.7
