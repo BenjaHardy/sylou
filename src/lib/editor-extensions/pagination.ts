@@ -23,6 +23,10 @@ declare module "@tiptap/core" {
       setPaginationEnabled: (enabled: boolean) => ReturnType;
     };
   }
+  // TipTap v3 types editor.storage per extension via this interface.
+  interface Storage {
+    pagination: { enabled: boolean };
+  }
 }
 
 export const Pagination = Extension.create({

@@ -57,9 +57,9 @@ Packages bundled into (or supporting) the shipped application.
 
 ### ISC (10)
 
-- @ungap/structured-clone@1.3.3
+- @ungap/structured-clone@1.4.0
 - anymatch@3.1.3
-- fastq@1.20.1
+- fastq@1.20.3
 - glob-parent@5.1.2
 - glob-parent@6.0.2
 - inherits@2.0.4
@@ -68,9 +68,9 @@ Packages bundled into (or supporting) the shipped application.
 - picocolors@1.1.1
 - qrcode.react@4.2.0
 
-### MIT (340)
+### MIT (330)
 
-- @alloc/quick-lru@5.2.0
+- @alloc/quick-lru@5.3.0
 - @dnd-kit/accessibility@3.1.1
 - @dnd-kit/core@6.3.1
 - @dnd-kit/sortable@10.0.0
@@ -81,12 +81,11 @@ Packages bundled into (or supporting) the shipped application.
 - @floating-ui/utils@0.2.12
 - @jridgewell/gen-mapping@0.3.13
 - @jridgewell/resolve-uri@3.1.2
-- @jridgewell/sourcemap-codec@1.5.5
+- @jridgewell/sourcemap-codec@1.6.0
 - @jridgewell/trace-mapping@0.3.31
 - @nodelib/fs.scandir@2.1.5
 - @nodelib/fs.stat@2.0.5
 - @nodelib/fs.walk@1.2.8
-- @popperjs/core@2.11.8
 - @radix-ui/number@1.1.2
 - @radix-ui/primitive@1.1.4
 - @radix-ui/react-alert-dialog@1.1.18
@@ -129,7 +128,6 @@ Packages bundled into (or supporting) the shipped application.
 - @radix-ui/react-use-size@1.1.2
 - @radix-ui/react-visually-hidden@1.2.7
 - @radix-ui/rect@1.1.2
-- @remirror/core-constants@3.0.0
 - @supabase/auth-js@2.110.0
 - @supabase/functions-js@2.110.0
 - @supabase/phoenix@0.4.4
@@ -139,37 +137,37 @@ Packages bundled into (or supporting) the shipped application.
 - @supabase/supabase-js@2.110.0
 - @tanstack/query-core@5.101.2
 - @tanstack/react-query@5.101.2
-- @tiptap/core@2.27.2
-- @tiptap/extension-blockquote@2.27.2
-- @tiptap/extension-bold@2.27.2
-- @tiptap/extension-bubble-menu@2.27.2
-- @tiptap/extension-bullet-list@2.27.2
-- @tiptap/extension-character-count@2.27.2
-- @tiptap/extension-code-block@2.27.2
-- @tiptap/extension-code@2.27.2
-- @tiptap/extension-color@2.27.2
-- @tiptap/extension-document@2.27.2
-- @tiptap/extension-dropcursor@2.27.2
-- @tiptap/extension-floating-menu@2.27.2
-- @tiptap/extension-gapcursor@2.27.2
-- @tiptap/extension-hard-break@2.27.2
-- @tiptap/extension-heading@2.27.2
-- @tiptap/extension-history@2.27.2
-- @tiptap/extension-horizontal-rule@2.27.2
-- @tiptap/extension-italic@2.27.2
-- @tiptap/extension-link@2.27.2
-- @tiptap/extension-list-item@2.27.2
-- @tiptap/extension-ordered-list@2.27.2
-- @tiptap/extension-paragraph@2.27.2
-- @tiptap/extension-placeholder@2.27.2
-- @tiptap/extension-strike@2.27.2
-- @tiptap/extension-text-align@2.27.2
-- @tiptap/extension-text-style@2.27.2
-- @tiptap/extension-text@2.27.2
-- @tiptap/extension-underline@2.27.2
-- @tiptap/pm@2.27.2
-- @tiptap/react@2.27.2
-- @tiptap/starter-kit@2.27.2
+- @tiptap/core@3.31.3
+- @tiptap/extension-blockquote@3.31.3
+- @tiptap/extension-bold@3.31.3
+- @tiptap/extension-bubble-menu@3.31.3
+- @tiptap/extension-bullet-list@3.31.3
+- @tiptap/extension-code-block@3.31.3
+- @tiptap/extension-code@3.31.3
+- @tiptap/extension-color@3.31.3
+- @tiptap/extension-document@3.31.3
+- @tiptap/extension-dropcursor@3.31.3
+- @tiptap/extension-floating-menu@3.31.3
+- @tiptap/extension-gapcursor@3.31.3
+- @tiptap/extension-hard-break@3.31.3
+- @tiptap/extension-heading@3.31.3
+- @tiptap/extension-horizontal-rule@3.31.3
+- @tiptap/extension-italic@3.31.3
+- @tiptap/extension-link@3.31.3
+- @tiptap/extension-list-item@3.31.3
+- @tiptap/extension-list-keymap@3.31.3
+- @tiptap/extension-list@3.31.3
+- @tiptap/extension-ordered-list@3.31.3
+- @tiptap/extension-paragraph@3.31.3
+- @tiptap/extension-strike@3.31.3
+- @tiptap/extension-text-align@3.31.3
+- @tiptap/extension-text-style@3.31.3
+- @tiptap/extension-text@3.31.3
+- @tiptap/extension-underline@3.31.3
+- @tiptap/extensions@3.31.3
+- @tiptap/pm@3.31.3
+- @tiptap/react@3.31.3
+- @tiptap/starter-kit@3.31.3
 - @types/debug@4.1.13
 - @types/estree-jsx@1.0.5
 - @types/estree@1.0.9
@@ -206,7 +204,6 @@ Packages bundled into (or supporting) the shipped application.
 - commander@4.1.1
 - cookie@1.1.1
 - core-util-is@1.0.3
-- crelt@1.0.7
 - cssesc@3.0.0
 - csstype@3.2.3
 - date-fns@3.6.0
@@ -218,11 +215,10 @@ Packages bundled into (or supporting) the shipped application.
 - dlv@1.1.3
 - docx@9.7.1
 - es-errors@1.3.0
-- escape-string-regexp@4.0.0
 - escape-string-regexp@5.0.0
 - estree-util-is-identifier-name@3.0.0
 - extend@3.0.2
-- fast-deep-equal@3.1.3
+- fast-equals@5.4.2
 - fast-glob@3.3.3
 - fdir@6.5.0
 - file-saver@2.0.5
@@ -318,8 +314,7 @@ Packages bundled into (or supporting) the shipped application.
 - parse-entities@4.0.2
 - path-parse@1.0.7
 - picomatch@2.3.2
-- picomatch@4.0.5
-- pify@2.3.0
+- picomatch@4.0.7
 - pirates@4.0.7
 - postcss-import@15.1.0
 - postcss-js@4.1.0
@@ -331,7 +326,6 @@ Packages bundled into (or supporting) the shipped application.
 - process-nextick-args@2.0.1
 - property-information@7.2.0
 - prosemirror-changeset@2.4.1
-- prosemirror-collab@1.3.1
 - prosemirror-commands@1.7.1
 - prosemirror-dropcursor@1.8.2
 - prosemirror-gapcursor@1.4.1
@@ -339,15 +333,12 @@ Packages bundled into (or supporting) the shipped application.
 - prosemirror-inputrules@1.5.1
 - prosemirror-keymap@1.2.3
 - prosemirror-markdown@1.13.4
-- prosemirror-menu@1.3.2
-- prosemirror-model@1.25.9
-- prosemirror-schema-basic@1.2.4
+- prosemirror-model@1.25.11
 - prosemirror-schema-list@1.5.1
 - prosemirror-state@1.4.4
 - prosemirror-tables@1.8.5
-- prosemirror-trailing-node@3.0.0
 - prosemirror-transform@1.12.0
-- prosemirror-view@1.42.0
+- prosemirror-view@1.42.3
 - punycode.js@2.3.1
 - queue-microtask@1.2.3
 - react-dom@18.3.1
@@ -359,7 +350,7 @@ Packages bundled into (or supporting) the shipped application.
 - react-router@7.18.2
 - react-style-singleton@2.2.3
 - react@18.3.1
-- read-cache@1.0.0
+- read-cache@1.0.2
 - readable-stream@2.3.8
 - readdirp@3.6.0
 - remark-gfm@4.0.1
@@ -388,7 +379,6 @@ Packages bundled into (or supporting) the shipped application.
 - thenify-all@1.6.0
 - thenify@3.3.1
 - tinyglobby@0.2.17
-- tippy.js@6.3.7
 - to-regex-range@5.0.1
 - trim-lines@3.0.1
 - trough@2.2.0
@@ -432,12 +422,12 @@ part of the shipped application.
 - @humanfs/types@0.15.0
 - @humanwhocodes/module-importer@1.0.1
 - @humanwhocodes/retry@0.4.3
-- @swc/core-linux-arm-gnueabihf@1.16.0
-- @swc/core@1.16.0
+- @swc/core-linux-arm-gnueabihf@1.16.1
+- @swc/core@1.16.1
 - @swc/counter@0.1.3
 - @swc/types@0.1.28
 - aria-query@5.3.0
-- baseline-browser-mapping@2.11.15
+- baseline-browser-mapping@2.11.21
 - detect-libc@2.1.2
 - eslint-visitor-keys@3.4.3
 - eslint-visitor-keys@4.2.1
@@ -448,17 +438,17 @@ part of the shipped application.
 
 ### Apache-2.0 AND MIT (11)
 
-- @swc/core-darwin-arm64@1.16.0
-- @swc/core-darwin-x64@1.16.0
-- @swc/core-linux-arm64-gnu@1.16.0
-- @swc/core-linux-arm64-musl@1.16.0
-- @swc/core-linux-ppc64-gnu@1.16.0
-- @swc/core-linux-s390x-gnu@1.16.0
-- @swc/core-linux-x64-gnu@1.16.0
-- @swc/core-linux-x64-musl@1.16.0
-- @swc/core-win32-arm64-msvc@1.16.0
-- @swc/core-win32-ia32-msvc@1.16.0
-- @swc/core-win32-x64-msvc@1.16.0
+- @swc/core-darwin-arm64@1.16.1
+- @swc/core-darwin-x64@1.16.1
+- @swc/core-linux-arm64-gnu@1.16.1
+- @swc/core-linux-arm64-musl@1.16.1
+- @swc/core-linux-ppc64-gnu@1.16.1
+- @swc/core-linux-s390x-gnu@1.16.1
+- @swc/core-linux-x64-gnu@1.16.1
+- @swc/core-linux-x64-musl@1.16.1
+- @swc/core-win32-arm64-msvc@1.16.1
+- @swc/core-win32-ia32-msvc@1.16.1
+- @swc/core-win32-x64-msvc@1.16.1
 
 ### BlueOak-1.0.0 (1)
 
@@ -486,11 +476,11 @@ part of the shipped application.
 
 ### CC-BY-4.0 (1)
 
-- caniuse-lite@1.0.30001809
+- caniuse-lite@1.0.30001810
 
 ### ISC (8)
 
-- electron-to-chromium@1.5.409
+- electron-to-chromium@1.5.422
 - flatted@3.4.4
 - isexe@2.0.0
 - minimatch@3.1.5
@@ -505,12 +495,10 @@ part of the shipped application.
 - @babel/code-frame@7.29.7
 - @babel/helper-validator-identifier@7.29.7
 - @babel/runtime@7.29.7
-- @emnapi/core@1.11.1
-- @emnapi/runtime@1.11.1
 - @emnapi/wasi-threads@1.2.2
 - @eslint-community/eslint-utils@4.10.1
 - @eslint-community/regexpp@4.12.2
-- @eslint/eslintrc@3.3.6
+- @eslint/eslintrc@3.3.7
 - @eslint/js@9.39.4
 - @napi-rs/wasm-runtime@1.2.3
 - @oxc-project/types@0.139.0
@@ -576,7 +564,7 @@ part of the shipped application.
 - balanced-match@4.0.4
 - brace-expansion@1.1.18
 - brace-expansion@5.0.9
-- browserslist@4.28.8
+- browserslist@4.28.9
 - call-bind-apply-helpers@1.0.2
 - callsites@3.1.0
 - chai@6.2.2
@@ -604,10 +592,12 @@ part of the shipped application.
 - es-object-atoms@1.1.2
 - es-set-tostringtag@2.1.0
 - escalade@3.2.0
+- escape-string-regexp@4.0.0
 - eslint-plugin-react-hooks@5.2.0
 - eslint-plugin-react-refresh@0.4.26
 - eslint@9.39.4
 - estree-walker@3.0.3
+- fast-deep-equal@3.1.3
 - fast-json-stable-stringify@2.1.0
 - fast-levenshtein@2.0.6
 - file-entry-cache@8.0.0
@@ -628,12 +618,12 @@ part of the shipped application.
 - https-proxy-agent@5.0.1
 - iconv-lite@0.6.3
 - ignore@5.3.2
-- ignore@7.0.6
+- ignore@7.0.8
 - import-fresh@3.3.1
 - imurmurhash@0.1.4
 - indent-string@4.0.0
 - is-potential-custom-element-name@1.0.1
-- js-yaml@4.3.1
+- js-yaml@4.3.2
 - jsdom@20.0.3
 - json-buffer@3.0.1
 - json-schema-traverse@0.4.1
@@ -649,8 +639,8 @@ part of the shipped application.
 - mime-types@2.1.35
 - min-indent@1.0.1
 - natural-compare@1.4.0
-- node-releases@2.0.53
-- nwsapi@2.2.24
+- node-releases@2.0.54
+- nwsapi@2.2.27
 - obug@2.1.4
 - optionator@0.9.4
 - p-limit@3.1.0
@@ -681,7 +671,7 @@ part of the shipped application.
 - supports-color@7.2.0
 - symbol-tree@3.2.4
 - tinybench@2.9.0
-- tinyexec@1.3.0
+- tinyexec@1.3.1
 - tinyrainbow@3.1.1
 - tr46@3.0.0
 - ts-api-utils@2.5.0
@@ -689,7 +679,7 @@ part of the shipped application.
 - typescript-eslint@8.62.1
 - undici-types@6.21.0
 - universalify@0.2.0
-- update-browserslist-db@1.3.1
+- update-browserslist-db@1.3.2
 - url-parse@1.5.10
 - vite@8.1.3
 - vitest@4.1.9

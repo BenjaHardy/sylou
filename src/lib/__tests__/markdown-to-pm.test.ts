@@ -7,13 +7,14 @@
 // build the same StarterKit editor the app uses.
 import { describe, it, expect, afterEach } from "vitest";
 import { Editor } from "@tiptap/core";
-import StarterKit from "@tiptap/starter-kit";
+import { sylouStarterKit } from "@/lib/editor-extensions/sylou-starter";
 import { buildEditorMarkdownParser, parseMarkdownToFragment } from "@/lib/markdown-to-pm";
 
 let editor: Editor | null = null;
 
 function makeParser() {
-  editor = new Editor({ extensions: [StarterKit] });
+  // WritingEditor's StarterKit configuration (parity with the app's schema).
+  editor = new Editor({ extensions: sylouStarterKit() });
   return buildEditorMarkdownParser(editor.schema);
 }
 

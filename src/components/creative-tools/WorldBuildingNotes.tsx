@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
+import { sylouStarterKit } from "@/lib/editor-extensions/sylou-starter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -390,7 +390,13 @@ function NoteEditor({
 
   const editor = useEditor(
     {
-      extensions: [StarterKit],
+      // TipTap v3 stops re-rendering on every transaction by default; the
+      // mini toolbar's isActive() states below depend on the v2 behavior
+      // (caret moves, collapsed-caret mark toggles), so keep it.
+      shouldRerenderOnTransaction: true,
+      // Plain v2-equivalent StarterKit (v3-only behaviors opted out — see
+      // sylou-starter.ts); this editor never had link/underline.
+      extensions: sylouStarterKit(),
       content: note.content,
       onUpdate: ({ editor }) => {
         onUpdate(note.id, { content: editor.getHTML() });

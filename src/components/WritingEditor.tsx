@@ -1,13 +1,12 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import type { ChatMessage } from "@/hooks/useChatMessages";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
+import { sylouStarterKit } from "@/lib/editor-extensions/sylou-starter";
 import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
 import TextAlign from "@tiptap/extension-text-align";
-import CharacterCount from "@tiptap/extension-character-count";
-import Placeholder from "@tiptap/extension-placeholder";
-import TextStyle from "@tiptap/extension-text-style";
+import { CharacterCount, Placeholder } from "@tiptap/extensions";
+import { TextStyle } from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
 import { FontSize } from "@/lib/tiptap-font-size";
 import { Pagination } from "@/lib/editor-extensions/pagination";
@@ -116,14 +115,22 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   }, []);
 
   const editor = useEditor({
+    // TipTap v3 stops re-rendering on every transaction by default; the
+    // toolbar's isActive() states depend on the v2 behavior, so keep it.
+    shouldRerenderOnTransaction: true,
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      // StarterKit with every v3-only editing behavior opted out — see
+      // sylou-starter.ts for the list and rationale. Link and Underline are
+      // registered here with their own options (the v2 schema).
+      ...sylouStarterKit({ heading: { levels: [1, 2, 3] } }),
       Underline,
       Link.configure({ openOnClick: false, autolink: true }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       CharacterCount,
       Placeholder.configure({ placeholder: "Start writing…" }),
-      TextStyle,
+      // v3 flipped mergeNestedSpanStyles to true (pasted nested styled spans
+      // inherit the outer span's style); keep v2's parse result.
+      TextStyle.configure({ mergeNestedSpanStyles: false }),
       Color,
       FontSize,
       Pagination,
@@ -280,6 +287,24 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
 
       prevDocLenRef.current = e.state.doc.content.size;
     },
+    // TipTap v3 no longer emits `update` for a doc-changing transaction that
+    // leaves the document identical (dispatchTransaction's guard:
+    // prevState.doc.eq(state.doc)); v2 did. Pasting, or accepting a
+    // proposal, whose text equals the selection is exactly that case — and
+    // it must still reach onUpdate so the tracker consumes its pending
+    // signal (otherwise the NEXT typed insertion would inherit the paste/AI
+    // source). `transaction` still fires for it: re-emit `update` for
+    // precisely the suppressed case, mirroring the guard's other two
+    // conditions. Pinned by editor-update-guard.test.ts.
+    onTransaction: ({ editor: e, transaction, appendedTransactions }) => {
+      if (
+        transaction.docChanged &&
+        !transaction.getMeta("preventUpdate") &&
+        transaction.before.eq(e.state.doc)
+      ) {
+        e.emit("update", { editor: e, transaction, appendedTransactions });
+      }
+    },
   });
 
   // Set initial content when loaded
@@ -290,7 +315,10 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       isInitialLoadRef.current = true;
       tracker.setSkipTracking(true);
 
-      editor.commands.setContent(content || "");
+      // emitUpdate: false is load-bearing (and v3's default is true):
+      // emitting would run onUpdate on a load — a pointless re-save of
+      // just-loaded content plus a false writing-activity ping.
+      editor.commands.setContent(content || "", { emitUpdate: false });
 
       tracker.setSkipTracking(false);
       isInitialLoadRef.current = false;
@@ -299,12 +327,11 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       prevDocLenRef.current = docLen;
       initWithContentLength(docLen);
       setInitialSet(true);
-      // Push the loaded HTML up: setContent does not fire onUpdate, so the
-      // parent's editorHtml (and the Live Provenance View reading it) would
-      // otherwise keep the previous project's text until the first
-      // keystroke. Direct call rather than setContent's emitUpdate flag —
-      // emitting would also trigger updateContent (a pointless re-save of
-      // just-loaded content) and the writing-activity ping.
+      // Push the loaded HTML up: the setContent above does not fire
+      // onUpdate, so the parent's editorHtml (and the Live Provenance View
+      // reading it) would otherwise keep the previous project's text until
+      // the first keystroke. Direct call rather than emitting the update —
+      // see the note on the setContent call.
       onEditorContent?.(editor.getHTML());
       // Expose tracker to parent (flush is handled by the stable ref-based effect above)
       onProvenanceTracker?.(tracker);
@@ -583,6 +610,9 @@ function ExportEnabledToolbar({
       // Click-time import (P4-3): the docx library is heavy and only needed
       // here — it stays out of the initial bundle and loads on first export.
       const { exportWritingAsDocx } = await import("@/lib/export-docx");
+      // A project switch landing inside the await above destroys this
+      // editor; v3 nulls its schema on destroy, so getHTML() would throw.
+      if (editor.isDestroyed) return;
       const html = editor.getHTML();
       await exportWritingAsDocx(html, projectName);
       toast.success("DOCX exported successfully");

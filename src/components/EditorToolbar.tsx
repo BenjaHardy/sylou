@@ -204,7 +204,8 @@ export function EditorToolbar({ editor, onExportPDF, onExportDOCX, onExportJSON,
   const handleReplaceAll = () => {
     const html = editor.getHTML();
     const replaced = html.split(findText).join(replaceText);
-    editor.commands.setContent(replaced);
+    // v2 semantics preserved (no update event); v3's default would emit.
+    editor.commands.setContent(replaced, { emitUpdate: false });
   };
 
   const setLink = () => {

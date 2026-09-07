@@ -20,11 +20,11 @@
 // correctly), never a casual re-pin.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Editor } from "@tiptap/core";
-import StarterKit from "@tiptap/starter-kit";
+import { sylouStarterKit } from "@/lib/editor-extensions/sylou-starter";
 import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
 import TextAlign from "@tiptap/extension-text-align";
-import TextStyle from "@tiptap/extension-text-style";
+import { TextStyle } from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
 import { FontSize } from "@/lib/tiptap-font-size";
 
@@ -33,11 +33,12 @@ let editor: Editor;
 beforeAll(() => {
   editor = new Editor({
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      // Mirrors WritingEditor exactly (same helper, same options).
+      ...sylouStarterKit({ heading: { levels: [1, 2, 3] } }),
       Underline,
       Link.configure({ openOnClick: false, autolink: true }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
-      TextStyle,
+      TextStyle.configure({ mergeNestedSpanStyles: false }),
       Color,
       FontSize,
     ],
@@ -123,6 +124,16 @@ const CANONICAL: Array<{ name: string; html: string }> = [
     html: '<p><a target="_blank" rel="noopener noreferrer nofollow" href="https://example.com/"><strong>bold link</strong></a></p>',
   },
   {
+    name: "three nested marks (schema mark rank decides the nesting order)",
+    html: "<p><strong><em><u>all three</u></em></strong></p>",
+  },
+  { name: "non-breaking space entity", html: "<p>a&nbsp;b</p>" },
+  {
+    name: "code block with a language class",
+    html: '<pre><code class="language-ts">const x = 1;</code></pre>',
+  },
+  { name: "paragraph holding only a hard break", html: "<p><br></p>" },
+  {
     name: "kitchen sink",
     html:
       '<h1>Doc</h1><p style="text-align: center;">A <strong>bold</strong>, <em>italic</em>, <u>underlined</u> <a target="_blank" rel="noopener noreferrer nofollow" href="https://example.com/">link</a></p><ul><li><p><span style="color: rgb(180, 83, 9);">colored</span> item</p></li></ul><blockquote><p><span style="font-size: 14px;">small quote</span></p></blockquote><pre><code>code();</code></pre><hr><p>end</p>',
@@ -164,6 +175,28 @@ const NORMALIZED: Array<{ name: string; input: string; expected: string }> = [
     name: "hex color normalizes to rgb()",
     input: '<p><span style="color: #b45309">amber</span></p>',
     expected: '<p><span style="color: rgb(180, 83, 9);">amber</span></p>',
+  },
+  {
+    name: "heading levels beyond the schema (h4) parse as paragraphs",
+    input: "<h4>too deep</h4>",
+    expected: "<p>too deep</p>",
+  },
+  {
+    name: "empty list item gains an empty paragraph",
+    input: "<ul><li></li></ul>",
+    expected: "<ul><li><p></p></li></ul>",
+  },
+  {
+    name: "unsupported alignment value (start) is dropped",
+    input: '<p style="text-align: start">x</p>',
+    expected: "<p>x</p>",
+  },
+  {
+    // v2 parse semantics kept via TextStyle mergeNestedSpanStyles: false —
+    // v3's default would merge the outer color into the inner span.
+    name: "nested styled spans keep v2 parsing (no style merge)",
+    input: '<p><span style="color: #b45309"><span style="font-size: 20px">x</span></span></p>',
+    expected: '<p><span style="font-size: 20px;">x</span></p>',
   },
 ];
 
