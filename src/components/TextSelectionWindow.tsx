@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from "react";
 import { X, Loader2, Check, XCircle, Send } from "lucide-react";
 import type { ChatMessage } from "@/hooks/useChatMessages";
 import { Button } from "@/components/ui/button";
@@ -122,17 +122,58 @@ export function TextSelectionWindow({
   const isCreativeModule = sourceModule !== "editor";
   const actions = isCreativeModule ? CREATIVE_ACTIONS : tutorMode ? TUTOR_ACTIONS : NORMAL_ACTIONS;
 
-  // Position the panel (add scrollTop/scrollLeft because the panel is an
-  // absolute child of the scrollable editor wrapper — see AISelectionButton).
-  const editorRect = editorElement.getBoundingClientRect();
-  const top = anchorRect.bottom - editorRect.top + editorElement.scrollTop + 8;
-  const left = Math.max(
-    8,
-    Math.min(
-      anchorRect.left - editorRect.left + editorElement.scrollLeft,
-      editorElement.scrollLeft + editorRect.width - 340
-    )
-  );
+  // Anchor geometry, resolved ONCE per open into the editor wrapper's
+  // content coordinates (the panel is an absolute child of that scrollable
+  // wrapper — see AISelectionButton). anchorRect is a viewport rect frozen
+  // at open time; combining it with the LIVE scroll offset on every render
+  // made the panel drift by the scroll delta on each keystroke once the
+  // user had scrolled down to reach it.
+  const anchor = useMemo(() => {
+    const editorRect = editorElement.getBoundingClientRect();
+    const scrollTop = editorElement.scrollTop;
+    return {
+      top: anchorRect.top - editorRect.top + scrollTop,
+      bottom: anchorRect.bottom - editorRect.top + scrollTop,
+      left: Math.max(
+        8,
+        Math.min(
+          anchorRect.left - editorRect.left + editorElement.scrollLeft,
+          editorElement.scrollLeft + editorRect.width - 340,
+        ),
+      ),
+      // Visible room around the selection at open time, for the flip below.
+      spaceBelow: editorRect.height - (anchorRect.bottom - editorRect.top),
+      spaceAbove: anchorRect.top - editorRect.top,
+    };
+  }, [anchorRect, editorElement]);
+
+  // The panel grows with its phase (actions → input → streaming → result);
+  // measure it so it can sit ABOVE the selection when there is no room
+  // below, keeping the selected text visible. Placed below otherwise, and
+  // below as a last resort when it fits neither side.
+  const [panelHeight, setPanelHeight] = useState(0);
+  useLayoutEffect(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    const measure = () => setPanelHeight(el.offsetHeight);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const GAP = 8;
+  const placeAbove =
+    panelHeight + GAP > anchor.spaceBelow && anchor.spaceAbove >= panelHeight + GAP;
+  const top = placeAbove ? Math.max(0, anchor.top - panelHeight - GAP) : anchor.bottom + GAP;
+  const left = anchor.left;
+
+  // The selection may sit at the very bottom of the visible editor: bring
+  // the panel into view once on open instead of leaving it off-screen.
+  useEffect(() => {
+    panelRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, []);
 
   // Close on Escape
   useEffect(() => {

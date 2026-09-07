@@ -613,7 +613,7 @@ export function CharactersDiagram({ data: rawData, save, loading, worldCategorie
                   <MiniTipTapEditor
                     value={editChar.description}
                     onChange={(html) => setEditChar({ ...editChar, description: html })}
-                    className="min-h-[80px]"
+                    className="min-h-[80px] max-h-60 overflow-y-auto"
                     placeholder="Describe this character…"
                   />
                 </CreativeAITextField>
