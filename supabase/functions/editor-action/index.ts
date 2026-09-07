@@ -1,8 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, normaliseResponse, extractProviderError } from "../_shared/_llm.ts";
+import { callLLM, providerFor, normaliseResponse, extractProviderError, isTruncatedStop } from "../_shared/_llm.ts";
 import { makeSSEHelpers, readProviderStream } from "../_shared/_sse.ts";
 import { EDITOR_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
-import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
+import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 import {
   EDITOR_THINKING, EDITOR_EFFORT, EDITOR_MISTRAL_EFFORT,
@@ -169,7 +169,7 @@ Deno.serve(async (req) => {
     const thinking = resolveThinking(EDITOR_THINKING, chatModel);
     const effort = resolveEffort(EDITOR_EFFORT, chatModel);
     const mistralEffort = resolveMistralEffort(EDITOR_MISTRAL_EFFORT, chatModel);
-    const editorMaxTokens = resolveMaxTokens(1000, chatModel, thinking, mistralEffort !== undefined);
+    const editorMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.EDITOR_ACTION_TOKENS, chatModel, thinking, mistralEffort !== undefined);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
     if (!Deno.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
@@ -219,6 +219,10 @@ Deno.serve(async (req) => {
         async start(controller) {
           let fullResponse = "";
           let clientDisconnected = false;
+          // Provider stop reason: max_tokens/length means the rewrite was
+          // cut off at the output budget. Surfaced to the client as
+          // `truncated` so Accept can warn before replacing the selection.
+          let stopReason: string | null = null;
 
           try {
             fullResponse = await readProviderStream(llmRes, provider, {
@@ -231,9 +235,15 @@ Deno.serve(async (req) => {
                   }
                 }
               },
+              onStop: (reason) => {
+                stopReason = reason;
+              },
             });
 
             console.log("[stream:editor-action] LLM stream complete, persisting");
+            if (isTruncatedStop(stopReason)) {
+              console.warn("[stream:editor-action] reply truncated at max_tokens", { chars: fullResponse.length });
+            }
 
             try {
               const proposedText = fullResponse || "No response generated.";
@@ -299,6 +309,7 @@ Deno.serve(async (req) => {
                       sseEvent({
                         done: true,
                         result: proposedText,
+                        truncated: isTruncatedStop(stopReason),
                         action_id: actionRow?.id ?? null,
                         budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
                       })

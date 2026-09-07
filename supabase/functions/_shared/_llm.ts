@@ -358,6 +358,10 @@ export interface NormalisedResponse {
   // Raw assistant message in OpenAI-shape (for appending to history).
   assistantMessage: LLMMessage;
   usage?: { input_tokens?: number; output_tokens?: number };
+  /** Provider stop/finish reason as sent on the wire (Anthropic
+   *  `stop_reason`, OpenAI-shape `finish_reason`); null when absent. Feed
+   *  it to isTruncatedStop() to detect a reply cut off at max_tokens. */
+  stopReason: string | null;
 }
 
 /**
@@ -408,13 +412,13 @@ interface RawUsage {
 interface RawResponse {
   content?: RawContentBlock[];
   stop_reason?: string;
-  choices?: Array<{ message?: RawMessage }>;
+  choices?: Array<{ message?: RawMessage; finish_reason?: string }>;
   usage?: RawUsage;
 }
 interface RawStreamChunk {
-  choices?: Array<{ delta?: { content?: unknown } }>;
+  choices?: Array<{ delta?: { content?: unknown }; finish_reason?: string }>;
   type?: string;
-  delta?: { text?: string };
+  delta?: { text?: string; stop_reason?: string };
 }
 
 export function normaliseResponse(
@@ -499,6 +503,7 @@ export function normaliseResponse(
       usage: r.usage
         ? { input_tokens: r.usage.input_tokens, output_tokens: r.usage.output_tokens }
         : undefined,
+      stopReason: r.stop_reason ?? null,
     };
   }
   // OpenAI-shape (Mistral/DeepSeek)
@@ -551,6 +556,7 @@ export function normaliseResponse(
           output_tokens: r.usage.completion_tokens ?? r.usage.output_tokens,
         }
       : undefined,
+    stopReason: r.choices?.[0]?.finish_reason ?? null,
   };
 }
 
@@ -586,6 +592,31 @@ export function extractDeltaText(parsed: unknown, _provider: ProviderId): string
     if (typeof t === "string") return t;
   }
   return null;
+}
+
+/**
+ * Provider stop/finish reason carried by a streaming chunk, model-agnostic:
+ * OpenAI-shape `choices[0].finish_reason` (on the last content chunk) or
+ * Anthropic's `message_delta` → `delta.stop_reason`. null when the chunk
+ * carries none. A reply cut off at max_tokens is reported this way by the
+ * provider — it is not an error; see isTruncatedStop().
+ */
+export function extractStopReason(parsed: unknown): string | null {
+  if (!parsed || typeof parsed !== "object") return null;
+  const p = parsed as RawStreamChunk;
+  const finish = p.choices?.[0]?.finish_reason;
+  if (typeof finish === "string" && finish) return finish;
+  if (p.type === "message_delta") {
+    const stop = p.delta?.stop_reason;
+    if (typeof stop === "string" && stop) return stop;
+  }
+  return null;
+}
+
+/** True when a stop reason means the output hit max_tokens: Anthropic
+ *  "max_tokens", OpenAI-shape (Mistral/DeepSeek/GLM) "length". */
+export function isTruncatedStop(reason: string | null | undefined): boolean {
+  return reason === "max_tokens" || reason === "length";
 }
 
 /**

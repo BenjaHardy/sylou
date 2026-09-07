@@ -46,6 +46,22 @@ export const INPUT_LIMITS = {
 } as const;
 
 /**
+ * Output budgets (max_tokens bases) for the short-form LLM functions —
+ * the ONE place these numbers live server-side; resolveMaxTokens in
+ * _thinking.ts adds reasoning headroom on top. The client mirrors
+ * EDITOR_ACTION_TOKENS in src/lib/editor-limits.ts to warn before an
+ * editor action whose reply would not fit — keep the two in sync.
+ */
+export const OUTPUT_BUDGETS = {
+  /** editor-action: one inline rewrite of the selection. */
+  EDITOR_ACTION_TOKENS: 1_000,
+  /** context-prompt: the Ask/Propose response call. */
+  CONTEXT_RESPONSE_TOKENS: 2_000,
+  /** context-prompt: the writing-summary call. */
+  CONTEXT_SUMMARY_TOKENS: 1_000,
+} as const;
+
+/**
  * Context-window size (input tokens) per allowed model.
  *
  * Same mirror-of-the-frontend-registry discipline as ALLOWED_MODELS above

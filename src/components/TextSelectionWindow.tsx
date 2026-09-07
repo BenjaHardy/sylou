@@ -7,6 +7,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 import { consumeSSEStream } from "@/lib/sse-stream";
+import { assessSelectionSize } from "@/lib/editor-limits";
+import { LargeSelectionNotice } from "@/components/text-selection/LargeSelectionNotice";
+import { TruncatedAcceptDialog } from "@/components/text-selection/TruncatedAcceptDialog";
 
 type ActionId =
   | "fix-grammar"
@@ -118,6 +121,13 @@ export function TextSelectionWindow({
   const [accepting, setAccepting] = useState(false);
   const acceptingRef = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  // Large-selection safety: the server flags a reply cut off at the output
+  // limit (`truncated` on the done event); Accept then asks for
+  // confirmation. The editor actions hide behind a notice for selections
+  // their budget cannot rewrite, until the user acknowledges it.
+  const [resultTruncated, setResultTruncated] = useState(false);
+  const [confirmAcceptOpen, setConfirmAcceptOpen] = useState(false);
+  const [largeSelectionAcknowledged, setLargeSelectionAcknowledged] = useState(false);
 
   const isCreativeModule = sourceModule !== "editor";
   const actions = isCreativeModule ? CREATIVE_ACTIONS : tutorMode ? TUTOR_ACTIONS : NORMAL_ACTIONS;
@@ -175,14 +185,14 @@ export function TextSelectionWindow({
     panelRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, []);
 
-  // Close on Escape
+  // Close on Escape (the confirm dialog handles its own Escape first).
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !confirmAcceptOpen) onClose();
     };
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+  }, [onClose, confirmAcceptOpen]);
 
   // While a run is in flight (loading/streaming), a proposal awaits a
   // decision (result), or a CONFIRM is being recorded (accepting), the
@@ -200,6 +210,9 @@ export function TextSelectionWindow({
   useEffect(() => {
     if (isProtected) {
       const swallow = (e: Event) => {
+        // The truncated-result confirm dialog renders in a portal outside
+        // the panel; its buttons must not be swallowed.
+        if (confirmAcceptOpen) return;
         if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
           e.preventDefault();
           e.stopPropagation();
@@ -241,7 +254,7 @@ export function TextSelectionWindow({
       clearTimeout(timer);
       document.removeEventListener("mousedown", handleClick);
     };
-  }, [onClose, isProtected, phase]);
+  }, [onClose, isProtected, phase, confirmAcceptOpen]);
 
   const getSourceBreakdown = useCallback(() => {
     if (isCreativeModule) return undefined;
@@ -303,6 +316,7 @@ export function TextSelectionWindow({
             onDone: (evt) => {
               const result = (evt.result as string) || "";
               setProposedText(result);
+              setResultTruncated(evt.truncated === true);
               setCurrentActionId((evt.action_id as string) ?? null);
               provenanceTracker?.registerAiResultText(result);
               setPhase("result");
@@ -467,6 +481,7 @@ export function TextSelectionWindow({
                 }
                 const aiResponse = (evt.ai_response as string) || "";
                 setProposedText(aiResponse);
+                setResultTruncated(evt.truncated === true);
                 setCurrentActionId((evt.action_id as string) ?? null);
                 provenanceTracker?.registerAiResultText(aiResponse);
                 setPhase("result");
@@ -517,6 +532,7 @@ export function TextSelectionWindow({
   const handleAction = useCallback(
     (actionId: ActionId) => {
       setActiveAction(actionId);
+      setResultTruncated(false);
 
 
 
@@ -617,6 +633,23 @@ export function TextSelectionWindow({
 
   const row1 = actions.filter((a) => a.row === 1);
   const row2 = actions.filter((a) => a.row === 2);
+  // Only the predefined editor actions rewrite the selection within a fixed
+  // output budget; Ask/Propose (row 2, or row 1 in tutor mode) are exempt.
+  const selectionSize = isCreativeModule ? "ok" : assessSelectionSize(selectedText.length);
+  const editorActionsGated = selectionSize !== "ok" && !largeSelectionAcknowledged;
+  const renderActionButton = (a: { id: ActionId; label: string }) => (
+    <button
+      key={a.id}
+      onClick={() => handleAction(a.id)}
+      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+        isProminent(a.id)
+          ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+          : "bg-secondary text-secondary-foreground border-border hover:bg-accent"
+      }`}
+    >
+      {a.label}
+    </button>
+  );
 
   return (
     <div
@@ -646,37 +679,24 @@ export function TextSelectionWindow({
         {/* Actions phase */}
         {phase === "actions" && (
           <div className="space-y-2">
-            <div className="flex flex-wrap gap-1.5">
-              {row1.map((a) => (
-                <button
-                  key={a.id}
-                  onClick={() => handleAction(a.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
-                    isProminent(a.id)
-                      ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
-                      : "bg-secondary text-secondary-foreground border-border hover:bg-accent"
-                  }`}
-                >
-                  {a.label}
-                </button>
-              ))}
-            </div>
+            {editorActionsGated ? (
+              <>
+                <LargeSelectionNotice
+                  size={selectionSize}
+                  chars={selectedText.length}
+                  onAcknowledge={() => setLargeSelectionAcknowledged(true)}
+                />
+                {row1.some((a) => !PREDEFINED.includes(a.id)) && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {row1.filter((a) => !PREDEFINED.includes(a.id)).map(renderActionButton)}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">{row1.map(renderActionButton)}</div>
+            )}
             {row2.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {row2.map((a) => (
-                  <button
-                    key={a.id}
-                    onClick={() => handleAction(a.id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
-                      isProminent(a.id)
-                        ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
-                        : "bg-secondary text-secondary-foreground border-border hover:bg-accent"
-                    }`}
-                  >
-                    {a.label}
-                  </button>
-                ))}
-              </div>
+              <div className="flex flex-wrap gap-1.5">{row2.map(renderActionButton)}</div>
             )}
           </div>
         )}
@@ -744,12 +764,18 @@ export function TextSelectionWindow({
                   {proposedText}
                 </p>
               </div>
+              {resultTruncated && (
+                <p role="status" className="p-2 rounded-md border border-border bg-muted text-foreground">
+                  The AI stopped at its output limit — this result is incomplete. Accepting will
+                  ask you to confirm.
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
                 className="h-7 text-xs gap-1"
-                onClick={handleAccept}
+                onClick={() => (resultTruncated ? setConfirmAcceptOpen(true) : void handleAccept())}
                 disabled={accepting}
               >
                 {accepting ? (
@@ -775,6 +801,14 @@ export function TextSelectionWindow({
                 Reject
               </Button>
             </div>
+            <TruncatedAcceptDialog
+              open={confirmAcceptOpen}
+              onOpenChange={setConfirmAcceptOpen}
+              onConfirm={() => {
+                setConfirmAcceptOpen(false);
+                void handleAccept();
+              }}
+            />
           </div>
         )}
 

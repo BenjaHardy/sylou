@@ -1,9 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, type LLMTool } from "../_shared/_llm.ts";
+import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, isTruncatedStop, type LLMTool } from "../_shared/_llm.ts";
 import { makeSSEHelpers, readProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { searchWeb, buildDocumentTool, buildWebSearchTool, formatWebSearchResults } from "../_shared/_tools.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
-import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
+import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 import {
   CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT,
@@ -115,8 +115,8 @@ Deno.serve(async (req) => {
     const thinking = resolveThinking(CONTEXT_THINKING, chatModel);
     const effort = resolveEffort(CONTEXT_EFFORT, chatModel);
     const mistralEffort = resolveMistralEffort(CONTEXT_MISTRAL_EFFORT, chatModel);
-    const contextMaxTokens = resolveMaxTokens(2000, chatModel, thinking, mistralEffort !== undefined);
-    const summaryMaxTokens = resolveMaxTokens(1000, chatModel, thinking, mistralEffort !== undefined);
+    const contextMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_RESPONSE_TOKENS, chatModel, thinking, mistralEffort !== undefined);
+    const summaryMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_SUMMARY_TOKENS, chatModel, thinking, mistralEffort !== undefined);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
     if (!Deno.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
@@ -470,6 +470,7 @@ When citing information from web search results, always include the source URL i
                   controller.enqueue(sseEvent({
                     done: true,
                     ai_response: responseText,
+                    truncated: isTruncatedStop(norm2a.stopReason),
                     summary_update: summaryUpdate,
                     action_id: actionRow?.id ?? null,
                     budget_remaining: budgetRemaining,
@@ -568,10 +569,12 @@ When citing information from web search results, always include the source URL i
                 }
 
                 // Read Call #2b stream and forward tokens
+                let call2bStop: string | null = null;
                 let fullResponse = await readProviderStream(call2bRes, providerFor(chatModel), {
                   onToken: (delta) => {
                     try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
                   },
+                  onStop: (reason) => { call2bStop = reason; },
                 });
 
                 // Clean and persist
@@ -586,6 +589,7 @@ When citing information from web search results, always include the source URL i
                     controller.enqueue(sseEvent({
                       done: true,
                       ai_response: aiResponse,
+                      truncated: isTruncatedStop(call2bStop),
                       summary_update: summaryUpdate,
                       action_id: actionRow?.id ?? null,
                       budget_remaining: budgetRemaining,
@@ -647,6 +651,7 @@ When citing information from web search results, always include the source URL i
       const readable = new ReadableStream({
         async start(controller) {
           let fullResponse = "";
+          let stopReason: string | null = null;
 
           try {
             controller.enqueue(sseEvent({ phase: "responding" }));
@@ -657,6 +662,7 @@ When citing information from web search results, always include the source URL i
                   controller.enqueue(sseEvent({ token: delta }));
                 } catch { /* client gone */ }
               },
+              onStop: (reason) => { stopReason = reason; },
             });
 
             console.log("[stream:context-prompt] LLM stream complete, persisting");
@@ -672,6 +678,7 @@ When citing information from web search results, always include the source URL i
                 controller.enqueue(sseEvent({
                   done: true,
                   ai_response: aiResponse,
+                  truncated: isTruncatedStop(stopReason),
                   summary_update: summaryUpdate,
                   action_id: actionRow?.id ?? null,
                   budget_remaining: budgetRemaining,

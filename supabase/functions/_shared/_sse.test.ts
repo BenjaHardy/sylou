@@ -7,6 +7,7 @@
 // checkpoint, not a test edit.
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { makeSSEHelpers, readProviderStream, replayTokenBurst } from "./_sse.ts";
+import { isTruncatedStop } from "./_llm.ts";
 
 // ── helpers ──────────────────────────────────────────────────────────
 
@@ -205,4 +206,44 @@ Deno.test("replayTokenBurst: empty text emits nothing", async () => {
     called = true;
   });
   assert(!called);
+});
+
+// ── stop-reason reporting (2026-09, large-selection safety) ───────────
+
+Deno.test("readProviderStream: reports an OpenAI-shape finish_reason through onStop", async () => {
+  const stops: string[] = [];
+  const last = `data: ${JSON.stringify({ choices: [{ delta: { content: "!" }, finish_reason: "length" }] })}\n`;
+  const result = await readProviderStream(
+    sseResponse([openaiDelta("cut"), last, "data: [DONE]\n"]),
+    "mistral",
+    { onToken: () => {}, onStop: (r) => stops.push(r) },
+  );
+  assertEquals(result, "cut!");
+  assertEquals(stops, ["length"]);
+});
+
+Deno.test("readProviderStream: reports Anthropic's message_delta stop_reason through onStop", async () => {
+  const stops: string[] = [];
+  const chunks = [
+    `data: ${JSON.stringify({ type: "content_block_delta", delta: { text: "cut" } })}\n`,
+    `data: ${JSON.stringify({ type: "message_delta", delta: { stop_reason: "max_tokens", stop_sequence: null }, usage: { output_tokens: 1000 } })}\n`,
+    `data: ${JSON.stringify({ type: "message_stop" })}\n`,
+  ];
+  const result = await readProviderStream(sseResponse(chunks), "anthropic", {
+    onToken: () => {},
+    onStop: (r) => stops.push(r),
+  });
+  assertEquals(result, "cut");
+  assertEquals(stops, ["max_tokens"]);
+});
+
+Deno.test("readProviderStream: without onStop the loop is unchanged; isTruncatedStop maps only length/max_tokens", async () => {
+  const last = `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }] })}\n`;
+  const result = await readProviderStream(sseResponse([openaiDelta("done"), last]), "mistral", { onToken: () => {} });
+  assertEquals(result, "done");
+  assertEquals(isTruncatedStop("stop"), false);
+  assertEquals(isTruncatedStop("end_turn"), false);
+  assertEquals(isTruncatedStop("length"), true);
+  assertEquals(isTruncatedStop("max_tokens"), true);
+  assertEquals(isTruncatedStop(null), false);
 });

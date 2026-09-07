@@ -237,7 +237,11 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   to persist). `context-prompt` has the richest phase set
   (`reviewing`/`reading_documents`/`searching_web`); one client consumer,
   `src/lib/sse-stream.ts`. Phase events + the budget/`done` payloads are
-  load-bearing for the UI.
+  load-bearing for the UI. The editor-action and context-prompt `done`
+  payloads carry `truncated: true` when the provider stopped at max_tokens
+  (`onStop` on `readProviderStream`, `isTruncatedStop` in `_llm.ts`); the
+  selection window warns before Accept. Output budgets live in
+  `_models.ts` (`OUTPUT_BUDGETS`), mirrored by `src/lib/editor-limits.ts`.
 - Transparency logging invariants (see §4): withheld `writing_summary_log`,
   `not_assessed` summary flagging, Propose-defers-to-CONFIRM.
 - Provenance tracker pending-signal pattern (`src/lib/provenance-tracker.ts`).
