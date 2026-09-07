@@ -314,7 +314,7 @@ export function TimelineView({ data: rawData, save, loading, worldCategories, ch
                   <MiniTipTapEditor
                     value={editEvent.description}
                     onChange={(html) => setEditEvent({ ...editEvent, description: html })}
-                    className="min-h-[80px]"
+                    className="min-h-[80px] max-h-60 overflow-y-auto"
                     placeholder="Describe this event…"
                   />
                 </CreativeAITextField>
