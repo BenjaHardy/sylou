@@ -16,7 +16,7 @@ particular implementation:
 
 - The four pillar definitions (Find / Lead / Organize / Write), the 0.0–5.0
   scoring scale, its calibration anchors, and the null-evidence rule
-- The six display bands and the sixteen work-profile taxonomy
+- The six display bands and the sixteen work-style taxonomy
 - The FLOW analysis prompt text (the instructions given to the scoring model),
   including the attribution-doctrine passages embedded in the request
   assembly (enumerated below)
@@ -35,7 +35,7 @@ embedded in code files:
 | `supabase/functions/analysis/prompts.ts` | The FLOW analysis prompt text (embedded string constants) | The file is AGPL code; the embedded prompt text is CC BY-SA methodology |
 | `supabase/functions/analysis/index.ts` | The attribution-doctrine passages embedded in the request assembly (enumerated below, marked inline) | The file is AGPL code; the listed passages are CC BY-SA methodology |
 | `supabase/functions/_shared/_prompts.ts` | `TUTOR_MODE_SYSTEM_PROMPT` (pillar-by-pillar teaching behavior) — the single copy shared by the chat and context-prompt functions | The file is AGPL code; the tutor prompt text is CC BY-SA methodology |
-| `src/lib/flow-work-profiles.ts` | The 16 work-profile taxonomy (codes, names, descriptions, domain palette) | The data is CC BY-SA methodology; the surrounding TypeScript is AGPL |
+| `src/lib/flow-work-profiles.ts` | The 16 work-style taxonomy (codes, names, descriptions, domain palette) | The data is CC BY-SA methodology; the surrounding TypeScript is AGPL |
 | `src/lib/flowBands.ts` | The six display bands (thresholds, labels, domain palette) | Same as above |
 | `TRANSPARENCY.md` §2–§3 | Prose definition of the pillars and the scale | CC BY-SA methodology |
 
@@ -66,7 +66,7 @@ instruction, section scaffolding, document-budget notices, the retry nudge,
 and the formatter-rendered evidence blocks — is operational plumbing,
 licensed AGPL like the rest of the code.
 
-Deliberately **not** methodology (considered and excluded): the profile
+Deliberately **not** methodology (considered and excluded): the collaboration-style
 painting selections and rationale texts in
 `src/lib/flow-profile-paintings.ts` (editorial presentation about the
 taxonomy, not the framework); `CLASSIC_MODE_SYSTEM_PROMPT` and the

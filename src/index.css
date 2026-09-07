@@ -161,7 +161,7 @@
 }
 .tiptap pre code { background: none; padding: 0; }
 
-/* Card flip animation for FLOW Profile tab */
+/* Card flip animation for FLOW Collaboration Style tab */
 @keyframes card-flip-in {
   from { transform: rotateY(90deg); opacity: 0; }
   to { transform: rotateY(0deg); opacity: 1; }

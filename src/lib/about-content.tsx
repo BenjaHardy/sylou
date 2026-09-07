@@ -93,7 +93,7 @@ export function WelcomeBody() {
       </div>
 
       <p>
-        Each pillar is analyzed independently, producing a FLOW report and work profile that you can
+        Each pillar is analyzed independently, producing a FLOW report and collaboration style that you can
         share, export, and use to communicate how a piece of writing was actually produced; these
         come together with further evidence and reports which, when taken together, aim to
         provide further assurance of human contribution to external users.

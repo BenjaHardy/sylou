@@ -71,8 +71,8 @@ export function ProfileTabContent({
 
   return (
     <div className="space-y-6">
-      {/* About this FLOW Profile */}
-      <FlowInfoSection title="About this FLOW Profile" />
+      {/* About this FLOW Collaboration Style */}
+      <FlowInfoSection title="About this FLOW Collaboration Style" />
 
       {/* Sub-tabs for assessment source */}
       {hasAlternatives && (
@@ -116,18 +116,18 @@ export function ProfileTabContent({
           key={source}
           data-ai-generated="true"
           data-ai-model={aiModelName}
-          aria-label="AI-derived collaboration profile"
+          aria-label="AI-derived collaboration style"
           className="animate-card-flip space-y-4"
         >
           <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground text-center">
-            Your Collaboration Profile ({SOURCE_LABELS[source]})
+            Your Collaboration Style ({SOURCE_LABELS[source]})
           </h3>
           <FlowWorkProfile profile={activeProfile} scores={activeScores} />
         </section>
       ) : (
         <div key={source} className="animate-card-flip space-y-4">
           <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground text-center">
-            Your Collaboration Profile ({SOURCE_LABELS[source]})
+            Your Collaboration Style ({SOURCE_LABELS[source]})
           </h3>
           <FlowWorkProfile profile={activeProfile} scores={activeScores} />
         </div>

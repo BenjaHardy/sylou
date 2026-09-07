@@ -21,12 +21,12 @@ export default function ProfilePaintingReveal({ code }: ProfilePaintingRevealPro
         <button
           type="button"
           onClick={() => setRevealed(true)}
-          aria-label="Reveal your profile's painting"
+          aria-label="Reveal your collaboration style's painting"
           className="group relative w-[140px] h-[140px] rounded-lg border-2 border-dashed border-flow-accent/40 bg-flow-accent/5 hover:bg-flow-accent/10 hover:border-flow-accent/70 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md flex flex-col items-center justify-center gap-2 cursor-pointer"
         >
           <Sparkles className="w-8 h-8 text-flow-accent group-hover:scale-110 transition-transform" />
           <span className="text-[11px] font-medium text-muted-foreground px-2 text-center leading-tight">
-            Reveal your profile's painting
+            Reveal your collaboration style's painting
           </span>
         </button>
       </div>

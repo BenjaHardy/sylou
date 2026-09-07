@@ -55,7 +55,7 @@ design choices)
 - [ ] Documentation update
 - [ ] Translation
 - [ ] Refactoring / cleanup (no functional change)
-- [ ] Methodology change (FLOW prompts, scoring rubric, pillar definitions, Work Profiles)
+- [ ] Methodology change (FLOW prompts, scoring rubric, pillar definitions, Work Styles)
 - [ ] Other:
 
 ## Checklist

@@ -20,7 +20,7 @@ Additionally, it can further be used in an educational context as a means to pro
 
 Sylou analyses human-AI collaboration across four dimensions thanks to a structured analysis framework — FLOW — that maps how AI assistance and human work fit together across the full lifecycle of the writing process.
 
-Each dimension is assessed independently, producing a dedicated and sharable FLOW report, as well as a FLOW profile that describes a collaboration style for your work: one of sixteen possible types, inspired by personality-type frameworks.
+Each dimension is assessed independently, producing a dedicated and sharable FLOW report, as well as a FLOW collaboration style for your work: one of sixteen possible types, inspired by personality-type frameworks.
 
 FLOW describes the writing process, with no pass or fail, only a structured analysis of who contributed to what and how. And it exists alongside your own self-evaluation, if provided.
 
@@ -41,7 +41,7 @@ The transparency architecture, covering all the means, whats, whys, hows to achi
 - **Creative writing tools** aimed for fiction writers: world-building tool, character diagram and timeline.
 - **Other convenience functionalities** such as virtual post-its and chat messages bookmarks.
 - **FLOW analysis** that produces a structured report analysing the four pillars of the FLOW methodology.
-- **FLOW profile** based on the FLOW analysis describing the collaboration style for the work - akin to personality-type frameworks.
+- **FLOW collaboration style** based on the FLOW analysis, describing how you worked with the AI - akin to personality-type frameworks.
 - **Self-assessment options** for users to record their own feedback (both before and after the FLOW analysis is provided) on the collaboration alongside the FLOW analysis.
 - **Work replay functionality and quantitative data** for futher evidence of the involvement of the user to the work.
 - **Shareable FLOW reports** comprising the above elements, with a public URL, a QR-coded badge, and machine-readable AI-origin markers. 
@@ -71,7 +71,7 @@ Self-hosters can set per-user token budgets via SQL; see docs/setup.md for detai
 
 ## How it works (briefly)
 
-When a project is analysed, the FLOW prompt examines the editor content, the creative writing tools, the chat history, the AI interactions, the provenance tags metadata and the imported documents to evaluate each of the four pillars and assign a profile.
+When a project is analysed, the FLOW prompt examines the editor content, the creative writing tools, the chat history, the AI interactions, the provenance tags metadata and the imported documents to evaluate each of the four pillars and assign a collaboration style.
 
 The provenance tags are as follows:
 

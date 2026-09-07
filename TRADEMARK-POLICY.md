@@ -76,7 +76,7 @@ Most forks do not require renaming. The cases where a rename is needed are speci
 **Rename needed for:**
 
 - Forks operated as long-term independent projects competing for the Sylou identity, or positioning themselves as alternatives to the official Sylou project
-- Modifications to the FLOW methodology, FLOW prompts, scoring rubric, pillar definitions, or Work Profile taxonomy that substantially alter the analytical output users see
+- Modifications to the FLOW methodology, FLOW prompts, scoring rubric, pillar definitions, or Work Style taxonomy that substantially alter the analytical output users see
 - Modifications to the FLOW Pledge Badges format or the structure of FLOW reports as user-facing artifacts
 - Modifications to core behaviors that define what Sylou *is*: for example, removing the transparency/text provenance tracking, or adding telemetry that violates the project's privacy commitments
 
