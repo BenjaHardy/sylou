@@ -5,14 +5,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Mail, Lock } from "lucide-react";
 import { SiteFooter } from "@/components/SiteFooter";
+import { setPasswordRedirectUrl } from "@/lib/auth-links";
+
+const inputClass =
+  "w-full h-10 pl-10 pr-3 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors";
+const buttonClass =
+  "w-full h-10 bg-primary hover:bg-ethos-hover text-primary-foreground rounded-md text-sm font-medium transition-all duration-150 ease-ethos-ease active:scale-[0.98] disabled:opacity-50";
+const linkButtonClass = "w-full text-xs text-muted-foreground hover:text-foreground hover:underline";
 
 export default function Auth() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const [mode, setMode] = useState<"signin" | "reset">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   if (loading) return null;
   if (user) return <Navigate to="/" replace />;
@@ -32,6 +41,48 @@ export default function Auth() {
       setSubmitting(false);
     }
   };
+
+  // Password reset: only existing accounts receive an email, and Supabase
+  // answers the same way for unknown addresses — so the confirmation below
+  // stays neutral. Registration is not possible from here (see
+  // src/lib/auth-links.ts).
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: setPasswordRedirectUrl(window.location.origin),
+      });
+      if (error) throw error;
+      setResetSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send the reset email");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const switchMode = (next: "signin" | "reset") => {
+    setMode(next);
+    setError("");
+    setResetSent(false);
+  };
+
+  const emailField = (
+    <div className="relative">
+      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <input
+        type="email"
+        placeholder="Email address"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        required
+        autoComplete="email"
+        className={inputClass}
+      />
+    </div>
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-[hsl(var(--ethos-surface))]">
@@ -78,42 +129,59 @@ export default function Auth() {
 
         {/* Sign-in card */}
         <div className="w-full max-w-[400px] bg-card shadow-depth rounded-lg overflow-hidden">
-          <form onSubmit={handleSubmit} className="p-8 space-y-4">
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                type="email"
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full h-10 pl-10 pr-3 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
-              />
-            </div>
+          {mode === "signin" ? (
+            <form onSubmit={handleSubmit} className="p-8 space-y-4">
+              {emailField}
 
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                className="w-full h-10 pl-10 pr-3 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
-              />
-            </div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  autoComplete="current-password"
+                  className={inputClass}
+                />
+              </div>
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+              {error && <p className="text-sm text-destructive">{error}</p>}
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full h-10 bg-primary hover:bg-ethos-hover text-primary-foreground rounded-md text-sm font-medium transition-all duration-150 ease-ethos-ease active:scale-[0.98] disabled:opacity-50"
-            >
-              {submitting ? "Please wait…" : "Sign In"}
-            </button>
-          </form>
+              <button type="submit" disabled={submitting} className={buttonClass}>
+                {submitting ? "Please wait…" : "Sign In"}
+              </button>
+
+              <button type="button" onClick={() => switchMode("reset")} className={linkButtonClass}>
+                Forgot password?
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleReset} className="p-8 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Enter your email address and we will send you a link to choose a new password.
+              </p>
+
+              {emailField}
+
+              {error && <p className="text-sm text-destructive">{error}</p>}
+
+              {resetSent ? (
+                <p className="text-sm text-foreground">
+                  If an account exists for this address, an email with a reset link is on its way.
+                </p>
+              ) : (
+                <button type="submit" disabled={submitting} className={buttonClass}>
+                  {submitting ? "Please wait…" : "Send reset link"}
+                </button>
+              )}
+
+              <button type="button" onClick={() => switchMode("signin")} className={linkButtonClass}>
+                Back to sign in
+              </button>
+            </form>
+          )}
         </div>
       </div>
       </div>

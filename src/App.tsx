@@ -14,6 +14,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 // longer download the authoring app (editor, chat, creative tools, exports).
 const Index = lazy(() => import("./pages/Index"));
 const Auth = lazy(() => import("./pages/Auth"));
+const SetPassword = lazy(() => import("./pages/SetPassword"));
 const SharedReport = lazy(() => import("./pages/SharedReport"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -36,6 +37,8 @@ const App = () => (
             <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/auth" element={<Auth />} />
+              {/* Invitation + password-reset landing (email-template links). */}
+              <Route path="/auth/set-password" element={<SetPassword />} />
               <Route
                 path="/"
                 element={
