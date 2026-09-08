@@ -26,6 +26,10 @@ export default function SetPassword() {
   const navigate = useNavigate();
   const [phase, setPhase] = useState<Phase>("verifying");
   const [linkType, setLinkType] = useState<SetPasswordLinkType>("recovery");
+  // Shown on the form so a user who was handed someone ELSE's link (an
+  // invitation or reset for another account) notices before setting a
+  // password on an account that is not theirs.
+  const [accountEmail, setAccountEmail] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
@@ -37,15 +41,24 @@ export default function SetPassword() {
       const link = parseSetPasswordLink(location.search);
       if (link) {
         setLinkType(link.type);
-        const { error } = await supabase.auth.verifyOtp({ token_hash: link.tokenHash, type: link.type });
+        const { data, error } = await supabase.auth.verifyOtp({ token_hash: link.tokenHash, type: link.type });
         if (cancelled) return;
-        setPhase(error ? "invalid" : "form");
+        if (error) {
+          setPhase("invalid");
+          return;
+        }
+        // The one-time token is consumed now: drop it from the address bar
+        // and the history entry so it cannot be re-read or leak via the URL.
+        window.history.replaceState(window.history.state, "", window.location.pathname);
+        setAccountEmail(data.user?.email ?? data.session?.user.email ?? null);
+        setPhase("form");
         return;
       }
       // No token in the URL: a default-template reset link lands here
       // already signed in; anything else is not a valid landing.
       const { data: { session } } = await supabase.auth.getSession();
       if (cancelled) return;
+      setAccountEmail(session?.user.email ?? null);
       setPhase(session ? "form" : "invalid");
     })();
     return () => {
@@ -107,6 +120,12 @@ export default function SetPassword() {
                 <p className="text-sm font-medium text-foreground">
                   {linkType === "invite" ? "Welcome to Sylou. Choose your password." : "Choose a new password."}
                 </p>
+                {accountEmail && (
+                  <p className="text-xs text-muted-foreground">
+                    Account: <span className="font-medium text-foreground">{accountEmail}</span>. If this is not
+                    your address, close this page.
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground">
                   At least {MIN_PASSWORD_LENGTH} characters. You will use it with your email address to sign in.
                 </p>
