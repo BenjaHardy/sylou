@@ -32,22 +32,21 @@ export function LargeSelectionNotice({ size, chars, onAcknowledge }: Props) {
         <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
         {size === "too-long" ? (
           <p>
-            Your selection is {fmt(chars)} characters — above the {fmt(SELECTED_TEXT_MAX_CHARS)}-character
+            Your selection is {fmt(chars)} characters, above the {fmt(SELECTED_TEXT_MAX_CHARS)}-character
             maximum the editor actions accept. Select a shorter passage (Ask and Propose below remain
             available).
           </p>
         ) : (
           <p>
             Your selection is {fmt(chars)} characters. Editor actions reply within a fixed budget of
-            about {fmt(EDITOR_ACTION_OUTPUT_CHARS)} characters, so the result may be cut off — you will
-            be warned before accepting it. Working passage by passage keeps results complete, and keeps
-            AI-inserted text easy to trace.
+            about {fmt(EDITOR_ACTION_OUTPUT_CHARS)} characters, so the result may be cut off; if so, you
+            will be warned before accepting it.
           </p>
         )}
       </div>
       {size === "large" && (
         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onAcknowledge}>
-          I understand — show the editor actions
+          I understand, show the editor actions
         </Button>
       )}
     </div>

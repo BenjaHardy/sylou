@@ -766,7 +766,7 @@ export function TextSelectionWindow({
               </div>
               {resultTruncated && (
                 <p role="status" className="p-2 rounded-md border border-border bg-muted text-foreground">
-                  The AI stopped at its output limit — this result is incomplete. Accepting will
+                  The AI stopped at its output limit, this result is incomplete. Accepting will
                   ask you to confirm.
                 </p>
               )}

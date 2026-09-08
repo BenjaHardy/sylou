@@ -28,10 +28,8 @@ export function TruncatedAcceptDialog({ open, onOpenChange, onConfirm }: Props) 
         <AlertDialogHeader>
           <AlertDialogTitle>Accept a cut-off result?</AlertDialogTitle>
           <AlertDialogDescription>
-            The AI stopped at its output limit before finishing, so this text is incomplete.
-            Accepting replaces your whole selection with it — the part the AI never reached
-            would be lost from the selection. You can undo with Ctrl+Z (Cmd+Z on Mac) right
-            after accepting, or reject and work on a shorter passage.
+            Accepting replaces your whole selection with it. You can undo with Ctrl+Z (Cmd+Z on
+            Mac) right after accepting, or reject and work on a shorter passage.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
