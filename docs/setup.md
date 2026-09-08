@@ -315,12 +315,26 @@ A few things worth knowing once your Sylou instance is running.
 
 ### Managing users
 
-If you're the only user, there's nothing to manage — sign-ups are open by default on a new Supabase project, but you can close them if you want.
+Sylou's sign-in page has no self-registration: accounts exist only when the operator creates them, and users then sign in with email + password, set or reset through an email link. Two settings make that explicit and fail-closed:
 
-If you're operating Sylou for others (a class, a team, a community), you can:
+- **Close sign-ups** under **Authentication → Providers → Email** ("Allow new users to sign up" off). Recommended for any deployment serving identified users; with it off, nothing outside your dashboard can create an account.
+- **Set the auth URLs** under **Authentication → URL Configuration**: *Site URL* = your frontend origin (e.g. `https://sylou.example`), and add `https://sylou.example/**` to *Redirect URLs*. Without this, every email link redirects to Supabase's default `http://localhost:3000`.
 
-- **Close sign-ups** in the Supabase dashboard under **Authentication → Providers → Email** and invite users individually. Recommended for any deployment serving identified users.
-- **Leave sign-ups open** for community-style deployments where anyone can join.
+**Creating accounts.** Under **Authentication → Users → Add user**:
+
+- *Create new user* — email + a temporary password, with **Auto Confirm User** ticked. Sends no email; share the credentials out of band. The quickest path for a handful of users or testers.
+- *Invite user* — sends an invitation email. Requires the template change below, so the invitee lands on Sylou's set-password page rather than straight in the app without a password.
+
+**Email templates.** Sylou handles invitations and password resets on `/auth/set-password`. Under **Authentication → Email Templates**, point the links at that page:
+
+- *Invite user*: `{{ .SiteURL }}/auth/set-password?token_hash={{ .TokenHash }}&type=invite`
+- *Reset password*: `{{ .SiteURL }}/auth/set-password?token_hash={{ .TokenHash }}&type=recovery`
+
+(The default `{{ .ConfirmationURL }}` reset link also works, since the app requests that page as its redirect; the invitation link needs the template change.)
+
+**Email sending limits.** Supabase's built-in mailer allows only a handful of auth emails per hour, project-wide, and deleting users does not reset the counter ("email rate limit exceeded"). Before inviting users in earnest, configure a custom provider under **Authentication → Emails → SMTP Settings** (Resend, Postmark and Brevo have free tiers); the limit under **Authentication → Rate Limits** becomes adjustable once custom SMTP is on.
+
+**Password resets.** Users request one from the sign-in page ("Forgot password?"). Only existing accounts receive an email, and the page answers neutrally either way.
 
 ### Per-user token budgets
 
