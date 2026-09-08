@@ -41,10 +41,10 @@ export default function Auth() {
         {/* Open-source notice */}
         <aside className="w-full max-w-[400px] bg-muted/40 border border-border rounded-lg p-5">
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Sylou is an open-source, self-hostable writing environment that makes human-AI collaboration transparent. This is the maintainer's instance and is not open for public sign-up.
+            Sylou is an open-source, self-hostable writing environment that makes human-AI collaboration transparent. This is the maintainer's instance and is currently not open for public sign-up.
           </p>
           <p className="text-xs text-muted-foreground leading-relaxed mt-3">
-            To learn about Sylou, visit{" "}
+            To learn more about Sylou, visit{" "}
             <a
               href="https://www.meetsylou.eu"
               target="_blank"
@@ -53,7 +53,25 @@ export default function Auth() {
             >
               meetsylou.eu
             </a>
-            . To run your own instance, see the source on GitHub (link coming soon).
+            . To run your own instance, see the source on{" "}
+            <a
+              href="https://github.com/BenjaHardy/sylou"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              GitHub
+            </a>
+            . To stay informed (occasional updates) or lend a hand, fill in the{" "}
+            <a
+              href="https://www.meetsylou.eu"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              short questionnaire
+            </a>{" "}
+            at the bottom of meetsylou.eu.
           </p>
         </aside>
 
