@@ -68,6 +68,7 @@ function WelcomeScreen() {
             Quick-start tips
           </p>
           <ul className="text-sm text-muted-foreground space-y-1">
+            <li>• Choose your <span className="font-medium text-foreground">AI model</span> in the Settings at the bottom left, for both Chat and FLOW Analysis; for the latter, opt for one of the recommended models. For more information, see the <a href="https://github.com/BenjaHardy/sylou/blob/main/docs/model-configuration.md" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Model Configuration Reference</a>.</li>
             <li>• Click <span className="font-medium text-foreground">+ New Project</span> to create your first project</li>
             <li>• Enable <span className="font-medium text-foreground">Tutor Mode</span> for guided learning</li>
             <li>• Choose the template that fits your type of work</li>
