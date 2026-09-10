@@ -1,6 +1,6 @@
 # Sylou and the EU AI Act
 
-**Version 1.0 — 01 June 2026**
+**Version 1.260910 — 10 September 2026**
 
 ## Why this document exists
 
@@ -14,6 +14,7 @@ It's the project's documented position. It's not legal advice, and it doesn't re
 - Article 50(2) — marking AI-generated content as artificially generated
 
 Other parts of the AI Act (deepfake disclosure, public-interest text, risk classification of high-risk systems) aren't in scope, Sylou doesn't do any of those things.
+Sylou is a transparency tool and is not meant to be used as an evaluation tool; within the scope of its intended use, it should not be classified as high-risk under the AI Act.
 
 ## Article 50(1) — disclosing AI interaction
 
@@ -41,7 +42,7 @@ AI editor actions that are not displayed in the chat (Fix Grammar, Translate, Re
 
 ### One known limitation
 
-When content is copied out of Sylou into another app (such as Word, Google Docs or an email) the AI-origin information doesn't survive. This is true of every writing tool we know of, and to the best of our knowledge no widely adopted standard reliably preserves AI provenance across copy-paste between unrelated applications today. Within Sylou's own json exports and Sylou itself, provenance is preserved (which is the point of the sharable FLOW reports).
+When content is copied out of Sylou into another app (such as Word, Google Docs or an email) the AI-origin information doesn't survive. Within Sylou itself, provenance is preserved (which is the point of the sharable FLOW reports).
 
 ## Self-hosters: this is on you too
 
@@ -51,7 +52,7 @@ A few practical notes:
 
 - The transparency mechanisms described above are built into the code. Please don't remove them in your deployment, weakening them likely weakens your own position under the Act.
 - Customise the disclaimer and any user-facing legal text to match your actual setup and needs (your data handling, your LLM provider, your terms).
-- If you're operating at any scale, get your own legal advice, this document isn't a substitute.
+- If you're operating at any scale, get your own legal advice, this document isn't a substitute and you bear the responsibilities of your instance.
 
 ## Updates
 
