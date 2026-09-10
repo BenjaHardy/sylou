@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to Sylou.
 
-Sylou is open-source software ([AGPL-3.0](LICENSE)) built around the open FLOW methodology ([CC BY-SA 4.0](LICENSE-METHODOLOGY)). The project welcomes contributions of all kinds — bug fixes, features, documentation, translations, accessibility improvements, design feedback, methodology discussion, ideas, and conversation.
+Sylou is an open-source software ([AGPL-3.0](LICENSE)) built around the open FLOW methodology ([CC BY-SA 4.0](LICENSE-METHODOLOGY)). If you're interested to contribute, the project welcomes contributions of all kinds, such as: bug fixes, translations, accessibility improvements, design feedback, methodology discussion, features, ideas, and conversation.
 
 This document explains how to contribute and what to expect.
 
@@ -10,18 +10,18 @@ This document explains how to contribute and what to expect.
 
 Sylou is currently maintained by one person on limited time. Reviews and responses may take longer than they would on a commercial or larger project: sometimes a week, occasionally more. Your patience is appreciated, and your contributions are read carefully. If a PR or issue seems to have gone quiet for more than two weeks, a friendly ping is welcome.
 
-A related note on long-term continuity: if at some point the current maintainer is unable to continue, the goal would be to find a way for the project to continue, whether through a trusted co-maintainer, a transfer to an interested organization, or another community-friendly arrangement. The trademark and other project assets would be handled accordingly. This isn't an immediate concern, and continuity is a value associated with this project, but it seemed appropriate to be transparent about it for contributors deciding to invest time in Sylou.
+A related note on long-term continuity: Sylou is planned to be maintained in the long term, with ongoing improvements and new features being added over time. If however at some point the current maintainer is unable to continue, and depending on interest, the goal would be to find a way for the project to continue, whether through a trusted co-maintainer, a transfer to an interested organization, or another community-friendly arrangement. The trademark and other project assets would be handled accordingly. This isn't a present concern, and continuity is a value associated with this project, but it seemed appropriate to be transparent about it for contributors deciding to invest time in Sylou.
 
 ## Ways to contribute
 
-There's no hierarchy here — all of these are useful:
+There's no hierarchy here, all of these are useful:
 
 - **Report bugs** by opening an issue. When you click "New Issue" on GitHub, pick the **Bug report** Template. It walks you through steps to reproduce, expected vs. actual behavior, and the environment details that make a bug easier to diagnose.
-- **Suggest features** by opening an issue and choosing the **Feature request** template. The use case matters more than the implementation idea, and so the template is structured to help you describe the problem first.
-- **Submit code** via pull request. Small PRs are easier to review and land than large ones; if you're planning something substantial, opening an issue first to discuss the approach saves everyone time. When you open a PR, a template will pre-fill with a short checklist (including the DCO sign-off and the transparency-impact note described below).
-- **Improve documentation**: README clarifications, setup guide fixes, typo corrections, better examples. These are among the most valuable contributions and the easiest to review.
-- **Discuss the FLOW methodology**: the prompts, scoring rubric, pillar definitions, and Work Style taxonomy are open to debate and refinement. Methodology observations have their own structured template (see the "Methodology contributions" section below).
-- **Share your experience**: write about how you use Sylou, what works, what doesn't, what you wish were different. Blog posts, academic write-ups, social media, all are welcome.
+- **Suggest features** by opening an issue and choosing the **Feature request** template. Both the implementation idea and the use case matter, and the template is structured to describe the problem first.
+- **Submit code** via pull request. Small PRs are easier to review and land than large ones; if you're planning something substantial, opening an issue first to discuss the approach is helpful and can help save time for everyone. When you open a PR, a template will pre-fill with a short checklist (including the DCO sign-off and the transparency-impact note described below).
+- **Improve documentation**: README clarifications, setup guide fixes, typo corrections, better examples.
+- **Discuss the FLOW methodology**: the prompts, scoring rubric, pillar definitions, and Work/Collaboration Style taxonomy are open to debate and refinement. Methodology observations have their own structured template (see the "Methodology contributions" section below).
+- **Share your experience**: write about how you use Sylou, what works, what doesn't, what you wish were different.
 
 ## Developer Certificate of Origin (DCO)
 
@@ -29,7 +29,7 @@ Sylou uses the **Developer Certificate of Origin** (DCO) for code contributions.
 
 The DCO is *not* a copyright assignment and *not* a Contributor License Agreement. You retain copyright over your contributions, and your code is licensed under the same license as the rest of the project (AGPL-3.0 for code; CC BY-SA 4.0 for methodology files).
 
-What you're attesting to when you sign off on a commit is that you have the right to submit the work; that you wrote it yourself, or you have permission from the rightsholder, or you took it from somewhere with a compatible license. The full DCO text is below.
+What you're attesting to when you sign off on a commit is that you have the right to submit the work; the full DCO text is below.
 
 ### How to sign off
 
@@ -88,19 +88,19 @@ For small changes (typo fixes, obvious bug fixes, minor documentation improvemen
 
 For anything larger (new features, significant refactoring, changes to the FLOW methodology), open an issue first to discuss the approach. The idea is to be pragmatic, and to make sure your time is well spent before you write code, noting the specific requirements embedded with Sylou (see the paragraph below). A 30-minute discussion can save a significant amount of time going in the wrong direction.
 
-**A specific principle worth keeping in mind: transparency matters more than token-usage optimization.** Improvements that reduce token usage in FLOW prompts, context prompts, or system prompts are welcome, but only if they do *not* impact the transparency Sylou is designed to deliver. The whole point of Sylou is to make human-AI collaboration visible for users willing to show transparency; an optimization that saves tokens at the cost of weakening that visibility is not an improvement, even if it's technically more efficient.
-The transparency architecture, covering all the means, whats, whys, hows to achieve this goal, is detailed in a separate and dedicated document: TRANSPARENCY.md.
+**A specific principle worth keeping in mind: transparency matters more than token-usage optimization.** Improvements that reduce token usage in FLOW prompts, context prompts, or system prompts are welcome, but only if they do *not* impact the transparency Sylou is designed to deliver. The whole point of Sylou is to make human-AI collaboration visible for users willing to show transparency, and there is thus a right balance to achieve; an optimization that saves tokens at the cost of weakening that visibility is not an improvement, even if it's technically more efficient.
+The transparency architecture, covering all the means, whats, whys, hows to achieve this goal, is detailed in a separate and dedicated document: [TRANSPARENCY.md](TRANSPARENCY.md).
 
-For any submission, please confirm in your PR description whether the change affects the AI-use transparency and provenance-capture architecture underpinning Sylou, and if yes, how it was handled. This saves time for everyone in review.
+For any submission, please confirm in your PR description whether you consider that the change affects the AI-use transparency and provenance-capture architecture underpinning Sylou, and if yes, how it was handled.
 
-Lastly, if your contribution touches anything related to AI disclosure (the chat reminder, the AI message labelling, the disclaimer), or to AI-generated content marking (the data-ai-generated attributes, the FLOW report meta tags), please also check ai-act-position.md, which describes what Sylou commits to on those surfaces and why. Modifications that impact those measures need a corresponding update to the document and an explanation in the PR.
+Lastly, if your contribution touches anything related to AI disclosure (the chat reminder, the AI message labelling, the disclaimer), or to AI-generated content marking (the data-ai-generated attributes, the FLOW report meta tags), please also check [docs/ai-act-position.md](docs/ai-act-position.md), which describes what Sylou commits to on those surfaces and why. Modifications that impact those measures need a corresponding update to the document and an explanation in the PR.
 
 ### Development setup
 
 Sylou has no mock backend: to run it locally you need your own (free-tier)
-Supabase project. The full walkthrough is [docs/setup.md](docs/setup.md) —
-it's written for production self-hosting, and local development is the same
-setup minus the frontend host. In brief:
+Supabase project; the full walkthrough is [docs/setup.md](docs/setup.md).
+It's written for production self-hosting, and local development is the same
+setup (minus the frontend host). In brief:
 
 1. Create a Supabase project, apply the migrations, set the secrets, and
    deploy the edge functions per [docs/setup.md](docs/setup.md).
@@ -123,16 +123,16 @@ If the setup instructions don't work for you, that's itself a bug worth reportin
 
 ### Code style and structure
 
-- The distilled engineering rules — security, correctness, streaming
-  lifecycle, transparency invariants, and a per-PR checklist — live in
+- The engineering rules (security, correctness, streaming
+  lifecycle, transparency invariants, and a per-PR checklist) live in
   [docs/engineering-standards.md](docs/engineering-standards.md). Worth a
   read before substantial changes, and if you code with an AI assistant,
   give it that file as context.
 - TypeScript throughout. New code should be properly typed; existing untyped patches are fair game for improvement.
-- File-level conventions: see existing files in the same directory for the pattern. The codebase prefers small, focused files over large ones.
-- Edge functions share common code via `supabase/functions/_shared/` (the provider router, temperature/thinking tables, etc.). Don't copy helpers between function folders — some legacy duplication remains, and consolidating it into `_shared/` is a tracked refactor.
-- UI strings are English-only today (there is no i18n framework). If you'd like to work on internationalization, open an issue first — it's a significant architectural choice.
-- Commits should be focused — one logical change per commit where reasonable. Don't worry about getting this perfect; reviewers can ask for a rebase if needed.
+- File-level conventions: see existing files in the same directory for the pattern. Whenever possible, the codebase prefers small, focused files over large ones.
+- Edge functions share common code via `supabase/functions/_shared/` (the provider router, temperature/thinking tables, etc.). Don't copy helpers between function folders; some legacy duplication may remain, and consolidating it into `_shared/` is a tracked refactor.
+- UI strings are English-only today (there is, currently, no i18n framework yet).
+- Commits should be focused: one logical change per commit where reasonable.
 
 ### Pull request process
 
@@ -140,17 +140,9 @@ When you open a pull request, a template pre-fills the description with a short 
 
 1. Fork the repository and create a branch from `main`.
 2. Make your changes. Sign off on each commit with `git commit -s`.
-3. Open a PR with a clear description: what changed, why, and how to test it. Note whether the change affects transparency/provenance behavior (see the principle above).
+3. Open a PR with a clear description. Note whether the change affects transparency/provenance behavior (see the principle above).
 4. Address review feedback. 
-5. Once approved, the PR is merged. The default merge method is **squash and merge** (see below); that's done by the maintainer at merge time, not by you.
-
-### How merges work
-
-When your PR is approved, the maintainer clicks "Squash and merge" in GitHub. This combines all the commits from your PR into a single commit on the main branch, with your PR's title as the commit message and your name preserved as the author. You don't need to do anything special; push your commits normally on your branch and the squashing happens automatically at merge.
-
-Why squash-merge? It keeps the main-branch history clean: one commit per PR, easy to read, easy to revert if needed, easy to bisect when hunting regressions. The downside is that the individual commits on your PR branch don't appear on main; however the PR itself remains as the historical record of the change.
-
-If your PR has a misleading or unclear title, expect the maintainer to edit it before merging, since the title becomes the permanent commit message. Or save the effort by giving the PR a clear title before requesting review.
+5. Once approved, the PR is merged. The default merge method is **squash and merge** (see below), which is done by the maintainer at merge time (not by you).
 
 ### What gets accepted
 
@@ -160,7 +152,7 @@ Most well-scoped contributions that fit the project's direction get accepted. Th
 - Tests for new functionality (or at least a manual test plan)
 - Documentation updates if user-facing behavior changes
 - Following existing patterns rather than introducing new ones unnecessarily
-- Reasonable scope - easier to review three focused PRs than one sprawling one
+- Reasonable scope and focused PRs
 - Explicit note on whether transparency/provenance behavior is affected
 
 Things that might lead to a "not this way" response:
@@ -168,14 +160,14 @@ Things that might lead to a "not this way" response:
 - Changes to the FLOW methodology without discussion first (the prompts, scoring, and pillar definitions are central to the project and need careful review)
 - Adding telemetry, tracking, or anything that undermines the privacy commitments
 - Optimizations that reduce token usage at the cost of weakening transparency
-- Adding dependencies for trivial functionality (the project prefers a smaller dependency footprint)
+- Adding dependencies for trivial functionality (the project prefers a smaller dependency footprint where possible)
 - Significant changes to architecture without prior discussion
 
 A "not this way" isn't a rejection of the contributor, but instead a conversation about how to get to a place where the change can land.
 
 ## Methodology contributions
 
-The FLOW methodology - the prompts, scoring rubric, pillar definitions, Work Style taxonomy - is licensed under CC BY-SA 4.0, separately from the code. Contributions here are especially welcome but go through a slightly different process.
+The FLOW methodology (the prompts, scoring rubric, pillar definitions, etc.) is licensed under CC BY-SA 4.0, separately from the code. Contributions here are welcome but go through a different process.
 
 ### Methodology observations and feedback
 
@@ -205,7 +197,7 @@ A worked example:
 
 | Field | Example |
 |---|---|
-| Date | 2026-05-15 |
+| Date | 2026-09-15 |
 | Framework | FLOW |
 | LLM | Claude Sonnet 4.6 |
 | Temperature | Unmodified |
@@ -227,7 +219,7 @@ If you're submitting methodology changes via PR (not just observations), additio
 
 - Open an issue tagged `methodology` to start the discussion before writing the PR
 - Methodology changes often benefit from concrete examples (test cases where the current methodology produces the wrong answer, and your proposed change produces a better one)
-- Changes to the public-facing aspects of the methodology (the four pillars, the scoring scale, the Work Style logic) are conservative; these are part of how users understand the framework, so stability matters
+- Changes to the public-facing aspects of the methodology (the four pillars, the scoring scale, the Work Style logic, etc.) are conservative by default and need to be well-justified; these are part of how users understand the framework, so stability matters
 - Changes to the internal aspects (prompt wording, evidence requirements, calibration anchors) are more flexible and benefit from iteration
 
 The CC BY-SA license means any methodology changes you contribute will be released under the same license. Your DCO sign-off on the commits applies the same way as for code.
@@ -235,44 +227,41 @@ The CC BY-SA license means any methodology changes you contribute will be releas
 ### Note on the size of the works being tested
 
 Sylou has been extensively tested by the maintainer with small to medium-sized works, and is being tested with large-scale works. 
-Whatever the size of the your work, structured feedback is always welcome. That is particularly true for very large pieces of work (e.g. novels, doctoral dissertations, etc.) where test cases naturally take a long time to produce. 
-Feedback derived from such tests will help guide the development of future dedicated functionalities.
+Whatever the size of the your work, structured feedback is always welcome. That is particularly true for very large pieces of work (e.g. novels, doctoral dissertations, etc.) where test cases naturally take a long time to produce. If applicable, feedback derived from such tests will help guide the development of future dedicated functionalities for very large works.
 
 ### Note on LLM calibration
 
-Based on our tests (Claude/Mistral/DeepSeek, and Z.ai GLM 5.2 via the Mistral API since August 2026), two models deliver accurate FLOW analysis outputs: Claude Sonnet 4.6 and Z.ai GLM 5.2. Both showed strong repeatability (i.e. consistent outcomes from one run to another), less bias toward the user, did not mix up different pillars, and were consistently in line with the tester's own critical self-evaluation. The other LLMs tend to overscore the user's involvement, or show less repeatability.
-The two recommended models are not ranked against each other: the choice depends on the provider you prefer to work with (Anthropic API, Mistral API, or both). Claude Sonnet (4.6 as of the date of this memo) occasionally encounters issues with JSON parsing; if that is the case, it is recommended to first switch to Claude Opus (4.8 as of the date of this memo).
+Based on our tests (Claude/Mistral/DeepSeek, and Z.ai GLM 5.2 via the Mistral API since August 2026), the following models deliver accurate FLOW analysis outputs: Claude Sonnet 4.6 (and up) and Z.ai GLM 5.2. Both showed strong repeatability (i.e. consistent outcomes from one run to another), less bias toward the user, did not mix up different pillars, and were consistently in line with the tester's own critical self-evaluation. The other LLMs tend to overscore the user's involvement, or show less repeatability.
 Where this is possible, temperature for the FLOW analysis is set at 0.0, which does appear to make the grounding slightly better for some models; temperature is set in a dedicated file: supabase/functions/_shared/_temperatures.ts
 Whatever the feedback, it is important to be careful not to propose calibration changes to the FLOW prompt that may improve the outputs of one LLM at the detriment of the others.
 
 ### Surveys and structured studies
 
-The observation template captures specific moments of LLM behavior. 
-The following ways to contribute could also be of interest - subject to sufficient community interest.
+The following ways to contribute are also welcome, subject to sufficient community support.
 
-- **Surveys**: occasional short questionnaires asking about your experience with specific models. These would be published in GitHub Discussions in case of sufficient interest.
-- **Structured studies** (hypothetical, also contingent on interest): more rigorous empirical work could be valuable; for example, multiple contributors analyzing projects under controlled conditions to compare qualitative accuracy across models. No such study has been conducted to date, and we have no immediate plans to organize one. 
-However, if community interest emerges and contributors want to participate, propose or run a study, we're open to it. Methodology contributions from completed studies would be incorporated under the CC BY-SA license with attribution.
+- **Surveys**: occasional short questionnaires asking about your experience with the tool or with specific models; these could be published in GitHub Discussions if sufficient interest.
+- **Structured studies, empirical studies, pilot projects**: if interest, collaboration with universities or organisations are more than welcome. 
 
-Both are voluntary. If you're interested in either, open a GitHub Discussion.
+If community interest emerges and contributors want to participate, propose or run a study, we're happy to participate, contribute or give a hand as and where applicable.
+Both are voluntary. If you're interested in either, open a GitHub Discussion or reach out to us at contact@sylou.eu.
 
 ## A note on AI-assisted contributions
 
-Sylou is a tool for transparent human-AI collaboration, and it itself relied on AI coding tools during development, so we're ok with AI assistance in contributions to it, subject to some conditions. Use whatever tools help you do good work: AI-assisted code, AI-assisted writing, AI-assisted methodology drafts are all fine. The DCO sign-off attests that you have the right to submit the contribution, which is what matters legally.
+Sylou is a tool for transparent human-AI collaboration, and it itself relied on AI coding tools during development. Likewise, we're ok with AI assistance in contributions to it, subject to some conditions. Use whatever tools help you do good work: AI-assisted code, AI-assisted writing, AI-assisted methodology drafts are all fine, and DCO sign-off is used for you to attest that you have the right to submit the contribution.
 
-In the spirit of the project, we'd love if you share how you worked. Though what matters practically is that you understand what you're submitting and the implications to the Sylou project, can answer questions about it, and will respond to review feedback. AI-generated PRs where the author can't engage substantively with the review tend not to land. AI-assisted PRs from contributors who genuinely understand their work are welcome.
+In the spirit of the project, we'd love if you share how you worked. Though what matters practically is that you understand what you're submitting and the implications to the Sylou project, can answer questions about it, and will respond to review feedback. AI-generated PRs where the author can't engage substantively with the review tend not to land. AI-assisted PRs from contributors who genuinely understand their contribution are welcome.
 
 ## Trademarks
 
-The Sylou name and logo are trademarks and are governed by a separate TRADEMARK-POLICY.md, not by the AGPL or this contributing guide. In short: forking and modifying are welcomed (that's open source); using the Sylou name on a substantively modified or competing version isn't.
+The Sylou name and logo are trademarks and are governed by a separate [TRADEMARK-POLICY.md](TRADEMARK-POLICY.md), not by the AGPL or this contributing guide. 
 
-Most contribution scenarios are entirely unaffected by the trademark Policy: PRs, branches, distribution packages, self-hosted deployments, and educational use are all fine without any trademark conversation, and the bias of the trademark Policy is toward permission. The policy only comes into play only for cases that could mislead users about what they're using.
+In short: the Sylou name is not authorized on substantively modified or competing versions. Most contribution scenarios are entirely unaffected by the trademark Policy: PRs, branches, forks, distribution packages, self-hosted deployments, and educational use are all fine without any trademark conversation, and the bias of the trademark policy is toward permission. The policy only comes into play only for cases that could mislead users about what they're using.
 
 ## Code of conduct
 
 The project doesn't have a separate code of conduct document, because the expectations are simple:
 
-- Treat others with respect. Critique ideas, not people.
+- Treat others with respect.
 - Assume good faith. Most misunderstandings are misunderstandings, not bad intent.
 - Disagreements are fine and often productive. Personal attacks aren't.
 - The maintainer reserves the right to remove comments, lock issues, or block contributors whose conduct undermines the project's collaborative atmosphere. This is rarely necessary and never the goal.
@@ -283,6 +272,6 @@ If you experience or witness behavior that concerns you, reach out at contact@sy
 
 If anything in this document is unclear, or if you're considering a contribution and want to talk it through first, open an issue or email contact@sylou.eu. Genuine questions are always welcome.
 
-When you open a new issue on GitHub, you'll also see links for things that don't belong in the issue tracker (security reports, trademark inquiries, and general questions), each routed to the right place. Use those rather than opening a public issue for those topics (security vulnerabilities in particular should always be reported privately; see SECURITY.md).
+When you open a new issue on GitHub, you'll also see links for things that don't belong in the issue tracker (security reports, trademark inquiries, and general questions), each routed to the right place. Use those rather than opening a public issue for those topics (security vulnerabilities in particular should always be reported privately; see [SECURITY.md](SECURITY.md)).
 
 Thank you for considering contributing to Sylou.
