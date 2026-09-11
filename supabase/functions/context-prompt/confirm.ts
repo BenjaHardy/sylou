@@ -1,7 +1,7 @@
 // context-prompt/confirm.ts — the CONFIRM endpoint (P4-1 Phase D split;
 // branch body moved verbatim from index.ts).
 //
-// CONTRACT (CLAUDE.md §4 / TRANSPARENCY.md §5.1, pinned by
+// CONTRACT (CLAUDE.md §4, pinned by
 // confirm.test.ts): CONFIRM records ONLY the decision. The exchange
 // itself (prompt, summary delta, proposal) was already logged at
 // delivery in the main path; nothing is written to the chat or the
@@ -82,7 +82,7 @@ export async function handleConfirm(args: {
   // concurrent double-submits match zero rows here and no-op idempotently.
   // CONFIRM records ONLY the decision — the exchange itself (prompt,
   // summary delta, proposal) was already logged at delivery in the main
-  // path (TRANSPARENCY.md §5.1), so nothing is written to the chat or the
+  // path (CLAUDE.md §4), so nothing is written to the chat or the
   // summary log here.
   if (!action_id || typeof action_id !== "string") {
     // No ledger row to transition (the Propose-time insert failed).

@@ -8,7 +8,7 @@
 // carries "summary + newest-50 verbatim" — the summary may overlap the
 // window (expected; disclosed in both prompts, recent messages win).
 //
-// Invariants (see TRANSPARENCY.md §5.6 and the migration comment):
+// Invariants (see TRANSPARENCY.md §5.5 and the migration comment):
 // - FLOW never reads this: continuity aid, never assessment evidence
 //   (extends the withheld-writing_summary_log invariant).
 // - chat_thread_summaries is user-READ-only; every write goes through the

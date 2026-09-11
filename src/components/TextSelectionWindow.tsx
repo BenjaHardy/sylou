@@ -466,7 +466,7 @@ export function TextSelectionWindow({
                 onClose();
               } else {
                 // Propose: the exchange is already logged server-side at
-                // delivery (TRANSPARENCY.md §5.1) — surface it in the chat
+                // delivery (CLAUDE.md §4) — surface it in the chat
                 // now, before any decision; CONFIRM only records the outcome.
                 const insertedMessages = (evt.inserted_messages as ChatMessage[]) ?? [];
                 if (insertedMessages.length > 0) {
@@ -623,7 +623,7 @@ export function TextSelectionWindow({
 
 
   const handleReject = async () => {
-    // The exchange was already logged at delivery (TRANSPARENCY.md §5.1);
+    // The exchange was already logged at delivery (CLAUDE.md §4);
     // this only records the rejected outcome on the action row.
     await confirmDecision(false);
     onClose();

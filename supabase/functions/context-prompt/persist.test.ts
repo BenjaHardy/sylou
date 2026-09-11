@@ -1,7 +1,7 @@
 // Deno unit tests for the Ask/Propose persistence sequence.
 // Run with: deno test supabase/functions/context-prompt/persist.test.ts
 //
-// These pin the CLAUDE.md §4 / TRANSPARENCY.md §5.1 contract at the exact
+// These pin the CLAUDE.md §4 contract at the exact
 // moment the sequence became shared (P4-1 Phase C). A red test here means
 // the transparency contract changed — that needs a checkpoint, not a test
 // edit.

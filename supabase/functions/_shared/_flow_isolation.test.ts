@@ -1,5 +1,5 @@
 // FLOW-isolation tripwire: the conversation memory must NEVER become an
-// analysis input (TRANSPARENCY.md §5.4/§5.6 — a continuity aid, not
+// analysis input (TRANSPARENCY.md §5.3/§5.5 — a continuity aid, not
 // assessment evidence; the same principle as the withheld
 // writing_summary_log). This test greps EVERY module in the analysis
 // function's directory (the P4-1 split moved code into siblings, so

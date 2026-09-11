@@ -7,7 +7,7 @@
 // phase early, in Phase C, because the sequence-pinning tests below cannot
 // import index.ts — importing it executes Deno.serve).
 //
-// CONTRACT (CLAUDE.md §4 / TRANSPARENCY.md §5.1 — pinned by
+// CONTRACT (CLAUDE.md §4 — pinned by
 // persist.test.ts; a red test means the transparency contract changed and
 // needs a checkpoint, not a test edit):
 //   - Delivery-time logging for Ask AND Propose alike; dismissals and
@@ -176,7 +176,7 @@ export async function persistContextExchange(
   const insertedMessages: unknown[] = [];
 
   // Log the exchange at delivery for Ask AND Propose alike (deliberate
-  // contract — TRANSPARENCY.md §5.1): the user reads the reply either
+  // contract — CLAUDE.md §4): the user reads the reply either
   // way, so it goes on the record here, server-side (surviving
   // dismissals, tab closes and disconnects). For Propose, the CONFIRM
   // endpoint afterwards records only the decision.
