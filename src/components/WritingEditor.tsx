@@ -44,8 +44,8 @@ interface Props {
 
 export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, onFlushEditor, conciseMode, onEditorContent, chatSetMessages, webSearchEnabled }: Props & { onEditorContent?: (html: string) => void }) {
   
-  const { content, loading, saveState, updateContent, isDirty, manualSave, flushSave: flushWritingContent } = useWritingContent(projectId);
-  const { getTracker, initWithContentLength, scheduleSave, flushSave: flushProvenance, provenanceLoaded } = useProvenanceTracker(projectId);
+  const { content, loading, loadFailed, saveState, updateContent, isDirty, manualSave, flushSave: flushWritingContent } = useWritingContent(projectId);
+  const { getTracker, initWithContentLength, scheduleSave, flushSave: flushProvenance, provenanceLoaded, provenanceLoadFailed } = useProvenanceTracker(projectId);
   const [initialSet, setInitialSet] = useState(false);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
   const prevDocLenRef = useRef<number>(0);
@@ -307,9 +307,28 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     },
   });
 
-  // Set initial content when loaded
+  // Load-failure warnings. A failed writing-content load leaves the editor
+  // uninitialised (gate below) with saves refused (useWritingContent); a
+  // failed provenance load opens the editor but keeps provenance in memory
+  // only (useProvenanceTracker's hydration guard). Either way the DB rows
+  // stay intact and the user is told to reload.
   useEffect(() => {
-    if (editor && !loading && provenanceLoaded && !initialSet) {
+    if (loadFailed) {
+      toast.error("This project's text could not be loaded. Reload the page before editing; nothing is saved until then.");
+    }
+  }, [loadFailed]);
+  useEffect(() => {
+    if (provenanceLoadFailed) {
+      toast.warning("Provenance data could not be loaded for this project. Provenance is not saved in this session; reload the page.");
+    }
+  }, [provenanceLoadFailed]);
+
+  // Set initial content when loaded. `!loadFailed` is load-bearing: on a
+  // failed content load the editor must not be initialised on an empty
+  // document — the provenance map would be clamped to it and, once hydrated,
+  // persisted in that truncated form.
+  useEffect(() => {
+    if (editor && !loading && !loadFailed && provenanceLoaded && !initialSet) {
       // Skip provenance tracking during initial setContent
       const tracker = getTracker();
       isInitialLoadRef.current = true;
@@ -336,7 +355,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       // Expose tracker to parent (flush is handled by the stable ref-based effect above)
       onProvenanceTracker?.(tracker);
     }
-  }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker, onEditorContent]);
+  }, [editor, loading, loadFailed, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker, onEditorContent]);
 
   // Reset when projectId changes
   useEffect(() => {
