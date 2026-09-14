@@ -432,7 +432,24 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     onAskComplete?.(messages);
   }, [onAskComplete]);
 
-  if (loading || !editor) {
+  // The text fetch failed: no editor at all (the toast above asked for a
+  // reload). Rendering an empty editor here invited typing into a document
+  // that was not this one.
+  if (loadFailed) {
+    return (
+      <div className="flex-1 flex items-center justify-center px-8 text-center text-sm text-muted-foreground">
+        This project's text could not be loaded. Reload the page to try again.
+      </div>
+    );
+  }
+
+  // Spinner until BOTH fetches are done, not just the text. The editor is
+  // mounted in the same render that lets the initial-content effect fire,
+  // so there is no window in which an empty, editable editor is on screen
+  // before the text is placed — a keystroke in that window used to replace
+  // the hook's copy of the text and be saved over the real document once
+  // the provenance map arrived.
+  if (loading || !provenanceLoaded || !editor) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
