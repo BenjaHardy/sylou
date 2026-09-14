@@ -44,8 +44,8 @@ interface Props {
 
 export function WritingEditor({ projectId, tutorMode = false, threadId, onWritingActivity, onFlowClick, onReanalyzeClick, flowLoading, hasFlowReport, onAskComplete, onChatRefresh, onProvenanceTracker, onFlushEditor, conciseMode, onEditorContent, chatSetMessages, webSearchEnabled }: Props & { onEditorContent?: (html: string) => void }) {
   
-  const { content, loading, saveState, updateContent, isDirty, manualSave, flushSave: flushWritingContent } = useWritingContent(projectId);
-  const { getTracker, initWithContentLength, scheduleSave, flushSave: flushProvenance, provenanceLoaded } = useProvenanceTracker(projectId);
+  const { content, loading, loadFailed, saveState, updateContent, isDirty, manualSave, flushSave: flushWritingContent } = useWritingContent(projectId);
+  const { getTracker, initWithContentLength, scheduleSave, flushSave: flushProvenance, provenanceLoaded, provenanceLoadFailed } = useProvenanceTracker(projectId);
   const [initialSet, setInitialSet] = useState(false);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
   const prevDocLenRef = useRef<number>(0);
@@ -307,9 +307,28 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     },
   });
 
-  // Set initial content when loaded
+  // Load-failure warnings. A failed writing-content load leaves the editor
+  // uninitialised (gate below) with saves refused (useWritingContent); a
+  // failed provenance load opens the editor but keeps provenance in memory
+  // only (useProvenanceTracker's hydration guard). Either way the DB rows
+  // stay intact and the user is told to reload.
   useEffect(() => {
-    if (editor && !loading && provenanceLoaded && !initialSet) {
+    if (loadFailed) {
+      toast.error("This project's text could not be loaded. Reload the page before editing; nothing is saved until then.");
+    }
+  }, [loadFailed]);
+  useEffect(() => {
+    if (provenanceLoadFailed) {
+      toast.warning("Provenance data could not be loaded for this project. Provenance is not saved in this session; reload the page.");
+    }
+  }, [provenanceLoadFailed]);
+
+  // Set initial content when loaded. `!loadFailed` is load-bearing: on a
+  // failed content load the editor must not be initialised on an empty
+  // document — the provenance map would be clamped to it and, once hydrated,
+  // persisted in that truncated form.
+  useEffect(() => {
+    if (editor && !loading && !loadFailed && provenanceLoaded && !initialSet) {
       // Skip provenance tracking during initial setContent
       const tracker = getTracker();
       isInitialLoadRef.current = true;
@@ -336,7 +355,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
       // Expose tracker to parent (flush is handled by the stable ref-based effect above)
       onProvenanceTracker?.(tracker);
     }
-  }, [editor, loading, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker, onEditorContent]);
+  }, [editor, loading, loadFailed, provenanceLoaded, content, initialSet, initWithContentLength, getTracker, onProvenanceTracker, onEditorContent]);
 
   // Reset when projectId changes
   useEffect(() => {
@@ -413,7 +432,24 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     onAskComplete?.(messages);
   }, [onAskComplete]);
 
-  if (loading || !editor) {
+  // The text fetch failed: no editor at all (the toast above asked for a
+  // reload). Rendering an empty editor here invited typing into a document
+  // that was not this one.
+  if (loadFailed) {
+    return (
+      <div className="flex-1 flex items-center justify-center px-8 text-center text-sm text-muted-foreground">
+        This project's text could not be loaded. Reload the page to try again.
+      </div>
+    );
+  }
+
+  // Spinner until BOTH fetches are done, not just the text. The editor is
+  // mounted in the same render that lets the initial-content effect fire,
+  // so there is no window in which an empty, editable editor is on screen
+  // before the text is placed — a keystroke in that window used to replace
+  // the hook's copy of the text and be saved over the real document once
+  // the provenance map arrived.
+  if (loading || !provenanceLoaded || !editor) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

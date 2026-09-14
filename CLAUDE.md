@@ -245,6 +245,17 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 - Transparency logging invariants (see §4): withheld `writing_summary_log`,
   `not_assessed` summary flagging, Propose-defers-to-CONFIRM.
 - Provenance tracker pending-signal pattern (`src/lib/provenance-tracker.ts`).
+  Persistence hydration guard (`useProvenanceTracker`): nothing is written to
+  `provenance_events` until the map fetched for the project was applied to
+  the loaded document; a failed fetch keeps provenance in memory only. Its
+  companion in `useWritingContent`: saves are refused after a failed content
+  load. Both exist because the switch/unmount flushes once wrote `[]` over a
+  real map when a project was left before its text finished loading, and
+  the next edit persisted the "no map → all typed" fallback (2026-09).
+  Pinned by `src/hooks/__tests__/`. `WritingEditor` keeps the spinner up
+  until BOTH fetches are done (a keystroke into the empty editor before the
+  text was placed used to be saved over the real document) and shows a
+  reload panel instead of an editor when the text fetch failed.
 - Editor stable-ref flush pattern in `useWritingContent` / `WritingEditor`.
   The client **must flush editor + provenance before `runAnalysis`** — the
   `analysis` function reads writing/provenance from the DB, not the request,

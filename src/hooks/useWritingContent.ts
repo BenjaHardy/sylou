@@ -29,6 +29,12 @@ const SAVE_TIMEOUT_MS = 10_000;
 export function useWritingContent(projectId: string | null) {
   const [content, setContent] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  // True when the fetch for the current project failed. The editor then holds
+  // something that is NOT this document (an empty doc, or a few keystrokes
+  // into it), so saves are refused until a reload — otherwise the first
+  // auto-save would replace the real text (and the provenance map with it).
+  const [loadFailed, setLoadFailed] = useState(false);
+  const loadFailedRef = useRef(false);
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
 
   // Refs for debounce & version tracking
@@ -50,6 +56,8 @@ export function useWritingContent(projectId: string | null) {
       return;
     }
     currentProjectId.current = projectId;
+    loadFailedRef.current = false;
+    setLoadFailed(false);
     setLoading(true);
 
     const load = async () => {
@@ -63,6 +71,8 @@ export function useWritingContent(projectId: string | null) {
 
       if (error) {
         console.error("Failed to load writing content:", error);
+        loadFailedRef.current = true;
+        setLoadFailed(true);
         setLoading(false);
         return;
       }
@@ -112,6 +122,13 @@ export function useWritingContent(projectId: string | null) {
         maxWaitTimer.current = null;
       }
       if (html === lastSavedContent.current) return true;
+
+      // The content never loaded for this project: refuse to write (see
+      // loadFailed above). The UI tells the user to reload.
+      if (loadFailedRef.current) {
+        setSaveState({ status: "error" });
+        return false;
+      }
 
       // Fail fast when offline: a pending write would otherwise hang the
       // awaited flush (and the project switch that awaits it) indefinitely.
@@ -199,5 +216,5 @@ export function useWritingContent(projectId: string | null) {
     return saveNow(contentRef.current);
   }, [projectId, saveNow]);
 
-  return { content, loading, saveState, updateContent, isDirty, manualSave, flushSave };
+  return { content, loading, loadFailed, saveState, updateContent, isDirty, manualSave, flushSave };
 }
