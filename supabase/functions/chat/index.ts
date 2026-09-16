@@ -3,7 +3,7 @@ import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLM
 import { makeSSEHelpers, readProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
-import { ALLOWED_MODELS, INPUT_LIMITS } from "../_shared/_models.ts";
+import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 import {
   CHAT_THINKING, CHAT_EFFORT, CHAT_MISTRAL_EFFORT,
@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
     const thinking = resolveThinking(CHAT_THINKING, chatModel);
     const effort = resolveEffort(CHAT_EFFORT, chatModel);
     const mistralEffort = resolveMistralEffort(CHAT_MISTRAL_EFFORT, chatModel);
-    const chatMaxTokens = resolveMaxTokens(2000, chatModel, thinking, mistralEffort !== undefined);
+    const chatMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CHAT, chatModel, thinking, mistralEffort !== undefined);
     console.log(
       `[chat] model=${chatModel} provider=${providerFor(chatModel)} source=${
         requestedModel ? "request" : profile.preferred_chat_model ? "profile" : "default"

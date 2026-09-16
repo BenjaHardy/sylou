@@ -10,6 +10,7 @@ import {
   ALLOWED_MODELS,
   CONTEXT_LIMIT_TOKENS,
   FALLBACK_CONTEXT_LIMIT_TOKENS,
+  OUTPUT_BUDGETS,
 } from "../_shared/_models.ts";
 import { computeSimilarityPct } from "../_shared/_similarity.ts";
 import { sliceSafe } from "../_shared/_text.ts";
@@ -175,7 +176,7 @@ Deno.serve(async (req) => {
     const thinking = resolveThinking(FLOW_THINKING, flowModel);
     const effort = resolveEffort(FLOW_EFFORT, flowModel);
     const mistralEffort = resolveMistralEffort(FLOW_MISTRAL_EFFORT, flowModel);
-    const flowMaxTokens = resolveMaxTokens(8192, flowModel, thinking, mistralEffort !== undefined);
+    const flowMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.FLOW, flowModel, thinking, mistralEffort !== undefined);
 
     // The model's real context window (tokens), from the server-side mirror
     // of the src/lib/models.ts registry; conservative fallback for stale

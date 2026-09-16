@@ -62,19 +62,19 @@ Conversational responses. Quality matters; reasoning effort calibrated per model
 
 | Model              | Temperature                  | Thinking / Effort                | max_tokens (output) | Notes                                                                 |
 | ------------------ | ---------------------------- | -------------------------------- | ------------------- | --------------------------------------------------------------------- |
-| Claude Sonnet 4.6  | 1.0                          | thinking: off, effort: high      | 2000                | Default chat behavior.                                                |
-| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high | 4000                | Adaptive thinking; raises max_tokens.                                 |
-| Mistral Large 3    | 0.7                          | n/a                              | 2000                | Standard chat.                                                        |
-| Mistral Medium 3.5 | 0.7                          | reasoning_effort: high           | 4000                | Mistral "Quality tier" — reasoning enabled.                           |
-| Mistral Small 4    | 0.7                          | reasoning_effort: none           | 2000                | Mistral "Speed tier" — no thinking chunk; ideal for cheap, fast chat. |
-| DeepSeek V4 Flash  | 1.0                          | n/a                              | 2000                | Standard, cheap chat.                                                 |
-| Z.ai GLM 5.2       | 0.7                          | reasoning_effort: max            | 4000                | Third-party (Z.ai) via Mistral API; 1M context.                       |
+| Claude Sonnet 4.6  | 1.0                          | thinking: off, effort: high      | 4000                | Default chat behavior.                                                |
+| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high | 8000                | Adaptive thinking; raises max_tokens.                                 |
+| Mistral Large 3    | 0.7                          | n/a                              | 4000                | Standard chat.                                                        |
+| Mistral Medium 3.5 | 0.7                          | reasoning_effort: high           | 8000                | Mistral "Quality tier" — reasoning enabled.                           |
+| Mistral Small 4    | 0.7                          | reasoning_effort: none           | 4000                | Mistral "Speed tier" — no thinking chunk; ideal for cheap, fast chat. |
+| DeepSeek V4 Flash  | 1.0                          | n/a                              | 4000                | Standard, cheap chat.                                                 |
+| Z.ai GLM 5.2       | 0.7                          | reasoning_effort: max            | 8000                | Third-party (Z.ai) via Mistral API; 1M context.                       |
 
 **Rationale for Chat settings:**
 
 - Temperature at provider default: 1.0 for Claude Sonnet and DeepSeek, 0.7 for Mistral; allows natural variation for conversational warmth.
 - Reasoning effort tier-matched: e.g. GLM 5.2 and Medium 3.5 get reasoning; Small ("speed tier") doesn't.
-- max_tokens 4000 for reasoning models: same logic as FLOW, smaller bump since chat responses are shorter.
+- max_tokens 4000, 8000 for reasoning models: same logic as FLOW, smaller bump since chat responses are shorter. 
 
 ---
 
@@ -84,18 +84,18 @@ Inline rewrites and proposals from within the editor. Latency-sensitive.
 
 | Model              | Temperature                  | Thinking / Effort                | max_tokens (output) | Notes                                           |
 | ------------------ | ---------------------------- | -------------------------------- | ------------------- | ----------------------------------------------- |
-| Claude Sonnet 4.6  | 1.0                          | thinking: off, effort: high      | 1000                | Fast inline action.                             |
-| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high | 2500                | Adaptive thinking; raises max_tokens.           |
-| Mistral Large 3    | 0.7                          | n/a                              | 1000                | Standard.                                       |
-| Mistral Medium 3.5 | 0.7                          | reasoning_effort: none           | 1000                | No reasoning — editor actions should be snappy. |
-| Mistral Small 4    | 0.7                          | reasoning_effort: none           | 1000                | Same as Medium for editor.                      |
-| DeepSeek V4 Flash  | 1.0                          | n/a                              | 1000                | Standard.                                       |
-| Z.ai GLM 5.2       | 0.7                          | reasoning_effort: none           | 1000                | Third-party via Mistral API; reasoning off, editor actions stay snappy. |
+| Claude Sonnet 4.6  | 1.0                          | thinking: off, effort: high      | 4000                | Fast inline action.                             |
+| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high | 6000                | Adaptive thinking; raises max_tokens.           |
+| Mistral Large 3    | 0.7                          | n/a                              | 4000                | Standard.                                       |
+| Mistral Medium 3.5 | 0.7                          | reasoning_effort: none           | 4000                | No reasoning — editor actions should be snappy. |
+| Mistral Small 4    | 0.7                          | reasoning_effort: none           | 4000                | Same as Medium for editor.                      |
+| DeepSeek V4 Flash  | 1.0                          | n/a                              | 4000                | Standard.                                       |
+| Z.ai GLM 5.2       | 0.7                          | reasoning_effort: none           | 4000                | Third-party via Mistral API; reasoning off, editor actions stay snappy. |
 
 **Rationale for Editor settings:**
 
 - Reasoning disabled by default: editor actions are short, standard, latency-sensitive; thinking-chunk overhead isn't justified.
-- Lower max_tokens (1000); proposals expected to be inherently short. The budget lives in `_shared/_models.ts` (`OUTPUT_BUDGETS.EDITOR_ACTION_TOKENS`) and is mirrored by `src/lib/editor-limits.ts`: the selection window shows a notice (acknowledge to proceed) for selections beyond ~3,400 characters, and a reply the provider cut off at max_tokens arrives flagged `truncated`.
+- max_tokens 4000, 6000 with reasoning. NB: The selection window shows a notice (acknowledge to proceed) for selections beyond ~13,600 characters, and a reply the provider cut off at max_tokens arrives flagged `truncated` (through `src/lib/editor-limits.ts`).
 
 ---
 
@@ -105,17 +105,18 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 
 | Model | Temperature | Thinking / Effort | max_tokens (summary) (output) | max_tokens (response) (output) | Notes |
 |---|---|---|---|---|---|
-| Claude Sonnet 4.6 | 1.0 | thinking: off, effort: high | 1000 | 2000 | Standard. |
-| Claude Opus 4.8 | undefined (model-controlled) | thinking: adaptive, effort: high | 2500 | 4000 | Adaptive thinking. |
-| Mistral Large 3 | 0.7 | n/a | 1000 | 2000 | Standard. |
-| Mistral Medium 3.5 | 0.7 | reasoning_effort: high | 2500 | 4000 | Mistral quality tier — reasoning helps with nuanced AI features. |
-| Mistral Small 4 | 0.7 | reasoning_effort: none | 1000 | 2000 | Mistral speed tier. |
-| DeepSeek V4 Flash | 1.0 | n/a | 1000 | 2000 | Standard. |
-| Z.ai GLM 5.2 | 0.7 | reasoning_effort: max | 2500 | 4000 | Third-party via Mistral API. |
+| Claude Sonnet 4.6 | 1.0 | thinking: off, effort: high | 2000 | 4000 | Standard. |
+| Claude Opus 4.8 | undefined (model-controlled) | thinking: adaptive, effort: high | 4000 | 8000 | Adaptive thinking. |
+| Mistral Large 3 | 0.7 | n/a | 2000 | 4000 | Standard. |
+| Mistral Medium 3.5 | 0.7 | reasoning_effort: high | 4000 | 8000 | Mistral quality tier — reasoning helps with nuanced AI features. |
+| Mistral Small 4 | 0.7 | reasoning_effort: none | 2000 | 4000 | Mistral speed tier. |
+| DeepSeek V4 Flash | 1.0 | n/a | 2000 | 4000 | Standard. |
+| Z.ai GLM 5.2 | 0.7 | reasoning_effort: max | 4000 | 8000 | Third-party via Mistral API. |
 
 **Rationale for Context-prompt settings:**
 
 - Matches Chat defaults: context-prompt powers Ask/Propose user-facing features, so quality posture should align with chat.
+- max_tokens 4000/8000 for the response and 2000/4000 for the summary (plain / reasoning; `OUTPUT_BUDGETS.CONTEXT_RESPONSE` and `.CONTEXT_SUMMARY`).
 
 ---
 
@@ -128,7 +129,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 | Claude thinking + effort per function × model | `supabase/functions/_shared/_thinking.ts`     | Tables: `*_THINKING`, `*_EFFORT`.                                                                 |
 | Mistral reasoning_effort per function × model | `supabase/functions/_shared/_thinking.ts`     | Tables: `*_MISTRAL_EFFORT`.                                                                       |
 | Reasoning-supported Mistral models            | `supabase/functions/_shared/_thinking.ts`     | `MISTRAL_REASONING_MODELS` set.                                                                   |
-| max_tokens base values + raise rules          | `supabase/functions/_shared/_thinking.ts`     | `resolveMaxTokens()` function.                                                                    |
+| max_tokens ceilings (plain / reasoning pairs) | `supabase/functions/_shared/_models.ts`       | `OUTPUT_BUDGETS`; `resolveMaxTokens()` in `_thinking.ts` picks the member that applies.           |
 | Anthropic models without temperature          | `supabase/functions/_shared/_temperatures.ts` | `NO_TEMPERATURE_MODELS` set.                                                                      |
 | Server-side model allowlist + input limits    | `supabase/functions/_shared/_models.ts`       | `ALLOWED_MODELS` (gates the `model` request override), `INPUT_LIMITS` (request text ceilings), `CONTEXT_LIMIT_TOKENS` (per-model context windows, mirrors the registry). |
 | FLOW imported-documents budget                | `supabase/functions/analysis/index.ts`        | `FLOW_IMPORTED_DOCS_BUDGET_TOKENS` cost ceiling; effective allowance = min(policy, model-window remainder after the never-truncated sections). |
@@ -158,7 +159,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
    
     Add the model id to ALLOWED_MODELS in supabase/functions/_shared/_models.ts — requests naming a model not in this set are rejected with 400, so a model missing here is selectable in Settings but unusable via the request override.
    
-    Add the model's context window to CONTEXT_LIMIT_TOKENS in the same file (a mirror of contextLimit in src/lib/models.ts) — the FLOW imported-documents budget and the report's token-usage disclosure read it. A missing id falls back to a conservative 200k window.
+    Add the model's context window to CONTEXT_LIMIT_TOKENS in the same file (a mirror of contextLimit in src/lib/models.ts): the FLOW imported-documents budget and the report's token-usage disclosure read it. A missing id falls back to a conservative 200k window.
    
     Update fallback model strings in each edge function that references a default:
    
@@ -183,9 +184,9 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 
 3. Adjust token budgets (if needed)
    
-    Review base max_tokens values in edge function calls. Only change these if the new model has a hard output limit lower than our current bases.
+    Review the `OUTPUT_BUDGETS` pairs in `_shared/_models.ts`. Only change these if the new model has a hard output limit lower than a current ceiling.
    
-        resolveMaxTokens() automatically scales headroom when reasoning/thinking is enabled, so base values typically stay the same.
+        resolveMaxTokens() picks the `reasoning` ceiling automatically when reasoning/thinking is enabled for the model, so the pairs typically stay the same.
 
 4. Update schema defaults (if this is a new system default)
    

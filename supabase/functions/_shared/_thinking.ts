@@ -74,6 +74,8 @@
 //         then "none" if it persists.
 // ============================================================
 
+import type { OutputBudget } from "./_models.ts";
+
 export type ClaudeEffort  = "low" | "medium" | "high" | "xhigh";
 export type MistralEffort = "high" | "max" | "none";
 
@@ -165,18 +167,19 @@ export function resolveMistralEffort(
 // therefore need more headroom than the bare prompt would suggest.
 // Mistral reasoning models (Medium 3.5, Small, GLM 5.2) at "high"/"max"
 // effort emit reasoning tokens into the same budget and need the same
-// headroom.
-// Non-reasoning callers keep their base.
+// headroom. Each OUTPUT_BUDGETS entry (_models.ts) carries both ceilings
+// explicitly: `plain` for a non-reasoning call, `reasoning` when thinking
+// or reasoning_effort is on for an eligible model. (Until 2026-09 the
+// reasoning ceiling was inferred from the size of the base value, which
+// would have silently mis-tiered any base that moved.)
 export function resolveMaxTokens(
-  base: number,
+  budget: OutputBudget,
   modelId: string,
   thinkingOn: boolean,
   mistralEffortOn = false,
 ): number {
   const reasoningOn = thinkingOn || mistralEffortOn;
-  if (!reasoningOn) return base;
-  if (!modelId.startsWith("claude-") && !MISTRAL_REASONING_MODELS.has(modelId)) return base;
-  if (base <= 1000) return 2500;   // editor-action
-  if (base <= 2000) return 4000;   // chat, context-prompt
-  return Math.max(base, 16000);    // analysis (FLOW)
+  if (!reasoningOn) return budget.plain;
+  if (!modelId.startsWith("claude-") && !MISTRAL_REASONING_MODELS.has(modelId)) return budget.plain;
+  return budget.reasoning;
 }

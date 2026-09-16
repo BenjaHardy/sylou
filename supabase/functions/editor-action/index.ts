@@ -169,7 +169,7 @@ Deno.serve(async (req) => {
     const thinking = resolveThinking(EDITOR_THINKING, chatModel);
     const effort = resolveEffort(EDITOR_EFFORT, chatModel);
     const mistralEffort = resolveMistralEffort(EDITOR_MISTRAL_EFFORT, chatModel);
-    const editorMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.EDITOR_ACTION_TOKENS, chatModel, thinking, mistralEffort !== undefined);
+    const editorMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.EDITOR_ACTION, chatModel, thinking, mistralEffort !== undefined);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
     if (!Deno.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);

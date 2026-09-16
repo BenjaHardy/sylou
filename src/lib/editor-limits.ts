@@ -3,7 +3,7 @@
 //
 // Sources of truth live server-side in supabase/functions/_shared/_models.ts:
 // INPUT_LIMITS.SELECTED_TEXT_CHARS (the request is rejected above it) and
-// OUTPUT_BUDGETS.EDITOR_ACTION_TOKENS (the max_tokens base of an editor
+// OUTPUT_BUDGETS.EDITOR_ACTION.plain (the max_tokens ceiling of an editor
 // action). Keep the two in sync — the numbers here only decide when the
 // window warns; the server still enforces.
 //
@@ -16,9 +16,10 @@
 /** Hard cap on selected text (characters); the server answers 400 beyond it. */
 export const SELECTED_TEXT_MAX_CHARS = 50_000;
 
-/** max_tokens base of an editor action (reasoning models get headroom on
- *  top, which their thinking consumes — the visible reply stays ~this). */
-export const EDITOR_ACTION_OUTPUT_TOKENS = 1_000;
+/** max_tokens ceiling of an editor action without reasoning (reasoning
+ *  models get a higher ceiling, which their thinking consumes — the
+ *  visible reply stays ~this). Raised from 1,000 in 2026-09. */
+export const EDITOR_ACTION_OUTPUT_TOKENS = 4_000;
 
 const CHARS_PER_TOKEN = 4;
 
