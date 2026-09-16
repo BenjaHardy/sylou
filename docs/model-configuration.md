@@ -74,7 +74,7 @@ Conversational responses. Quality matters; reasoning effort calibrated per model
 
 - Temperature at provider default: 1.0 for Claude Sonnet and DeepSeek, 0.7 for Mistral; allows natural variation for conversational warmth.
 - Reasoning effort tier-matched: e.g. GLM 5.2 and Medium 3.5 get reasoning; Small ("speed tier") doesn't.
-- max_tokens 4000, 8000 for reasoning models (`OUTPUT_BUDGETS.CHAT` in `_shared/_models.ts`): ceilings, not targets — a reply stops when the model is done, so the higher ceiling costs nothing on ordinary replies. Raised from 2000/4000 in 2026-09 after replies were cut off mid-sentence and GLM 5.2 at max spent a whole reasoning budget thinking (same logic as FLOW, smaller bump since chat responses are shorter).
+- max_tokens 4000, 8000 for reasoning models: same logic as FLOW, smaller bump since chat responses are shorter. 
 
 ---
 
@@ -95,7 +95,7 @@ Inline rewrites and proposals from within the editor. Latency-sensitive.
 **Rationale for Editor settings:**
 
 - Reasoning disabled by default: editor actions are short, standard, latency-sensitive; thinking-chunk overhead isn't justified.
-- max_tokens 4000, 6000 with reasoning (raised from 1000/2500 in 2026-09: proposals are short, but a rewrite of a long selection is not, and the old ceiling cut replies off). The budget lives in `_shared/_models.ts` (`OUTPUT_BUDGETS.EDITOR_ACTION`) and is mirrored by `src/lib/editor-limits.ts`: the selection window shows a notice (acknowledge to proceed) for selections beyond ~13,600 characters, and a reply the provider cut off at max_tokens arrives flagged `truncated`.
+- max_tokens 4000, 6000 with reasoning. NB: The selection window shows a notice (acknowledge to proceed) for selections beyond ~13,600 characters, and a reply the provider cut off at max_tokens arrives flagged `truncated` (through `src/lib/editor-limits.ts`).
 
 ---
 
@@ -116,7 +116,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 **Rationale for Context-prompt settings:**
 
 - Matches Chat defaults: context-prompt powers Ask/Propose user-facing features, so quality posture should align with chat.
-- max_tokens 4000/8000 for the response and 2000/4000 for the summary (plain / reasoning; `OUTPUT_BUDGETS.CONTEXT_RESPONSE` and `.CONTEXT_SUMMARY`), raised in 2026-09 for the reasons given under Chat: with web-search results to digest, GLM 5.2 at max could spend the whole 4000 reasoning budget thinking and answer with nothing ("No response generated").
+- max_tokens 4000/8000 for the response and 2000/4000 for the summary (plain / reasoning; `OUTPUT_BUDGETS.CONTEXT_RESPONSE` and `.CONTEXT_SUMMARY`).
 
 ---
 
@@ -159,7 +159,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
    
     Add the model id to ALLOWED_MODELS in supabase/functions/_shared/_models.ts — requests naming a model not in this set are rejected with 400, so a model missing here is selectable in Settings but unusable via the request override.
    
-    Add the model's context window to CONTEXT_LIMIT_TOKENS in the same file (a mirror of contextLimit in src/lib/models.ts) — the FLOW imported-documents budget and the report's token-usage disclosure read it. A missing id falls back to a conservative 200k window.
+    Add the model's context window to CONTEXT_LIMIT_TOKENS in the same file (a mirror of contextLimit in src/lib/models.ts): the FLOW imported-documents budget and the report's token-usage disclosure read it. A missing id falls back to a conservative 200k window.
    
     Update fallback model strings in each edge function that references a default:
    
