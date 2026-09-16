@@ -45,21 +45,40 @@ export const INPUT_LIMITS = {
   SHORT_FIELD_CHARS: 200,
 } as const;
 
+/** One output ceiling per call shape: `plain` when the model answers
+ *  without reasoning, `reasoning` when thinking / reasoning_effort is on
+ *  (reasoning tokens are billed against the same max_tokens, so the
+ *  visible reply keeps roughly the plain budget). */
+export interface OutputBudget {
+  plain: number;
+  reasoning: number;
+}
+
 /**
- * Output budgets (max_tokens bases) for the short-form LLM functions —
- * the ONE place these numbers live server-side; resolveMaxTokens in
- * _thinking.ts adds reasoning headroom on top. The client mirrors
- * EDITOR_ACTION_TOKENS in src/lib/editor-limits.ts to warn before an
- * editor action whose reply would not fit — keep the two in sync.
+ * Output budgets (max_tokens ceilings) per LLM call shape — the ONE place
+ * these numbers live server-side; resolveMaxTokens in _thinking.ts picks
+ * the applicable member. Ceilings, not targets: a reply stops when the
+ * model is done, so raising one costs nothing on ordinary replies and only
+ * lets long ones finish. Raised 2026-09 (chat / context 2k→4k plain and
+ * 4k→8k reasoning; editor 1k→4k / 2.5k→6k) after GLM 5.2 at "max" spent a
+ * whole 4k budget thinking about web-search results and answered with
+ * nothing ("No response generated"), and non-reasoning replies were seen
+ * cut off mid-sentence. The client mirrors EDITOR_ACTION.plain in
+ * src/lib/editor-limits.ts to warn before an editor action whose reply
+ * would not fit — keep the two in sync.
  */
 export const OUTPUT_BUDGETS = {
-  /** editor-action: one inline rewrite of the selection. */
-  EDITOR_ACTION_TOKENS: 1_000,
+  /** chat: one assistant turn (also the two-pass and tool-loop calls). */
+  CHAT: { plain: 4_000, reasoning: 8_000 },
   /** context-prompt: the Ask/Propose response call. */
-  CONTEXT_RESPONSE_TOKENS: 2_000,
+  CONTEXT_RESPONSE: { plain: 4_000, reasoning: 8_000 },
   /** context-prompt: the writing-summary call. */
-  CONTEXT_SUMMARY_TOKENS: 1_000,
-} as const;
+  CONTEXT_SUMMARY: { plain: 2_000, reasoning: 4_000 },
+  /** editor-action: one inline rewrite of the selection. */
+  EDITOR_ACTION: { plain: 4_000, reasoning: 6_000 },
+  /** analysis: the FLOW report (Structured Outputs / forced tool call). */
+  FLOW: { plain: 8_192, reasoning: 16_000 },
+} as const satisfies Record<string, OutputBudget>;
 
 /**
  * Context-window size (input tokens) per allowed model.
