@@ -152,7 +152,13 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   `import.meta.env.VITE_*`; private keys stay server-side.
 
 ## 5. AI routing
-- Model registry: `src/lib/models.ts` (id, label, provider, pricing, context limit).
+- Model registry: `src/lib/models.ts` (id, label, provider, pricing, context
+  limit, `flowRecommended`). The Settings pickers fold the registry into
+  collapsible groups (`src/components/settings/ModelPicker.tsx`): by serving
+  API for chat (`groupModelsByProvider`), by FLOW recommendation for FLOW
+  (`groupModelsForFlow`, the second group topped by a "not currently
+  recommended" notice). A new model lands in the right group by itself; the
+  recommendation is the flag, never note wording.
 - Users pick two models in Settings: `preferred_chat_model` and
   `preferred_flow_model` on `profiles`. Editor-action and context-prompt
   reuse `preferred_chat_model` — there is no separate per-function picker.

@@ -25,6 +25,11 @@ export interface ModelInfo {
   isRollingLatest?: boolean;
   /** Optional one-line note shown beneath the row. */
   note?: string;
+  /** True when the maintainer's field tests recommend the model for FLOW
+   *  analysis. Drives the grouping of the FLOW picker in Settings (see
+   *  groupModelsForFlow); docs/model-configuration.md holds the rationale
+   *  per model. Until 2026-09 this lived only in the wording of `note`. */
+  flowRecommended?: boolean;
 }
 
 export const MODELS: ModelInfo[] = [
@@ -67,7 +72,8 @@ export const MODELS: ModelInfo[] = [
     // docs/model-configuration.md and _shared/_thinking.ts). Recommended
     // for FLOW alongside Claude Sonnet 4.6 after the maintainer's field
     // tests (2026-08/09) — the two are not ranked against each other.
-    note: "Recommended for FLOW analysis — hosted on the Mistral API",
+    flowRecommended: true,
+    note: "Third-party model hosted on the Mistral API",
   },
   {
     id: "claude-sonnet-4-6",
@@ -75,7 +81,7 @@ export const MODELS: ModelInfo[] = [
     provider: "anthropic",
     pricing: { input: 3.0, output: 15.0 },
     contextLimit: 1_000_000,
-    note: "Recommended for FLOW analysis",
+    flowRecommended: true,
   },
   {
     id: "claude-opus-4-8",
@@ -112,6 +118,57 @@ export const MODEL_LABELS: Record<string, string> = MODELS.reduce(
 
 export function getModel(id: string): ModelInfo | undefined {
   return MODELS.find((m) => m.id === id);
+}
+
+/** The reference the Settings pickers link to for per-model rationale. */
+export const MODEL_CONFIG_DOC_URL =
+  "https://github.com/BenjaHardy/sylou/blob/main/docs/model-configuration.md";
+
+/** Short names of the API that serves a model, for the muted tag on the
+ *  FLOW picker's cards. GLM is a third-party model served by the Mistral
+ *  API, hence "Mistral API" rather than "Mistral". */
+export const PROVIDER_LABELS: Record<ModelProvider, string> = {
+  anthropic: "Anthropic",
+  mistral: "Mistral API",
+  deepseek: "DeepSeek",
+};
+
+/** A titled slice of the registry, as rendered by the Settings pickers. */
+export interface ModelGroup {
+  id: string;
+  label: string;
+  models: ModelInfo[];
+}
+
+/** Chat picker: models grouped by the API that serves them. A provider
+ *  without a dedicated group lands in "Other providers", so adding one to
+ *  the registry needs no change here. Empty groups are omitted; registry
+ *  order is kept inside each group. */
+export function groupModelsByProvider(models: ModelInfo[] = MODELS): ModelGroup[] {
+  const groups: ModelGroup[] = [
+    { id: "anthropic", label: "Anthropic (Claude)", models: models.filter((m) => m.provider === "anthropic") },
+    { id: "mistral", label: "Mistral API", models: models.filter((m) => m.provider === "mistral") },
+    {
+      id: "other",
+      label: "Other providers",
+      models: models.filter((m) => m.provider !== "anthropic" && m.provider !== "mistral"),
+    },
+  ];
+  return groups.filter((g) => g.models.length > 0);
+}
+
+export const FLOW_RECOMMENDED_GROUP_ID = "flow-recommended";
+export const FLOW_OTHER_GROUP_ID = "flow-not-recommended";
+
+/** FLOW picker: the recommended models first, every other model behind a
+ *  second group (the UI tops it with a "not currently recommended" notice).
+ *  Empty groups are omitted. */
+export function groupModelsForFlow(models: ModelInfo[] = MODELS): ModelGroup[] {
+  const groups: ModelGroup[] = [
+    { id: FLOW_RECOMMENDED_GROUP_ID, label: "Recommended for FLOW", models: models.filter((m) => m.flowRecommended) },
+    { id: FLOW_OTHER_GROUP_ID, label: "Not currently recommended", models: models.filter((m) => !m.flowRecommended) },
+  ];
+  return groups.filter((g) => g.models.length > 0);
 }
 
 export const DEFAULT_CHAT_MODEL = "mistral-medium-3-5";
