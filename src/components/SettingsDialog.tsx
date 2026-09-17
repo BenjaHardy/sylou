@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -34,7 +33,14 @@ import { useUserSettings } from "@/hooks/useUserSettings";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { MODELS, type ModelInfo } from "@/lib/models";
+import {
+  FLOW_OTHER_GROUP_ID,
+  FLOW_RECOMMENDED_GROUP_ID,
+  MODEL_CONFIG_DOC_URL,
+  groupModelsByProvider,
+  groupModelsForFlow,
+} from "@/lib/models";
+import { ModelPicker } from "@/components/settings/ModelPicker";
 
 interface Props {
   open: boolean;
@@ -51,52 +57,20 @@ const LANGUAGES = [
   "Nederlands",
 ];
 
-function formatPrice(n: number): string {
-  return n < 1 ? `$${n.toFixed(2)}` : `$${n.toFixed(2)}`;
-}
+// The registry is static, so the two groupings are computed once.
+const CHAT_MODEL_GROUPS = groupModelsByProvider();
+const FLOW_MODEL_GROUPS = groupModelsForFlow();
 
-function ModelOption({
-  model,
-  selected,
-  onSelect,
-}: {
-  model: ModelInfo;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={`w-full text-left rounded-md border p-3 transition-colors ${
-        selected
-          ? "border-primary bg-primary/5"
-          : "border-border hover:border-primary/40 hover:bg-accent/30"
-      }`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-foreground">{model.label}</span>
-          {model.isRollingLatest && (
-            <span className="text-[11px] text-muted-foreground">· latest version</span>
-          )}
-          {model.isExperimental && (
-            <Badge variant="outline" className="text-[10px] py-0 h-4 px-1.5">
-              experimental
-            </Badge>
-          )}
-        </div>
-        <span className="text-[11px] text-muted-foreground tabular-nums">
-          ~{formatPrice(model.pricing.input)} in · ~{formatPrice(model.pricing.output)} out
-          <span className="ml-1 opacity-60">/ 1M tok</span>
-        </span>
-      </div>
-      {model.note && (
-        <p className="text-[11px] text-muted-foreground mt-1">{model.note}</p>
-      )}
-    </button>
-  );
-}
+const modelConfigLink = (
+  <a
+    href={MODEL_CONFIG_DOC_URL}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="underline underline-offset-2 hover:text-foreground"
+  >
+    Model Configuration Reference
+  </a>
+);
 
 export function SettingsDialog({ open, onOpenChange }: Props) {
   const { settings, loading, update } = useUserSettings();
@@ -155,16 +129,11 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
               <p className="text-xs text-muted-foreground mb-2">
                 Used for the chat panel and the editor's Ask / Propose actions.
               </p>
-              <div className="space-y-2">
-                {MODELS.map((m) => (
-                  <ModelOption
-                    key={m.id}
-                    model={m}
-                    selected={settings.preferred_chat_model === m.id}
-                    onSelect={() => update({ preferred_chat_model: m.id })}
-                  />
-                ))}
-              </div>
+              <ModelPicker
+                groups={CHAT_MODEL_GROUPS}
+                selectedId={settings.preferred_chat_model}
+                onSelect={(id) => update({ preferred_chat_model: id })}
+              />
             </div>
 
             <div>
@@ -172,16 +141,22 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
               <p className="text-xs text-muted-foreground mb-2">
                 Used when running a FLOW report on your project.
               </p>
-              <div className="space-y-2">
-                {MODELS.map((m) => (
-                  <ModelOption
-                    key={m.id}
-                    model={m}
-                    selected={settings.preferred_flow_model === m.id}
-                    onSelect={() => update({ preferred_flow_model: m.id })}
-                  />
-                ))}
-              </div>
+              <ModelPicker
+                groups={FLOW_MODEL_GROUPS}
+                selectedId={settings.preferred_flow_model}
+                onSelect={(id) => update({ preferred_flow_model: id })}
+                defaultOpenGroupIds={[FLOW_RECOMMENDED_GROUP_ID]}
+                showProviderTag
+                groupNotices={{
+                  [FLOW_OTHER_GROUP_ID]: (
+                    <>
+                      These models are currently not recommended for FLOW analysis, because of
+                      reliability or speed constraints. See the {modelConfigLink} for details.
+                      These lists may change as testing continues.
+                    </>
+                  ),
+                }}
+              />
             </div>
 
             <p className="text-[11px] text-muted-foreground italic border-t pt-3">
@@ -190,7 +165,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
               requests finish on the previous model.
             </p>
             <p className="text-[11px] text-muted-foreground italic">
-              See the Model Configuration Reference on GitHub for details on
+              See the {modelConfigLink} on GitHub for details on
               model configurations and behavior across functions.
             </p>
           </TabsContent>
