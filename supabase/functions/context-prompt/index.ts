@@ -650,7 +650,7 @@ When citing information from web search results, always include the source URL i
 
       const readable = new ReadableStream({
         async start(controller) {
-          let fullResponse = "";
+          let fullResponse: string;
           let stopReason: string | null = null;
 
           try {

@@ -217,7 +217,7 @@ Deno.serve(async (req) => {
       // billing entirely.
       const readable = new ReadableStream({
         async start(controller) {
-          let fullResponse = "";
+          let fullResponse: string;
           let clientDisconnected = false;
           // Provider stop reason: max_tokens/length means the rewrite was
           // cut off at the output budget. Surfaced to the client as

@@ -18,7 +18,15 @@ export default tseslint.config(
       "react-refresh": reactRefresh,
     },
     rules: {
-      ...reactHooks.configs.recommended.rules,
+      // The two classic hooks rules, enabled explicitly rather than through
+      // the plugin's `recommended` preset. Since v6 that preset also switches
+      // on the React Compiler rule set (set-state-in-effect, refs, purity…),
+      // which flags ~40 deliberate patterns here: state reset when a prop
+      // changes, and the stable-ref pattern in the editor and save hooks.
+      // Adopting those rules is a refactor to weigh on its own, not a side
+      // effect of a linter upgrade. Severities match the pre-v6 preset.
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": ["error", {
         argsIgnorePattern: "^_",

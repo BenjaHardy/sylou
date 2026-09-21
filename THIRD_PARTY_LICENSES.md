@@ -410,13 +410,13 @@ Packages bundled into (or supporting) the shipped application.
 Build, test and lint tooling used to develop Sylou; these packages are not
 part of the shipped application.
 
-### Apache-2.0 (23)
+### Apache-2.0 (22)
 
-- @eslint/config-array@0.21.2
-- @eslint/config-helpers@0.4.2
-- @eslint/core@0.17.0
-- @eslint/object-schema@2.1.7
-- @eslint/plugin-kit@0.4.1
+- @eslint/config-array@0.23.5
+- @eslint/config-helpers@0.7.0
+- @eslint/core@1.2.1
+- @eslint/object-schema@3.0.5
+- @eslint/plugin-kit@0.7.3
 - @humanfs/core@0.19.2
 - @humanfs/node@0.16.8
 - @humanfs/types@0.15.0
@@ -430,7 +430,6 @@ part of the shipped application.
 - baseline-browser-mapping@2.11.21
 - detect-libc@2.1.2
 - eslint-visitor-keys@3.4.3
-- eslint-visitor-keys@4.2.1
 - eslint-visitor-keys@5.0.1
 - expect-type@1.4.0
 - typescript@5.9.3
@@ -458,8 +457,8 @@ part of the shipped application.
 ### BSD-2-Clause (8)
 
 - entities@8.1.0
-- eslint-scope@8.4.0
-- espree@10.4.0
+- eslint-scope@9.1.2
+- espree@11.2.0
 - esrecurse@4.3.0
 - estraverse@5.3.0
 - esutils@2.0.3
@@ -479,18 +478,20 @@ part of the shipped application.
 
 - mdn-data@2.27.1
 
-### ISC (8)
+### ISC (10)
 
 - electron-to-chromium@1.5.422
 - flatted@3.4.4
 - isexe@2.0.0
-- minimatch@3.1.5
+- lru-cache@5.1.1
 - saxes@6.0.0
+- semver@6.3.1
 - semver@7.8.5
 - siginfo@2.0.0
 - which@2.0.2
+- yallist@3.1.1
 
-### MIT (185)
+### MIT (198)
 
 - @adobe/css-tools@4.5.0
 - @asamuzakjp/css-color@5.1.11
@@ -498,9 +499,25 @@ part of the shipped application.
 - @asamuzakjp/generational-cache@1.0.1
 - @asamuzakjp/nwsapi@2.3.9
 - @babel/code-frame@7.29.7
+- @babel/compat-data@7.29.7
+- @babel/core@7.29.7
+- @babel/generator@7.29.8
+- @babel/helper-compilation-targets@7.29.7
+- @babel/helper-globals@7.29.7
+- @babel/helper-module-imports@7.29.7
+- @babel/helper-module-transforms@7.29.7
+- @babel/helper-string-parser@7.29.7
 - @babel/helper-validator-identifier@7.29.7
+- @babel/helper-validator-option@7.29.7
+- @babel/helpers@7.29.7
+- @babel/parser@7.29.9
 - @babel/runtime@7.29.7
+- @babel/template@7.29.7
+- @babel/traverse@7.29.8
+- @babel/types@7.29.8
 - @bramus/specificity@2.4.2
+- @cacheable/memory@2.2.0
+- @cacheable/utils@2.5.0
 - @csstools/css-calc@3.4.0
 - @csstools/css-color-parser@4.2.3
 - @csstools/css-parser-algorithms@4.0.0
@@ -513,9 +530,11 @@ part of the shipped application.
 - @emnapi/wasi-threads@1.2.3
 - @eslint-community/eslint-utils@4.10.1
 - @eslint-community/regexpp@4.12.2
-- @eslint/eslintrc@3.3.7
-- @eslint/js@9.39.4
+- @eslint/js@10.0.1
 - @exodus/bytes@1.15.2
+- @jridgewell/remapping@2.3.5
+- @keyv/bigmap@1.3.1
+- @keyv/serialize@1.1.1
 - @napi-rs/wasm-runtime@1.2.3
 - @oxc-project/types@0.139.0
 - @rolldown/binding-android-arm64@1.1.5
@@ -543,18 +562,19 @@ part of the shipped application.
 - @types/aria-query@5.0.4
 - @types/chai@5.2.3
 - @types/deep-eql@4.0.2
+- @types/esrecurse@4.3.1
 - @types/json-schema@7.0.15
 - @types/node@22.20.0
-- @typescript-eslint/eslint-plugin@8.62.1
-- @typescript-eslint/parser@8.62.1
-- @typescript-eslint/project-service@8.62.1
-- @typescript-eslint/scope-manager@8.62.1
-- @typescript-eslint/tsconfig-utils@8.62.1
-- @typescript-eslint/type-utils@8.62.1
-- @typescript-eslint/types@8.62.1
-- @typescript-eslint/typescript-estree@8.62.1
-- @typescript-eslint/utils@8.62.1
-- @typescript-eslint/visitor-keys@8.62.1
+- @typescript-eslint/eslint-plugin@8.70.0
+- @typescript-eslint/parser@8.70.0
+- @typescript-eslint/project-service@8.70.0
+- @typescript-eslint/scope-manager@8.70.0
+- @typescript-eslint/tsconfig-utils@8.70.0
+- @typescript-eslint/type-utils@8.70.0
+- @typescript-eslint/types@8.70.0
+- @typescript-eslint/typescript-estree@8.70.0
+- @typescript-eslint/utils@8.70.0
+- @typescript-eslint/visitor-keys@8.70.0
 - @vitejs/plugin-react-swc@4.3.1
 - @vitest/expect@4.1.11
 - @vitest/mocker@4.1.11
@@ -567,22 +587,15 @@ part of the shipped application.
 - acorn@8.18.0
 - ajv@6.15.0
 - ansi-regex@5.0.1
-- ansi-styles@4.3.0
 - ansi-styles@5.2.0
 - assertion-error@2.0.1
 - autoprefixer@10.5.2
-- balanced-match@1.0.2
 - balanced-match@4.0.4
 - bidi-js@1.1.0
-- brace-expansion@1.1.18
-- brace-expansion@5.0.9
+- brace-expansion@5.0.12
 - browserslist@4.28.9
-- callsites@3.1.0
+- cacheable@2.5.0
 - chai@6.2.2
-- chalk@4.1.2
-- color-convert@2.0.1
-- color-name@1.1.4
-- concat-map@0.0.1
 - convert-source-map@2.0.0
 - cross-spawn@7.0.6
 - css-tree@3.2.1
@@ -595,36 +608,38 @@ part of the shipped application.
 - es-module-lexer@2.3.2
 - escalade@3.2.0
 - escape-string-regexp@4.0.0
-- eslint-plugin-react-hooks@5.2.0
-- eslint-plugin-react-refresh@0.4.26
-- eslint@9.39.4
+- eslint-plugin-react-hooks@7.1.1
+- eslint-plugin-react-refresh@0.5.7
+- eslint@10.11.0
 - estree-walker@3.0.3
 - fast-deep-equal@3.1.3
 - fast-json-stable-stringify@2.1.0
 - fast-levenshtein@2.0.6
-- file-entry-cache@8.0.0
+- file-entry-cache@11.1.5
 - find-up@5.0.0
-- flat-cache@4.0.1
+- flat-cache@6.1.23
 - fraction.js@5.3.4
-- globals@14.0.0
-- globals@15.15.0
-- has-flag@4.0.0
+- gensync@1.0.0-beta.2
+- globals@17.12.0
+- hashery@1.5.1
+- hermes-estree@0.25.1
+- hermes-parser@0.25.1
+- hookified@1.15.1
+- hookified@2.2.0
 - html-encoding-sniffer@6.0.0
 - ignore@5.3.2
-- ignore@7.0.8
-- import-fresh@3.3.1
+- ignore@7.0.9
 - imurmurhash@0.1.4
 - indent-string@4.0.0
 - is-potential-custom-element-name@1.0.1
-- js-yaml@4.3.2
 - jsdom@29.1.1
-- json-buffer@3.0.1
+- jsesc@3.1.0
 - json-schema-traverse@0.4.1
 - json-stable-stringify-without-jsonify@1.0.1
-- keyv@4.5.4
+- json5@2.2.3
+- keyv@5.6.0
 - levn@0.4.1
 - locate-path@6.0.0
-- lodash.merge@4.6.2
 - lz-string@1.5.0
 - magic-string@0.30.21
 - min-indent@1.0.1
@@ -634,7 +649,6 @@ part of the shipped application.
 - optionator@0.9.4
 - p-limit@3.1.0
 - p-locate@5.0.0
-- parent-module@1.0.1
 - parse5@8.0.1
 - path-exists@4.0.0
 - path-key@3.1.1
@@ -643,18 +657,16 @@ part of the shipped application.
 - prelude-ls@1.2.1
 - pretty-format@27.5.1
 - punycode@2.3.1
+- qified@0.10.1
 - react-is@17.0.2
 - redent@3.0.0
 - require-from-string@2.0.2
-- resolve-from@4.0.0
 - rolldown@1.1.5
 - shebang-command@2.0.0
 - shebang-regex@3.0.0
 - stackback@0.0.2
 - std-env@4.2.0
 - strip-indent@3.0.0
-- strip-json-comments@3.1.1
-- supports-color@7.2.0
 - symbol-tree@3.2.4
 - tinybench@2.9.0
 - tinyexec@1.3.1
@@ -664,7 +676,7 @@ part of the shipped application.
 - tr46@6.0.0
 - ts-api-utils@2.5.0
 - type-check@0.4.0
-- typescript-eslint@8.62.1
+- typescript-eslint@8.70.0
 - undici-types@6.21.0
 - undici@7.29.1
 - update-browserslist-db@1.3.2
@@ -677,6 +689,8 @@ part of the shipped application.
 - word-wrap@1.2.5
 - xmlchars@2.2.0
 - yocto-queue@0.1.0
+- zod-validation-error@4.0.2
+- zod@4.6.5
 
 ### MIT-0 (2)
 
