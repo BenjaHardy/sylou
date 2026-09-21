@@ -168,7 +168,6 @@ export async function runToolLoop(
         });
 
       if (!nextRes.ok) {
-        currentToolCalls = [];
         break;
       }
 

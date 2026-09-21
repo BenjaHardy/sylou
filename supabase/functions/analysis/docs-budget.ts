@@ -32,7 +32,7 @@ export function resolveImportedDocs(
   importedDocs: ImportedDocRow[],
   docsAllowanceChars: number,
 ): ImportedDocsDecision {
-  let importedDocsSection = "";
+  let importedDocsSection: string;
   let importedDocsMode: "full_text" | "summaries" | "excluded" | "none" = "none";
   let importedDocsTotalChars = 0;
 

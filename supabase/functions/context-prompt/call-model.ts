@@ -38,7 +38,7 @@ export async function callChatModel(
   }
 
   const data = await res.json();
-  let rawText = "";
+  let rawText: string;
   if (providerFor(model) === "anthropic") {
     const blocks: any[] = data?.content ?? [];
     rawText = blocks.filter(b => b?.type === "text").map(b => b.text ?? "").join("");

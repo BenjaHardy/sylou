@@ -518,7 +518,7 @@ Deno.serve(async (req) => {
 
       const readable = new ReadableStream({
         async start(controller) {
-          let fullResponse = "";
+          let fullResponse: string;
 
           try {
             fullResponse = await readProviderStream(llmRes, providerFor(chatModel), {

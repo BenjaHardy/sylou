@@ -764,6 +764,7 @@ export async function fetchWithTimeout(
     if (controller.signal.aborted) {
       throw new Error(
         `Provider request timed out after ${Math.round(timeoutMs / 1000)}s`,
+        { cause: err },
       );
     }
     throw err;
