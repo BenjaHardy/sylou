@@ -221,7 +221,7 @@ The chat history, the writing-summary log, and the editor-action record are
 writable only by Sylou's server-side functions: a modified client cannot
 fabricate these FLOW inputs by writing to the database directly.
 
-NB: By design, the conversation memory (5.6) is **not** an input: the analysis
+NB: By design, the conversation memory (5.5) is **not** an input: the analysis
 always reads the full, raw chat history itself, never the summarized form.
 
 The analysis returns, for each pillar, its reasoning, cited evidence, a score (or
@@ -282,12 +282,12 @@ Below are Sylou's known limitations:
 - **Provenance doesn't survive leaving Sylou.** Copy your text into Word, Google
   Docs, or an email and the origin tags are gone. 
 
-- **The work-summary mechanism (5.1) is a faithful approximation, not a transcript.**
+- **The work-summary mechanism (5.1) is not a transcript.**
   It records the *state and substance* of the user's writing at each query so
-  contributions can be attributed correctly; it is not a verbatim, moment-by-
-  moment recording of the document.
+  contributions can be attributed correctly, and is not a moment-by-
+  moment recording of the document (see 5.1 for details and rationale).
 
-We'll keep this list honest and add to it as we learn more; material changes will be noted in release notes.
+We'll update this list as and where appropriate; material changes will be noted in release notes.
 
 ---
 
