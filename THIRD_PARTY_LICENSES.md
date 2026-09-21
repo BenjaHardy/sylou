@@ -434,7 +434,7 @@ part of the shipped application.
 - eslint-visitor-keys@5.0.1
 - expect-type@1.4.0
 - typescript@5.9.3
-- xml-name-validator@4.0.0
+- xml-name-validator@5.0.0
 
 ### Apache-2.0 AND MIT (11)
 
@@ -450,33 +450,34 @@ part of the shipped application.
 - @swc/core-win32-ia32-msvc@1.16.1
 - @swc/core-win32-x64-msvc@1.16.1
 
-### BlueOak-1.0.0 (1)
+### BlueOak-1.0.0 (2)
 
+- lru-cache@11.5.3
 - minimatch@10.2.6
 
-### BSD-2-Clause (10)
+### BSD-2-Clause (8)
 
-- entities@6.0.1
-- escodegen@2.1.0
+- entities@8.1.0
 - eslint-scope@8.4.0
 - espree@10.4.0
-- esprima@4.0.1
 - esrecurse@4.3.0
 - estraverse@5.3.0
 - esutils@2.0.3
 - uri-js@4.4.1
-- webidl-conversions@7.0.0
+- webidl-conversions@8.0.1
 
-### BSD-3-Clause (4)
+### BSD-3-Clause (2)
 
-- abab@2.0.6
 - esquery@1.7.0
-- source-map@0.6.1
-- tough-cookie@4.1.4
+- tough-cookie@6.0.2
 
 ### CC-BY-4.0 (1)
 
 - caniuse-lite@1.0.30001810
+
+### CC0-1.0 (1)
+
+- mdn-data@2.27.1
 
 ### ISC (8)
 
@@ -489,12 +490,21 @@ part of the shipped application.
 - siginfo@2.0.0
 - which@2.0.2
 
-### MIT (206)
+### MIT (185)
 
 - @adobe/css-tools@4.5.0
+- @asamuzakjp/css-color@5.1.11
+- @asamuzakjp/dom-selector@7.1.1
+- @asamuzakjp/generational-cache@1.0.1
+- @asamuzakjp/nwsapi@2.3.9
 - @babel/code-frame@7.29.7
 - @babel/helper-validator-identifier@7.29.7
 - @babel/runtime@7.29.7
+- @bramus/specificity@2.4.2
+- @csstools/css-calc@3.4.0
+- @csstools/css-color-parser@4.2.3
+- @csstools/css-parser-algorithms@4.0.0
+- @csstools/css-tokenizer@4.0.1
 - @emnapi/core@1.11.1
 - @emnapi/core@1.11.3
 - @emnapi/runtime@1.11.1
@@ -505,6 +515,7 @@ part of the shipped application.
 - @eslint-community/regexpp@4.12.2
 - @eslint/eslintrc@3.3.7
 - @eslint/js@9.39.4
+- @exodus/bytes@1.15.2
 - @napi-rs/wasm-runtime@1.2.3
 - @oxc-project/types@0.139.0
 - @rolldown/binding-android-arm64@1.1.5
@@ -528,7 +539,6 @@ part of the shipped application.
 - @testing-library/dom@10.4.1
 - @testing-library/jest-dom@6.9.1
 - @testing-library/react@16.3.2
-- @tootallnate/once@2.0.1
 - @tybys/wasm-util@0.10.3
 - @types/aria-query@5.0.4
 - @types/chai@5.2.3
@@ -553,49 +563,36 @@ part of the shipped application.
 - @vitest/snapshot@4.1.11
 - @vitest/spy@4.1.11
 - @vitest/utils@4.1.11
-- acorn-globals@7.0.1
 - acorn-jsx@5.3.2
-- acorn-walk@8.3.5
 - acorn@8.18.0
-- agent-base@6.0.2
 - ajv@6.15.0
 - ansi-regex@5.0.1
 - ansi-styles@4.3.0
 - ansi-styles@5.2.0
 - assertion-error@2.0.1
-- asynckit@0.4.0
 - autoprefixer@10.5.2
 - balanced-match@1.0.2
 - balanced-match@4.0.4
+- bidi-js@1.1.0
 - brace-expansion@1.1.18
 - brace-expansion@5.0.9
 - browserslist@4.28.9
-- call-bind-apply-helpers@1.0.2
 - callsites@3.1.0
 - chai@6.2.2
 - chalk@4.1.2
 - color-convert@2.0.1
 - color-name@1.1.4
-- combined-stream@1.0.8
 - concat-map@0.0.1
 - convert-source-map@2.0.0
 - cross-spawn@7.0.6
+- css-tree@3.2.1
 - css.escape@1.5.1
-- cssom@0.3.8
-- cssom@0.5.0
-- cssstyle@2.3.0
-- data-urls@3.0.2
+- data-urls@7.0.0
 - decimal.js@10.6.0
 - deep-is@0.1.4
-- delayed-stream@1.0.0
 - dom-accessibility-api@0.5.16
 - dom-accessibility-api@0.6.3
-- domexception@4.0.0
-- dunder-proto@1.0.1
-- es-define-property@1.0.1
 - es-module-lexer@2.3.2
-- es-object-atoms@1.1.2
-- es-set-tostringtag@2.1.0
 - escalade@3.2.0
 - escape-string-regexp@4.0.0
 - eslint-plugin-react-hooks@5.2.0
@@ -608,20 +605,11 @@ part of the shipped application.
 - file-entry-cache@8.0.0
 - find-up@5.0.0
 - flat-cache@4.0.1
-- form-data@4.0.6
 - fraction.js@5.3.4
-- get-intrinsic@1.3.0
-- get-proto@1.0.1
 - globals@14.0.0
 - globals@15.15.0
-- gopd@1.2.0
 - has-flag@4.0.0
-- has-symbols@1.1.0
-- has-tostringtag@1.0.2
-- html-encoding-sniffer@3.0.0
-- http-proxy-agent@5.0.0
-- https-proxy-agent@5.0.1
-- iconv-lite@0.6.3
+- html-encoding-sniffer@6.0.0
 - ignore@5.3.2
 - ignore@7.0.8
 - import-fresh@3.3.1
@@ -629,7 +617,7 @@ part of the shipped application.
 - indent-string@4.0.0
 - is-potential-custom-element-name@1.0.1
 - js-yaml@4.3.2
-- jsdom@20.0.3
+- jsdom@29.1.1
 - json-buffer@3.0.1
 - json-schema-traverse@0.4.1
 - json-stable-stringify-without-jsonify@1.0.1
@@ -639,34 +627,27 @@ part of the shipped application.
 - lodash.merge@4.6.2
 - lz-string@1.5.0
 - magic-string@0.30.21
-- math-intrinsics@1.1.0
-- mime-db@1.52.0
-- mime-types@2.1.35
 - min-indent@1.0.1
 - natural-compare@1.4.0
 - node-releases@2.0.54
-- nwsapi@2.2.27
 - obug@2.1.4
 - optionator@0.9.4
 - p-limit@3.1.0
 - p-locate@5.0.0
 - parent-module@1.0.1
-- parse5@7.3.0
+- parse5@8.0.1
 - path-exists@4.0.0
 - path-key@3.1.1
 - pathe@2.0.3
 - postcss-selector-parser@6.0.10
 - prelude-ls@1.2.1
 - pretty-format@27.5.1
-- psl@1.15.0
 - punycode@2.3.1
-- querystringify@2.2.0
 - react-is@17.0.2
 - redent@3.0.0
-- requires-port@1.0.0
+- require-from-string@2.0.2
 - resolve-from@4.0.0
 - rolldown@1.1.5
-- safer-buffer@2.1.2
 - shebang-command@2.0.0
 - shebang-regex@3.0.0
 - stackback@0.0.2
@@ -678,25 +659,29 @@ part of the shipped application.
 - tinybench@2.9.0
 - tinyexec@1.3.1
 - tinyrainbow@3.1.1
-- tr46@3.0.0
+- tldts-core@7.4.13
+- tldts@7.4.13
+- tr46@6.0.0
 - ts-api-utils@2.5.0
 - type-check@0.4.0
 - typescript-eslint@8.62.1
 - undici-types@6.21.0
-- universalify@0.2.0
+- undici@7.29.1
 - update-browserslist-db@1.3.2
-- url-parse@1.5.10
 - vite@8.1.3
 - vitest@4.1.11
-- w3c-xmlserializer@4.0.0
-- whatwg-encoding@2.0.0
-- whatwg-mimetype@3.0.0
-- whatwg-url@11.0.0
+- w3c-xmlserializer@5.0.0
+- whatwg-mimetype@5.0.0
+- whatwg-url@16.0.1
 - why-is-node-running@2.3.0
 - word-wrap@1.2.5
-- ws@8.21.3
 - xmlchars@2.2.0
 - yocto-queue@0.1.0
+
+### MIT-0 (2)
+
+- @csstools/color-helpers@6.1.1
+- @csstools/css-syntax-patches-for-csstree@1.1.14
 
 ### MPL-2.0 (12)
 
