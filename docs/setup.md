@@ -1,10 +1,7 @@
 # Self-hosting Sylou
 
-This guide walks through setting up your own Sylou instance from scratch. The goal is that anyone reasonably comfortable with a terminal and a web browser can complete it in 30–60 minutes the first time.
-
-The guide gives the full manual sequence; each step is short and explained as you go.
-
-If you get stuck at any step, please [open an issue](https://github.com/BenjaHardy/sylou/issues) — we'd rather know about a setup problem than have someone quietly give up.
+This guide walks through setting up your own Sylou instance from scratch, with the full manual sequence.
+If you get stuck at any step, please [open an issue](https://github.com/BenjaHardy/sylou/issues).
 
 ---
 
@@ -14,30 +11,27 @@ If you get stuck at any step, please [open an issue](https://github.com/BenjaHar
 
 **Accounts:**
 - A [Supabase](https://supabase.com) account (free tier works for personal and small-team use)
-- An API key from at least one LLM provider (Anthropic/Claude provides the more accurate and reliable FLOW analysis results and is therefore recommended as a default option for the FLOW analysis):
+- An API key from at least one LLM provider (among the usable APIs, both Anthropic/Claude and Mistral provide accurate and reliable FLOW analysis results and either of them is therefore recommended as a default option for the FLOW analysis):
   - [Anthropic](https://console.anthropic.com) for Claude models
   - [Mistral](https://console.mistral.ai) for Mistral models
-  - [DeepSeek](https://platform.deepseek.com) for DeepSeek models
 - Optionally, a [Brave Search](https://api.search.brave.com) API key if you want web search inside Sylou
 - A frontend hosting account ([Vercel](https://vercel.com), [Cloudflare Pages](https://pages.cloudflare.com), or any static host)
 
 **Tools installed locally:**
-- [Git](https://git-scm.com)
-- [Node.js](https://nodejs.org) v20 or later (and npm, which comes with it)
-- The [Supabase CLI](https://supabase.com/docs/guides/cli) (`npm install -g supabase` or via your OS package manager)
+- [Git](https://git-scm.com) (Note: The Git installer's defaults are fine; if you don't know Vim, choose Notepad as Git's default editor when asked.)
+- [Node.js](https://nodejs.org) v22.13 or later (and npm, which comes with it)
 
 **Time and budget:**
 - 30–60 minutes for first-time setup
-- LLM API usage costs depend on how much you use Sylou. Light personal use is typically a few dollars per month; multi-user deployments scale with usage. Set per-user budgets if cost matters — see [Operating your instance](#operating-your-instance).
+- LLM API usage costs depend on how much you use Sylou. Light personal use is typically a few dollars per month; multi-user deployments scale with usage. Set per-user budgets if needed; for more details, see [Operating your instance](#operating-your-instance).
 
-### A note on what Sylou is and isn't
+### A note on self-hosting Sylou
 
-Sylou is designed to be self-hosted. The Sylou project doesn't operate a hosted service for other users — the official `sylou.eu` instance is maintainer-only. When you self-host, *you* are the operator, and you're responsible for the instance you stand up. The Sylou project provides the code, the transparency mechanisms, and this guide; the rest is your call.
+By self-hosting, you become the operator of your instance and are responsible for your instance.
+Meaning, in practice:
 
-Two specific things this means:
-
-- **Your users' data lives on your Supabase project.** Nothing flows to the Sylou project. Data handling, retention, backups, and security are yours to define.
-- **You'll likely need to write your own Terms of Use and Privacy Policy** if you operate Sylou for anyone other than yourself. The Sylou project will provide template documents you can adapt — but they're starting points, not legal advice.
+- **Your users' data live on your Supabase project.** Nothing flows to the Sylou project. Data handling, retention, backups, and security are yours to define.
+- **You'll likely need to write your own Terms of Use, Privacy Policy, and other documents** if you operate Sylou for anyone other than yourself.
 
 See the [Operating your instance](#operating-your-instance) section near the end for more on this.
 
@@ -55,7 +49,7 @@ cd sylou
 Install the project's dependencies:
 
 ```bash
-npm install
+npm ci
 ```
 
 This installs the frontend tooling and shouldn't take more than a minute or two.
@@ -67,14 +61,14 @@ This installs the frontend tooling and shouldn't take more than a minute or two.
 1. Sign in to [Supabase](https://supabase.com) and click **New project**.
 2. Give the project a name (e.g. `sylou-myinstance`).
 3. Choose a **region** close to your users. For EU-based users, Frankfurt (`eu-central-1`) is a good default.
-4. Set a strong database password and save it somewhere safe — you won't need it for everyday Sylou operation, but you may need it later for direct database access.
+4. Set a strong database password and save it somewhere safe: you won't need it for everyday Sylou operation, but you may need it later for direct database access.
 5. Wait for the project to provision (1–2 minutes).
 
 Once provisioned, take note of the following values from the Supabase dashboard:
 
-- **Project Reference** — visible in **Settings → General**. Looks like `abcdefghijklmnop`.
-- **Project URL** — visible in **Settings → API**. Looks like `https://abcdefghijklmnop.supabase.co`.
-- **Publishable (anon) key** — also in **Settings → API**. Starts with `eyJ...`.
+- **Project ID**: visible in **Project Settings → General**. Looks like `abcdefghijklmnop`.
+- **Project URL**: visible in **Project Overview**. Looks like `https://abcdefghijklmnop.supabase.co`.
+- **Publishable (anon) key**: also in **Project Settings → API Keys (second tab)**. Starts with `eyJ...`.
 
 You'll use these in the next steps.
 
@@ -85,15 +79,15 @@ You'll use these in the next steps.
 In your terminal, from inside the `sylou` directory:
 
 ```bash
-supabase login
+npx supabase login
 ```
 
 This opens a browser for authentication.
 
-Then link the local project to your Supabase project:
+Once logged in, link the local project to your Supabase project:
 
 ```bash
-supabase link --project-ref YOUR-PROJECT-REF
+npx supabase link --project-ref YOUR-PROJECT-ID
 ```
 
 Replace `YOUR-PROJECT-REF` with the value from Step 2.
@@ -105,12 +99,12 @@ Replace `YOUR-PROJECT-REF` with the value from Step 2.
 The Sylou repository includes the full database schema as migration files. Apply them all:
 
 ```bash
-supabase db push
+npx supabase db push
 ```
 
-This creates all the tables, indexes, row-level security policies, database functions, and the storage bucket Sylou needs. The command should report each migration as applied; the whole process takes 30–60 seconds.
+This creates all the tables, indexes, row-level security policies, database functions, and the storage bucket Sylou needs. The command should report each migration as applied; the whole process takes 10–20 seconds.
 
-If you see errors, please [open an issue](https://github.com/BenjaHardy/sylou/issues) with the error output — first-run setup should work cleanly and any failure is a bug worth fixing.
+If you see errors, please [open an issue](https://github.com/BenjaHardy/sylou/issues) with the error output.
 
 ---
 
@@ -122,48 +116,51 @@ Sylou's edge functions read several configuration values as Supabase secrets. Yo
 
 Before setting secrets, decide:
 
-- **Which LLM providers** you want available - Sylou currently works with Anthopic/Claude, Mistral, and Deepseek. 
-Set the API key for each. You need at least one. The provider whose key isn't set will appear in Sylou's model picker but fail at runtime if a user selects it — so set keys for the providers you want users to actually have access to.
-Worth noting: based on our tests, Anthropic/Claude provides the more accurate and reliable FLOW analysis results and is therefore recommended (see TRANSPARENCY.md or CONTRIBUTING.md for more details); in any case, the LLM selected is disclosed in the analysis.
+- **Which LLM providers** you want available; Sylou currently works with Anthopic/Claude, Mistral, and Deepseek. 
+Set the API key for each you wish to use; and you need to have at least either Anthropic/Claude or Mistral (recommended models for FLOW analysis). The provider whose key isn't set will appear in Sylou's model picker but fail at runtime if a user selects it (TO-DO: instance-level model allowlist); set keys for the providers you want users to actually have access to.
 
-- **Whether you want web search.** Web search uses [Brave Search](https://api.search.brave.com); it's optional. If you don't set the Brave key, the web search toggle in Sylou's UI is greyed out with an explanatory tooltip — users see clearly that the feature isn't available rather than encountering broken behavior.
+- **Whether you want web search.** Web search uses [Brave Search](https://api.search.brave.com); it's optional. If you don't set the Brave key, the web search toggle in Sylou's UI is greyed out with an explanatory tooltip.
 
 ### Set the secrets
 
 In your terminal:
 
 ```bash
-# LLM provider keys — set at least one
-supabase secrets set ANTHROPIC_API_KEY=your-anthropic-key
-supabase secrets set MISTRAL_API_KEY=your-mistral-key
-supabase secrets set DEEPSEEK_API_KEY=your-deepseek-key
+# LLM provider keys: set at least one
+npx supabase secrets set ANTHROPIC_API_KEY=your-anthropic-key
+npx supabase secrets set MISTRAL_API_KEY=your-mistral-key
+npx supabase secrets set DEEPSEEK_API_KEY=your-deepseek-key
 
 # Optional: web search
-supabase secrets set BRAVE_SEARCH_API_KEY=your-brave-key
+npx supabase secrets set BRAVE_SEARCH_API_KEY=your-brave-key
 
 # CORS allow-list: the origin(s) where your Sylou frontend will be served
-# Use https://yourdomain.com here once you know it (Step 7).
+# Use your domain here once you know it:
+npx supabase secrets set ALLOWED_ORIGIN=https://yourdomain.com
+# If domain unknown, this step can be completed together with step 7.7.
 # Multiple origins comma-separated, no trailing slashes, no paths.
-supabase secrets set ALLOWED_ORIGIN=https://yourdomain.com
 
 # Instance metadata (shown on shared FLOW reports)
-supabase secrets set SYLOU_INSTANCE_LABEL=self-hosted
-supabase secrets set SYLOU_INSTANCE_DOMAIN=yourdomain.com
-supabase secrets set SYLOU_VERSION=v0.5.0
-supabase secrets set SYLOU_COMMIT_HASH=$(git rev-parse --short HEAD)
+npx supabase secrets set SYLOU_INSTANCE_LABEL=self-hosted
+npx supabase secrets set SYLOU_INSTANCE_DOMAIN=yourdomain.com
+# If domain unknown, can be done together with step 7.7 or left unset
+npx supabase secrets set SYLOU_VERSION=v0.7.0
+git rev-parse --short HEAD
+# returns the commit hash (7 characters) to be used in the next line
+npx supabase secrets set SYLOU_COMMIT_HASH=RETURNED_COMMIT_HASH
 ```
 
 A few notes:
 
-- **`ALLOWED_ORIGIN`** is critical and is the most common source of setup problems. It must contain the *exact* origin(s) where your frontend will be deployed (scheme + host, no trailing slash, no path). For example: `https://sylou.acme.edu` — not `sylou.acme.edu` and not `https://sylou.acme.edu/`. If this is wrong, all backend calls from the browser will be blocked by CORS with confusing error messages.
-- **`SYLOU_INSTANCE_LABEL`** should remain `self-hosted` for any deployment other than the upstream Sylou project. The value `official` is reserved for the upstream project (in case it ever welcomes external users directly in the future). Using `official` on a self-hosted instance would misrepresent it to anyone viewing a shared FLOW report.
-- **`SYLOU_VERSION` and `SYLOU_COMMIT_HASH`** appear in shared FLOW reports and the FLOW Pledge Badge so viewers can identify which version produced the report. Set them on each deploy — see [Deploys](#operating-your-instance) below.
+- **`ALLOWED_ORIGIN`** is critical and is the most common source of setup problems. It must contain the *exact* origin(s) where your frontend will be deployed (scheme + host, no trailing slash, no path). For example: `https://sylou.acme.edu`, not `sylou.acme.edu` and not `https://sylou.acme.edu/`. If this is wrong, all backend calls from the browser will be blocked by CORS.
+- **`SYLOU_INSTANCE_LABEL`** should remain `self-hosted` for any deployment other than the upstream Sylou project. The value `official` is reserved for the upstream project (in case it ever welcomes external users directly in the future). 
+- **`SYLOU_VERSION` and `SYLOU_COMMIT_HASH`** appear in shared FLOW reports and the FLOW Pledge Badge so viewers can identify which version produced the report. Set them on each deploy: see [Deploys](#operating-your-instance) below.
 - **You can leave any secret unset** and the system will use a safe default (the warning will appear in the function logs at startup so you can verify which keys are missing).
 
 You can verify the secrets were set:
 
 ```bash
-supabase secrets list
+npx supabase secrets list
 ```
 
 The values are masked but the names should all appear.
@@ -175,12 +172,12 @@ The values are masked but the names should all appear.
 Sylou has eight edge functions that handle chat, FLOW analysis, document import, account deletion, and other backend work. Deploy them all:
 
 ```bash
-supabase functions deploy
+npx supabase functions deploy
 ```
 
 This deploys every function defined in the `supabase/functions/` directory. Each function takes 5–15 seconds. Once complete, you should see all eight listed as deployed in **Edge Functions** in your Supabase dashboard.
 
-If you can't use the Supabase CLI for any reason, the same functions can be deployed manually via the Supabase dashboard's **Edge Functions** section. Note that dashboard deployment is significantly more fiddly (each function has multiple files, and the JWT verification toggle must be set manually for each — see `supabase/config.toml` for the correct settings). The CLI is strongly recommended.
+If you can't use the Supabase CLI for any reason, the same functions can be deployed manually via the Supabase dashboard's **Edge Functions** section. Note that dashboard deployment is significantly more fiddly (each function has multiple files, and the JWT verification toggle must be set manually for each; see `supabase/config.toml` for the correct settings). The CLI is strongly recommended.
 
 ---
 
@@ -207,10 +204,13 @@ The Sylou frontend is a static Vite-built React application. It can be deployed 
 7. **Important:** go back and update the `ALLOWED_ORIGIN` Supabase secret to include this URL exactly:
 
    ```bash
-   supabase secrets set ALLOWED_ORIGIN=https://your-project.vercel.app
+   npx supabase secrets set ALLOWED_ORIGIN=https://your-project.vercel.app
+   # If you've already configured a custom domain, use that instead. If you use both, comma-separate them.
+   
+   # Likewise, SYLOU_INSTANCE_DOMAIN can also be updated with the deployed Vercel URL if no custom domain is used.
+   npx supabase secrets set SYLOU_INSTANCE_DOMAIN=https://your-project.vercel.app
+   # Alternatively can be left unset; if so the FLOW badge says "Generated by a self-hosted instance" and the report footer shows "(domain not configured)"
    ```
-
-   (If you've already configured a custom domain, use that instead. If you use both, comma-separate them.)
 
 ### Alternative: Cloudflare Pages
 
@@ -226,7 +226,7 @@ The Sylou frontend is a static Vite-built React application. It can be deployed 
 
 ### Other hosts
 
-The frontend is a plain Vite SPA — it works on any static host. Two configuration points to be aware of:
+The frontend is a plain Vite SPA, it works on any static host. Two configuration points to be aware of:
 
 - **SPA fallback routing**: your host must serve `index.html` for any unknown route. On Netlify, Cloudflare Pages, and Vercel this is automatic. On generic static hosts, you may need to configure a fallback rule (e.g., `_redirects` file for Netlify-compatible hosts).
 - **Environment variables**: must be available at build time (Vite bakes them into the JS bundle), not just at runtime.
