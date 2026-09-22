@@ -92,7 +92,7 @@ export default function Auth() {
         {/* Open-source notice */}
         <aside className="w-full max-w-[400px] bg-muted/40 border border-border rounded-lg p-5">
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Sylou is an open-source, self-hostable writing environment that makes human-AI collaboration transparent. This is the maintainer's instance and is currently not open for public sign-up.
+            Sylou is an open-source, self-hostable writing environment that makes human-AI collaboration transparent.
           </p>
           <p className="text-xs text-muted-foreground leading-relaxed mt-3">
             To learn more about Sylou, visit{" "}

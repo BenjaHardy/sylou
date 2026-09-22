@@ -56,8 +56,11 @@ export function DisclaimerBody() {
         <p>
           This instance uses LLM APIs configured by the operator. When you send a message that
           involves an LLM, the contents of that message reach the LLM provider, who handles it
-          under their own terms and privacy policy. Sylou does not control what the LLM provider
-          does with that data.
+          under their own terms and privacy policy. Providers differ on whether such data may be
+          used to train their models: excluded by default, opt-out, or opt-in, depending on the
+          provider, the plan and the settings the operator has chosen. If in doubt, ask the
+          operator which provider and settings this instance uses; Sylou does not control what
+          the LLM provider does with that data.
         </p>
       </section>
 
