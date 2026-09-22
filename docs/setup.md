@@ -14,7 +14,8 @@ If you get stuck at any step, please [open an issue](https://github.com/BenjaHar
 - An API key from at least one LLM provider (among the usable APIs, both Anthropic/Claude and Mistral provide accurate and reliable FLOW analysis results and either of them is therefore recommended as a default option for the FLOW analysis):
   - [Anthropic](https://console.anthropic.com) for Claude models
   - [Mistral](https://console.mistral.ai) for Mistral models
-- Optionally, a [Brave Search](https://api.search.brave.com) API key if you want web search inside Sylou (optional, but needed if you wish the LLM to have access to latest available information online)
+  - Make sure to check and review the confidentiality settings of the API and adjust as desired 
+- Optionally, a [Brave Search](https://api.search.brave.com) API key if you want web search inside Sylou; note that Brave Search API's terms of services require to disable model training on data
 - A frontend hosting account ([Vercel](https://vercel.com), [Cloudflare Pages](https://pages.cloudflare.com), or any static host)
 
 **Tools installed locally:**
@@ -196,7 +197,7 @@ The Sylou frontend is a static Vite-built React application. It can be deployed 
 
    `VITE_PUBLIC_SITE_URL` is optional; if unset, the frontend uses the browser's current origin, which is the right default for most deployments. Only set it if you need to override (e.g., a reverse proxy where the public URL differs from the deployed origin).
 
-5. Click **Deploy**. Vercel handles the build and SPA routing automatically.
+5. Click **Create Project**. Vercel handles the build and SPA routing automatically.
 6. Note the deployed URL (e.g., `https://your-project.vercel.app` or your custom domain once configured).
 7. **Important:** go back and update the `ALLOWED_ORIGIN` Supabase secret to include this URL exactly:
 
