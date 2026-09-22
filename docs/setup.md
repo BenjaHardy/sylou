@@ -14,7 +14,7 @@ If you get stuck at any step, please [open an issue](https://github.com/BenjaHar
 - An API key from at least one LLM provider (among the usable APIs, both Anthropic/Claude and Mistral provide accurate and reliable FLOW analysis results and either of them is therefore recommended as a default option for the FLOW analysis):
   - [Anthropic](https://console.anthropic.com) for Claude models
   - [Mistral](https://console.mistral.ai) for Mistral models
-- Optionally, a [Brave Search](https://api.search.brave.com) API key if you want web search inside Sylou
+- Optionally, a [Brave Search](https://api.search.brave.com) API key if you want web search inside Sylou (optional, but needed if you wish the LLM to have access to latest available information online)
 - A frontend hosting account ([Vercel](https://vercel.com), [Cloudflare Pages](https://pages.cloudflare.com), or any static host)
 
 **Tools installed locally:**
@@ -236,19 +236,22 @@ This sequence confirms each major part of your Sylou instance is working, and ca
 
 **1. Sign in**
 
+First create your Sylou account in **Supabase**. The quickest way is: 
+Under **Authentication → Users → Add user**: *Create new user*: email + password, with **Auto Confirm User** ticked.
+
 Open your deployed Sylou URL (Vercel deployed URL or custom domain). Sign up with an email and password (this is your operator account: you'll be the only user unless you choose to add others).
 
 *Verifies: frontend is deployed, can reach Supabase, auth is working.*
 
 **2. Acknowledge the disclaimer**
 
-You'll see the first-use disclaimer modal. Acknowledge it.
+You'll see the first-use disclaimer modal, acknowledge it. The default screen will then show a quick summary of Sylou tips and functionalities. 
 
 *Verifies: the disclaimer system is working.*
 
 **3. Create your first project**
 
-Click **+ New Project**. Use the **General** template. Give it a name.
+By clicking **+ New Project**.
 
 *Verifies: projects can be created, the database is writable.*
 
@@ -256,17 +259,17 @@ Click **+ New Project**. Use the **General** template. Give it a name.
 
 Click into the editor and type a few sentences.
 
-*Verifies: the editor renders and accepts input; provenance tracking is recording your typing as `[t]`.*
+*Verifies: the editor renders and accepts input; provenance tracking (button on the top right) is recording your typing as `[t]`.*
 
 **5. Send a chat message**
 
-In the chat panel on the right, type something like *"Suggest three angles for an essay on climate adaptation."* Send it.
+First choose a chat model in the settings: click on your account at the bottom left → Settings → Models tab.
 
 *Verifies: the `chat` edge function is deployed and reachable, your LLM provider key is correct, CORS is configured properly. If this fails with a network error, the most likely cause is a mismatch between `ALLOWED_ORIGIN` and your actual deployed URL.*
 
 **6. Use Ask or Propose**
 
-In the editor, select a sentence you typed. In the contextual menu, click **Ask** or **Propose** and type a question about the selected text. Confirm a response appears (Ask -> in the chat; Propose -> in a dedicated window).
+In the editor, select a sentence you typed. In the contextual menu, click **Ask** or **Propose** and type a question about the selected text. Confirm a response appears (Ask -> in the chat; Propose -> in a dedicated window). Both Ask and Propose allow for context-aware AI feedback, meaning that prior to responding the LLM receives, in addition to the selected text, all relevant information from the project (writing contents and creative writing tools where applicable) to answer the query. 
 You may also check that the other editor actions are working too, when selecting a sentence: Expand, Simplify, Rephrase, Fix grammar, Translate.
 
 *Verifies: the `context-prompt` edge function is deployed correctly, the `editor-action` edge function is deployed correctly.*
@@ -279,7 +282,7 @@ In the chat panel header, toggle on **Tutor mode**. Send another message. The re
 
 **8. Test a creative writing tool**
 
-Create a second project, this time choosing the **Creative** template. Use one of the creative writing tools (Worldbuilding, Character Diagram, Timeline) in the dedicated tabs. Feel free to try and use Ask, it should have context awareness of the creative tool contents and of the writing contents.
+Create a second project, this time choosing the **Creative** template. Use one of the creative writing tools (Worldbuilding, Character Diagram, Timeline) in the dedicated tabs. Feel free to try and use Ask or Propose, it should have context awareness of both the creative tool contents and of the writing contents.
 
 *Verifies: the creative template loads properly.*
 
@@ -311,17 +314,17 @@ A few things worth knowing once your Sylou instance is running.
 
 ### Managing users
 
-Sylou's sign-in page has no self-registration: accounts exist only when the operator creates them, and users then sign in with email + password, set or reset through an email link. Two settings make that explicit and fail-closed:
+Sylou's sign-in page has no self-registration: accounts exist only when the operator creates them, and users then sign in with email + password, set or reset through an email link. 
 
-- **Close sign-ups** under **Authentication → Providers → Email** ("Allow new users to sign up" off). Recommended for any deployment serving identified users; with it off, nothing outside your dashboard can create an account.
+- **Close sign-ups** under **Authentication → Sign In/Providers**: "Allow new users to sign up" → off. Recommended for any deployment serving identified users; with it off, nothing outside your dashboard can create an account.
 - **Set the auth URLs** under **Authentication → URL Configuration**: *Site URL* = your frontend origin (e.g. `https://sylou.example`), and add `https://sylou.example/**` to *Redirect URLs*. Without this, every email link redirects to Supabase's default `http://localhost:3000`.
 
 **Creating accounts.** Under **Authentication → Users → Add user**:
 
 - *Create new user*: email + a temporary password, with **Auto Confirm User** ticked. Sends no email; share the credentials out of band. The quickest path for a handful of users or testers.
-- *Invite user*: sends an invitation email. Requires the template change below, so the invitee lands on Sylou's set-password page rather than straight in the app without a password.
+- *Invite user*: sends an invitation email. Requires the email template change below, so the invitee lands on Sylou's set-password page (rather than straight in the app without a password).
 
-**Email templates.** Sylou handles invitations and password resets on `/auth/set-password`. Under **Authentication → Email Templates**, point the links at that page:
+**Email templates.** Sylou handles invitations and password resets on `/auth/set-password`. Under **Authentication → Emails → Templates (tab)**, point the links at that page (note: requires SMTP):
 
 - *Invite user*: `{{ .SiteURL }}/auth/set-password?token_hash={{ .TokenHash }}&type=invite`
 - *Reset password*: `{{ .SiteURL }}/auth/set-password?token_hash={{ .TokenHash }}&type=recovery`
@@ -371,17 +374,19 @@ ORDER BY total_tokens DESC;
 
 ### Updating to new Sylou versions
 
-When you want to update to a newer Sylou release:
+When you want to update to a newer Sylou release, simply go to your repository on GitHub, and click **Sync fork**
+Then when using the prompt console in your local Sylou directory:
 
 1. Pull the latest code: `git pull` in your local repository.
-2. If there are new database migrations: `supabase db push`.
-3. Redeploy the edge functions: `supabase functions deploy`.
+2. If there are new database migrations: `npx supabase db push`.
+3. Redeploy the edge functions: `npx supabase functions deploy`.
 4. Update the version secrets:
    ```bash
-   supabase secrets set SYLOU_VERSION=v0.6.0  # or whatever the new release is
-   supabase secrets set SYLOU_COMMIT_HASH=$(git rev-parse --short HEAD)
+   npx supabase secrets set SYLOU_VERSION=v0.6.0  # or whatever the new release is
+   git rev-parse --short HEAD
+   npx supabase secrets set SYLOU_COMMIT_HASH=RETURNED_COMMIT_HASH
    ```
-5. Push the updated code to your frontend host (Vercel/Cloudflare auto-redeploys from GitHub).
+5. Your frontend host (Vercel/Cloudflare) auto-redeploys from GitHub.
 
 The version and commit hash appear in shared FLOW reports, so keeping them updated lets viewers verify which version produced a given report.
 
@@ -393,11 +398,11 @@ A few common issues and their fixes.
 
 **Chat or analysis returns a network error in the browser.**
 
-Almost always a CORS misconfiguration. Open your browser's developer tools, look at the Network tab, and find the failed request. Check the response headers for `Access-Control-Allow-Origin` — if it's missing or doesn't match your deployed URL exactly, update `ALLOWED_ORIGIN` to include the correct value (no trailing slash, no path). After updating, the change takes effect on the next request.
+Almost always a CORS misconfiguration. Open your browser's developer tools, look at the Network tab, and find the failed request. Check the response headers for `Access-Control-Allow-Origin`: if it's missing or doesn't match your deployed URL exactly, update `ALLOWED_ORIGIN` to include the correct value (no trailing slash, no path). After updating, the change takes effect on the next request.
 
 **Sign-in works but every backend call returns 403.**
 
-You've hit the token budget. Either you're a user with a non-NULL budget that's been exceeded, or there's stale data. Check your profile:
+You've hit the token budget. Either you're a user with a non-NULL budget that's been exceeded, or there's stale data. Check your profile in Supabase:
 
 ```sql
 SELECT email, tokens_used_this_period, monthly_token_budget
@@ -410,23 +415,23 @@ If `monthly_token_budget` is set and the usage exceeds it, either reset the usag
 
 The user selected a model whose provider key isn't configured. Either set the key for that provider, or use a model from a provider whose key is set.
 
-**`supabase db push` fails with permission errors.**
+**`npx supabase db push` fails with permission errors.**
 
 Confirm you're linked to the right project (`supabase status` shows the current linked project). If you're on a fresh project, this should work cleanly; if it doesn't, please open an issue.
 
 **Edge functions deploy successfully but return 500 errors at runtime.**
 
-Check the function logs in the Supabase dashboard under **Edge Functions → [function name] → Logs**. The most common cause is a missing secret — the function startup log will tell you which.
+Check the function logs in the Supabase dashboard under **Edge Functions → [function name] → Logs**. The most common cause is a missing secret, the function startup log will tell you which.
 
 **Web search returns no results even with `BRAVE_SEARCH_API_KEY` set.**
 
-Confirm the key is correct (the Brave Search dashboard shows your usage; you should see requests appearing). Brave's free tier has request limits — at higher usage, you may need to upgrade.
+Confirm the key is correct (the Brave Search dashboard shows your usage; you should see requests appearing). Brave's free tier has request limits, so at higher usage, you may need to upgrade.
 
 **Shared FLOW report URLs point to the wrong domain.**
 
 You set `VITE_PUBLIC_SITE_URL` to a value that doesn't match where you actually deployed. Either remove the env var entirely (it defaults to the browser's current origin, which is usually correct) or update it to the right value and redeploy.
 
-If you encounter something not in this list, please open an issue — the troubleshooting section grows as real users encounter real problems.
+If you encounter something not in this list, please open an issue; the troubleshooting section may grow as real users encounter real problems.
 
 ---
 
