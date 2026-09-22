@@ -104,7 +104,17 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
 
           {/* Language */}
           <div className="space-y-1.5">
-            <Label>Language</Label>
+            <div className="flex items-center gap-2">
+              <Label>Language</Label>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[240px] text-xs">
+                  Sets the language of the FLOW report for this project; it cannot be changed after project creation.
+                </TooltipContent>
+              </Tooltip>
+            </div>
             <Select value={language} onValueChange={setLanguage}>
               <SelectTrigger>
                 <SelectValue />
