@@ -10,7 +10,7 @@
 
 # Sylou
 
-**Process-based AI-use transparency - an open-source writing environment that makes human-AI collaboration visible.**
+**Process-based AI-use transparency. An open-source writing environment that makes human-AI collaboration visible and shareable: across research, ideas, structure and prose.**
 
 > [!TIP]
 > **New here?** Learn more at [meetsylou.eu](https://www.meetsylou.eu), and [share feedback](https://tally.so/r/KYvxyz) to help us out and for occasional updates on Sylou.
