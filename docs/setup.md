@@ -42,7 +42,7 @@ Meaning, in practice:
 Sylou is deployed from a GitHub repository that belongs to you, so start by making your copy.
 
 1. Sign in to GitHub and open https://github.com/BenjaHardy/sylou
-2. Click **Fork** (top right), keep the defaults, and click **Create fork**.
+2. Ensure you are in the main (default) branch, then click **Fork** (top right), keep the defaults, and click **Create fork**.
 3. Open your prompt console to clone your fork and install the dependencies:
 
 ```bash
