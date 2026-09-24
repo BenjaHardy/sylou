@@ -1,0 +1,32 @@
+-- flow_reports_public: no privileges for the user roles, at all.
+--
+-- Found while checking the Data API grants on a fresh staging install
+-- (2026-09-24). The view was created in 20260522111654, when Supabase still
+-- granted ALL privileges on every new public relation to anon, authenticated
+-- and service_role; 20260704000100 then revoked SELECT from the two user
+-- roles (shared reports are read only through the get_shared_report RPC,
+-- which runs as the view's owner). INSERT, UPDATE, DELETE, TRUNCATE,
+-- REFERENCES and TRIGGER stayed behind — verified on production before this
+-- migration was written.
+--
+-- Why that mattered: the view is owner-executed (no security_invoker), so
+-- it bypasses row-level security on flow_reports; a single-table view over
+-- plain columns is automatically updatable in Postgres; and PostgREST
+-- accepts writes on updatable views. An unfiltered PATCH or DELETE on
+-- /rest/v1/flow_reports_public needs no SELECT privilege and would have
+-- reached every publicly shared report at once. Production was fixed by
+-- hand with the statement below on 2026-09-24; this migration makes every
+-- install match.
+--
+-- No application impact: nothing reads or writes the view under anon or
+-- authenticated (SharedReport.tsx calls the RPC), and the SECURITY DEFINER
+-- function is unaffected — it runs as postgres, which keeps its privileges.
+-- Idempotent: revoking an absent privilege is a no-op.
+--
+-- Rule for any future owner-executed view: REVOKE ALL from anon,
+-- authenticated and PUBLIC right after CREATE VIEW, then GRANT SELECT only
+-- if the roles are meant to read it. src/lib/__tests__/
+-- migrations-privileges.test.ts now fails CI if a user role holds anything
+-- beyond SELECT on a view.
+
+REVOKE ALL ON public.flow_reports_public FROM PUBLIC, anon, authenticated;
