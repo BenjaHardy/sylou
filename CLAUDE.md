@@ -120,12 +120,18 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   tables gate on `owns_project(project_id)`. There is **no role system
   today** `(not yet implemented)` — if roles are ever added, put them in a
   dedicated `user_roles` table, never on profiles or client storage.
-- **Migrations**: every `public` `CREATE TABLE` is followed by
-  `ENABLE ROW LEVEL SECURITY` and per-op policies (`TO authenticated`,
-  USING/WITH CHECK on ownership). Add an explicit `GRANT` only where a
-  non-default role needs access — e.g. `GRANT SELECT … TO anon` on the
-  sanitized `flow_reports_public` view. Tables otherwise rely on the
-  default `authenticated`-role grants + RLS.
+- **Migrations**: every `public` `CREATE TABLE` is followed, in the same
+  migration, by `ENABLE ROW LEVEL SECURITY`, per-op policies
+  (`TO authenticated`, USING/WITH CHECK on ownership) **and explicit
+  grants**: to `authenticated` exactly the operations that have a policy,
+  `ALL` to `service_role`, nothing to `anon` on base tables (its reads go
+  through the granted `flow_reports_public` view and the
+  `get_shared_report` RPC), and `TRUNCATE, REFERENCES, TRIGGER` revoked
+  from both user roles. Supabase no longer grants Data API access to new
+  tables automatically (`20260925120000` explains and applies this to the
+  17 existing tables), and `src/lib/__tests__/migrations-privileges.test.ts`
+  replays the migrations in CI and fails when grants and policies disagree.
+  RLS remains the layer that restricts rows; grants only mirror it.
 - **RLS perf (`auth_rls_initplan`)**: the advisor wants `auth.uid()` wrapped as
   `(select auth.uid())` so it's evaluated once per statement, not per row.
   Applied everywhere, including the two `profiles` policies since
