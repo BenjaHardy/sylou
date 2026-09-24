@@ -99,7 +99,16 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   (DELETE policy dropped, `20260904120000`): a direct thread delete would
   cascade away that thread's `chat_messages`, side-stepping the lockdown.
   The UI never offered thread deletion; project deletion still cascades
-  normally (FK referential actions bypass RLS). The per-thread **conversation memory**
+  normally (FK referential actions bypass RLS). The same rule covers the
+  **report evidence** (`20260924120000`): `flow_reports` rows are inserted
+  only by the `analysis` function through its service-role client (user
+  INSERT/DELETE policies dropped; users keep SELECT and UPDATE for share
+  toggles and feedback), and `writing_versions` is user-undeletable (the
+  client inserts versions; the replay timeline must not be thinned).
+  `token_usage` is the deliberate exception: its user INSERT policy stays,
+  because the RLS-scoped user client writes the usage row precisely so its
+  `user_id` is bound to the caller — it is an audit log that neither FLOW
+  nor the budget counter reads. The per-thread **conversation memory**
   (`chat_thread_summaries`, maintained by `_shared/_conversation_memory.ts`
   in the chat/context-prompt stream tails) follows the same pattern —
   user-read-only, service-role writes, injected into chat and

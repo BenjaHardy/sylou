@@ -734,7 +734,14 @@ ${writePillarNotice}`;
     replayEvents.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
     // --- Store FLOW report ---
-    const { data: report, error: reportErr } = await supabase
+    // Service-role write (write-surface lockdown, CLAUDE.md §4): the user
+    // INSERT policy on flow_reports was dropped in 20260924120000 so a
+    // report row can only come from this function — never forged through
+    // a direct PostgREST insert and then shared as if Sylou produced it.
+    // Ownership was verified at request entry (the RLS-scoped project
+    // fetch above), and user_id never enters this row: the report is
+    // reached through project_id → projects.user_id.
+    const { data: report, error: reportErr } = await adminSupabase
       .from("flow_reports")
       .insert({
         project_id: projectId,
