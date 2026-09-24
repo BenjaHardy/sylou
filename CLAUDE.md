@@ -132,6 +132,14 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   17 existing tables), and `src/lib/__tests__/migrations-privileges.test.ts`
   replays the migrations in CI and fails when grants and policies disagree.
   RLS remains the layer that restricts rows; grants only mirror it.
+  **Views** are the exception that bites: an owner-executed view bypasses
+  RLS on its base table and, when auto-updatable, accepts writes through
+  PostgREST — so `REVOKE ALL … FROM PUBLIC, anon, authenticated` right
+  after `CREATE VIEW`, and `GRANT SELECT` only if the roles are meant to
+  read it (`flow_reports_public` grants nothing: shared reports are read
+  through the `get_shared_report` RPC; `20260925130000` closed the
+  leftover write privileges found on production). The lint fails when a
+  user role holds more than SELECT on a view.
 - **RLS perf (`auth_rls_initplan`)**: the advisor wants `auth.uid()` wrapped as
   `(select auth.uid())` so it's evaluated once per statement, not per row.
   Applied everywhere, including the two `profiles` policies since

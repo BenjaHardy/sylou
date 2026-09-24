@@ -17,7 +17,11 @@
 //   4. anon holds nothing on base tables (its reads go through the granted
 //      view and RPC);
 //   5. no user role holds TRUNCATE, REFERENCES or TRIGGER;
-//   6. profiles keeps its column-level-only UPDATE (the budget freeze).
+//   6. profiles keeps its column-level-only UPDATE (the budget freeze);
+//   7. on a view, a user role holds at most SELECT — an owner-executed view
+//      bypasses RLS on its base table and is writable through PostgREST
+//      when it is auto-updatable (the flow_reports_public finding of
+//      2026-09-24, see 20260925130000).
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -33,6 +37,7 @@ type Role = (typeof ROLES)[number];
 type Priv = (typeof ALL_PRIVS)[number];
 
 interface TableState {
+  kind: "table" | "view";
   rls: boolean;
   policies: Map<string, string>; // policy name -> command (SELECT/INSERT/UPDATE/DELETE/ALL)
   grants: Record<Role, Map<Priv, "table" | "column">>;
@@ -40,11 +45,11 @@ interface TableState {
 
 function replayMigrations(): Map<string, TableState> {
   const tables = new Map<string, TableState>();
-  const table = (raw: string): TableState => {
+  const table = (raw: string, kind: "table" | "view" = "table"): TableState => {
     const name = raw.replace(/^public\./i, "").toLowerCase();
     let s = tables.get(name);
     if (!s) {
-      s = { rls: false, policies: new Map(), grants: { anon: new Map(), authenticated: new Map(), service_role: new Map() } };
+      s = { kind, rls: false, policies: new Map(), grants: { anon: new Map(), authenticated: new Map(), service_role: new Map() } };
       tables.set(name, s);
     }
     return s;
@@ -59,6 +64,7 @@ function replayMigrations(): Map<string, TableState> {
       const s = stmt.trim();
       let m: RegExpMatchArray | null;
       if ((m = s.match(/^CREATE TABLE (?:IF NOT EXISTS )?(public\.[a-z_]+)/i))) table(m[1]);
+      else if ((m = s.match(/^CREATE (?:OR REPLACE )?VIEW (public\.[a-z_]+)/i))) table(m[1], "view");
       else if ((m = s.match(/^ALTER TABLE (?:ONLY )?(public\.[a-z_]+) ENABLE ROW LEVEL SECURITY/i))) table(m[1]).rls = true;
       else if ((m = s.match(/^DROP POLICY (?:IF EXISTS )?"([^"]+)" ON (public\.[a-z_]+)/i))) table(m[2]).policies.delete(m[1]);
       else if ((m = s.match(/^CREATE POLICY "([^"]+)" ON (public\.[a-z_]+)(?: AS \w+)? FOR (\w+)/i))) {
@@ -66,7 +72,7 @@ function replayMigrations(): Map<string, TableState> {
       } else if ((m = s.match(/^(GRANT|REVOKE) (.+?) ON (?:TABLE )?(public\.[a-z_]+) (?:TO|FROM) (.+)$/i))) {
         const [, verb, privText, target, roleText] = m;
         const name = target.replace(/^public\./i, "").toLowerCase();
-        if (!tables.has(name)) continue; // a view or something else that is not a created table
+        if (!tables.has(name)) continue; // not a created table or view (functions never match this shape)
         const state = tables.get(name)!;
         const roles = roleText.split(",").map((r) => r.trim().toLowerCase()).filter((r): r is Role => (ROLES as readonly string[]).includes(r));
         const privs: Array<{ priv: Priv; column: boolean }> = [];
@@ -86,7 +92,9 @@ function replayMigrations(): Map<string, TableState> {
   return tables;
 }
 
-const tables = replayMigrations();
+const relations = replayMigrations();
+const tables = new Map([...relations].filter(([, s]) => s.kind === "table"));
+const views = new Map([...relations].filter(([, s]) => s.kind === "view"));
 const names = [...tables.keys()].sort();
 const policyOps = (s: TableState): string[] => {
   const ops = new Set<string>();
@@ -134,5 +142,20 @@ describe("migrations: grants mirror RLS on every public table", () => {
     expect(dmlGrants(tables.get("writing_versions")!, "authenticated")).toEqual(["INSERT", "SELECT"]);
     // The budget freeze: UPDATE on profiles is column-level only.
     expect(tables.get("profiles")!.grants.authenticated.get("UPDATE")).toBe("column");
+  });
+
+  it("on a view, a user role holds at most SELECT", () => {
+    expect([...views.keys()]).toContain("flow_reports_public");
+    for (const [name, s] of views) {
+      for (const role of ["anon", "authenticated"] as const) {
+        const held = [...s.grants[role].keys()].filter((p) => p !== "SELECT");
+        expect(held, `${name}/${role}`).toEqual([]);
+      }
+    }
+    // Shared reports are read only through the get_shared_report RPC:
+    // the user roles hold nothing on the view, not even SELECT.
+    for (const role of ["anon", "authenticated"] as const) {
+      expect([...views.get("flow_reports_public")!.grants[role].keys()], role).toEqual([]);
+    }
   });
 });
