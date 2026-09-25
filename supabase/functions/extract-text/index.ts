@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
         .select("preferred_chat_model")
         .eq("id", user.id)
         .single();
-      const summaryModel = profile?.preferred_chat_model || "mistral-medium-3-5";
+      const summaryModel = profile?.preferred_chat_model || "zai-glm-5-2";
       const provider = providerFor(summaryModel);
 
       if (!Deno.env.get(envKeyFor(provider))) {
