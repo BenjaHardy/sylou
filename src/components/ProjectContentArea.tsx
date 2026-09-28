@@ -122,13 +122,6 @@ const LazyPanelFallback = () => (
 export function ProjectContentArea({ project, onFlowLoadingChange, onFlushRef }: Props) {
   const [chatExpanded, setChatExpanded] = useState(false);
   const [conciseMode, setConciseMode] = useState(false);
-  // The session-wide concise toggle follows the profile default: applied when
-  // the profile loads and again whenever the user changes the default in
-  // Settings, so "Default to concise responses" takes effect at once rather
-  // than at the next page load (the previous seed-once logic only read it on
-  // first load; this component is reused across projects, so new projects
-  // in the same session never saw a changed default). A manual toggle in the
-  // chat panel still holds until the default is changed again.
   const { settings: _userSettings } = useUserSettings();
   useEffect(() => {
     setConciseMode(_userSettings.default_concise_mode);
