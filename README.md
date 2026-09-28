@@ -3,7 +3,7 @@
   <img src="docs/assets/sylou-logo.png" alt="Sylou" width="200" />
 </p>
 <p align="center">
-  <a href="https://www.meetsylou.eu"><strong>meetsylou.eu</strong></a>
+  <a href="https://meetsylou.eu"><strong>meetsylou.eu</strong></a>
   &nbsp;·&nbsp;
   <a href="https://tally.so/r/KYvxyz">Share feedback</a>
 </p>
@@ -13,7 +13,7 @@
 **Process-based AI-use transparency. An open-source writing environment that makes human-AI collaboration visible and shareable: across research, ideas, structure and prose.**
 
 > [!TIP]
-> **New here?** Learn more at [meetsylou.eu](https://www.meetsylou.eu), and [share feedback](https://tally.so/r/KYvxyz) to help us out and for occasional updates on Sylou.
+> **New here?** Learn more at [meetsylou.eu](https://meetsylou.eu), and [share feedback](https://tally.so/r/KYvxyz) to help us out and for occasional updates on Sylou.
 
 Sylou is a text editor that helps you write with AI assistance and analyses your collaboration with AI using a standardized framework that looks into the processes of writing: where ideas came from, what got structured by whom, how the prose itself was shaped, etc.
 As it's becoming ever more difficult to understand *how* AI was used to produce a writing, with standard detection tools being occasionally unreliable and missing the full picture, Sylou aims to flip the problem: helping users gather evidence and proactively demonstrate how they have used AI, using a standardized framework that looks into the processes of writing, producing visual and shareable reports along the way.
@@ -41,6 +41,13 @@ O — Organize: structure and argumentation (structure it)
 W — Write: writing and authorship (write it)
    
 The transparency architecture, covering all the means, whats, whys, hows to achieve this goal, is detailed in a separate and dedicated document, in case you're interested or plan to contribute: [TRANSPARENCY.md](TRANSPARENCY.md).
+
+<p align="center">
+  <a href="https://sylou.eu/report/33fbcecf-3efb-4ed2-a59c-58bd19b4971b"><img src="https://meetsylou.eu/assets/badge-runga-ahi-radar.png" width="280" alt="FLOW Pledge Badge for Runga Ahi: radar chart of the four pillar scores"></a>
+  <a href="https://sylou.eu/report/65f1ed5f-6173-4fcd-aa6a-3ad9842fd61e"><img src="https://meetsylou.eu/assets/badge-detection-to-transparency-radar.png" width="280" alt="FLOW Pledge Badge for From Detection to Transparency: radar chart of the four pillar scores"></a>
+  <a href="https://sylou.eu/report/47860893-6177-458f-bb2e-6abc25fcbd52"><img src="https://meetsylou.eu/assets/badge-antlerbranches-radar.png" width="280" alt="FLOW Pledge Badge for The Antlerbranches: radar chart of the four pillar scores"></a>
+</p>
+<p align="center"><em>FLOW Pledge Badges from three of the maintainer's own projects: click one to open its shared report. More on <a href="https://meetsylou.eu/#examples">meetsylou.eu</a>.</em></p>
 
 ---
 
@@ -140,7 +147,7 @@ Sylou's transparency mechanisms and FLOW methodology are designed by the maintai
 
 ## Learn more
 
-- **Project landing page**: [meetsylou.eu](https://www.meetsylou.eu)
+- **Project landing page**: [meetsylou.eu](https://meetsylou.eu)
 - **About Sylou and FLOW**: linked from the landing page, plus the documentation in this repo
 - **Feedback or questions**: [contact@sylou.eu](mailto:contact@sylou.eu), or open an issue
 
