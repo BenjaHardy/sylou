@@ -2,6 +2,8 @@
 // the client-side mirror of the edge functions' _shared/_models checks.
 import { describe, it, expect } from "vitest";
 import {
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_FLOW_MODEL,
   FLOW_OTHER_GROUP_ID,
   FLOW_RECOMMENDED_GROUP_ID,
   MODELS,
@@ -51,6 +53,13 @@ describe("MODELS registry", () => {
 
   it("the recommendation lives in the flag, not in note wording (the FLOW group conveys it)", () => {
     for (const m of MODELS) expect(m.note ?? "", m.id).not.toMatch(/recommended/i);
+  });
+
+  it("the defaults for new profiles are GLM 5.2 (maintainer decision 2026-09-25) and exist in the registry", () => {
+    expect(DEFAULT_CHAT_MODEL).toBe("zai-glm-5-2");
+    expect(DEFAULT_FLOW_MODEL).toBe("zai-glm-5-2");
+    expect(MODELS.map((m) => m.id)).toContain(DEFAULT_CHAT_MODEL);
+    expect(MODELS.find((m) => m.id === DEFAULT_FLOW_MODEL)?.flowRecommended).toBe(true);
   });
 });
 

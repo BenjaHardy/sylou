@@ -171,5 +171,8 @@ export function groupModelsForFlow(models: ModelInfo[] = MODELS): ModelGroup[] {
   return groups.filter((g) => g.models.length > 0);
 }
 
-export const DEFAULT_CHAT_MODEL = "mistral-medium-3-5";
-export const DEFAULT_FLOW_MODEL = "mistral-medium-3-5";
+// Defaults for new profiles (mirrored by the profiles column defaults in
+// migration 20260925140000 and by the edge functions' NULL-preference
+// fallback). GLM 5.2 since 2026-09-25 (was Mistral Medium 3.5).
+export const DEFAULT_CHAT_MODEL = "zai-glm-5-2";
+export const DEFAULT_FLOW_MODEL = "zai-glm-5-2";
