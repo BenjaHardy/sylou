@@ -22,6 +22,8 @@ Sylou's whole point is to make human-AI collaboration visible for users willing 
 
 Additionally, it can further be used in an educational context as a means to promote one's own AI-use awareness, and help serve as a framework for AI-use.
 
+https://github.com/user-attachments/assets/da67993d-da0b-440f-bb94-2fb8d1c3175a
+
 ---
 
 ## The FLOW methodology
