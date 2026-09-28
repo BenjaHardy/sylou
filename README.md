@@ -79,7 +79,7 @@ Setup is documented in [**docs/setup.md**](docs/setup.md). At a high level, you'
 - A Supabase project (free tier works for personal use)
 - API keys for at least one LLM provider (currently recommended with either Anthropic or Mistral). For the FLOW analysis, both Claude Sonnet 4.6 and up from Anthropic API, or Z.ai GLM 5.2 from Mistral API, are recommended options
 - A few environment variables
-- About 15–30 minutes for first-time setup
+- About 30-60 minutes for first-time setup
 
 The same self-hosted instance can be used by a single person, a small team, an academic department, or a community; whatever fits.
 Self-hosters can set per-user token budgets via SQL; see docs/setup.md for details.
