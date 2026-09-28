@@ -89,7 +89,7 @@ Once logged in, link the local project to your Supabase project:
 npx supabase link --project-ref YOUR-PROJECT-ID
 ```
 
-Replace `YOUR-PROJECT-REF` with the value from Step 2.
+Replace `YOUR-PROJECT-ID` with the value from Step 2.
 
 ---
 
@@ -116,7 +116,7 @@ Sylou's edge functions read several configuration values as Supabase secrets. Yo
 Before setting secrets, decide:
 
 - **Which LLM providers** you want available; Sylou currently works with Anthopic/Claude, Mistral, and Deepseek. 
-Set the API key for each you wish to use; and you need to have at least either Anthropic/Claude or Mistral (recommended models for FLOW analysis). The provider whose key isn't set will appear in Sylou's model picker but fail at runtime if a user selects it (TO-DO: instance-level model allowlist); set keys for the providers you want users to actually have access to.
+Set the API key for each you wish to use; and you need to have at least either Anthropic/Claude or Mistral (recommended models for FLOW analysis). The provider whose key isn't set will appear in Sylou's model picker but fail at runtime if a user selects it; set keys for the providers you want users to actually have access to.
 
 - **Whether you want web search.** Web search uses [Brave Search](https://api.search.brave.com); it's optional. If you don't set the Brave key, the web search toggle in Sylou's UI is greyed out with an explanatory tooltip.
 
@@ -136,13 +136,13 @@ npx supabase secrets set BRAVE_SEARCH_API_KEY=your-brave-key
 # CORS allow-list: the origin(s) where your Sylou frontend will be served
 # Use your domain here once you know it:
 npx supabase secrets set ALLOWED_ORIGIN=https://yourdomain.com
-# If domain unknown, this step can be completed together with step 7.7.
+# If domain unknown, this step can be completed together with step 7.6.
 # Multiple origins comma-separated, no trailing slashes, no paths.
 
 # Instance metadata (shown on shared FLOW reports)
 npx supabase secrets set SYLOU_INSTANCE_LABEL=self-hosted
 npx supabase secrets set SYLOU_INSTANCE_DOMAIN=yourdomain.com
-# If domain unknown, can be done together with step 7.7 or left unset
+# If domain unknown, can be done together with step 7.6 or left unset
 npx supabase secrets set SYLOU_VERSION=v0.7.0
 git rev-parse --short HEAD
 # returns the commit hash (7 characters) to be used in the next line
@@ -154,7 +154,6 @@ A few notes:
 - **`ALLOWED_ORIGIN`** is critical and is the most common source of setup problems. It must contain the *exact* origin(s) where your frontend will be deployed (scheme + host, no trailing slash, no path). For example: `https://sylou.acme.edu`, not `sylou.acme.edu` and not `https://sylou.acme.edu/`. If this is wrong, all backend calls from the browser will be blocked by CORS.
 - **`SYLOU_INSTANCE_LABEL`** should remain `self-hosted` for any deployment other than the upstream Sylou project. The value `official` is reserved for the upstream project (in case it ever welcomes external users directly in the future). 
 - **`SYLOU_VERSION` and `SYLOU_COMMIT_HASH`** appear in shared FLOW reports and the FLOW Pledge Badge so viewers can identify which version produced the report. Set them on each deploy: see [Deploys](#operating-your-instance) below.
-- **You can leave any secret unset** and the system will use a safe default (the warning will appear in the function logs at startup so you can verify which keys are missing).
 
 You can verify the secrets were set:
 
@@ -197,16 +196,16 @@ The Sylou frontend is a static Vite-built React application. It can be deployed 
 
    `VITE_PUBLIC_SITE_URL` is optional; if unset, the frontend uses the browser's current origin, which is the right default for most deployments. Only set it if you need to override (e.g., a reverse proxy where the public URL differs from the deployed origin).
 
-5. Click **Create Project**. Vercel handles the build and SPA routing automatically.
-6. Note the deployed URL (e.g., `https://your-project.vercel.app` or your custom domain once configured).
-7. **Important:** go back and update the `ALLOWED_ORIGIN` Supabase secret to include this URL exactly:
+4. Click **Create Project**. Vercel handles the build and SPA routing automatically.
+5. Note the deployed URL (e.g., `https://your-project.vercel.app` or your custom domain once configured).
+6. **Important:** go back and update the `ALLOWED_ORIGIN` Supabase secret to include this URL exactly:
 
    ```bash
    npx supabase secrets set ALLOWED_ORIGIN=https://your-project.vercel.app
    # If you've already configured a custom domain, use that instead. If you use both, comma-separate them.
    
    # Likewise, SYLOU_INSTANCE_DOMAIN can also be updated with the deployed Vercel URL if no custom domain is used.
-   npx supabase secrets set SYLOU_INSTANCE_DOMAIN=https://your-project.vercel.app
+   npx supabase secrets set SYLOU_INSTANCE_DOMAIN=your-project.vercel.app
    # Unlike ALLOWED_ORIGIN, SYLOU_INSTANCE_DOMAIN can be left unset; if so the FLOW badge says "Generated by a self-hosted instance" and the report footer shows "(domain not configured)"
    ```
 
@@ -240,7 +239,7 @@ This sequence confirms each major part of your Sylou instance is working, and ca
 First create your Sylou account in **Supabase**. The quickest way is: 
 Under **Authentication → Users → Add user**: *Create new user*: email + password, with **Auto Confirm User** ticked.
 
-Open your deployed Sylou URL (Vercel deployed URL or custom domain). Sign up with an email and password (this is your operator account: you'll be the only user unless you choose to add others).
+Open your deployed Sylou URL (Vercel deployed URL or custom domain). Sign in with the email and password chosen in Supabase just before (this is your operator account: you'll be the only user unless you choose to add others).
 
 *Verifies: frontend is deployed, can reach Supabase, auth is working.*
 
@@ -264,14 +263,14 @@ Click into the editor and type a few sentences.
 
 **5. Send a chat message**
 
-First choose a chat model in the settings: click on your account at the bottom left → Settings → Models tab.
+First choose a chat model in the settings: click on your account at the bottom left → Settings → Models tab. GLM 5.2 (through Mistral API) is the default model, so this is especially important if the Mistral API is not set.
 
 *Verifies: the `chat` edge function is deployed and reachable, your LLM provider key is correct, CORS is configured properly. If this fails with a network error, the most likely cause is a mismatch between `ALLOWED_ORIGIN` and your actual deployed URL.*
 
 **6. Use Ask or Propose**
 
 In the editor, select a sentence you typed. In the contextual menu, click **Ask** or **Propose** and type a question about the selected text. Confirm a response appears (Ask -> in the chat; Propose -> in a dedicated window). Both Ask and Propose allow for context-aware AI feedback, meaning that prior to responding the LLM receives, in addition to the selected text, all relevant information from the project (writing contents and creative writing tools where applicable) to answer the query. 
-You may also check that the other editor actions are working too, when selecting a sentence: Expand, Simplify, Rephrase, Fix grammar, Translate.
+You may also check that the other editor actions are working too, when selecting a sentence: Expand, Simplify, Rewrite, Fix grammar, Translate.
 
 *Verifies: the `context-prompt` edge function is deployed correctly, the `editor-action` edge function is deployed correctly.*
 
@@ -297,7 +296,7 @@ Go back to your first project. Click **Analyze with FLOW** at the bottom of the 
 
 In the FLOW report view, toggle **Sharing** on. A public URL is generated. Open it in a private/incognito window to confirm it's publicly accessible.
 
-*Verifies: the `share-report` edge function is working and the public-read RLS policies are correctly applied.*
+*Verifies: the `share-report` edge function is working.*
 
 **Optional: document import.** If you intend to use the document import feature, upload a PDF or text file in the chat panel's attachment area and confirm it loads. *(Verifies the `extract-text` edge function and the storage bucket setup.)*
 
@@ -412,7 +411,7 @@ FROM public.profiles WHERE email = 'your@email.com';
 
 If `monthly_token_budget` is set and the usage exceeds it, either reset the usage counter or raise the budget.
 
-**Chat returns "Missing API key for {provider}".**
+**Chat returns "{provider} API key not configured".**
 
 The user selected a model whose provider key isn't configured. Either set the key for that provider, or use a model from a provider whose key is set.
 
@@ -422,7 +421,7 @@ Confirm you're linked to the right project (`supabase status` shows the current 
 
 **Edge functions deploy successfully but return 500 errors at runtime.**
 
-Check the function logs in the Supabase dashboard under **Edge Functions → [function name] → Logs**. The most common cause is a missing secret, the function startup log will tell you which.
+Check the function logs in the Supabase dashboard under **Edge Functions → [function name] → Logs**. The most common cause is a missing secret.
 
 **Web search returns no results even with `BRAVE_SEARCH_API_KEY` set.**
 
