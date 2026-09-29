@@ -244,11 +244,11 @@ export default function SharedReport() {
         <span className="text-xs text-muted-foreground">{projectName}</span>
       </div>
 
-      {/* Certificate Banner */}
+      {/* Report ID banner */}
       {certificateId && (
         <div className="border-b border-border bg-primary/5 py-3 px-6 flex items-center justify-center gap-2">
           <Award className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold text-primary">FLOW Certificate #{certificateId}</span>
+          <span className="text-sm font-semibold text-primary">FLOW Report ID #{certificateId}</span>
         </div>
       )}
 
@@ -455,7 +455,7 @@ export default function SharedReport() {
 
               <div className="border-t border-border pt-6 pb-8 mt-8 text-center space-y-3">
                 {certificateId && (
-                  <p className="text-xs text-muted-foreground">Certificate: {certificateId}</p>
+                  <p className="text-xs text-muted-foreground">FLOW Report ID: {certificateId}</p>
                 )}
                 {(() => {
                   const gi = report.generator_info ?? null;

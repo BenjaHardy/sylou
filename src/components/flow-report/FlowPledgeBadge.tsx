@@ -134,7 +134,7 @@ function drawCommonChrome(
 
     ctx.fillStyle = "#6b7280";
     ctx.font = "9px system-ui, sans-serif";
-    ctx.fillText(`Certificate #${certificateId}`, 12, lineY2);
+    ctx.fillText(`FLOW Report ID #${certificateId}`, 12, lineY2);
 
     ctx.fillStyle = "#6b7280";
     ctx.font = "9px system-ui, sans-serif";
@@ -147,7 +147,7 @@ function drawCommonChrome(
 
     ctx.fillStyle = "#6b7280";
     ctx.font = "9px system-ui, sans-serif";
-    ctx.fillText(`Certificate #${certificateId}`, 12, lineY3);
+    ctx.fillText(`FLOW Report ID #${certificateId}`, 12, lineY3);
   }
 }
 
