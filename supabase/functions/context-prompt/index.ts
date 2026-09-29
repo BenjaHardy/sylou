@@ -5,6 +5,7 @@ import { searchWeb, buildDocumentTool, buildWebSearchTool, formatWebSearchResult
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
+import { contentLogsEnabled } from "../_shared/_debug.ts";
 import {
   CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT,
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
@@ -525,7 +526,7 @@ When citing information from web search results, always include the source URL i
                     });
                   } else if (tc.name === "web_search") {
                     const query = tc.arguments.query as string;
-                    console.log("[stream:context-prompt] web search:", query);
+                    console.log("[stream:context-prompt] web search:", contentLogsEnabled() ? query : `(${query.length} chars)`);
                     webSearchesPerformed.push(query);
 
                     try { controller.enqueue(sseEvent({ phase: "searching_web" })); } catch { /* */ }

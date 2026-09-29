@@ -30,6 +30,7 @@ import {
   type NormalisedResponse,
 } from "../_shared/_llm.ts";
 import { formatWebSearchResults, searchWeb } from "../_shared/_tools.ts";
+import { contentLogsEnabled } from "../_shared/_debug.ts";
 
 // Minimal structural view of the admin client (the concrete client's
 // generic instance type does not cross module boundaries cleanly — the
@@ -131,7 +132,7 @@ export async function runToolLoop(
         });
       } else if (tc.name === "web_search") {
         const query = tc.arguments.query as string;
-        console.log("[stream] web search:", query);
+        console.log("[stream] web search:", contentLogsEnabled() ? query : `(${query.length} chars)`);
         webSearchesPerformed.push(query);
 
         emitPhase("searching_web");
