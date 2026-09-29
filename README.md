@@ -3,7 +3,7 @@
   <img src="docs/assets/sylou-logo.png" alt="Sylou" width="200" />
 </p>
 <p align="center">
-  <a href="https://www.meetsylou.eu"><strong>meetsylou.eu</strong></a>
+  <a href="https://meetsylou.eu"><strong>meetsylou.eu</strong></a>
   &nbsp;·&nbsp;
   <a href="https://tally.so/r/KYvxyz">Share feedback</a>
 </p>
@@ -13,7 +13,7 @@
 **Process-based AI-use transparency. An open-source writing environment that makes human-AI collaboration visible and shareable: across research, ideas, structure and prose.**
 
 > [!TIP]
-> **New here?** Learn more at [meetsylou.eu](https://www.meetsylou.eu), and [share feedback](https://tally.so/r/KYvxyz) to help us out and for occasional updates on Sylou.
+> **New here?** Learn more at [meetsylou.eu](https://meetsylou.eu), and [share feedback](https://tally.so/r/KYvxyz) to help us out and for occasional updates on Sylou.
 
 Sylou is a text editor that helps you write with AI assistance and analyses your collaboration with AI using a standardized framework that looks into the processes of writing: where ideas came from, what got structured by whom, how the prose itself was shaped, etc.
 As it's becoming ever more difficult to understand *how* AI was used to produce a writing, with standard detection tools being occasionally unreliable and missing the full picture, Sylou aims to flip the problem: helping users gather evidence and proactively demonstrate how they have used AI, using a standardized framework that looks into the processes of writing, producing visual and shareable reports along the way.
@@ -21,6 +21,8 @@ As it's becoming ever more difficult to understand *how* AI was used to produce 
 Sylou's whole point is to make human-AI collaboration visible for users willing to show this transparency. It's designed for writers, students, educators, researchers, and anyone who cares about AI-use transparency and is looking to proactively demonstrate how they have used AI, in a clear, visual and insightful way.
 
 Additionally, it can further be used in an educational context as a means to promote one's own AI-use awareness, and help serve as a framework for AI-use.
+
+https://github.com/user-attachments/assets/da67993d-da0b-440f-bb94-2fb8d1c3175a
 
 ---
 
@@ -40,6 +42,13 @@ W — Write: writing and authorship (write it)
    
 The transparency architecture, covering all the means, whats, whys, hows to achieve this goal, is detailed in a separate and dedicated document, in case you're interested or plan to contribute: [TRANSPARENCY.md](TRANSPARENCY.md).
 
+<p align="center">
+  <a href="https://sylou.eu/report/33fbcecf-3efb-4ed2-a59c-58bd19b4971b"><img src="https://meetsylou.eu/assets/badge-runga-ahi-radar.png" width="280" alt="FLOW Pledge Badge for Runga Ahi: radar chart of the four pillar scores"></a>
+  <a href="https://sylou.eu/report/65f1ed5f-6173-4fcd-aa6a-3ad9842fd61e"><img src="https://meetsylou.eu/assets/badge-detection-to-transparency-radar.png" width="280" alt="FLOW Pledge Badge for From Detection to Transparency: radar chart of the four pillar scores"></a>
+  <a href="https://sylou.eu/report/47860893-6177-458f-bb2e-6abc25fcbd52"><img src="https://meetsylou.eu/assets/badge-antlerbranches-radar.png" width="280" alt="FLOW Pledge Badge for The Antlerbranches: radar chart of the four pillar scores"></a>
+</p>
+<p align="center"><em>FLOW Pledge Badges from three of the maintainer's own projects: click one to open its shared report. More on <a href="https://meetsylou.eu/#examples">meetsylou.eu</a>.</em></p>
+
 ---
 
 ## What's in the box
@@ -51,10 +60,10 @@ The transparency architecture, covering all the means, whats, whys, hows to achi
 - **FLOW analysis** that produces a structured report analysing the four pillars of the FLOW methodology.
 - **FLOW collaboration style** based on the FLOW analysis, describing how you worked with the AI, akin to personality-type frameworks at the level of a piece of work.
 - **Self-assessment options** for users to record their own feedback (both before and after the FLOW analysis is provided) on the collaboration alongside the FLOW analysis.
-- **Work replay functionality and quantitative data** for futher evidence of the involvement of the user to the work.
+- **Work replay functionality and quantitative data** for further evidence of the involvement of the user to the work.
 - **Shareable FLOW reports** comprising the above elements, with a public URL, a QR-coded badge, and machine-readable AI-origin markers. 
 - **Tutor mode** that restricts the AI to guidance rather than direct generation (for educational contexts).
-- **Selectable LLM** for both the chat and the FLOW analysis separately, between Mistral (incl. GLM), Claude and Deepseek.
+- **Selectable LLM** for both the chat and the FLOW analysis separately, between Mistral (incl. GLM), Claude and DeepSeek.
 
 Sylou is built on React + TypeScript on the frontend, Supabase (PostgreSQL + Edge Functions) on the backend, and uses LLMs via API.
 
@@ -70,7 +79,7 @@ Setup is documented in [**docs/setup.md**](docs/setup.md). At a high level, you'
 - A Supabase project (free tier works for personal use)
 - API keys for at least one LLM provider (currently recommended with either Anthropic or Mistral). For the FLOW analysis, both Claude Sonnet 4.6 and up from Anthropic API, or Z.ai GLM 5.2 from Mistral API, are recommended options
 - A few environment variables
-- About 15–30 minutes for first-time setup
+- About 30-60 minutes for first-time setup
 
 The same self-hosted instance can be used by a single person, a small team, an academic department, or a community; whatever fits.
 Self-hosters can set per-user token budgets via SQL; see docs/setup.md for details.
@@ -92,7 +101,7 @@ The recommended LLM and settings to use for the FLOW analysis can be found in [*
 Sylou is open-source software released under [**AGPL-3.0**](LICENSE). The FLOW methodology is published separately under [**CC BY-SA 4.0**](LICENSE-METHODOLOGY). Anyone can inspect the code, modify it, self-host it, or adapt the methodology under the terms of those licenses.
 A precise mapping of which files fall under which license is in [**LICENSING.md**](LICENSING.md).
 
-The Sylou name and logo, and the FLOW Pledge Badge format, are governed by a separate [**Trademark Policy**](TRADEMARK-POLICY.md). In short: the Sylou name is not authorized on substantively modified or competing versions. Most contribution scenarios are entirely unaffected by the trademark Policy: PRs, branches, forks, distribution packages, self-hosted deployments, and educational use are all fine, and the bias of the trademark policy is toward permission. The policy only comes into play only for cases that could mislead users about what they're using.
+The Sylou name and logo, and the FLOW Pledge Badge format, are governed by a separate [**Trademark Policy**](TRADEMARK-POLICY.md). In short: the Sylou name is not authorized on substantively modified or competing versions. Most contribution scenarios are entirely unaffected by the trademark Policy: PRs, branches, forks, distribution packages, self-hosted deployments, and educational use are all fine, and the bias of the trademark policy is toward permission. The policy only comes into play for cases that could mislead users about what they're using.
 
 ---
 
@@ -130,9 +139,15 @@ Besides what's listed there, we're of course open to suggestions and feedback. S
 
 ---
 
+## A note on how it was built
+
+Sylou's transparency mechanisms and FLOW methodology are designed by the maintainer, with the code largely written with AI tools under the maintainer's direction and review: initially Cursor (late 2025-early 2026) for a first, fully offline experimental prototype (separate repository); then Lovable (March-June 2026) for a scaffold of this codebase; since then Claude Code, every change reviewed by the maintainer and backed by tests, CI and DCO sign-offs. 
+
+---
+
 ## Learn more
 
-- **Project landing page**: [meetsylou.eu](https://www.meetsylou.eu)
+- **Project landing page**: [meetsylou.eu](https://meetsylou.eu)
 - **About Sylou and FLOW**: linked from the landing page, plus the documentation in this repo
 - **Feedback or questions**: [contact@sylou.eu](mailto:contact@sylou.eu), or open an issue
 
