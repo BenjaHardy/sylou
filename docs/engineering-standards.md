@@ -67,10 +67,11 @@ the code is authoritative — flag the drift rather than guessing.
   by the token). A public view that the client filters by token is an
   enumerable directory, not a capability URL.
 - Migrations are **idempotent** (`CREATE OR REPLACE`, `IF EXISTS`,
-  `ALTER POLICY`, guarded `ADD CONSTRAINT`) and are applied by hand via the
-  Supabase SQL editor (never `supabase db push` — the remote migration history
-  doesn't reconcile). The file in `supabase/migrations/` remains the source of
-  truth.
+  `ALTER POLICY`, guarded `ADD CONSTRAINT`). Migrations are applied by a
+  human, never by an AI assistant: the maintainer's production database
+  through the SQL editor, fresh instances (including staging) with
+  `supabase db push` (docs/setup.md). The file in `supabase/migrations/`
+  remains the source of truth.
 
 ### 1.2 Edge functions
 
@@ -197,9 +198,12 @@ can have; changes require an explicit transparency-impact note in the PR.
   function never reads it). The writing summary reaches FLOW only as a chat
   message flagged `flow_flag = 'not_assessed'`, and only as the **per-turn
   delta**, never the full summary.
-- **Ask persists in the same request. Propose defers all chat + summary-log
-  writes to the CONFIRM endpoint.** A rejected proposal mutates nothing except
-  the action's `outcome`. Do not collapse these paths.
+- **Ask and Propose both persist the exchange at delivery time** (prompt,
+  summary delta, reply; summary log advanced), server-side in the same
+  request, so a dismissed or never-decided proposal is still logged. The
+  CONFIRM endpoint records only the decision: the first decision per action
+  wins, and only acceptance injects the text (with its `[ai]` provenance) into
+  the writing. Keep the delivery-time log and the decision record separate.
 - **Every AI interaction must end up visible to FLOW** — as a chat message, an
   `ai_editor_actions` row, or provenance. Cancelling, closing a window, or a
   mid-stream error must still record the interaction's outcome; an abandoned
@@ -340,8 +344,9 @@ can have; changes require an explicit transparency-impact note in the PR.
   subquery (§1.1). The two accepted `profiles` advisor WARNs are deliberate.
 - `REVOKE ... FROM PUBLIC` alone leaves `anon`/`authenticated` EXECUTE on
   Supabase — revoke from all three.
-- Remote migration history doesn't match local filenames → apply DDL via the
-  SQL editor; don't `migration repair` or `db pull`.
+- On the maintainer's production database, the remote migration history
+  doesn't match local filenames → apply DDL via the SQL editor; don't
+  `migration repair` or `db pull` there.
 - The hosted DB has an out-of-band `rls_auto_enable` event trigger (Lovable
   era) — repo migrations must stay self-sufficient without it.
 - Perf advisor oscillation: FK covering indexes report as `unused_index` until
