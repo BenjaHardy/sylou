@@ -260,7 +260,7 @@ encounter it, and marks AI-generated content so it can be detected programmatica
 
 ## 7. Shared FLOW reports
 
-A FLOW report can be kept private or shared at a public URL. Each shared report carries the generating instance's label, version, and commit hash, so a viewer can identify exactly what produced it.
+A FLOW report can be kept private or shared at a public URL. Each shared report carries the generating instance's label, version, and commit hash, so a viewer can identify what produced it. These variables are declared by the operator, and ultimately only the domain serving a shared report can be verified by a viewer: a report is as trustworthy as that domain's operator.
 
 ---
 
