@@ -39,8 +39,5 @@ dist-ssr
 bun.lockb
 bun.lock
 
-# Lovable-era scaffolding; the Lovable<->GitHub sync is disconnected.
-.lovable/
-
 # Claude Code local tooling (session state, launch configs, worktrees)
 .claude/

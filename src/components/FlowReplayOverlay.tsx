@@ -192,7 +192,7 @@ export function FlowReplayOverlay({ events, onClose, sanitize = false }: FlowRep
               Writing at this point
             </h4>
             <div
-              className="prose prose-sm dark:prose-invert max-w-none text-sm"
+              className="max-w-none text-sm"
               dangerouslySetInnerHTML={{ __html: writingHtml }}
             />
           </div>

@@ -56,7 +56,7 @@ export function ConversationMemoryDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 min-h-0 overflow-y-auto rounded-md bg-muted/50 p-4">
-          <div className="prose prose-sm max-w-none text-sm text-foreground">
+          <div className="max-w-none text-sm text-foreground">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{memory.summary_text}</ReactMarkdown>
           </div>
         </div>

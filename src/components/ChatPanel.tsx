@@ -102,7 +102,7 @@ const markdownComponents: ComponentProps<typeof ReactMarkdown>["components"] = {
 
 function AssistantMarkdown({ content }: { content: string }) {
   return (
-    <div className="prose-chat break-words">
+    <div className="break-words">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
         {content}
       </ReactMarkdown>

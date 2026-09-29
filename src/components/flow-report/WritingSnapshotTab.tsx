@@ -31,7 +31,7 @@ export function WritingSnapshotTab({ snapshot, capturedAt }: Props) {
 
       {hasContent ? (
         <div
-          className="prose prose-sm max-w-none rounded-md border border-border bg-[hsl(var(--ethos-surface))] px-6 py-5 text-foreground"
+          className="max-w-none rounded-md border border-border bg-[hsl(var(--ethos-surface))] px-6 py-5 text-foreground"
           // Snapshot is TipTap-generated HTML; sanitized for safety on the public shared report route.
           dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(snapshot) }}
         />

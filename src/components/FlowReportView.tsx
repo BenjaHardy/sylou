@@ -490,11 +490,11 @@ export function FlowReportView({
 
                 {shareToken && shareEnabled && (
                   <div className="space-y-3">
-                    {/* Certificate ID */}
+                    {/* Report ID */}
                     {certificateId && (
                       <div className="flex items-center gap-2 text-xs">
                         <Award className="h-3.5 w-3.5 text-primary" />
-                        <span className="font-medium text-foreground">FLOW Certificate #{certificateId}</span>
+                        <span className="font-medium text-foreground">FLOW Report ID #{certificateId}</span>
                       </div>
                     )}
 

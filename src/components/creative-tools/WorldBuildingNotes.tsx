@@ -485,7 +485,7 @@ function NoteEditor({
         <CreativeAITextField sourceModule="worldbuilding">
           <EditorContent
             editor={editor}
-            className="prose prose-sm dark:prose-invert max-w-none [&_.tiptap]:outline-none [&_.tiptap]:min-h-[200px]"
+            className="max-w-none [&_.tiptap]:outline-none [&_.tiptap]:min-h-[200px]"
           />
         </CreativeAITextField>
       </ScrollArea>
