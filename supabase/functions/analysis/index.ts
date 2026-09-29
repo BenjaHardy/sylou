@@ -44,11 +44,11 @@ const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
 // Generator provenance — captured at report-generation time so shared
 // reports retain their origin metadata regardless of where they are viewed.
 //
-// `is_modified` is hardcoded to `false` in the official codebase. Forks that
-// modify the source are encouraged to set this to `true` as a transparency
-// signal, but the authoritative evidence of modification is the commit_hash
-// — viewers can compare it against the official Sylou repository's release
-// tags to verify.
+// Everything here is declared by the operator: the env vars, and is_modified,
+// which forks that modify the source should set to true (shared reports and
+// badges then flag a modified build). commit_hash can be compared with the
+// release tags, but only the domain serving a shared report can be verified
+// by a viewer: a report is as trustworthy as that domain's operator.
 const SYLOU_INSTANCE_LABEL  = Deno.env.get("SYLOU_INSTANCE_LABEL")  ?? "self-hosted";
 const SYLOU_INSTANCE_DOMAIN = Deno.env.get("SYLOU_INSTANCE_DOMAIN") ?? null;
 const SYLOU_VERSION         = Deno.env.get("SYLOU_VERSION")         ?? "unknown";

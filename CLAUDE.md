@@ -32,12 +32,13 @@ Apply strict coding standards to avoid future code liabilities for the open-sour
   TextStyle's `mergeNestedSpanStyles: false`). Adopting any of them is a UX
   decision to take deliberately — pinned by `v2-keymap-parity.test.ts`,
   serialization by `editor-html-roundtrip.test.ts`.
-- Supabase via Lovable Cloud; Edge Functions in `supabase/functions/`
+- Supabase (Postgres, Auth, Storage); Edge Functions in `supabase/functions/`
 - Vitest 4 (frontend units) + `deno test` (edge-function units beside their
   modules: `_shared/` plus the split function directories — the `deno.json`
   test task holds the collected list)
-- LLM providers: Anthropic (Sonnet 4.6, Opus 4.8), Mistral (Large 3,
-  Medium 3.5, Small 4), DeepSeek (deepseek-v4-flash).
+- LLM providers: Anthropic (Sonnet 4.6, Opus 4.8), Mistral API (Large 3,
+  Medium 3.5, Small 4, and Z.ai GLM 5.2 — the default chat and FLOW model for
+  new profiles), DeepSeek (deepseek-v4-flash).
 
 Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 → `src/components/ProjectContentArea.tsx`.
@@ -125,8 +126,7 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   (`TO authenticated`, USING/WITH CHECK on ownership) **and explicit
   grants**: to `authenticated` exactly the operations that have a policy,
   `ALL` to `service_role`, nothing to `anon` on base tables (its reads go
-  through the granted `flow_reports_public` view and the
-  `get_shared_report` RPC), and `TRUNCATE, REFERENCES, TRIGGER` revoked
+  through the `get_shared_report` RPC), and `TRUNCATE, REFERENCES, TRIGGER` revoked
   from both user roles. Supabase no longer grants Data API access to new
   tables automatically (`20260925120000` explains and applies this to the
   17 existing tables), and `src/lib/__tests__/migrations-privileges.test.ts`
@@ -170,8 +170,8 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   sanitized public-share surface that replaced a base-table anon policy; dismiss
   the `security_definer_view` lint rather than switching to `security_invoker`.
 - **Secrets**: Edge functions read secrets via `Deno.env.get("NAME")`;
-  values are injected by the host (Lovable secrets / `supabase secrets
-  set`), never committed. Frontend only reads publishable values via
+  values are injected by the host (`supabase secrets set`), never
+  committed. Frontend only reads publishable values via
   `import.meta.env.VITE_*`; private keys stay server-side.
 
 ## 5. AI routing
@@ -272,7 +272,8 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   selection window warns before Accept. Output budgets live in
   `_models.ts` (`OUTPUT_BUDGETS`), mirrored by `src/lib/editor-limits.ts`.
 - Transparency logging invariants (see §4): withheld `writing_summary_log`,
-  `not_assessed` summary flagging, Propose-defers-to-CONFIRM.
+  `not_assessed` summary flagging, delivery-time logging of Ask and Propose
+  (CONFIRM records only the decision).
 - Provenance tracker pending-signal pattern (`src/lib/provenance-tracker.ts`).
   Persistence hydration guard (`useProvenanceTracker`): nothing is written to
   `provenance_events` until the map fetched for the project was applied to
