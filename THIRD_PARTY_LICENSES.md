@@ -253,7 +253,7 @@ Packages bundled into (or supporting) the shipped application.
 - linkifyjs@4.3.3
 - longest-streak@3.1.0
 - loose-envify@1.4.0
-- markdown-it@14.3.0
+- markdown-it@14.3.1
 - markdown-table@3.0.4
 - mdast-util-find-and-replace@3.0.2
 - mdast-util-from-markdown@2.0.3
