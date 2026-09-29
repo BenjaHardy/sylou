@@ -141,7 +141,7 @@ Besides what's listed there, we're of course open to suggestions and feedback. S
 
 ## A note on how it was built
 
-Sylou's transparency mechanisms and FLOW methodology are designed by the maintainer, with the code largely written with AI tools under the maintainer's direction and review: initially Cursor (late 2025-early 2026) for a first, fully offline experimental prototype (separate repository); then Lovable (March-June 2026) for a scaffold of this codebase; since then Claude Code, every change reviewed by the maintainer and backed by tests, CI and DCO sign-offs. 
+Sylou's transparency mechanisms and FLOW methodology were designed by the maintainer, with the code largely written with AI tools under the maintainer's direction and review: initially Cursor (late 2025-early 2026) for a first, fully offline experimental prototype (separate repository); then Lovable (March-June 2026) for a scaffold of this codebase; since then Claude Code, every change reviewed by the maintainer and backed by tests, CI and DCO sign-offs. 
 
 ---
 
