@@ -138,7 +138,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     editorProps: {
       attributes: {
         class:
-          "prose prose-sm sm:prose max-w-none focus:outline-none min-h-full px-8 py-6",
+          "max-w-none focus:outline-none min-h-full px-8 py-6",
         style: "font-size:16px;line-height:1.6;",
       },
       // NOTE: keys in `handleDOMEvents` must be raw DOM event names
@@ -608,8 +608,8 @@ function ExportEnabledToolbar({
     const html = editor.getHTML();
 
     const container = document.createElement("div");
-    // .prose + .tiptap keeps typography consistent with the on-screen editor.
-    container.className = "print-export-root prose tiptap";
+    // .tiptap keeps typography consistent with the on-screen editor.
+    container.className = "print-export-root tiptap";
     container.innerHTML = html;
     document.body.appendChild(container);
 

@@ -68,7 +68,7 @@ Packages bundled into (or supporting) the shipped application.
 - picocolors@1.1.1
 - qrcode.react@4.2.0
 
-### MIT (330)
+### MIT (329)
 
 - @alloc/quick-lru@5.3.0
 - @dnd-kit/accessibility@3.1.1
@@ -171,7 +171,6 @@ Packages bundled into (or supporting) the shipped application.
 - @types/debug@4.1.13
 - @types/estree-jsx@1.0.5
 - @types/estree@1.0.9
-- @types/file-saver@2.0.7
 - @types/hast@3.0.5
 - @types/linkify-it@5.0.0
 - @types/markdown-it@14.1.2
@@ -491,7 +490,7 @@ part of the shipped application.
 - which@2.0.2
 - yallist@3.1.1
 
-### MIT (198)
+### MIT (197)
 
 - @adobe/css-tools@4.5.0
 - @asamuzakjp/css-color@5.1.11
@@ -554,7 +553,6 @@ part of the shipped application.
 - @rolldown/binding-win32-x64-msvc@1.1.5
 - @rolldown/pluginutils@1.0.1
 - @standard-schema/spec@1.1.0
-- @tailwindcss/typography@0.5.20
 - @testing-library/dom@10.4.1
 - @testing-library/jest-dom@6.9.1
 - @testing-library/react@16.3.2
@@ -563,6 +561,7 @@ part of the shipped application.
 - @types/chai@5.2.3
 - @types/deep-eql@4.0.2
 - @types/esrecurse@4.3.1
+- @types/file-saver@2.0.7
 - @types/json-schema@7.0.15
 - @types/node@22.20.0
 - @typescript-eslint/eslint-plugin@8.70.0
@@ -653,7 +652,6 @@ part of the shipped application.
 - path-exists@4.0.0
 - path-key@3.1.1
 - pathe@2.0.3
-- postcss-selector-parser@6.0.10
 - prelude-ls@1.2.1
 - pretty-format@27.5.1
 - punycode@2.3.1
