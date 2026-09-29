@@ -60,10 +60,10 @@ The transparency architecture, covering all the means, whats, whys, hows to achi
 - **FLOW analysis** that produces a structured report analysing the four pillars of the FLOW methodology.
 - **FLOW collaboration style** based on the FLOW analysis, describing how you worked with the AI, akin to personality-type frameworks at the level of a piece of work.
 - **Self-assessment options** for users to record their own feedback (both before and after the FLOW analysis is provided) on the collaboration alongside the FLOW analysis.
-- **Work replay functionality and quantitative data** for futher evidence of the involvement of the user to the work.
+- **Work replay functionality and quantitative data** for further evidence of the involvement of the user to the work.
 - **Shareable FLOW reports** comprising the above elements, with a public URL, a QR-coded badge, and machine-readable AI-origin markers. 
 - **Tutor mode** that restricts the AI to guidance rather than direct generation (for educational contexts).
-- **Selectable LLM** for both the chat and the FLOW analysis separately, between Mistral (incl. GLM), Claude and Deepseek.
+- **Selectable LLM** for both the chat and the FLOW analysis separately, between Mistral (incl. GLM), Claude and DeepSeek.
 
 Sylou is built on React + TypeScript on the frontend, Supabase (PostgreSQL + Edge Functions) on the backend, and uses LLMs via API.
 
@@ -101,7 +101,7 @@ The recommended LLM and settings to use for the FLOW analysis can be found in [*
 Sylou is open-source software released under [**AGPL-3.0**](LICENSE). The FLOW methodology is published separately under [**CC BY-SA 4.0**](LICENSE-METHODOLOGY). Anyone can inspect the code, modify it, self-host it, or adapt the methodology under the terms of those licenses.
 A precise mapping of which files fall under which license is in [**LICENSING.md**](LICENSING.md).
 
-The Sylou name and logo, and the FLOW Pledge Badge format, are governed by a separate [**Trademark Policy**](TRADEMARK-POLICY.md). In short: the Sylou name is not authorized on substantively modified or competing versions. Most contribution scenarios are entirely unaffected by the trademark Policy: PRs, branches, forks, distribution packages, self-hosted deployments, and educational use are all fine, and the bias of the trademark policy is toward permission. The policy only comes into play only for cases that could mislead users about what they're using.
+The Sylou name and logo, and the FLOW Pledge Badge format, are governed by a separate [**Trademark Policy**](TRADEMARK-POLICY.md). In short: the Sylou name is not authorized on substantively modified or competing versions. Most contribution scenarios are entirely unaffected by the trademark Policy: PRs, branches, forks, distribution packages, self-hosted deployments, and educational use are all fine, and the bias of the trademark policy is toward permission. The policy only comes into play for cases that could mislead users about what they're using.
 
 ---
 
