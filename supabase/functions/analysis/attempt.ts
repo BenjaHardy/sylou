@@ -27,6 +27,7 @@ import {
   type ProviderId,
 } from "../_shared/_llm.ts";
 import { repairToolOutput } from "../_shared/_repair.ts";
+import { contentLogsEnabled } from "../_shared/_debug.ts";
 import { SUBMIT_FLOW_TOOL } from "./prompts.ts";
 
 /** Pillar-shape validator (reasoning + evidence[] + narrative; the score
@@ -109,12 +110,14 @@ export async function attemptFlowCall(
         ],
       };
 
+  const requestBody = JSON.stringify(llmArgs);
   console.log("FLOW prompt sent", {
     model: flowModel,
     provider,
     attempt,
     temperature,
-    request_body: JSON.stringify(llmArgs),
+    request_chars: requestBody.length,
+    ...(contentLogsEnabled() ? { request_body: requestBody } : {}),
   });
 
   const llmRes = await callLLM(llmArgs);
@@ -133,13 +136,15 @@ export async function attemptFlowCall(
   }
 
   const rawData = await llmRes.json();
+  const rawResponse = JSON.stringify(rawData);
 
   console.log("FLOW raw response", {
     model: flowModel,
     attempt,
     temperature,
     stop_reason: rawData?.stop_reason ?? rawData?.choices?.[0]?.finish_reason ?? null,
-    raw_response: JSON.stringify(rawData),
+    response_chars: rawResponse.length,
+    ...(contentLogsEnabled() ? { raw_response: rawResponse } : {}),
   });
 
   let normalised;
@@ -153,15 +158,15 @@ export async function attemptFlowCall(
     );
   } catch (e) {
     if (e instanceof StructuredOutputError) {
-      // Full server-side log for operator investigation.
+      // The message can quote model output (JSON parse errors), so it is
+      // logged with the raw response only when content logs are on.
       console.error("[FLOW structured-output error]", {
         code: e.code,
-        message: e.message,
         model: flowModel,
         project_id: projectId,
         attempt,
         stop_reason: rawData?.stop_reason ?? null,
-        raw_response: JSON.stringify(rawData),
+        ...(contentLogsEnabled() ? { message: e.message, raw_response: rawResponse } : {}),
       });
 
       if (e.code === STRUCTURED_OUTPUT_REFUSAL) {
@@ -214,7 +219,13 @@ export async function attemptFlowCall(
   };
 
   if (!toolCall?.arguments) {
-    console.error("No tool_use block found in response:", JSON.stringify(rawData));
+    console.error("No tool_use block found in response", {
+      model: flowModel,
+      attempt,
+      stop_reason: rawData?.stop_reason ?? rawData?.choices?.[0]?.finish_reason ?? null,
+      response_chars: rawResponse.length,
+      ...(contentLogsEnabled() ? { raw_response: rawResponse } : {}),
+    });
     return {
       ok: false,
       usage,
@@ -257,11 +268,13 @@ export async function attemptFlowCall(
       pillar_shape: pillarShape,
       summary_len: typeof flowResult?.summary === "string" ? (flowResult.summary as string).length : 0,
     });
-    console.error("FLOW raw tool input (full)", {
-      model: flowModel,
-      attempt,
-      raw_tool_input: JSON.stringify(flowResult),
-    });
+    if (contentLogsEnabled()) {
+      console.error("FLOW raw tool input (full)", {
+        model: flowModel,
+        attempt,
+        raw_tool_input: JSON.stringify(flowResult),
+      });
+    }
     return {
       ok: false,
       usage,
