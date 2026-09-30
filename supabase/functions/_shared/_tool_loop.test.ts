@@ -1,7 +1,7 @@
 // Deno unit tests for the shared tool-resolution loop.
 // Run with: deno test --allow-read supabase/functions/_shared/_tool_loop.test.ts
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { ROUND_LIMIT_NOTE, runToolLoop, type ToolLoopDeps } from "./_tool_loop.ts";
+import { promptChars, ROUND_LIMIT_NOTE, runToolLoop, type ToolLoopDeps } from "./_tool_loop.ts";
 import type { LLMMessage } from "./_llm.ts";
 
 // Document reads always succeed, so no network is needed.
@@ -95,4 +95,32 @@ Deno.test("tool loop: every tool call gets exactly one result, in order", async 
   }, toolMessages));
 
   assertEquals(toolResults(toolMessages).map((m) => m.tool_call_id), ["call-0", "call-a", "call-b"]);
+});
+
+Deno.test("promptChars: counts text, non-text content and echoed tool calls", () => {
+  const toolCalls = [{ id: "c1", type: "function" as const, function: { name: "web_search", arguments: "{\"query\":\"x\"}" } }];
+  const messages: LLMMessage[] = [
+    { role: "system", content: "abc" },
+    { role: "assistant", content: "", tool_calls: toolCalls },
+    { role: "assistant", content: [{ type: "text", text: "hi" }] },
+  ];
+  assertEquals(
+    promptChars(messages),
+    3 + JSON.stringify(toolCalls).length + JSON.stringify([{ type: "text", text: "hi" }]).length,
+  );
+});
+
+Deno.test("tool loop: counts the whole re-sent prompt of every check call", async () => {
+  const toolMessages: LLMMessage[] = [{ role: "system", content: "S".repeat(1000) }];
+  const promptsSeen: number[] = [];
+  const { inputCharsAdded } = await runToolLoop(makeDeps((opts) => {
+    promptsSeen.push(promptChars(opts.messages));
+    return Promise.resolve(completion(promptsSeen.length === 1 ? ["call-a"] : []));
+  }, toolMessages));
+
+  // Two check calls, each re-sending the system prompt and everything so far;
+  // the tool results are not counted a second time on their own.
+  assertEquals(promptsSeen.length, 2);
+  assert(promptsSeen.every((size) => size > 1000));
+  assertEquals(inputCharsAdded, promptsSeen[0] + promptsSeen[1]);
 });

@@ -20,6 +20,10 @@
 // module boundary. The caller MUST fold {inputCharsAdded,
 // outputCharsAdded} into its running totals — forgetting compiles clean
 // and silently under-bills (chat/persist.test.ts pins the fold-in).
+// Every call re-sends the whole conversation, so inputCharsAdded is the
+// full prompt of each check call (tool results are counted inside the
+// calls that carry them, never separately); the caller counts its first
+// and final calls the same way, with promptChars.
 // toolMessages / documentsReferenced / webSearchesPerformed mutate by
 // reference on purpose (the cp persist.ts precedent).
 
@@ -37,6 +41,18 @@ import { contentLogsEnabled } from "./_debug.ts";
 
 export const ROUND_LIMIT_NOTE =
   "Tool-use limit reached for this request: write your answer now from the information above.";
+
+/** Prompt size in characters for the usage estimate: every message's
+ *  content plus any echoed tool calls. */
+export function promptChars(messages: LLMMessage[]): number {
+  return messages.reduce(
+    (sum, m) =>
+      sum +
+      (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content ?? "").length) +
+      (m.tool_calls ? JSON.stringify(m.tool_calls).length : 0),
+    0,
+  );
+}
 
 // Minimal structural view of the admin client (the concrete client's
 // generic instance type does not cross module boundaries cleanly — the
@@ -134,8 +150,6 @@ export async function runToolLoop(
           ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
           : `Document not found in this project or text not yet extracted.`;
 
-        inputCharsAdded += toolResult.length;
-
         toolMessages.push({
           role: "tool",
           tool_call_id: tc.id,
@@ -150,7 +164,6 @@ export async function runToolLoop(
 
         const results = await searchWeb(query);
         const toolResult = formatWebSearchResults(query, results);
-        inputCharsAdded += toolResult.length;
 
         toolMessages.push({
           role: "tool",
@@ -173,6 +186,7 @@ export async function runToolLoop(
 
     // Check if the LLM wants to make more tool calls
     if (iteration < MAX_ITERATIONS) {
+      const promptSize = promptChars(toolMessages);
       const nextRes = await llm({
           model: chatModel,
           messages: toolMessages,
@@ -187,6 +201,7 @@ export async function runToolLoop(
       if (!nextRes.ok) {
         break;
       }
+      inputCharsAdded += promptSize;
 
       const nextData = await nextRes.json();
       const nextNorm = normaliseResponse(providerFor(chatModel), nextData);

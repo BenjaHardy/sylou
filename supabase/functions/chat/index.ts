@@ -23,7 +23,7 @@ import {
   TUTOR_MODE_SYSTEM_PROMPT,
 } from "../_shared/_prompts.ts";
 import { buildDocIndex, buildFavBlock, WEB_SEARCH_PROMPT } from "./context.ts";
-import { runToolLoop } from "../_shared/_tool_loop.ts";
+import { promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { persistChatExchange } from "./persist.ts";
 
 
@@ -430,6 +430,7 @@ Deno.serve(async (req) => {
               try { controller.enqueue(sseEvent({ done: true, error: msg })); } catch { /* */ }
               return;
             }
+            totalInputChars += promptChars(toolMessages);
 
             // Read Call #2 stream and forward tokens
             let call2Stop: string | null = null;
