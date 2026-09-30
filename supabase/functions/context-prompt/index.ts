@@ -1,11 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, isTruncatedStop, type LLMTool } from "../_shared/_llm.ts";
+import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, isTruncatedStop, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
 import { makeSSEHelpers, readProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
-import { searchWeb, buildDocumentTool, buildWebSearchTool, formatWebSearchResults } from "../_shared/_tools.ts";
+import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
+import { promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
-import { contentLogsEnabled } from "../_shared/_debug.ts";
 import {
   CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT,
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
@@ -38,14 +38,6 @@ function getAdminClient() {
 import { makeCorsHeadersFor } from "../_shared/_cors.ts";
 
 const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
-
-// ── helpers ──────────────────────────────────────────────────────────────────
-
-// Real tool executions per assistant turn; calls past this (and unknown
-// tool names) still get a stub result — every echoed tool_call MUST be
-// answered or the follow-up provider request 400s for the unpaired ids
-// (P3-7e).
-const TOOL_CALL_LIMIT = 5;
 
 // ── Main handler ────────────────────────────────────────────────────────────
 
@@ -127,7 +119,6 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { project_id, thread_id, action_type, selected_text, instruction, source_module } = body;
     const selectedTextSource: string | undefined = body.selected_text_source;
-    const streamRequested: boolean = body.stream === true;
     const webSearchEnabled: boolean = body.web_search_enabled ?? false;
 
     // ── CONFIRM endpoint ────────────────────────────────────────────────
@@ -150,6 +141,9 @@ Deno.serve(async (req) => {
         { error: "project_id, thread_id, action_type, selected_text, instruction, and source_module are required" },
         400,
       );
+    }
+    if (body.stream !== true) {
+      return jsonResponse({ error: "Only streaming requests are supported (send stream: true)" }, 400);
     }
     if (typeof selected_text !== "string" || selected_text.length > INPUT_LIMITS.SELECTED_TEXT_CHARS) {
       return jsonResponse(
@@ -411,67 +405,156 @@ When citing information from web search results, always include the source URL i
     // =========================================================
     // STREAMING PATH — LLM Call #2 with optional tool-use
     // =========================================================
-    if (streamRequested) {
-      console.log("[stream:context-prompt] entering streaming path, action_type:", action_type, "hasTools:", hasTools);
+    console.log("[stream:context-prompt] entering streaming path, action_type:", action_type, "hasTools:", hasTools);
 
-      const { sseEvent, createSSEResponse } = makeSSEHelpers(corsHeaders);
+    const { sseEvent, createSSEResponse } = makeSSEHelpers(corsHeaders);
 
-      // ── TWO-PASS FLOW when tools exist ──
-      // Move entire Call #2a inside ReadableStream so phase events stream immediately
-      if (hasTools) {
-        console.log("[stream:context-prompt] tools available, two-pass flow (stream-first)");
+    // ── TWO-PASS FLOW when tools exist ──
+    // Move entire Call #2a inside ReadableStream so phase events stream immediately
+    if (hasTools) {
+      console.log("[stream:context-prompt] tools available, two-pass flow (stream-first)");
 
-        const readable = new ReadableStream({
-          async start(controller) {
-            try {
-              // Emit initial phase so the client knows we're working
-              controller.enqueue(sseEvent({ phase: "reviewing" }));
+      const readable = new ReadableStream({
+        async start(controller) {
+          try {
+            // Emit initial phase so the client knows we're working
+            controller.enqueue(sseEvent({ phase: "reviewing" }));
 
-              // Call #2a: non-streamed with tools (provider-aware via callLLM)
-              const call2aRes = await callLLM({
+            // Call #2a: non-streamed with tools (provider-aware via callLLM)
+            const call2aRes = await callLLM({
+              model: chatModel,
+              messages: responseMessages as any,
+              max_tokens: contextMaxTokens,
+              tools: tools as any,
+              temperature,
+              thinking,
+              effort,
+              mistral_effort: mistralEffort,
+            });
+
+            if (!call2aRes.ok) {
+              const errText = await call2aRes.text();
+              console.error("[stream:context-prompt] Call #2a error:", call2aRes.status, errText);
+              controller.enqueue(sseEvent({ error: extractProviderError(providerFor(chatModel), call2aRes.status, errText) }));
+              return;
+            }
+
+            const call2aData = await call2aRes.json();
+            const norm2a = normaliseResponse(providerFor(chatModel), call2aData);
+            const toolCalls = norm2a.toolCalls;
+            const call2aContent = cleanLLMContent(norm2a.text);
+            const call2aInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
+            totalInputChars += call2aInputChars;
+            totalOutputChars += call2aContent.length;
+
+            if (toolCalls.length === 0) {
+              // No tool use — emit Call #2a text as rapid SSE tokens
+              console.log("[stream:context-prompt] no tool use, emitting Call #2a directly");
+              const responseText = call2aContent || "No response generated.";
+
+              controller.enqueue(sseEvent({ phase: "responding" }));
+
+              await replayTokenBurst(responseText, (chunk) => controller.enqueue(sseEvent({ token: chunk })));
+
+              const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, responseText, totalInputChars, totalOutputChars);
+
+              if (persistenceFailed) {
+                controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
+              } else {
+                controller.enqueue(sseEvent({
+                  done: true,
+                  ai_response: responseText,
+                  truncated: isTruncatedStop(norm2a.stopReason),
+                  summary_update: summaryUpdate,
+                  action_id: actionRow?.id ?? null,
+                  budget_remaining: budgetRemaining,
+                  inserted_messages: insertedMessages,
+                  ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
+                  ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
+                }));
+              }
+            } else {
+              // ── Tool use detected ──
+              console.log("[stream:context-prompt] tool use detected:", toolCalls.length, "calls");
+
+              // Tool messages stay in OpenAI shape; toAnthropicBody in _llm.ts
+              // translates `role:"tool"` and assistant `tool_calls` to Anthropic's
+              // tool_result / tool_use content blocks transparently.
+              const toolMessages: LLMMessage[] = [
+                ...(responseMessages as LLMMessage[]),
+                norm2a.assistantMessage,
+              ];
+
+              // Resolve tool calls iteratively (_shared/_tool_loop.ts); the
+              // char counters return as values and must be folded in.
+              const { inputCharsAdded, outputCharsAdded } = await runToolLoop({
+                toolMessages,
+                toolCalls,
+                documentsReferenced,
+                webSearchesPerformed,
+                emitPhase: (phase) => {
+                  try { controller.enqueue(sseEvent({ phase })); } catch { /* */ }
+                },
+                adminSupabase: adminClient,
+                projectId: project_id,
+                chatModel,
+                chatMaxTokens: contextMaxTokens,
+                tools,
+                temperature,
+                thinking,
+                effort,
+                mistralEffort,
+                logTag: "[stream:context-prompt]",
+              });
+              totalInputChars += inputCharsAdded;
+              totalOutputChars += outputCharsAdded;
+
+              // Call #2b: streaming with tool results (provider-aware via callLLM)
+              console.log("[stream:context-prompt] starting Call #2b streaming");
+              const call2bRes = await callLLM({
                 model: chatModel,
-                messages: responseMessages as any,
+                messages: toolMessages,
                 max_tokens: contextMaxTokens,
-                tools: tools as any,
+                stream: true,
                 temperature,
                 thinking,
                 effort,
                 mistral_effort: mistralEffort,
               });
 
-              if (!call2aRes.ok) {
-                const errText = await call2aRes.text();
-                console.error("[stream:context-prompt] Call #2a error:", call2aRes.status, errText);
-                controller.enqueue(sseEvent({ error: extractProviderError(providerFor(chatModel), call2aRes.status, errText) }));
+              if (!call2bRes.ok) {
+                const errText = await call2bRes.text();
+                console.error("[stream:context-prompt] Call #2b error:", call2bRes.status, errText);
+                controller.enqueue(sseEvent({ done: true, error: extractProviderError(providerFor(chatModel), call2bRes.status, errText) }));
                 return;
               }
+              totalInputChars += promptChars(toolMessages);
 
-              const call2aData = await call2aRes.json();
-              const norm2a = normaliseResponse(providerFor(chatModel), call2aData);
-              const toolCalls = norm2a.toolCalls;
-              const call2aContent = cleanLLMContent(norm2a.text);
-              const call2aInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
-              totalInputChars += call2aInputChars;
-              totalOutputChars += call2aContent.length;
+              // Read Call #2b stream and forward tokens
+              let call2bStop: string | null = null;
+              let fullResponse = await readProviderStream(call2bRes, providerFor(chatModel), {
+                onToken: (delta) => {
+                  try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
+                },
+                onStop: (reason) => { call2bStop = reason; },
+              });
 
-              if (toolCalls.length === 0) {
-                // No tool use — emit Call #2a text as rapid SSE tokens
-                console.log("[stream:context-prompt] no tool use, emitting Call #2a directly");
-                const responseText = call2aContent || "No response generated.";
+              // Clean and persist
+              fullResponse = cleanLLMContent(fullResponse);
+              if (!fullResponse.trim()) {
+                console.warn("[stream:context-prompt] Call #2b returned no text", { stop_reason: call2bStop });
+              }
+              const aiResponse = fullResponse.trim() || "No response generated.";
+              const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars, totalOutputChars + aiResponse.length);
 
-                controller.enqueue(sseEvent({ phase: "responding" }));
-
-                await replayTokenBurst(responseText, (chunk) => controller.enqueue(sseEvent({ token: chunk })));
-
-                const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, responseText, totalInputChars, totalOutputChars);
-
+              try {
                 if (persistenceFailed) {
                   controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
                 } else {
                   controller.enqueue(sseEvent({
                     done: true,
-                    ai_response: responseText,
-                    truncated: isTruncatedStop(norm2a.stopReason),
+                    ai_response: aiResponse,
+                    truncated: isTruncatedStop(call2bStop),
                     summary_update: summaryUpdate,
                     action_id: actionRow?.id ?? null,
                     budget_remaining: budgetRemaining,
@@ -480,222 +563,17 @@ When citing information from web search results, always include the source URL i
                     ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
                   }));
                 }
-              } else {
-                // ── Tool use detected ──
-                console.log("[stream:context-prompt] tool use detected:", toolCalls.length, "calls");
-
-                // Tool messages stay in OpenAI shape; toAnthropicBody in _llm.ts
-                // translates `role:"tool"` and assistant `tool_calls` to Anthropic's
-                // tool_result / tool_use content blocks transparently.
-                const toolMessages: Array<Record<string, unknown>> = [
-                  ...responseMessages,
-                  norm2a.assistantMessage as unknown as Record<string, unknown>,
-                ];
-
-                for (const [tcIndex, tc] of toolCalls.entries()) {
-                  if (tcIndex >= TOOL_CALL_LIMIT) {
-                    toolMessages.push({
-                      role: "tool",
-                      tool_call_id: tc.id,
-                      content: "Not executed: per-turn tool-call limit reached. Ask again in a follow-up if still needed.",
-                    });
-                  } else if (tc.name === "read_imported_document") {
-                    const docId = tc.arguments.document_id as string;
-                    console.log("[stream:context-prompt] reading document:", docId);
-                    documentsReferenced.push(docId);
-
-                    try { controller.enqueue(sseEvent({ phase: "reading_documents" })); } catch { /* */ }
-
-                    const { data: docData } = await adminClient
-                      .from("imported_documents")
-                      .select("extracted_text, file_name")
-                      .eq("id", docId)
-                      .eq("project_id", project_id)
-                      .maybeSingle();
-
-                    const toolResult = docData?.extracted_text
-                      ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
-                      : `Document not found in this project or text not yet extracted.`;
-
-                    totalInputChars += toolResult.length;
-
-                    toolMessages.push({
-                      role: "tool",
-                      tool_call_id: tc.id,
-                      content: toolResult,
-                    });
-                  } else if (tc.name === "web_search") {
-                    const query = tc.arguments.query as string;
-                    console.log("[stream:context-prompt] web search:", contentLogsEnabled() ? query : `(${query.length} chars)`);
-                    webSearchesPerformed.push(query);
-
-                    try { controller.enqueue(sseEvent({ phase: "searching_web" })); } catch { /* */ }
-
-                    const results = await searchWeb(query);
-                    const toolResult = formatWebSearchResults(query, results);
-                    totalInputChars += toolResult.length;
-
-                    toolMessages.push({
-                      role: "tool",
-                      tool_call_id: tc.id,
-                      content: toolResult,
-                    });
-                  } else {
-                    toolMessages.push({
-                      role: "tool",
-                      tool_call_id: tc.id,
-                      content: `Unknown tool "${tc.name}" — not executed.`,
-                    });
-                  }
-                }
-
-                // Call #2b: streaming with tool results (provider-aware via callLLM)
-                console.log("[stream:context-prompt] starting Call #2b streaming");
-                const call2bRes = await callLLM({
-                  model: chatModel,
-                  messages: toolMessages as any,
-                  max_tokens: contextMaxTokens,
-                  stream: true,
-                  temperature,
-                  thinking,
-                  effort,
-                  mistral_effort: mistralEffort,
-                });
-
-                if (!call2bRes.ok) {
-                  const errText = await call2bRes.text();
-                  console.error("[stream:context-prompt] Call #2b error:", call2bRes.status, errText);
-                  controller.enqueue(sseEvent({ done: true, error: extractProviderError(providerFor(chatModel), call2bRes.status, errText) }));
-                  return;
-                }
-
-                // Read Call #2b stream and forward tokens
-                let call2bStop: string | null = null;
-                let fullResponse = await readProviderStream(call2bRes, providerFor(chatModel), {
-                  onToken: (delta) => {
-                    try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
-                  },
-                  onStop: (reason) => { call2bStop = reason; },
-                });
-
-                // Clean and persist
-                fullResponse = cleanLLMContent(fullResponse);
-                const aiResponse = fullResponse.trim() || "No response generated.";
-                const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars, totalOutputChars + aiResponse.length);
-
-                try {
-                  if (persistenceFailed) {
-                    controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
-                  } else {
-                    controller.enqueue(sseEvent({
-                      done: true,
-                      ai_response: aiResponse,
-                      truncated: isTruncatedStop(call2bStop),
-                      summary_update: summaryUpdate,
-                      action_id: actionRow?.id ?? null,
-                      budget_remaining: budgetRemaining,
-                      inserted_messages: insertedMessages,
-                      ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
-                      ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
-                    }));
-                  }
-                } catch { /* client gone */ }
-              }
-            } catch (err) {
-              console.error("[stream:context-prompt] error in tool-use path:", err);
-              const msg = err instanceof Error && err.message ? sliceSafe(err.message, 200) : "AI service temporarily unavailable.";
-              try { controller.enqueue(sseEvent({ done: true, error: msg })); } catch { /* */ }
-            } finally {
-              // conversation-memory: refresh in the tail, after `done` —
-              // Ask/Propose exchanges land in the thread too, so this
-              // function crosses the boundary as well. Non-fatal; no-ops
-              // cheaply when fewer than the threshold are uncovered.
-              await maybeRefreshConversationMemory({
-                admin: adminClient,
-                threadId: thread_id,
-                model: chatModel,
-                userId: authedUser.id,
-                overBudget: authedProfile.monthly_token_budget !== null &&
-                  authedProfile.tokens_used_this_period >= authedProfile.monthly_token_budget,
-                logTag: "[context-prompt]",
-              });
-              controller.close();
+              } catch { /* client gone */ }
             }
-          },
-        });
-
-        return createSSEResponse(readable);
-      }
-      // ── NO TOOLS — streaming Call #2 using ReadableStream ──
-      console.log("[stream:context-prompt] no tools, standard streaming");
-
-      const llmRes = await callLLM({
-        model: chatModel,
-        messages: responseMessages as any,
-        max_tokens: contextMaxTokens,
-        stream: true,
-        temperature,
-        thinking,
-        effort,
-        mistral_effort: mistralEffort,
-      });
-
-      if (!llmRes.ok) {
-        const errText = await llmRes.text();
-        console.error("[stream:context-prompt] LLM API error:", llmRes.status, errText);
-        return jsonResponse(
-          { error: extractProviderError(providerFor(chatModel), llmRes.status, errText) },
-          502
-        );
-      }
-
-      const readable = new ReadableStream({
-        async start(controller) {
-          let fullResponse: string;
-          let stopReason: string | null = null;
-
-          try {
-            controller.enqueue(sseEvent({ phase: "responding" }));
-
-            fullResponse = await readProviderStream(llmRes, providerFor(chatModel), {
-              onToken: (delta) => {
-                try {
-                  controller.enqueue(sseEvent({ token: delta }));
-                } catch { /* client gone */ }
-              },
-              onStop: (reason) => { stopReason = reason; },
-            });
-
-            console.log("[stream:context-prompt] LLM stream complete, persisting");
-            fullResponse = cleanLLMContent(fullResponse);
-            const aiResponse = fullResponse.trim() || "No response generated.";
-            const extraInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
-            const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars + extraInputChars, totalOutputChars + aiResponse.length);
-
-            try {
-              if (persistenceFailed) {
-                controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
-              } else {
-                controller.enqueue(sseEvent({
-                  done: true,
-                  ai_response: aiResponse,
-                  truncated: isTruncatedStop(stopReason),
-                  summary_update: summaryUpdate,
-                  action_id: actionRow?.id ?? null,
-                  budget_remaining: budgetRemaining,
-                  inserted_messages: insertedMessages,
-                }));
-              }
-            } catch { /* client gone */ }
-
-            console.log("[stream:context-prompt] persistence complete");
-          } catch (persistErr) {
-            console.error("[stream:context-prompt] persistence error:", persistErr);
-            try {
-              controller.enqueue(sseEvent({ done: true, error: "Action may not have been saved." }));
-            } catch { /* client gone */ }
+          } catch (err) {
+            console.error("[stream:context-prompt] error in tool-use path:", err);
+            const msg = err instanceof Error && err.message ? sliceSafe(err.message, 200) : "AI service temporarily unavailable.";
+            try { controller.enqueue(sseEvent({ done: true, error: msg })); } catch { /* */ }
           } finally {
-            // conversation-memory: refresh in the tail (see tool-use path).
+            // conversation-memory: refresh in the tail, after `done` —
+            // Ask/Propose exchanges land in the thread too, so this
+            // function crosses the boundary as well. Non-fatal; no-ops
+            // cheaply when fewer than the threshold are uncovered.
             await maybeRefreshConversationMemory({
               admin: adminClient,
               threadId: thread_id,
@@ -712,137 +590,91 @@ When citing information from web search results, always include the source URL i
 
       return createSSEResponse(readable);
     }
+    // ── NO TOOLS — streaming Call #2 using ReadableStream ──
+    console.log("[stream:context-prompt] no tools, standard streaming");
 
-    // =========================================================
-    // NON-STREAMING PATH — with optional two-pass document flow
-    // =========================================================
+    const llmRes = await callLLM({
+      model: chatModel,
+      messages: responseMessages as any,
+      max_tokens: contextMaxTokens,
+      stream: true,
+      temperature,
+      thinking,
+      effort,
+      mistral_effort: mistralEffort,
+    });
 
-    if (hasTools) {
-      const call2aRes = await callLLM({
-        model: chatModel,
-        messages: responseMessages as any,
-        max_tokens: contextMaxTokens,
-        tools: tools as any,
-        temperature,
-        thinking,
-        effort,
-        mistral_effort: mistralEffort,
-      });
-
-      if (!call2aRes.ok) {
-        const errText = await call2aRes.text();
-        console.error("Call #2a error:", call2aRes.status, errText);
-        throw new Error(extractProviderError(providerFor(chatModel), call2aRes.status, errText));
-      }
-
-      const call2aData = await call2aRes.json();
-      const norm2a = normaliseResponse(providerFor(chatModel), call2aData);
-      const toolCalls = norm2a.toolCalls;
-      const call2aContent = cleanLLMContent(norm2a.text);
-      totalInputChars += responseMessages.reduce((s, m) => s + m.content.length, 0);
-      totalOutputChars += call2aContent.length;
-
-      let aiResponse: string;
-
-      if (toolCalls.length === 0) {
-        aiResponse = call2aContent || "No response generated.";
-      } else {
-        const toolMessages: Array<Record<string, unknown>> = [
-          ...responseMessages,
-          norm2a.assistantMessage as unknown as Record<string, unknown>,
-        ];
-
-        for (const [tcIndex, tc] of toolCalls.entries()) {
-          if (tcIndex >= TOOL_CALL_LIMIT) {
-            toolMessages.push({
-              role: "tool",
-              tool_call_id: tc.id,
-              content: "Not executed: per-turn tool-call limit reached. Ask again in a follow-up if still needed.",
-            });
-          } else if (tc.name === "read_imported_document") {
-            const docId = tc.arguments.document_id as string;
-            documentsReferenced.push(docId);
-            const { data: docData } = await adminClient
-              .from("imported_documents")
-              .select("extracted_text, file_name")
-              .eq("id", docId)
-              .eq("project_id", project_id)
-              .maybeSingle();
-
-            const toolResult = docData?.extracted_text
-              ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
-              : `Document not found in this project or text not yet extracted.`;
-            totalInputChars += toolResult.length;
-
-            toolMessages.push({
-              role: "tool",
-              tool_call_id: tc.id,
-              content: toolResult,
-            });
-          } else if (tc.name === "web_search") {
-            const query = tc.arguments.query as string;
-            webSearchesPerformed.push(query);
-
-            const results = await searchWeb(query);
-            const toolResult = formatWebSearchResults(query, results);
-            totalInputChars += toolResult.length;
-
-            toolMessages.push({
-              role: "tool",
-              tool_call_id: tc.id,
-              content: toolResult,
-            });
-          } else {
-            toolMessages.push({
-              role: "tool",
-              tool_call_id: tc.id,
-              content: `Unknown tool "${tc.name}" — not executed.`,
-            });
-          }
-        }
-
-        const call2bResult = await callChatModel(chatModel, toolMessages as { role: string; content: string }[], contextMaxTokens, temperature, thinking, effort, mistralEffort);
-        totalInputChars += call2bResult.inputChars;
-        totalOutputChars += call2bResult.outputChars;
-        aiResponse = call2bResult.text.trim() || "No response generated.";
-      }
-
-      const { actionRow, budgetRemaining, insertedMessages, persistenceFailed, totalTokens } = await persistContextExchange(persistCtx, aiResponse, totalInputChars, totalOutputChars);
-
-      return jsonResponse({
-        ai_response: aiResponse,
-        summary_update: summaryUpdate,
-        action_id: actionRow?.id ?? null,
-        tokens_used: totalTokens,
-        budget_remaining: budgetRemaining,
-        inserted_messages: insertedMessages,
-        ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
-        ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
-        // Same contract as the streaming paths: failed core writes are
-        // reported, never presented as success.
-        ...(persistenceFailed ? { error: "Messages may not have been saved." } : {}),
-      });
+    if (!llmRes.ok) {
+      const errText = await llmRes.text();
+      console.error("[stream:context-prompt] LLM API error:", llmRes.status, errText);
+      return jsonResponse(
+        { error: extractProviderError(providerFor(chatModel), llmRes.status, errText) },
+        502
+      );
     }
 
-    // ── NO TOOLS — original non-streaming path ──
-    const responseResult = await callChatModel(chatModel, responseMessages, contextMaxTokens, temperature, thinking, effort, mistralEffort);
-    const aiResponse = responseResult.text.trim();
+    const readable = new ReadableStream({
+      async start(controller) {
+        let fullResponse: string;
+        let stopReason: string | null = null;
 
-    const finalInputChars = totalInputChars + responseResult.inputChars;
-    const finalOutputChars = totalOutputChars + responseResult.outputChars;
-    const { actionRow, budgetRemaining, insertedMessages, persistenceFailed, totalTokens } = await persistContextExchange(persistCtx, aiResponse, finalInputChars, finalOutputChars);
+        try {
+          controller.enqueue(sseEvent({ phase: "responding" }));
 
-    return jsonResponse({
-      ai_response: aiResponse,
-      summary_update: summaryUpdate,
-      action_id: actionRow?.id ?? null,
-      tokens_used: totalTokens,
-      budget_remaining: budgetRemaining,
-      inserted_messages: insertedMessages,
-      // Same contract as the streaming paths: failed core writes are
-      // reported, never presented as success.
-      ...(persistenceFailed ? { error: "Messages may not have been saved." } : {}),
+          fullResponse = await readProviderStream(llmRes, providerFor(chatModel), {
+            onToken: (delta) => {
+              try {
+                controller.enqueue(sseEvent({ token: delta }));
+              } catch { /* client gone */ }
+            },
+            onStop: (reason) => { stopReason = reason; },
+          });
+
+          console.log("[stream:context-prompt] LLM stream complete, persisting");
+          fullResponse = cleanLLMContent(fullResponse);
+          const aiResponse = fullResponse.trim() || "No response generated.";
+          const extraInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
+          const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars + extraInputChars, totalOutputChars + aiResponse.length);
+
+          try {
+            if (persistenceFailed) {
+              controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
+            } else {
+              controller.enqueue(sseEvent({
+                done: true,
+                ai_response: aiResponse,
+                truncated: isTruncatedStop(stopReason),
+                summary_update: summaryUpdate,
+                action_id: actionRow?.id ?? null,
+                budget_remaining: budgetRemaining,
+                inserted_messages: insertedMessages,
+              }));
+            }
+          } catch { /* client gone */ }
+
+          console.log("[stream:context-prompt] persistence complete");
+        } catch (persistErr) {
+          console.error("[stream:context-prompt] persistence error:", persistErr);
+          try {
+            controller.enqueue(sseEvent({ done: true, error: "Action may not have been saved." }));
+          } catch { /* client gone */ }
+        } finally {
+          // conversation-memory: refresh in the tail (see tool-use path).
+          await maybeRefreshConversationMemory({
+            admin: adminClient,
+            threadId: thread_id,
+            model: chatModel,
+            userId: authedUser.id,
+            overBudget: authedProfile.monthly_token_budget !== null &&
+              authedProfile.tokens_used_this_period >= authedProfile.monthly_token_budget,
+            logTag: "[context-prompt]",
+          });
+          controller.close();
+        }
+      },
     });
+
+    return createSSEResponse(readable);
   } catch (err) {
     console.error("Context-prompt error:", err);
     return jsonResponse({ error: err instanceof Error ? err.message : "Internal server error" }, 500);

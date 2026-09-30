@@ -23,7 +23,7 @@ import {
   TUTOR_MODE_SYSTEM_PROMPT,
 } from "../_shared/_prompts.ts";
 import { buildDocIndex, buildFavBlock, WEB_SEARCH_PROMPT } from "./context.ts";
-import { runToolLoop } from "./tool-loop.ts";
+import { promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { persistChatExchange } from "./persist.ts";
 
 
@@ -81,7 +81,6 @@ Deno.serve(async (req) => {
     const threadId: string = body.thread_id;
     const message: string = body.message;
     const conciseMode: boolean = body.concise_mode ?? false;
-    const streamRequested: boolean = body.stream === true;
     const webSearchEnabled: boolean = body.web_search_enabled ?? false;
     const requestedModel: string | undefined = body.model;
     // Gate the request override against the registry allowlist; an absent/empty
@@ -93,6 +92,9 @@ Deno.serve(async (req) => {
         { error: `Unsupported model: ${sliceSafe(String(requestedModel), 64)}` },
         400,
       );
+    }
+    if (body.stream !== true) {
+      return jsonResponse({ error: "Only streaming requests are supported (send stream: true)" }, 400);
     }
     const chatModel: string =
       requestedModel || profile.preferred_chat_model || "zai-glm-5-2";
@@ -265,180 +267,57 @@ Deno.serve(async (req) => {
     // =========================================================
     // STREAMING PATH — with tool-use support
     // =========================================================
-    if (streamRequested) {
-      console.log("[stream] entering streaming path for thread", threadId, "hasTools:", hasTools);
+    console.log("[stream] entering streaming path for thread", threadId, "hasTools:", hasTools);
 
-      const { sseEvent, createSSEResponse } = makeSSEHelpers(corsHeaders);
+    const { sseEvent, createSSEResponse } = makeSSEHelpers(corsHeaders);
 
-      // ---- TWO-PASS FLOW when tools exist ----
-      if (hasTools) {
-        console.log("[stream] tools available, using two-pass flow");
+    // ---- TWO-PASS FLOW when tools exist ----
+    if (hasTools) {
+      console.log("[stream] tools available, using two-pass flow");
 
-        // LLM Call #1: non-streaming with tools
-        const call1Body = {
-          model: chatModel,
-          messages: llmMessages,
-          max_tokens: chatMaxTokens,
-          tools,
-          tool_choice: "auto" as const,
-          temperature,
-          thinking,
-          effort,
-          mistral_effort: mistralEffort,
-        };
+      // LLM Call #1: non-streaming with tools
+      const call1Body = {
+        model: chatModel,
+        messages: llmMessages,
+        max_tokens: chatMaxTokens,
+        tools,
+        tool_choice: "auto" as const,
+        temperature,
+        thinking,
+        effort,
+        mistral_effort: mistralEffort,
+      };
 
 
-        const call1Res = await callLLM(call1Body);
+      const call1Res = await callLLM(call1Body);
 
-        if (!call1Res.ok) {
-          const errText = await call1Res.text();
-          console.error("[stream] Call #1 error:", call1Res.status, errText);
-          return jsonResponse(
-            { error: extractProviderError(providerFor(chatModel), call1Res.status, errText) },
-            502
-          );
-        }
+      if (!call1Res.ok) {
+        const errText = await call1Res.text();
+        console.error("[stream] Call #1 error:", call1Res.status, errText);
+        return jsonResponse(
+          { error: extractProviderError(providerFor(chatModel), call1Res.status, errText) },
+          502
+        );
+      }
 
-        const call1Data = await call1Res.json();
-        const norm1 = normaliseResponse(providerFor(chatModel), call1Data);
-        const toolCalls = norm1.toolCalls;
+      const call1Data = await call1Res.json();
+      const norm1 = normaliseResponse(providerFor(chatModel), call1Data);
+      const toolCalls = norm1.toolCalls;
 
-        // Track tokens from Call #1
-        totalInputChars += llmMessages.reduce((s, m) => s + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length), 0);
-        const call1Content = cleanLLMContent(norm1.text);
-        totalOutputChars += call1Content.length;
+      // Track tokens from Call #1
+      totalInputChars += llmMessages.reduce((s, m) => s + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length), 0);
+      const call1Content = cleanLLMContent(norm1.text);
+      totalOutputChars += call1Content.length;
 
-        if (toolCalls.length === 0) {
-          // No tool use — emit Call #1 text as rapid SSE sequence
-          console.log("[stream] no tool use, emitting Call #1 response directly");
-          const responseText = call1Content || "No response generated.";
-
-          const readable = new ReadableStream({
-            async start(controller) {
-              try {
-                await replayTokenBurst(responseText, (chunk) => controller.enqueue(sseEvent({ token: chunk })));
-
-                const {
-                  insertedUser,
-                  insertedAssistant,
-                  persistenceFailed,
-                  newTotal,
-                } = await persistChatExchange(
-                  persistCtx,
-                  responseText,
-                  totalInputChars,
-                  totalOutputChars,
-                );
-
-                // Failed message writes take the same path a thrown persistence
-                // error does — never report success over missing rows.
-                if (persistenceFailed) {
-                  controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
-                } else {
-                  controller.enqueue(
-                    sseEvent({
-                      done: true,
-                      user_message: insertedUser,
-                      assistant_message: insertedAssistant,
-                      budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
-                    })
-                  );
-                }
-
-                // conversation-memory: refresh in the tail, after `done` is
-                // sent — the user never waits on it, and the stream-first
-                // pattern keeps the isolate alive until controller.close().
-                // Non-fatal by contract (the helper never throws).
-                await maybeRefreshConversationMemory({
-                  admin: adminSupabase,
-                  threadId,
-                  model: chatModel,
-                  userId: user.id,
-                  overBudget: profile.monthly_token_budget !== null && newTotal >= profile.monthly_token_budget,
-                  logTag: "[chat]",
-                });
-              } catch (err) {
-                console.error("[stream] error in no-tool path:", err);
-                try {
-                  controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
-                } catch { /* client gone */ }
-              } finally {
-                controller.close();
-              }
-            },
-          });
-
-          return createSSEResponse(readable);
-        }
-
-        // ---- Tool use detected — STREAM-FIRST approach ----
-        // Use ReadableStream so Deno keeps the isolate alive until controller.close()
-        console.log("[stream] tool use detected:", toolCalls.length, "calls — using stream-first approach");
+      if (toolCalls.length === 0) {
+        // No tool use — emit Call #1 text as rapid SSE sequence
+        console.log("[stream] no tool use, emitting Call #1 response directly");
+        const responseText = call1Content || "No response generated.";
 
         const readable = new ReadableStream({
           async start(controller) {
             try {
-              // Build conversation with tool results
-              const toolMessages: LLMMessage[] = [
-                ...llmMessages,
-                norm1.assistantMessage,
-              ];
-
-              // Resolve tool calls iteratively (tool-loop.ts); the char
-              // counters return as VALUES and must be folded in — numbers
-              // cannot mutate across the module boundary.
-              const { inputCharsAdded, outputCharsAdded } = await runToolLoop({
-                toolMessages,
-                toolCalls,
-                documentsReferenced,
-                webSearchesPerformed,
-                emitPhase: (phase) => {
-                  try { controller.enqueue(sseEvent({ phase })); } catch { /* */ }
-                },
-                adminSupabase,
-                projectId: thread.project_id,
-                chatModel,
-                chatMaxTokens,
-                tools,
-                temperature,
-                thinking,
-                effort,
-                mistralEffort,
-              });
-              totalInputChars += inputCharsAdded;
-              totalOutputChars += outputCharsAdded;
-
-              // LLM Call #2: streaming with tool results (no tools this time)
-              console.log("[stream] starting Call #2 streaming");
-              const call2Res = await callLLM({
-                  model: chatModel,
-                  messages: toolMessages,
-                  max_tokens: chatMaxTokens,
-                  stream: true,
-                  temperature,
-                  thinking,
-                  effort,
-                  mistral_effort: mistralEffort,
-                });
-
-              if (!call2Res.ok) {
-                const errText = await call2Res.text();
-                console.error("[stream] Call #2 error:", call2Res.status, errText);
-                const msg = extractProviderError(providerFor(chatModel), call2Res.status, errText);
-                try { controller.enqueue(sseEvent({ done: true, error: msg })); } catch { /* */ }
-                return;
-              }
-
-              // Read Call #2 stream and forward tokens
-              let fullResponse = await readProviderStream(call2Res, providerFor(chatModel), {
-                onToken: (delta) => {
-                  try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
-                },
-              });
-
-              // Clean and persist
-              fullResponse = cleanLLMContent(fullResponse);
-              totalOutputChars += fullResponse.length;
+              await replayTokenBurst(responseText, (chunk) => controller.enqueue(sseEvent({ token: chunk })));
 
               const {
                 insertedUser,
@@ -447,29 +326,30 @@ Deno.serve(async (req) => {
                 newTotal,
               } = await persistChatExchange(
                 persistCtx,
-                fullResponse || "No response generated.",
+                responseText,
                 totalInputChars,
                 totalOutputChars,
-                { documentsReferenced, webSearchesPerformed },
               );
 
-              try {
-                if (persistenceFailed) {
-                  controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
-                } else {
-                  controller.enqueue(
-                    sseEvent({
-                      done: true,
-                      user_message: insertedUser,
-                      assistant_message: insertedAssistant,
-                      budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
-                    })
-                  );
-                }
-              } catch { /* client gone */ }
+              // Failed message writes take the same path a thrown persistence
+              // error does — never report success over missing rows.
+              if (persistenceFailed) {
+                controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
+              } else {
+                controller.enqueue(
+                  sseEvent({
+                    done: true,
+                    user_message: insertedUser,
+                    assistant_message: insertedAssistant,
+                    budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
+                  })
+                );
+              }
 
               // conversation-memory: refresh in the tail, after `done` is
-              // sent (see the no-tool path for the full rationale).
+              // sent — the user never waits on it, and the stream-first
+              // pattern keeps the isolate alive until controller.close().
+              // Non-fatal by contract (the helper never throws).
               await maybeRefreshConversationMemory({
                 admin: adminSupabase,
                 threadId,
@@ -479,9 +359,9 @@ Deno.serve(async (req) => {
                 logTag: "[chat]",
               });
             } catch (err) {
-              console.error("[stream] error in tool-use path:", err);
+              console.error("[stream] error in no-tool path:", err);
               try {
-                controller.enqueue(sseEvent({ done: true, error: "AI service temporarily unavailable." }));
+                controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
               } catch { /* client gone */ }
             } finally {
               controller.close();
@@ -491,53 +371,83 @@ Deno.serve(async (req) => {
 
         return createSSEResponse(readable);
       }
-      // ---- NO TOOLS — streaming path using ReadableStream ----
-      console.log("[stream] no tools, standard streaming path");
 
-      const llmRes = await callLLM({
-          model: chatModel,
-          messages: llmMessages,
-          max_tokens: chatMaxTokens,
-          stream: true,
-          temperature,
-          thinking,
-          effort,
-          mistral_effort: mistralEffort,
-        });
-
-      if (!llmRes.ok) {
-        const errText = await llmRes.text();
-        console.error("[stream] LLM API error:", llmRes.status, errText);
-        return jsonResponse(
-          { error: extractProviderError(providerFor(chatModel), llmRes.status, errText) },
-          502
-        );
-      }
-
-      console.log("[stream] LLM response received, streaming via ReadableStream");
+      // ---- Tool use detected — STREAM-FIRST approach ----
+      // Use ReadableStream so Deno keeps the isolate alive until controller.close()
+      console.log("[stream] tool use detected:", toolCalls.length, "calls — using stream-first approach");
 
       const readable = new ReadableStream({
         async start(controller) {
-          let fullResponse: string;
-
           try {
-            fullResponse = await readProviderStream(llmRes, providerFor(chatModel), {
-              onToken: (delta) => {
-                try {
-                  controller.enqueue(sseEvent({ token: delta }));
-                } catch { /* client gone */ }
+            // Build conversation with tool results
+            const toolMessages: LLMMessage[] = [
+              ...llmMessages,
+              norm1.assistantMessage,
+            ];
+
+            // Resolve tool calls iteratively (_shared/_tool_loop.ts); the char
+            // counters return as VALUES and must be folded in — numbers
+            // cannot mutate across the module boundary.
+            const { inputCharsAdded, outputCharsAdded } = await runToolLoop({
+              toolMessages,
+              toolCalls,
+              documentsReferenced,
+              webSearchesPerformed,
+              emitPhase: (phase) => {
+                try { controller.enqueue(sseEvent({ phase })); } catch { /* */ }
               },
+              adminSupabase,
+              projectId: thread.project_id,
+              chatModel,
+              chatMaxTokens,
+              tools,
+              temperature,
+              thinking,
+              effort,
+              mistralEffort,
+              logTag: "[stream]",
+            });
+            totalInputChars += inputCharsAdded;
+            totalOutputChars += outputCharsAdded;
+
+            // LLM Call #2: streaming with tool results (no tools this time)
+            console.log("[stream] starting Call #2 streaming");
+            const call2Res = await callLLM({
+                model: chatModel,
+                messages: toolMessages,
+                max_tokens: chatMaxTokens,
+                stream: true,
+                temperature,
+                thinking,
+                effort,
+                mistral_effort: mistralEffort,
+              });
+
+            if (!call2Res.ok) {
+              const errText = await call2Res.text();
+              console.error("[stream] Call #2 error:", call2Res.status, errText);
+              const msg = extractProviderError(providerFor(chatModel), call2Res.status, errText);
+              try { controller.enqueue(sseEvent({ done: true, error: msg })); } catch { /* */ }
+              return;
+            }
+            totalInputChars += promptChars(toolMessages);
+
+            // Read Call #2 stream and forward tokens
+            let call2Stop: string | null = null;
+            let fullResponse = await readProviderStream(call2Res, providerFor(chatModel), {
+              onToken: (delta) => {
+                try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
+              },
+              onStop: (reason) => { call2Stop = reason; },
             });
 
-            // Persist
-            console.log("[stream] flush() started");
+            // Clean and persist
             fullResponse = cleanLLMContent(fullResponse);
+            if (!fullResponse.trim()) {
+              console.warn("[stream] Call #2 returned no text", { stop_reason: call2Stop });
+            }
+            totalOutputChars += fullResponse.length;
 
-            const inputChars = llmMessages.reduce(
-              (sum, m) => sum + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length),
-              0
-            );
-            const outputChars = fullResponse.length;
             const {
               insertedUser,
               insertedAssistant,
@@ -546,8 +456,9 @@ Deno.serve(async (req) => {
             } = await persistChatExchange(
               persistCtx,
               fullResponse || "No response generated.",
-              inputChars,
-              outputChars,
+              totalInputChars,
+              totalOutputChars,
+              { documentsReferenced, webSearchesPerformed },
             );
 
             try {
@@ -565,13 +476,8 @@ Deno.serve(async (req) => {
               }
             } catch { /* client gone */ }
 
-            console.log("[stream] flush() completed — persistence done");
-
             // conversation-memory: refresh in the tail, after `done` is
-            // sent (see the tool-offered paths for the full rationale).
-            // This is the third of chat's three streaming completions — the
-            // no-tools path (no imported documents, web search off) — and
-            // the one the original hook pass missed.
+            // sent (see the no-tool path for the full rationale).
             await maybeRefreshConversationMemory({
               admin: adminSupabase,
               threadId,
@@ -580,17 +486,11 @@ Deno.serve(async (req) => {
               overBudget: profile.monthly_token_budget !== null && newTotal >= profile.monthly_token_budget,
               logTag: "[chat]",
             });
-          } catch (persistErr) {
-            console.error("[stream] persistence error:", persistErr);
+          } catch (err) {
+            console.error("[stream] error in tool-use path:", err);
             try {
-              controller.enqueue(
-                sseEvent({
-                  done: true,
-                  error: "Messages may not have been saved.",
-                })
-              );
+              controller.enqueue(sseEvent({ done: true, error: "AI service temporarily unavailable." }));
             } catch { /* client gone */ }
-            console.log("[stream] flush() completed — with error");
           } finally {
             controller.close();
           }
@@ -599,14 +499,14 @@ Deno.serve(async (req) => {
 
       return createSSEResponse(readable);
     }
+    // ---- NO TOOLS — streaming path using ReadableStream ----
+    console.log("[stream] no tools, standard streaming path");
 
-    // =========================================================
-    // NON-STREAMING PATH (unchanged)
-    // =========================================================
     const llmRes = await callLLM({
         model: chatModel,
         messages: llmMessages,
         max_tokens: chatMaxTokens,
+        stream: true,
         temperature,
         thinking,
         effort,
@@ -615,55 +515,97 @@ Deno.serve(async (req) => {
 
     if (!llmRes.ok) {
       const errText = await llmRes.text();
-      console.error("LLM API error:", llmRes.status, errText);
+      console.error("[stream] LLM API error:", llmRes.status, errText);
       return jsonResponse(
         { error: extractProviderError(providerFor(chatModel), llmRes.status, errText) },
         502
       );
     }
 
-    const llmData = await llmRes.json();
-    // Provider-agnostic parse via the router's normaliser (the previous
-    // OpenAI-shape read returned "No response generated." for every
-    // Anthropic response — which was then persisted and billed).
-    const norm = normaliseResponse(providerFor(chatModel), llmData);
-    const assistantText = cleanLLMContent(norm.text || "No response generated.");
+    console.log("[stream] LLM response received, streaming via ReadableStream");
 
-    // --- Persist messages ---
-    // --- Estimate tokens & persist (persist.ts) ---
-    // Service-role writes (write-surface lockdown); thread ownership was
-    // verified at request entry. Disclosed D3 normalization: the prompt
-    // count here previously ran on the USER-context client — persist.ts
-    // uses the admin client on every path (outcome-identical: the
-    // project_stats owner UPDATE policy grants the same write).
-    const inputChars = llmMessages.reduce(
-      (sum, m) => sum + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length),
-      0
-    );
-    const outputChars = assistantText.length;
-    const {
-      insertedUser,
-      insertedAssistant,
-      persistenceFailed,
-      estimatedTokens,
-      newTotal,
-    } = await persistChatExchange(
-      persistCtx,
-      assistantText,
-      inputChars,
-      outputChars,
-    );
+    const readable = new ReadableStream({
+      async start(controller) {
+        let fullResponse: string;
 
-    return jsonResponse({
-      reply: assistantText,
-      tokens_used: estimatedTokens,
-      budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
-      user_message: insertedUser,
-      assistant_message: insertedAssistant,
-      // Same contract as the streaming paths: a failed message write is
-      // reported, never presented as success (client shows data.error).
-      ...(persistenceFailed ? { error: "Messages may not have been saved." } : {}),
+        try {
+          fullResponse = await readProviderStream(llmRes, providerFor(chatModel), {
+            onToken: (delta) => {
+              try {
+                controller.enqueue(sseEvent({ token: delta }));
+              } catch { /* client gone */ }
+            },
+          });
+
+          // Persist
+          console.log("[stream] flush() started");
+          fullResponse = cleanLLMContent(fullResponse);
+
+          const inputChars = llmMessages.reduce(
+            (sum, m) => sum + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length),
+            0
+          );
+          const outputChars = fullResponse.length;
+          const {
+            insertedUser,
+            insertedAssistant,
+            persistenceFailed,
+            newTotal,
+          } = await persistChatExchange(
+            persistCtx,
+            fullResponse || "No response generated.",
+            inputChars,
+            outputChars,
+          );
+
+          try {
+            if (persistenceFailed) {
+              controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
+            } else {
+              controller.enqueue(
+                sseEvent({
+                  done: true,
+                  user_message: insertedUser,
+                  assistant_message: insertedAssistant,
+                  budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
+                })
+              );
+            }
+          } catch { /* client gone */ }
+
+          console.log("[stream] flush() completed — persistence done");
+
+          // conversation-memory: refresh in the tail, after `done` is
+          // sent (see the tool-offered paths for the full rationale).
+          // This is the third of chat's three streaming completions — the
+          // no-tools path (no imported documents, web search off) — and
+          // the one the original hook pass missed.
+          await maybeRefreshConversationMemory({
+            admin: adminSupabase,
+            threadId,
+            model: chatModel,
+            userId: user.id,
+            overBudget: profile.monthly_token_budget !== null && newTotal >= profile.monthly_token_budget,
+            logTag: "[chat]",
+          });
+        } catch (persistErr) {
+          console.error("[stream] persistence error:", persistErr);
+          try {
+            controller.enqueue(
+              sseEvent({
+                done: true,
+                error: "Messages may not have been saved.",
+              })
+            );
+          } catch { /* client gone */ }
+          console.log("[stream] flush() completed — with error");
+        } finally {
+          controller.close();
+        }
+      },
     });
+
+    return createSSEResponse(readable);
   } catch (err) {
     console.error("Chat function error:", err);
     return jsonResponse({ error: "Internal server error" }, 500);
