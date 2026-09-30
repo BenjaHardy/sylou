@@ -23,7 +23,7 @@ import {
   TUTOR_MODE_SYSTEM_PROMPT,
 } from "../_shared/_prompts.ts";
 import { buildDocIndex, buildFavBlock, WEB_SEARCH_PROMPT } from "./context.ts";
-import { runToolLoop } from "./tool-loop.ts";
+import { runToolLoop } from "../_shared/_tool_loop.ts";
 import { persistChatExchange } from "./persist.ts";
 
 
@@ -385,7 +385,7 @@ Deno.serve(async (req) => {
               norm1.assistantMessage,
             ];
 
-            // Resolve tool calls iteratively (tool-loop.ts); the char
+            // Resolve tool calls iteratively (_shared/_tool_loop.ts); the char
             // counters return as VALUES and must be folded in — numbers
             // cannot mutate across the module boundary.
             const { inputCharsAdded, outputCharsAdded } = await runToolLoop({
@@ -405,6 +405,7 @@ Deno.serve(async (req) => {
               thinking,
               effort,
               mistralEffort,
+              logTag: "[stream]",
             });
             totalInputChars += inputCharsAdded;
             totalOutputChars += outputCharsAdded;
@@ -431,14 +432,19 @@ Deno.serve(async (req) => {
             }
 
             // Read Call #2 stream and forward tokens
+            let call2Stop: string | null = null;
             let fullResponse = await readProviderStream(call2Res, providerFor(chatModel), {
               onToken: (delta) => {
                 try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
               },
+              onStop: (reason) => { call2Stop = reason; },
             });
 
             // Clean and persist
             fullResponse = cleanLLMContent(fullResponse);
+            if (!fullResponse.trim()) {
+              console.warn("[stream] Call #2 returned no text", { stop_reason: call2Stop });
+            }
             totalOutputChars += fullResponse.length;
 
             const {

@@ -1,17 +1,20 @@
-// chat/tool-loop.ts — the tool-resolution loop for the chat function's
-// two-pass streaming flow (P4-1 chat split, cut D). Param-lifted from
-// index.ts; body verbatim except six recorded substitutions (dedent, the
-// two char-counter renames, one projectId rename, and the two phase
-// enqueues becoming the emitPhase callback — the callback OWNS the
-// client-gone guard). Hashes in the commit msg.
+// _shared/_tool_loop.ts — the tool-resolution loop shared by chat and
+// context-prompt (moved from chat/tool-loop.ts). After each round of tool
+// calls it asks the model again, tools still offered, until the model
+// stops calling them or MAX_ITERATIONS rounds have run; the caller then
+// makes its final, tool-less streaming call.
 //
 // Contract notes (P3-7e): every echoed tool_call MUST be answered —
 // calls past the per-turn limit and unknown tool names get stub results,
 // or the follow-up request 400s on unpaired ids. All five tool-result
 // string shapes are provider-visible and byte-frozen (one carries an em
 // dash). A failed intermediate call silently ends the loop (no log, no
-// error event) and falls through to Call #2 with the accumulated
-// messages — deliberate, preserved.
+// error event) and falls through to the caller's final call with the
+// accumulated messages — deliberate, preserved.
+//
+// The last allowed round's final tool result also carries
+// ROUND_LIMIT_NOTE: the caller's final call offers no tools, so a model
+// that still wanted another round would otherwise return no text at all.
 //
 // The char counters RETURN as values: numbers cannot mutate across a
 // module boundary. The caller MUST fold {inputCharsAdded,
@@ -28,9 +31,12 @@ import {
   type LLMMessage,
   type LLMTool,
   type NormalisedResponse,
-} from "../_shared/_llm.ts";
-import { formatWebSearchResults, searchWeb } from "../_shared/_tools.ts";
-import { contentLogsEnabled } from "../_shared/_debug.ts";
+} from "./_llm.ts";
+import { formatWebSearchResults, searchWeb } from "./_tools.ts";
+import { contentLogsEnabled } from "./_debug.ts";
+
+export const ROUND_LIMIT_NOTE =
+  "Tool-use limit reached for this request: write your answer now from the information above.";
 
 // Minimal structural view of the admin client (the concrete client's
 // generic instance type does not cross module boundaries cleanly — the
@@ -68,6 +74,10 @@ export interface ToolLoopDeps {
   thinking: Parameters<typeof callLLM>[0]["thinking"];
   effort: Parameters<typeof callLLM>[0]["effort"];
   mistralEffort: Parameters<typeof callLLM>[0]["mistral_effort"];
+  /** Log prefix, so each function keeps its own log lines. */
+  logTag: string;
+  /** Replaces callLLM in unit tests. */
+  llm?: typeof callLLM;
 }
 
 /** Runs the iterative tool-resolution loop; returns the char counts the
@@ -78,9 +88,10 @@ export async function runToolLoop(
   const {
     toolMessages, toolCalls, documentsReferenced, webSearchesPerformed,
     emitPhase, projectId, chatModel, chatMaxTokens, tools, temperature,
-    thinking, effort, mistralEffort,
+    thinking, effort, mistralEffort, logTag,
   } = deps;
   const adminSupabase = deps.adminSupabase as DocReadClient;
+  const llm = deps.llm ?? callLLM;
   let inputCharsAdded = 0;
   let outputCharsAdded = 0;
 
@@ -96,7 +107,7 @@ export async function runToolLoop(
 
   while (currentToolCalls.length > 0 && iteration < MAX_ITERATIONS) {
     iteration++;
-    console.log(`[stream] tool iteration ${iteration}, ${currentToolCalls.length} calls`);
+    console.log(`${logTag} tool iteration ${iteration}, ${currentToolCalls.length} calls`);
 
     for (const [tcIndex, tc] of currentToolCalls.entries()) {
       if (tcIndex >= TOOL_CALL_LIMIT) {
@@ -107,7 +118,7 @@ export async function runToolLoop(
         });
       } else if (tc.name === "read_imported_document") {
         const docId = tc.arguments.document_id as string;
-        console.log("[stream] reading document:", docId);
+        console.log(`${logTag} reading document:`, docId);
         documentsReferenced.push(docId);
 
         emitPhase("reading_documents");
@@ -132,7 +143,7 @@ export async function runToolLoop(
         });
       } else if (tc.name === "web_search") {
         const query = tc.arguments.query as string;
-        console.log("[stream] web search:", contentLogsEnabled() ? query : `(${query.length} chars)`);
+        console.log(`${logTag} web search:`, contentLogsEnabled() ? query : `(${query.length} chars)`);
         webSearchesPerformed.push(query);
 
         emitPhase("searching_web");
@@ -155,9 +166,14 @@ export async function runToolLoop(
       }
     }
 
+    if (iteration === MAX_ITERATIONS) {
+      const last = toolMessages[toolMessages.length - 1];
+      last.content = `${last.content}\n\n${ROUND_LIMIT_NOTE}`;
+    }
+
     // Check if the LLM wants to make more tool calls
     if (iteration < MAX_ITERATIONS) {
-      const nextRes = await callLLM({
+      const nextRes = await llm({
           model: chatModel,
           messages: toolMessages,
           max_tokens: chatMaxTokens,
@@ -182,7 +198,7 @@ export async function runToolLoop(
         toolMessages.push(nextNorm.assistantMessage);
       } else {
         // No more tool calls — discard any text from intermediate call
-        // and fall through to a proper streaming Call #2
+        // and fall through to the caller's streaming final call
         break;
       }
     }

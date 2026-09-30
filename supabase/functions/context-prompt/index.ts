@@ -1,11 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, isTruncatedStop, type LLMTool } from "../_shared/_llm.ts";
+import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, isTruncatedStop, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
 import { makeSSEHelpers, readProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
-import { searchWeb, buildDocumentTool, buildWebSearchTool, formatWebSearchResults } from "../_shared/_tools.ts";
+import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
+import { runToolLoop } from "../_shared/_tool_loop.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
-import { contentLogsEnabled } from "../_shared/_debug.ts";
 import {
   CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT,
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
@@ -38,14 +38,6 @@ function getAdminClient() {
 import { makeCorsHeadersFor } from "../_shared/_cors.ts";
 
 const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
-
-// ── helpers ──────────────────────────────────────────────────────────────────
-
-// Real tool executions per assistant turn; calls past this (and unknown
-// tool names) still get a stub result — every echoed tool_call MUST be
-// answered or the follow-up provider request 400s for the unpaired ids
-// (P3-7e).
-const TOOL_CALL_LIMIT = 5;
 
 // ── Main handler ────────────────────────────────────────────────────────────
 
@@ -488,73 +480,40 @@ When citing information from web search results, always include the source URL i
               // Tool messages stay in OpenAI shape; toAnthropicBody in _llm.ts
               // translates `role:"tool"` and assistant `tool_calls` to Anthropic's
               // tool_result / tool_use content blocks transparently.
-              const toolMessages: Array<Record<string, unknown>> = [
-                ...responseMessages,
-                norm2a.assistantMessage as unknown as Record<string, unknown>,
+              const toolMessages: LLMMessage[] = [
+                ...(responseMessages as LLMMessage[]),
+                norm2a.assistantMessage,
               ];
 
-              for (const [tcIndex, tc] of toolCalls.entries()) {
-                if (tcIndex >= TOOL_CALL_LIMIT) {
-                  toolMessages.push({
-                    role: "tool",
-                    tool_call_id: tc.id,
-                    content: "Not executed: per-turn tool-call limit reached. Ask again in a follow-up if still needed.",
-                  });
-                } else if (tc.name === "read_imported_document") {
-                  const docId = tc.arguments.document_id as string;
-                  console.log("[stream:context-prompt] reading document:", docId);
-                  documentsReferenced.push(docId);
-
-                  try { controller.enqueue(sseEvent({ phase: "reading_documents" })); } catch { /* */ }
-
-                  const { data: docData } = await adminClient
-                    .from("imported_documents")
-                    .select("extracted_text, file_name")
-                    .eq("id", docId)
-                    .eq("project_id", project_id)
-                    .maybeSingle();
-
-                  const toolResult = docData?.extracted_text
-                    ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
-                    : `Document not found in this project or text not yet extracted.`;
-
-                  totalInputChars += toolResult.length;
-
-                  toolMessages.push({
-                    role: "tool",
-                    tool_call_id: tc.id,
-                    content: toolResult,
-                  });
-                } else if (tc.name === "web_search") {
-                  const query = tc.arguments.query as string;
-                  console.log("[stream:context-prompt] web search:", contentLogsEnabled() ? query : `(${query.length} chars)`);
-                  webSearchesPerformed.push(query);
-
-                  try { controller.enqueue(sseEvent({ phase: "searching_web" })); } catch { /* */ }
-
-                  const results = await searchWeb(query);
-                  const toolResult = formatWebSearchResults(query, results);
-                  totalInputChars += toolResult.length;
-
-                  toolMessages.push({
-                    role: "tool",
-                    tool_call_id: tc.id,
-                    content: toolResult,
-                  });
-                } else {
-                  toolMessages.push({
-                    role: "tool",
-                    tool_call_id: tc.id,
-                    content: `Unknown tool "${tc.name}" — not executed.`,
-                  });
-                }
-              }
+              // Resolve tool calls iteratively (_shared/_tool_loop.ts); the
+              // char counters return as values and must be folded in.
+              const { inputCharsAdded, outputCharsAdded } = await runToolLoop({
+                toolMessages,
+                toolCalls,
+                documentsReferenced,
+                webSearchesPerformed,
+                emitPhase: (phase) => {
+                  try { controller.enqueue(sseEvent({ phase })); } catch { /* */ }
+                },
+                adminSupabase: adminClient,
+                projectId: project_id,
+                chatModel,
+                chatMaxTokens: contextMaxTokens,
+                tools,
+                temperature,
+                thinking,
+                effort,
+                mistralEffort,
+                logTag: "[stream:context-prompt]",
+              });
+              totalInputChars += inputCharsAdded;
+              totalOutputChars += outputCharsAdded;
 
               // Call #2b: streaming with tool results (provider-aware via callLLM)
               console.log("[stream:context-prompt] starting Call #2b streaming");
               const call2bRes = await callLLM({
                 model: chatModel,
-                messages: toolMessages as any,
+                messages: toolMessages,
                 max_tokens: contextMaxTokens,
                 stream: true,
                 temperature,
@@ -581,6 +540,9 @@ When citing information from web search results, always include the source URL i
 
               // Clean and persist
               fullResponse = cleanLLMContent(fullResponse);
+              if (!fullResponse.trim()) {
+                console.warn("[stream:context-prompt] Call #2b returned no text", { stop_reason: call2bStop });
+              }
               const aiResponse = fullResponse.trim() || "No response generated.";
               const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars, totalOutputChars + aiResponse.length);
 
