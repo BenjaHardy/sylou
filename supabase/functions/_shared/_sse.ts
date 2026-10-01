@@ -14,7 +14,7 @@
 // (per-event try/catch vs editor-action's clientDisconnected latch),
 // stream-first persistence tails, and controller.close() placement.
 
-import { extractDeltaText, extractStopReason, type ProviderId } from "./_llm.ts";
+import { extractDeltaText, extractStopReason, isThinkingDelta, type ProviderId } from "./_llm.ts";
 
 /** Per-request factory for the SSE envelope helpers. corsHeaders is the
  *  only request-scoped dependency; the two helpers were byte-identical
@@ -68,6 +68,10 @@ export function makeSSEHelpers(corsHeaders: Record<string, string>) {
  *     stop_reason, OpenAI-shape finish_reason) — the only way to learn a
  *     reply was cut off at max_tokens (isTruncatedStop in _llm.ts). It
  *     fires inside the per-line try like onToken; it never ends the loop.
+ *   - onThinking (optional, additive 2026-10) fires ONCE per stream, at the
+ *     first chunk that carries reasoning rather than answer text
+ *     (isThinkingDelta in _llm.ts) — the signal behind the "thinking"
+ *     phase. The reasoning text is never accumulated or forwarded.
  */
 export async function readProviderStream(
   res: Response,
@@ -75,9 +79,11 @@ export async function readProviderStream(
   handlers: {
     onToken: (delta: string) => void;
     onStop?: (reason: string) => void;
+    onThinking?: () => void;
   },
 ): Promise<string> {
   let fullResponse = "";
+  let thinkingSignalled = false;
   const decoder = new TextDecoder();
   let sseBuffer = "";
   const reader = res.body!.getReader();
@@ -98,6 +104,10 @@ export async function readProviderStream(
 
       try {
         const parsed = JSON.parse(payload);
+        if (!thinkingSignalled && handlers.onThinking && isThinkingDelta(parsed)) {
+          thinkingSignalled = true;
+          handlers.onThinking();
+        }
         const delta = extractDeltaText(parsed, provider);
         if (delta) {
           fullResponse += delta;

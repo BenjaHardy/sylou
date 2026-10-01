@@ -545,6 +545,9 @@ When citing information from web search results, always include the source URL i
                   try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
                 },
                 onStop: (reason) => { call2bStop = reason; },
+                onThinking: () => {
+                  try { controller.enqueue(sseEvent({ phase: "thinking" })); } catch { /* client gone */ }
+                },
               });
 
               // Clean and persist
@@ -636,6 +639,9 @@ When citing information from web search results, always include the source URL i
               } catch { /* client gone */ }
             },
             onStop: (reason) => { stopReason = reason; },
+            onThinking: () => {
+              try { controller.enqueue(sseEvent({ phase: "thinking" })); } catch { /* client gone */ }
+            },
           });
 
           console.log("[stream:context-prompt] LLM stream complete, persisting");

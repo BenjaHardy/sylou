@@ -264,8 +264,9 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   Response and each function owns a **stream-first `ReadableStream`** (kept
   open until `controller.close()` so the Deno isolate survives long enough
   to persist). `context-prompt` has the richest phase set
-  (`reviewing`/`reading_documents`/`searching_web`); one client consumer,
-  `src/lib/sse-stream.ts`. Phase events + the budget/`done` payloads are
+  (`reviewing`/`reading_documents`/`searching_web`/`thinking`); chat emits
+  `thinking` too, once per streamed reply at the first reasoning chunk
+  (`onThinking` in `_sse.ts`); one client consumer, `src/lib/sse-stream.ts`. Phase events + the budget/`done` payloads are
   load-bearing for the UI. The editor-action and context-prompt `done`
   payloads carry `truncated: true` when the provider stopped at max_tokens
   (`onStop` on `readProviderStream`, `isTruncatedStop` in `_llm.ts`); the

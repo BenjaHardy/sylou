@@ -10,6 +10,7 @@ import { consumeSSEStream } from "@/lib/sse-stream";
 import { assessSelectionSize } from "@/lib/editor-limits";
 import { LargeSelectionNotice } from "@/components/text-selection/LargeSelectionNotice";
 import { TruncatedAcceptDialog } from "@/components/text-selection/TruncatedAcceptDialog";
+import { ThinkingIndicator } from "@/components/ThinkingIndicator";
 
 type ActionId =
   | "fix-grammar"
@@ -116,7 +117,9 @@ export function TextSelectionWindow({
   const [inputText, setInputText] = useState("");
   
   const [currentActionId, setCurrentActionId] = useState<string | null>(null);
-  const [loadingStage, setLoadingStage] = useState<"reviewing" | "reading_documents" | "searching_web" | "preparing">("reviewing");
+  const [loadingStage, setLoadingStage] = useState<
+    "reviewing" | "reading_documents" | "searching_web" | "preparing" | "thinking"
+  >("reviewing");
   // For propose confirm flow
   const [accepting, setAccepting] = useState(false);
   const acceptingRef = useRef(false);
@@ -434,6 +437,8 @@ export function TextSelectionWindow({
                 setLoadingStage("reading_documents");
               } else if (p === "searching_web") {
                 setLoadingStage("searching_web");
+              } else if (p === "thinking") {
+                setLoadingStage("thinking");
               }
             },
             onToken: (text) => {
@@ -702,7 +707,12 @@ export function TextSelectionWindow({
         )}
 
         {/* Loading phase with two stages */}
-        {phase === "loading" && (
+        {phase === "loading" && loadingStage === "thinking" && (
+          <div className="flex items-center justify-center py-6">
+            <ThinkingIndicator className="text-sm" />
+          </div>
+        )}
+        {phase === "loading" && loadingStage !== "thinking" && (
           <div className="flex items-center justify-center py-6 gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             {loadingStage === "reviewing"
@@ -729,8 +739,14 @@ export function TextSelectionWindow({
               <div>
                 <span className="font-semibold text-muted-foreground">Proposed:</span>
                 <p className="mt-0.5 p-2 rounded-md bg-primary/10 text-foreground leading-relaxed max-h-24 overflow-y-auto">
-                  {streamingText}
-                  <span className="inline-block w-1.5 h-3.5 bg-primary/60 animate-pulse ml-0.5 align-text-bottom" />
+                  {streamingText === "" && loadingStage === "thinking" ? (
+                    <ThinkingIndicator />
+                  ) : (
+                    <>
+                      {streamingText}
+                      <span className="inline-block w-1.5 h-3.5 bg-primary/60 animate-pulse ml-0.5 align-text-bottom" />
+                    </>
+                  )}
                 </p>
               </div>
             </div>

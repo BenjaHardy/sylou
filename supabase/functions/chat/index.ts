@@ -440,6 +440,9 @@ Deno.serve(async (req) => {
                 try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
               },
               onStop: (reason) => { call2Stop = reason; },
+              onThinking: () => {
+                try { controller.enqueue(sseEvent({ phase: "thinking" })); } catch { /* client gone */ }
+              },
             });
 
             // Clean and persist
@@ -538,6 +541,9 @@ Deno.serve(async (req) => {
               } catch { /* client gone */ }
             },
             onStop: (reason) => { stopReason = reason; },
+            onThinking: () => {
+              try { controller.enqueue(sseEvent({ phase: "thinking" })); } catch { /* client gone */ }
+            },
           });
 
           // Persist

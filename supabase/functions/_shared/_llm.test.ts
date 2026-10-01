@@ -5,6 +5,7 @@ import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.t
 import {
   extractDeltaText,
   extractStopReason,
+  isThinkingDelta,
   isTruncatedStop,
   fetchWithTimeout,
   normaliseResponse,
@@ -389,6 +390,24 @@ Deno.test("fetchWithTimeout: non-abort errors pass through unchanged", async () 
 });
 
 // ── stop reasons (2026-09, large-selection safety) ────────────────────
+
+Deno.test("isThinkingDelta: reasoning chunks of every provider are recognised, answer text is not", () => {
+  // Mistral reasoning models / GLM via Mistral: content array with a thinking block.
+  assert(isThinkingDelta({ choices: [{ delta: { content: [{ type: "thinking", thinking: [{ type: "text", text: "hmm" }] }] } }] }));
+  assertEquals(isThinkingDelta({ choices: [{ delta: { content: [{ type: "text", text: "answer" }] } }] }), false);
+  assertEquals(isThinkingDelta({ choices: [{ delta: { content: "answer" } }] }), false);
+  // DeepSeek-style reasoning_content.
+  assert(isThinkingDelta({ choices: [{ delta: { reasoning_content: "hmm" } }] }));
+  assertEquals(isThinkingDelta({ choices: [{ delta: { reasoning_content: "", content: "x" } }] }), false);
+  // Anthropic: thinking block start and thinking_delta; text_delta and text blocks are not.
+  assert(isThinkingDelta({ type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } }));
+  assert(isThinkingDelta({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "hmm" } }));
+  assertEquals(isThinkingDelta({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "hi" } }), false);
+  assertEquals(isThinkingDelta({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }), false);
+  for (const junk of [null, undefined, "x", 42, {}, { choices: [] }, { choices: [{}] }]) {
+    assertEquals(isThinkingDelta(junk), false, String(junk));
+  }
+});
 
 Deno.test("extractStopReason: OpenAI finish_reason and Anthropic message_delta stop_reason; null otherwise", () => {
   assertEquals(extractStopReason({ choices: [{ delta: { content: "x" }, finish_reason: "length" }] }), "length");

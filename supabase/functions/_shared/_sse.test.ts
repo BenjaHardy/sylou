@@ -247,3 +247,28 @@ Deno.test("readProviderStream: without onStop the loop is unchanged; isTruncated
   assertEquals(isTruncatedStop("max_tokens"), true);
   assertEquals(isTruncatedStop(null), false);
 });
+
+Deno.test("readProviderStream: onThinking fires once, at the first reasoning chunk; text still streams and reasoning never accumulates", async () => {
+  const thinkingChunk = `data: ${
+    JSON.stringify({ choices: [{ delta: { content: [{ type: "thinking", thinking: [{ type: "text", text: "…" }] }] } }] })
+  }\n`;
+  let fired = 0;
+  const tokens: string[] = [];
+  const result = await readProviderStream(
+    sseResponse([thinkingChunk, thinkingChunk, openaiDelta("an"), thinkingChunk, openaiDelta("swer")]),
+    "mistral",
+    { onToken: (d) => tokens.push(d), onThinking: () => { fired++; } },
+  );
+  assertEquals(fired, 1);
+  assertEquals(tokens, ["an", "swer"]);
+  assertEquals(result, "answer");
+});
+
+Deno.test("readProviderStream: without onThinking, reasoning chunks are skipped exactly as before (Anthropic shape)", async () => {
+  const thinkingChunk = `data: ${
+    JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "…" } })
+  }\n`;
+  const text = `data: ${JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "ok" } })}\n`;
+  const result = await readProviderStream(sseResponse([thinkingChunk, text]), "anthropic", { onToken: () => {} });
+  assertEquals(result, "ok");
+});
