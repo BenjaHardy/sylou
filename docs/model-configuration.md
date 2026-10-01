@@ -50,12 +50,12 @@ The most analytically demanding function. All models targeted for determinism (t
 | Mistral Medium 3.5 | 0.0                          | reasoning_effort: off                                  | 8192                | *Not* recommended. Good repeatability, but strong Write pillar and provenance data lead to user-bias on other pillars. |
 | Mistral Small 4    | 0.0                          | reasoning_effort: high                                 | 24000               | *Not* recommended, bias towards the user, poor repeatability.  |
 | DeepSeek V4 Flash  | 0.0                          | n/a                                                    | 8192                | *Not* recommended, bias towards the user, poor repeatability.  |
-| Z.ai GLM 5.3       | 0.0                          | reasoning_effort: high                                 | 24000               | *Recommended* for FLOW; quality and repeatability. |
+| Z.ai GLM 5.3       | 0.0                          | reasoning_effort: low (field trial)                    | 24000               | *Recommended* for FLOW; quality and repeatability. |
 
 **Rationale for FLOW settings:**
 
 - max_tokens 24000 for reasoning models (in step with chat and context-prompt): thinking chunks consume output budget; insufficient headroom causes truncation and validation failures. FLOW is a single non-streamed call aborted at 145 s, and 24000 tokens take about 80 s at the ~300 tokens/s seen on GLM 5.3, so one attempt always fits; an attempt the provider cut at the ceiling is not retried (the retry exists for format slips, and a budget overrun at temperature 0 would only repeat).
-- GLM 5.3 at "high", not "max": at "max" it spent a whole 16000 ceiling thinking and never called the submit tool (both attempts, staging 2026-10-01); at "high" it thinks briefly and answers.
+- GLM 5.3 at "low" (field trial, October 2026): at "max" it spent a whole 16000 ceiling thinking and never called the submit tool (both attempts, staging 2026-10-01); at "high" it answered quickly but the scores leaned towards the user, well below GLM 5.2 at "max". If "low" does not pass the same test, the remaining lever is "max" with a ceiling sized for its think (~32000).
 - Opus 4.7+ excluded from temperature setting (returns 400 if non-default temperature is sent).
 
 ---

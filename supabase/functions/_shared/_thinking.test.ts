@@ -78,9 +78,10 @@ Deno.test("GLM 5.3 is configured at an explicit level in every Mistral effort ta
   assertEquals(resolveMistralEffort(EDITOR_MISTRAL_EFFORT, "zai-glm-5-3"), "low");
   assertEquals(resolveMistralEffort(SUMMARY_MISTRAL_EFFORT, "zai-glm-5-3"), "low");
   // "max" is GLM's deep-reasoning level: it spent whole budgets thinking
-  // (2026-10) — chat and Ask/Propose default to "high", and FLOW runs at
-  // "high" too (at "max" it never reached the submit tool within 16k).
-  assertEquals(resolveMistralEffort(FLOW_MISTRAL_EFFORT, "zai-glm-5-3"), "high");
+  // (2026-10) — chat and Ask/Propose default to "high"; FLOW is on a "low"
+  // field trial ("max" never reached the submit tool within 16k, "high"
+  // scored with a user-leaning bias).
+  assertEquals(resolveMistralEffort(FLOW_MISTRAL_EFFORT, "zai-glm-5-3"), "low");
   assertEquals(resolveMistralEffort(CHAT_MISTRAL_EFFORT, "zai-glm-5-3"), "high");
   assertEquals(resolveMistralEffort(CONTEXT_MISTRAL_EFFORT, "zai-glm-5-3"), "high");
 });
