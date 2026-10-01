@@ -29,7 +29,7 @@ Deno.test("budget pairs are the agreed ceilings", () => {
   assertEquals(OUTPUT_BUDGETS.CONTEXT_RESPONSE, { plain: 4_000, reasoning: 24_000 });
   assertEquals(OUTPUT_BUDGETS.CONTEXT_SUMMARY, { plain: 2_000, reasoning: 4_000 });
   assertEquals(OUTPUT_BUDGETS.EDITOR_ACTION, { plain: 4_000, reasoning: 6_000 });
-  assertEquals(OUTPUT_BUDGETS.FLOW, { plain: 8_192, reasoning: 16_000 });
+  assertEquals(OUTPUT_BUDGETS.FLOW, { plain: 8_192, reasoning: 24_000 });
   assertEquals(OUTPUT_BUDGETS.DOC_SUMMARY, { plain: 500, reasoning: 2_000 });
   assertEquals(OUTPUT_BUDGETS.MEMORY, { plain: 3_000, reasoning: 6_000 });
   for (const budget of Object.values(OUTPUT_BUDGETS)) {
@@ -48,7 +48,7 @@ Deno.test("reasoning ceiling for Claude thinking and Mistral reasoning models", 
   assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_RESPONSE, "zai-glm-5-3", false, true), 24_000);
   assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_SUMMARY, "mistral-medium-3-5", false, true), 4_000);
   assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.EDITOR_ACTION, "claude-opus-4-8", true), 6_000);
-  assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.FLOW, "claude-opus-4-8", true), 16_000);
+  assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.FLOW, "claude-opus-4-8", true), 24_000);
 });
 
 Deno.test("reasoning flags on a non-reasoning model never raise the ceiling", () => {

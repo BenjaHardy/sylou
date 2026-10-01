@@ -45,17 +45,17 @@ The most analytically demanding function. All models targeted for determinism (t
 | Model              | Temperature                  | Thinking / Effort                                      | max_tokens (output) | Notes                                                                                           |
 | ------------------ | ---------------------------- | ------------------------------------------------------ | ------------------- | ----------------------------------------------------------------------------------------------- |
 | Claude Sonnet 4.6  | 0.0                          | thinking: off, effort: high (matches provider default) | 8192                | *Recommended* for FLOW; quality and repeatability. |
-| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high                       | 16000               | Adaptive thinking; consumes more tokens than Sonnet, not recommended by default except for specific scenarios.         |
+| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high                       | 24000               | Adaptive thinking; consumes more tokens than Sonnet, not recommended by default except for specific scenarios.         |
 | Mistral Large 3    | 0.0                          | n/a (no reasoning support)                             | 8192                | *Not* recommended, strong inherent bias towards the user.                                       |
 | Mistral Medium 3.5 | 0.0                          | reasoning_effort: off                                  | 8192                | *Not* recommended. Good repeatability, but strong Write pillar and provenance data lead to user-bias on other pillars. |
-| Mistral Small 4    | 0.0                          | reasoning_effort: high                                 | 16000               | *Not* recommended, bias towards the user, poor repeatability.  |
+| Mistral Small 4    | 0.0                          | reasoning_effort: high                                 | 24000               | *Not* recommended, bias towards the user, poor repeatability.  |
 | DeepSeek V4 Flash  | 0.0                          | n/a                                                    | 8192                | *Not* recommended, bias towards the user, poor repeatability.  |
-| Z.ai GLM 5.3       | 0.0                          | reasoning_effort: high                                 | 16000               | *Recommended* for FLOW; quality and repeatability. |
+| Z.ai GLM 5.3       | 0.0                          | reasoning_effort: high                                 | 24000               | *Recommended* for FLOW; quality and repeatability. |
 
 **Rationale for FLOW settings:**
 
-- max_tokens 16000 for reasoning models: thinking chunks consume output budget; insufficient headroom causes truncation and validation failures.
-- GLM 5.3 at "high", not "max": at "max" it spent the whole 16000 thinking and never called the submit tool (both attempts, staging 2026-10-01); at "high" it thinks briefly and answers.
+- max_tokens 24000 for reasoning models (in step with chat and context-prompt): thinking chunks consume output budget; insufficient headroom causes truncation and validation failures. FLOW is a single non-streamed call aborted at 145 s, and 24000 tokens take about 80 s at the ~300 tokens/s seen on GLM 5.3, so one attempt always fits; an attempt the provider cut at the ceiling is not retried (the retry exists for format slips, and a budget overrun at temperature 0 would only repeat).
+- GLM 5.3 at "high", not "max": at "max" it spent a whole 16000 ceiling thinking and never called the submit tool (both attempts, staging 2026-10-01); at "high" it thinks briefly and answers.
 - Opus 4.7+ excluded from temperature setting (returns 400 if non-default temperature is sent).
 
 ---

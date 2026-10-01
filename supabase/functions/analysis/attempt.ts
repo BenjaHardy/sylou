@@ -21,6 +21,7 @@ import {
   callLLM,
   normaliseResponse,
   extractProviderError,
+  isTruncatedStop,
   StructuredOutputError,
   STRUCTURED_OUTPUT_REFUSAL,
   STRUCTURED_OUTPUT_MAX_TOKENS,
@@ -137,14 +138,32 @@ export async function attemptFlowCall(
 
   const rawData = await llmRes.json();
   const rawResponse = JSON.stringify(rawData);
+  const stopReason: string | null =
+    rawData?.stop_reason ?? rawData?.choices?.[0]?.finish_reason ?? null;
 
   console.log("FLOW raw response", {
     model: flowModel,
     attempt,
     temperature,
-    stop_reason: rawData?.stop_reason ?? rawData?.choices?.[0]?.finish_reason ?? null,
+    stop_reason: stopReason,
     response_chars: rawResponse.length,
     ...(contentLogsEnabled() ? { raw_response: rawResponse } : {}),
+  });
+
+  // A reply the provider cut at max_tokens is deterministic at FLOW's
+  // temperature 0 — a reasoning model that spent the ceiling thinking will
+  // spend it again — so it is not retried on the tool-calling path either
+  // (the Structured Outputs path has had this rule since P3-7c). Keeps a
+  // FLOW request to one long attempt, inside the hosted request limit.
+  const truncatedFailure = (usage: AttemptFail["usage"]): AttemptFail => ({
+    ok: false,
+    usage,
+    noRetry: true,
+    failureLabel: "analysis:max_tokens",
+    errorResponse: jsonResponse(
+      { error: "Analysis output was truncated. Please try again or use a smaller project." },
+      502,
+    ),
   });
 
   let normalised;
@@ -222,10 +241,11 @@ export async function attemptFlowCall(
     console.error("No tool_use block found in response", {
       model: flowModel,
       attempt,
-      stop_reason: rawData?.stop_reason ?? rawData?.choices?.[0]?.finish_reason ?? null,
+      stop_reason: stopReason,
       response_chars: rawResponse.length,
       ...(contentLogsEnabled() ? { raw_response: rawResponse } : {}),
     });
+    if (isTruncatedStop(stopReason)) return truncatedFailure(usage);
     return {
       ok: false,
       usage,
@@ -260,7 +280,7 @@ export async function attemptFlowCall(
       attempt,
       validPillarCount,
       hasSummary,
-      stop_reason: rawData?.stop_reason ?? rawData?.choices?.[0]?.finish_reason ?? null,
+      stop_reason: stopReason,
       input_tokens: usage.input_tokens ?? null,
       output_tokens: usage.output_tokens ?? null,
       tool_call_present: !!toolCall,
@@ -275,6 +295,8 @@ export async function attemptFlowCall(
         raw_tool_input: JSON.stringify(flowResult),
       });
     }
+    // A tool call cut mid-arguments parses to a shell that fails here.
+    if (isTruncatedStop(stopReason)) return truncatedFailure(usage);
     return {
       ok: false,
       usage,
