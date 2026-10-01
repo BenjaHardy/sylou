@@ -708,12 +708,12 @@ export async function callLLM(opts: {
     (body as Record<string, unknown>).top_p = 1;
   }
   // Diagnostic: log the top-level keys + reasoning-control fields of the
-  // outgoing body. Skipped for streaming requests to avoid log spam on token
-  // deltas. Excludes `messages` / `system` / `tools` so the line stays well
-  // under the log truncation limit. `reasoning_effort` is only included
-  // when actually present in the body — no more `null` noise for Anthropic
-  // calls.
-  if (!opts.stream) {
+  // outgoing body, once per request (streaming ones included — the line is
+  // written before the fetch, never per delta). Excludes `messages` /
+  // `system` / `tools` so the line stays well under the log truncation
+  // limit. `reasoning_effort` is only included when actually present in the
+  // body — no `null` noise for Anthropic calls.
+  {
     const b = body as Record<string, unknown>;
     const { messages: _m, system: _s, tools: _t, ...preview } = b;
     const logLine: Record<string, unknown> = {
