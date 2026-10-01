@@ -120,6 +120,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 
 - Matches Chat defaults: context-prompt powers Ask/Propose user-facing features, so quality posture should align with chat.
 - max_tokens 4000/16000 for the response and 2000/4000 for the summary (plain / reasoning; `OUTPUT_BUDGETS.CONTEXT_RESPONSE` and `.CONTEXT_SUMMARY`).
+- The writing-summary call (Call #1) keeps fixed settings whatever reasoning level the user picked: Claude as in the table, Mistral / GLM per the Summaries table (GLM at "low"). It runs before the stream starts and is a delta summary, not a reply.
 
 ---
 
@@ -146,7 +147,7 @@ Two small summary calls outside the four functions above, both on the user's cha
 
 ### User-selectable reasoning (chat and Ask/Propose)
 
-Settings → Models lets each user pick a reasoning level for the selected chat model. It applies to chat and to Ask/Propose, replacing the default from the Chat and Context-prompt tables above; FLOW, editor actions and the summary calls keep their fixed settings. The stored choice (`profiles.preferred_chat_reasoning`, a per-model map) is validated server-side against `CHAT_REASONING_OPTIONS` in `_shared/_thinking.ts`; an unknown or missing entry means the default. The picker labels come from the mirror in `src/lib/models.ts`.
+Settings → Models lets each user pick a reasoning level for the selected chat model. It applies to chat replies and to the Ask/Propose reply call, replacing the default from the Chat and Context-prompt tables above; FLOW, editor actions, the Ask/Propose writing-summary call and the summary calls keep their fixed settings. The level in force is shown next to the model name above the chat. The stored choice (`profiles.preferred_chat_reasoning`, a per-model map) is validated server-side against `CHAT_REASONING_OPTIONS` in `_shared/_thinking.ts`; an unknown or missing entry means the default. The picker labels come from the mirror in `src/lib/models.ts`.
 
 | Model | Options (default in bold) | Wire mapping |
 |---|---|---|
