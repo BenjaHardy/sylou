@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, isTruncatedStop, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
-import { makeSSEHelpers, readProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
+import { makeSSEHelpers, readProviderStream, replayTokenBurst, startKeepalive, type StreamStats } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
@@ -415,7 +415,7 @@ When citing information from web search results, always include the source URL i
     // =========================================================
     console.log("[stream:context-prompt] entering streaming path, action_type:", action_type, "hasTools:", hasTools);
 
-    const { sseEvent, createSSEResponse } = makeSSEHelpers(corsHeaders);
+    const { sseEvent, createSSEResponse, sseKeepalive } = makeSSEHelpers(corsHeaders);
 
     // ── TWO-PASS FLOW when tools exist ──
     // Move entire Call #2a inside ReadableStream so phase events stream immediately
@@ -424,6 +424,9 @@ When citing information from web search results, always include the source URL i
 
       const readable = new ReadableStream({
         async start(controller) {
+          const stopKeepalive = startKeepalive(() => {
+            try { controller.enqueue(sseKeepalive()); } catch { /* client gone */ }
+          });
           try {
             // Emit initial phase so the client knows we're working
             controller.enqueue(sseEvent({ phase: "reviewing" }));
@@ -540,6 +543,9 @@ When citing information from web search results, always include the source URL i
 
               // Read Call #2b stream and forward tokens
               let call2bStop: string | null = null;
+              // Assigned inside the onEnd callback: keep the declared union so
+              // the spread below type-checks (CFA would narrow a bare null).
+              let call2bStats = null as StreamStats | null;
               let fullResponse = await readProviderStream(call2bRes, providerFor(chatModel), {
                 onToken: (delta) => {
                   try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
@@ -548,12 +554,13 @@ When citing information from web search results, always include the source URL i
                 onThinking: () => {
                   try { controller.enqueue(sseEvent({ phase: "thinking" })); } catch { /* client gone */ }
                 },
+                onEnd: (stats) => { call2bStats = stats; },
               });
 
               // Clean and persist
               fullResponse = cleanLLMContent(fullResponse);
               if (!fullResponse.trim()) {
-                console.warn("[stream:context-prompt] Call #2b returned no text", { stop_reason: call2bStop });
+                console.warn("[stream:context-prompt] Call #2b returned no text", { stop_reason: call2bStop, ...call2bStats });
               }
               const aiResponse = fullResponse.trim() || "No response generated.";
               const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars, totalOutputChars + aiResponse.length);
@@ -594,6 +601,7 @@ When citing information from web search results, always include the source URL i
                 authedProfile.tokens_used_this_period >= authedProfile.monthly_token_budget,
               logTag: "[context-prompt]",
             });
+            stopKeepalive();
             controller.close();
           }
         },
@@ -628,6 +636,10 @@ When citing information from web search results, always include the source URL i
       async start(controller) {
         let fullResponse: string;
         let stopReason: string | null = null;
+        let streamStats = null as StreamStats | null;
+        const stopKeepalive = startKeepalive(() => {
+          try { controller.enqueue(sseKeepalive()); } catch { /* client gone */ }
+        });
 
         try {
           controller.enqueue(sseEvent({ phase: "responding" }));
@@ -642,10 +654,14 @@ When citing information from web search results, always include the source URL i
             onThinking: () => {
               try { controller.enqueue(sseEvent({ phase: "thinking" })); } catch { /* client gone */ }
             },
+            onEnd: (stats) => { streamStats = stats; },
           });
 
           console.log("[stream:context-prompt] LLM stream complete, persisting");
           fullResponse = cleanLLMContent(fullResponse);
+          if (!fullResponse.trim()) {
+            console.warn("[stream:context-prompt] reply returned no text", { stop_reason: stopReason, ...streamStats });
+          }
           const aiResponse = fullResponse.trim() || "No response generated.";
           const extraInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
           const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars + extraInputChars, totalOutputChars + aiResponse.length);
@@ -683,6 +699,7 @@ When citing information from web search results, always include the source URL i
               authedProfile.tokens_used_this_period >= authedProfile.monthly_token_budget,
             logTag: "[context-prompt]",
           });
+          stopKeepalive();
           controller.close();
         }
       },

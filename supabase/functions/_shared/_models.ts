@@ -69,17 +69,18 @@ export interface OutputBudget {
  * explicit pairs in 2026-10 when GLM 5.3 (reasoning-only) replaced 5.2: an
  * omitted `reasoning_effort` no longer means "no thinking" there, and a
  * thinking chunk inside a 500-token budget left no room for the summary.
- * Chat / context reasoning ceilings 8k→16k (2026-10) after GLM 5.3 at
- * "max" spent a whole 8k thinking and answered with nothing again: a
- * reasoning model's thinking must fit under the same ceiling as its
- * answer, and 16k still ends well inside the hosted wall clock at the
- * observed ~230 tokens/s.
+ * Chat / context reasoning ceilings 8k→24k (2026-10): GLM 5.3 at "max"
+ * thinks ~15k tokens before its first answer token on an ordinary prompt
+ * (direct capture), so a reasoning model's thinking must fit under the
+ * same ceiling as its answer. 24k is ~105 s at the observed ~230 tokens/s:
+ * inside a Pro plan's 400 s wall clock, but a "max" think can outrun the
+ * free plan's 150 s — the user-facing option is labelled slow for that.
  */
 export const OUTPUT_BUDGETS = {
   /** chat: one assistant turn (also the two-pass and tool-loop calls). */
-  CHAT: { plain: 4_000, reasoning: 16_000 },
+  CHAT: { plain: 4_000, reasoning: 24_000 },
   /** context-prompt: the Ask/Propose response call. */
-  CONTEXT_RESPONSE: { plain: 4_000, reasoning: 16_000 },
+  CONTEXT_RESPONSE: { plain: 4_000, reasoning: 24_000 },
   /** context-prompt: the writing-summary call. */
   CONTEXT_SUMMARY: { plain: 2_000, reasoning: 4_000 },
   /** editor-action: one inline rewrite of the selection. */

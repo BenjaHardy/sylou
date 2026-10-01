@@ -190,6 +190,9 @@ const LOW: ReasoningChoice = { id: "low", label: "Low" };
 const MEDIUM: ReasoningChoice = { id: "medium", label: "Medium" };
 const HIGH: ReasoningChoice = { id: "high", label: "High" };
 const MAX: ReasoningChoice = { id: "max", label: "Max" };
+// GLM 5.3's deep-reasoning level thinks for a minute or more before the
+// first answer token (2026-10 measurements): say so where it is chosen.
+const MAX_SLOW: ReasoningChoice = { id: "max", label: "Max (slow)" };
 
 /** Reasoning levels per chat model (Settings → Models, chat picker) and the
  *  level the code applies when nothing is chosen. Mirror of
@@ -205,7 +208,7 @@ export const CHAT_REASONING_OPTIONS: Readonly<
   "claude-opus-4-8": { options: [OFF, LOW, MEDIUM, HIGH, MAX], defaultId: "high" },
   "mistral-medium-3-5": { options: [OFF, HIGH], defaultId: "high" },
   "mistral-small-2603": { options: [OFF, HIGH], defaultId: "off" },
-  "zai-glm-5-3": { options: [LOW, HIGH, MAX], defaultId: "high" },
+  "zai-glm-5-3": { options: [LOW, HIGH, MAX_SLOW], defaultId: "high" },
 };
 
 /** Reasoning levels per model id and the one the code applies by default. */

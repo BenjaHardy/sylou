@@ -148,7 +148,7 @@ describe("chat reasoning options (UI mirror of _shared/_thinking.ts)", () => {
     expect(effectiveReasoningId("claude-sonnet-4-6", { "zai-glm-5-3": "max" })).toBe("off");
     expect(effectiveReasoningId("mistral-large-2512", { "mistral-large-2512": "high" })).toBeNull();
 
-    expect(reasoningLabelFor("zai-glm-5-3", { "zai-glm-5-3": "max" })).toBe("Max");
+    expect(reasoningLabelFor("zai-glm-5-3", { "zai-glm-5-3": "max" })).toBe("Max (slow)");
     expect(reasoningLabelFor("claude-opus-4-8", {})).toBe("High");
     expect(reasoningLabelFor("deepseek-v4-flash", {})).toBeNull();
   });

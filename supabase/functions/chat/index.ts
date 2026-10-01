@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
-import { makeSSEHelpers, readProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
+import { makeSSEHelpers, readProviderStream, replayTokenBurst, startKeepalive, type StreamStats } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
@@ -270,7 +270,7 @@ Deno.serve(async (req) => {
     // =========================================================
     console.log("[stream] entering streaming path for thread", threadId, "hasTools:", hasTools);
 
-    const { sseEvent, createSSEResponse } = makeSSEHelpers(corsHeaders);
+    const { sseEvent, createSSEResponse, sseKeepalive } = makeSSEHelpers(corsHeaders);
 
     // ---- TWO-PASS FLOW when tools exist ----
     if (hasTools) {
@@ -379,6 +379,9 @@ Deno.serve(async (req) => {
 
       const readable = new ReadableStream({
         async start(controller) {
+          const stopKeepalive = startKeepalive(() => {
+            try { controller.enqueue(sseKeepalive()); } catch { /* client gone */ }
+          });
           try {
             // Build conversation with tool results
             const toolMessages: LLMMessage[] = [
@@ -435,6 +438,9 @@ Deno.serve(async (req) => {
 
             // Read Call #2 stream and forward tokens
             let call2Stop: string | null = null;
+            // Assigned inside the onEnd callback: keep the declared union so
+            // the spread below type-checks (CFA would narrow a bare null).
+            let call2Stats = null as StreamStats | null;
             let fullResponse = await readProviderStream(call2Res, providerFor(chatModel), {
               onToken: (delta) => {
                 try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
@@ -443,12 +449,13 @@ Deno.serve(async (req) => {
               onThinking: () => {
                 try { controller.enqueue(sseEvent({ phase: "thinking" })); } catch { /* client gone */ }
               },
+              onEnd: (stats) => { call2Stats = stats; },
             });
 
             // Clean and persist
             fullResponse = cleanLLMContent(fullResponse);
             if (!fullResponse.trim()) {
-              console.warn("[stream] Call #2 returned no text", { stop_reason: call2Stop });
+              console.warn("[stream] Call #2 returned no text", { stop_reason: call2Stop, ...call2Stats });
             }
             totalOutputChars += fullResponse.length;
 
@@ -496,6 +503,7 @@ Deno.serve(async (req) => {
               controller.enqueue(sseEvent({ done: true, error: "AI service temporarily unavailable." }));
             } catch { /* client gone */ }
           } finally {
+            stopKeepalive();
             controller.close();
           }
         },
@@ -532,6 +540,10 @@ Deno.serve(async (req) => {
       async start(controller) {
         let fullResponse: string;
         let stopReason: string | null = null;
+        let streamStats = null as StreamStats | null;
+        const stopKeepalive = startKeepalive(() => {
+          try { controller.enqueue(sseKeepalive()); } catch { /* client gone */ }
+        });
 
         try {
           fullResponse = await readProviderStream(llmRes, providerFor(chatModel), {
@@ -544,13 +556,14 @@ Deno.serve(async (req) => {
             onThinking: () => {
               try { controller.enqueue(sseEvent({ phase: "thinking" })); } catch { /* client gone */ }
             },
+            onEnd: (stats) => { streamStats = stats; },
           });
 
           // Persist
           console.log("[stream] flush() started");
           fullResponse = cleanLLMContent(fullResponse);
           if (!fullResponse.trim()) {
-            console.warn("[stream] reply returned no text", { stop_reason: stopReason });
+            console.warn("[stream] reply returned no text", { stop_reason: stopReason, ...streamStats });
           }
 
           const inputChars = llmMessages.reduce(
@@ -612,6 +625,7 @@ Deno.serve(async (req) => {
           } catch { /* client gone */ }
           console.log("[stream] flush() completed — with error");
         } finally {
+          stopKeepalive();
           controller.close();
         }
       },

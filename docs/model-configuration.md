@@ -66,18 +66,19 @@ Conversational responses. Quality matters; reasoning effort calibrated per model
 | Model              | Temperature                  | Thinking / Effort                | max_tokens (output) | Notes                                                                 |
 | ------------------ | ---------------------------- | -------------------------------- | ------------------- | --------------------------------------------------------------------- |
 | Claude Sonnet 4.6  | 1.0                          | thinking: off, effort: high      | 4000                | Default chat behavior.                                                |
-| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high | 16000               | Adaptive thinking; raises max_tokens.                                 |
+| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high | 24000               | Adaptive thinking; raises max_tokens.                                 |
 | Mistral Large 3    | 0.7                          | n/a                              | 4000                | Standard chat.                                                        |
-| Mistral Medium 3.5 | 0.7                          | reasoning_effort: high           | 16000               | Mistral "Quality tier" — reasoning enabled.                           |
+| Mistral Medium 3.5 | 0.7                          | reasoning_effort: high           | 24000               | Mistral "Quality tier" — reasoning enabled.                           |
 | Mistral Small 4    | 0.7                          | reasoning_effort: none           | 4000                | Mistral "Speed tier" — no thinking chunk; ideal for cheap, fast chat. |
 | DeepSeek V4 Flash  | 1.0                          | n/a                              | 4000                | Standard, cheap chat.                                                 |
-| Z.ai GLM 5.3       | 0.7                          | reasoning_effort: high           | 16000               | Third-party (Z.ai) via Mistral API; 1M context. "max" is its deep-reasoning level and spent whole chat budgets thinking. |
+| Z.ai GLM 5.3       | 0.7                          | reasoning_effort: high           | 24000               | Third-party (Z.ai) via Mistral API; 1M context. "max" is its deep-reasoning level: a minute or more of thinking before the first answer token. |
 
 **Rationale for Chat settings:**
 
 - Temperature at provider default: 1.0 for Claude Sonnet and DeepSeek, 0.7 for Mistral; allows natural variation for conversational warmth.
 - Reasoning effort tier-matched: e.g. GLM 5.3 and Medium 3.5 get reasoning; Small ("speed tier") doesn't.
-- max_tokens 4000, 16000 for reasoning models: same logic as FLOW. Raised from 8000 in October 2026 after GLM 5.3 at "max" spent the whole 8000 thinking and answered with nothing; a ceiling costs nothing until it is hit.
+- max_tokens 4000, 24000 for reasoning models: same logic as FLOW. Raised from 8000 in October 2026 after GLM 5.3 at "max" spent whole budgets thinking (a direct capture showed ~15k tokens of thinking before the first answer token); a ceiling costs nothing until it is hit. Sized for a Pro plan's 400 s wall clock: on the free plan (150 s) a "max" think can outrun the limit before it reaches the ceiling, which drops the request instead of truncating the reply — the option is labelled "Max (slow)" for that reason.
+- Streams send an SSE keep-alive comment every 15 s for their whole life: a response with no bytes for ~50 s during a long think was observed being closed in front of the function (the provider read then ends with no finish reason and no text).
 
 ---
 
@@ -109,17 +110,17 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 | Model | Temperature | Thinking / Effort | max_tokens (summary) (output) | max_tokens (response) (output) | Notes |
 |---|---|---|---|---|---|
 | Claude Sonnet 4.6 | 1.0 | thinking: off, effort: high | 2000 | 4000 | Standard. |
-| Claude Opus 4.8 | undefined (model-controlled) | thinking: adaptive, effort: high | 4000 | 16000 | Adaptive thinking. |
+| Claude Opus 4.8 | undefined (model-controlled) | thinking: adaptive, effort: high | 4000 | 24000 | Adaptive thinking. |
 | Mistral Large 3 | 0.7 | n/a | 2000 | 4000 | Standard. |
-| Mistral Medium 3.5 | 0.7 | reasoning_effort: high | 4000 | 16000 | Mistral quality tier — reasoning helps with nuanced AI features. |
+| Mistral Medium 3.5 | 0.7 | reasoning_effort: high | 4000 | 24000 | Mistral quality tier — reasoning helps with nuanced AI features. |
 | Mistral Small 4 | 0.7 | reasoning_effort: none | 2000 | 4000 | Mistral speed tier. |
 | DeepSeek V4 Flash | 1.0 | n/a | 2000 | 4000 | Standard. |
-| Z.ai GLM 5.3 | 0.7 | reasoning_effort: high | 4000 | 16000 | Third-party via Mistral API. |
+| Z.ai GLM 5.3 | 0.7 | reasoning_effort: high | 4000 | 24000 | Third-party via Mistral API. |
 
 **Rationale for Context-prompt settings:**
 
 - Matches Chat defaults: context-prompt powers Ask/Propose user-facing features, so quality posture should align with chat.
-- max_tokens 4000/16000 for the response and 2000/4000 for the summary (plain / reasoning; `OUTPUT_BUDGETS.CONTEXT_RESPONSE` and `.CONTEXT_SUMMARY`).
+- max_tokens 4000/24000 for the response and 2000/4000 for the summary (plain / reasoning; `OUTPUT_BUDGETS.CONTEXT_RESPONSE` and `.CONTEXT_SUMMARY`).
 - The writing-summary call (Call #1) keeps fixed settings whatever reasoning level the user picked: Claude as in the table, Mistral / GLM per the Summaries table (GLM at "low"). It runs before the stream starts and is a delta summary, not a reply.
 
 ---
@@ -155,7 +156,7 @@ Settings → Models lets each user pick a reasoning level for the selected chat 
 | Claude Opus 4.8 | Off, Low, Medium, **High**, Max | as above; Max = effort xhigh |
 | Mistral Medium 3.5 | Off, **High** | reasoning_effort omitted / high |
 | Mistral Small 4 | **Off**, High | reasoning_effort omitted / high |
-| Z.ai GLM 5.3 | Low, **High**, Max | reasoning_effort low / high / max |
+| Z.ai GLM 5.3 | Low, **High**, Max (slow) | reasoning_effort low / high / max |
 | Mistral Large 3, DeepSeek V4 Flash | — | no reasoning control |
 
 The max_tokens ceiling follows the choice: the reasoning ceiling applies whenever a level other than Off is in force.
