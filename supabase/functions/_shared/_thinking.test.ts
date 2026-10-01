@@ -29,7 +29,7 @@ Deno.test("budget pairs are the agreed ceilings", () => {
   assertEquals(OUTPUT_BUDGETS.CONTEXT_RESPONSE, { plain: 4_000, reasoning: 24_000 });
   assertEquals(OUTPUT_BUDGETS.CONTEXT_SUMMARY, { plain: 2_000, reasoning: 4_000 });
   assertEquals(OUTPUT_BUDGETS.EDITOR_ACTION, { plain: 4_000, reasoning: 6_000 });
-  assertEquals(OUTPUT_BUDGETS.FLOW, { plain: 8_192, reasoning: 32_000 });
+  assertEquals(OUTPUT_BUDGETS.FLOW, { plain: 8_192, reasoning: 24_000 });
   assertEquals(OUTPUT_BUDGETS.DOC_SUMMARY, { plain: 500, reasoning: 2_000 });
   assertEquals(OUTPUT_BUDGETS.MEMORY, { plain: 3_000, reasoning: 6_000 });
   for (const budget of Object.values(OUTPUT_BUDGETS)) {
@@ -48,7 +48,7 @@ Deno.test("reasoning ceiling for Claude thinking and Mistral reasoning models", 
   assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_RESPONSE, "zai-glm-5-3", false, true), 24_000);
   assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_SUMMARY, "mistral-medium-3-5", false, true), 4_000);
   assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.EDITOR_ACTION, "claude-opus-4-8", true), 6_000);
-  assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.FLOW, "claude-opus-4-8", true), 32_000);
+  assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.FLOW, "claude-opus-4-8", true), 24_000);
 });
 
 Deno.test("reasoning flags on a non-reasoning model never raise the ceiling", () => {
@@ -78,10 +78,11 @@ Deno.test("GLM 5.3 is configured at an explicit level in every Mistral effort ta
   assertEquals(resolveMistralEffort(EDITOR_MISTRAL_EFFORT, "zai-glm-5-3"), "low");
   assertEquals(resolveMistralEffort(SUMMARY_MISTRAL_EFFORT, "zai-glm-5-3"), "low");
   // "max" is GLM's deep-reasoning level: it spent whole budgets thinking
-  // (2026-10) — chat and Ask/Propose default to "high"; FLOW stays at
-  // "max" ("high" and "low" both failed the maintainer's independence
-  // test) with a ceiling sized for the think.
-  assertEquals(resolveMistralEffort(FLOW_MISTRAL_EFFORT, "zai-glm-5-3"), "max");
+  // (2026-10) — chat and Ask/Propose default to "high". FLOW is "high" too:
+  // the model is not recommended for FLOW (every level failed the
+  // maintainer's independence test), so the fast level serves whoever
+  // selects it anyway.
+  assertEquals(resolveMistralEffort(FLOW_MISTRAL_EFFORT, "zai-glm-5-3"), "high");
   assertEquals(resolveMistralEffort(CHAT_MISTRAL_EFFORT, "zai-glm-5-3"), "high");
   assertEquals(resolveMistralEffort(CONTEXT_MISTRAL_EFFORT, "zai-glm-5-3"), "high");
 });

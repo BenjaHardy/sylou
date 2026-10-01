@@ -69,10 +69,10 @@ export const MODELS: ModelInfo[] = [
     // claude-/deepseek- prefix). Replaced GLM 5.2 in 2026-10 (Mistral
     // retires zai-glm-5-2 on 2026-10-31) at the same price and context
     // window; the per-function reasoning levels live in
-    // _shared/_thinking.ts (see docs/model-configuration.md). Recommended
-    // for FLOW alongside Claude Sonnet 4.6 after the maintainer's field
-    // tests (2026-08/09) — the two are not ranked against each other.
-    flowRecommended: true,
+    // _shared/_thinking.ts (see docs/model-configuration.md). The default
+    // chat model. NOT recommended for FLOW (field test 2026-10-02): at
+    // every reasoning level its scores lean towards the user, unlike GLM
+    // 5.2 at "max", which was recommended.
     note: "Third-party model hosted on the Mistral API",
   },
   {
@@ -173,11 +173,13 @@ export function groupModelsForFlow(models: ModelInfo[] = MODELS): ModelGroup[] {
 }
 
 // Defaults for new profiles (mirrored by the profiles column defaults in
-// migration 20261001120000 and by the edge functions' NULL-preference
-// fallback). GLM 5.3 since 2026-10 (GLM 5.2 from 2026-09-25, Mistral
-// Medium 3.5 before).
+// migrations 20261001120000 / 20261002120000 and by the edge functions'
+// NULL-preference fallback). Chat: GLM 5.3 since 2026-10 (GLM 5.2 from
+// 2026-09-25, Mistral Medium 3.5 before). FLOW: Claude Sonnet 4.6 since
+// 2026-10-02 — the one model still recommended for FLOW once GLM 5.3
+// failed the field test (GLM 5.2 was the default from 2026-09-25).
 export const DEFAULT_CHAT_MODEL = "zai-glm-5-3";
-export const DEFAULT_FLOW_MODEL = "zai-glm-5-3";
+export const DEFAULT_FLOW_MODEL = "claude-sonnet-4-6";
 
 /** A reasoning level a user can pick for a chat model. */
 export interface ReasoningChoice {

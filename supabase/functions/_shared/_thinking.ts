@@ -55,7 +55,7 @@
 //   FLOW    — schema-bound analysis. Thinking ON for Opus only (Sonnet
 //             is at 100% Structured Outputs success without it; don't
 //             risk regressing what's working). Effort "high" both Claudes.
-//             Mistral Small at "high", Medium 3.5 at "none", GLM 5.3 at "max".
+//             Mistral Small at "high", Medium 3.5 at "none", GLM 5.3 at "high".
 //   CHAT    — Opus thinking + "high" Claude effort. Mistral Medium 3.5
 //             at "high" (worth the latency); Small at "none" (chat speed);
 //             GLM 5.3 at "high" — its "max" is the deep-reasoning level
@@ -79,13 +79,12 @@
 //         reducing effort).
 //   * Average FLOW elapsed > 100s on Mistral Medium 3.5 across ≥5 runs
 //       → flip FLOW_MISTRAL_EFFORT["mistral-medium-3-5"] to "none".
-//   * GLM 5.3 runs FLOW at "max" (2026-10-01): "high" and "low" both
-//     failed the maintainer's independence test (scores leaning towards
-//     the user, well below GLM 5.2 at "max"), and "max" needs the full
-//     OUTPUT_BUDGETS.FLOW reasoning ceiling for its think — a run that
-//     still stops at the ceiling is reported as truncated, not retried.
-//     Runs past the 145s in-contract timeout call for the streaming-FLOW
-//     change (docs/model-configuration.md), not a lower level.
+//   * GLM 5.3 is NOT recommended for FLOW (field test 2026-10-02): at
+//     "low", "high" and "max" alike its scores lean towards the user,
+//     unlike GLM 5.2 at "max". Left at "high" for anyone who selects it
+//     anyway — fast, and the FLOW reasoning ceiling never binds there
+//     ("max" needed the whole ceiling for its think and still failed the
+//     test).
 // ============================================================
 
 import type { OutputBudget } from "./_models.ts";
@@ -126,7 +125,7 @@ export const CONTEXT_EFFORT: EffortTable = { "claude-sonnet-4-6": "high", "claud
 // are eligible. Determinism wins for FLOW; chat-style functions prefer
 // Small at "none" for latency. GLM 5.3 is reasoning-only, so "low" is
 // its "off" (see the Mistral reasoning note above).
-export const FLOW_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "high", "zai-glm-5-3": "max" };
+export const FLOW_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "high", "zai-glm-5-3": "high" };
 export const CHAT_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "none", "zai-glm-5-3": "high" };
 export const EDITOR_MISTRAL_EFFORT:  MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "none", "zai-glm-5-3": "low" };
 export const CONTEXT_MISTRAL_EFFORT: MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "none", "zai-glm-5-3": "high" };

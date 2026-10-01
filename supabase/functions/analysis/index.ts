@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
       );
     }
     const flowModel: string =
-      requestedModel || profile.preferred_flow_model || "zai-glm-5-3";
+      requestedModel || profile.preferred_flow_model || "claude-sonnet-4-6";
 
     const provider = providerFor(flowModel);
     if (!Deno.env.get(envKeyFor(provider))) {
