@@ -65,7 +65,10 @@ export interface OutputBudget {
  * nothing ("No response generated"), and non-reasoning replies were seen
  * cut off mid-sentence. The client mirrors EDITOR_ACTION.plain in
  * src/lib/editor-limits.ts to warn before an editor action whose reply
- * would not fit — keep the two in sync.
+ * would not fit — keep the two in sync. The two summary shapes gained
+ * explicit pairs in 2026-10 when GLM 5.3 (reasoning-only) replaced 5.2: an
+ * omitted `reasoning_effort` no longer means "no thinking" there, and a
+ * thinking chunk inside a 500-token budget left no room for the summary.
  */
 export const OUTPUT_BUDGETS = {
   /** chat: one assistant turn (also the two-pass and tool-loop calls). */
@@ -78,6 +81,10 @@ export const OUTPUT_BUDGETS = {
   EDITOR_ACTION: { plain: 4_000, reasoning: 6_000 },
   /** analysis: the FLOW report (Structured Outputs / forced tool call). */
   FLOW: { plain: 8_192, reasoning: 16_000 },
+  /** extract-text: the 3–5 sentence summary of an imported document. */
+  DOC_SUMMARY: { plain: 500, reasoning: 2_000 },
+  /** _conversation_memory: the rolling per-thread chat summary. */
+  MEMORY: { plain: 3_000, reasoning: 6_000 },
 } as const satisfies Record<string, OutputBudget>;
 
 /**

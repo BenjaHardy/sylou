@@ -649,7 +649,7 @@ ${writePillarNotice}`;
       // Fallback to "none" defends against a future model being added to
       // MISTRAL_REASONING_MODELS without a corresponding FLOW_MISTRAL_EFFORT
       // entry — silent missing disclosure would be worse than a sane default.
-      reasoningEffort = FLOW_MISTRAL_EFFORT[flowModel] ?? "none";   // "high" | "none"
+      reasoningEffort = FLOW_MISTRAL_EFFORT[flowModel] ?? "none";   // "low" | "high" | "max" | "none"
     }
 
     const flowMeta: Record<string, unknown> = {
