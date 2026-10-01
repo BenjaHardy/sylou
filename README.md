@@ -63,7 +63,7 @@ The transparency architecture, covering all the means, whats, whys, hows to achi
 - **Work replay functionality and quantitative data** for further evidence of the involvement of the user to the work.
 - **Shareable FLOW reports** comprising the above elements, with a public URL, a QR-coded badge, and machine-readable AI-origin markers. 
 - **Tutor mode** that restricts the AI to guidance rather than direct generation (for educational contexts).
-- **Selectable LLM** for both the chat and the FLOW analysis separately, between Mistral (incl. GLM), Claude and DeepSeek.
+- **Selectable LLM** for both the chat (where effort is also selectable) and the FLOW analysis separately, between Mistral (incl. GLM), Claude and DeepSeek.
 
 Sylou is built on React + TypeScript on the frontend, Supabase (PostgreSQL + Edge Functions) on the backend, and uses LLMs via API.
 
