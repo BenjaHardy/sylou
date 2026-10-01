@@ -86,10 +86,11 @@ export const OUTPUT_BUDGETS = {
   /** editor-action: one inline rewrite of the selection. */
   EDITOR_ACTION: { plain: 4_000, reasoning: 6_000 },
   /** analysis: the FLOW report (Structured Outputs / forced tool call).
-   *  Reasoning ceiling in step with chat / context: ~80 s at the ~300
-   *  tokens/s seen on GLM 5.3, inside the 145 s abort of FLOW's single
+   *  Reasoning ceiling sized for GLM 5.3 at "max" (the only level that
+   *  passed the maintainer's independence test): ~105 s at the ~300
+   *  tokens/s seen on it, inside the 145 s abort of FLOW's single
    *  non-streamed call; a truncated attempt is not retried (attempt.ts). */
-  FLOW: { plain: 8_192, reasoning: 24_000 },
+  FLOW: { plain: 8_192, reasoning: 32_000 },
   /** extract-text: the 3–5 sentence summary of an imported document. */
   DOC_SUMMARY: { plain: 500, reasoning: 2_000 },
   /** _conversation_memory: the rolling per-thread chat summary. */
