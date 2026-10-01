@@ -50,11 +50,12 @@ The most analytically demanding function. All models targeted for determinism (t
 | Mistral Medium 3.5 | 0.0                          | reasoning_effort: off                                  | 8192                | *Not* recommended. Good repeatability, but strong Write pillar and provenance data lead to user-bias on other pillars. |
 | Mistral Small 4    | 0.0                          | reasoning_effort: high                                 | 16000               | *Not* recommended, bias towards the user, poor repeatability.  |
 | DeepSeek V4 Flash  | 0.0                          | n/a                                                    | 8192                | *Not* recommended, bias towards the user, poor repeatability.  |
-| Z.ai GLM 5.3       | 0.0                          | reasoning_effort: max (GLM-native level)               | 16000               | *Recommended* for FLOW; quality and repeatability. |
+| Z.ai GLM 5.3       | 0.0                          | reasoning_effort: high                                 | 16000               | *Recommended* for FLOW; quality and repeatability. |
 
 **Rationale for FLOW settings:**
 
 - max_tokens 16000 for reasoning models: thinking chunks consume output budget; insufficient headroom causes truncation and validation failures.
+- GLM 5.3 at "high", not "max": at "max" it spent the whole 16000 thinking and never called the submit tool (both attempts, staging 2026-10-01); at "high" it thinks briefly and answers.
 - Opus 4.7+ excluded from temperature setting (returns 400 if non-default temperature is sent).
 
 ---
