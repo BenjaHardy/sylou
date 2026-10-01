@@ -17,8 +17,8 @@ import {
 } from "./_thinking.ts";
 
 Deno.test("budget pairs are the agreed ceilings", () => {
-  assertEquals(OUTPUT_BUDGETS.CHAT, { plain: 4_000, reasoning: 8_000 });
-  assertEquals(OUTPUT_BUDGETS.CONTEXT_RESPONSE, { plain: 4_000, reasoning: 8_000 });
+  assertEquals(OUTPUT_BUDGETS.CHAT, { plain: 4_000, reasoning: 16_000 });
+  assertEquals(OUTPUT_BUDGETS.CONTEXT_RESPONSE, { plain: 4_000, reasoning: 16_000 });
   assertEquals(OUTPUT_BUDGETS.CONTEXT_SUMMARY, { plain: 2_000, reasoning: 4_000 });
   assertEquals(OUTPUT_BUDGETS.EDITOR_ACTION, { plain: 4_000, reasoning: 6_000 });
   assertEquals(OUTPUT_BUDGETS.FLOW, { plain: 8_192, reasoning: 16_000 });
@@ -36,8 +36,8 @@ Deno.test("plain ceiling when reasoning is off", () => {
 });
 
 Deno.test("reasoning ceiling for Claude thinking and Mistral reasoning models", () => {
-  assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CHAT, "claude-opus-4-8", true), 8_000);
-  assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_RESPONSE, "zai-glm-5-3", false, true), 8_000);
+  assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CHAT, "claude-opus-4-8", true), 16_000);
+  assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_RESPONSE, "zai-glm-5-3", false, true), 16_000);
   assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_SUMMARY, "mistral-medium-3-5", false, true), 4_000);
   assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.EDITOR_ACTION, "claude-opus-4-8", true), 6_000);
   assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.FLOW, "claude-opus-4-8", true), 16_000);
@@ -70,6 +70,10 @@ Deno.test("GLM 5.3 is configured at an explicit level in every Mistral effort ta
   assertEquals(resolveMistralEffort(EDITOR_MISTRAL_EFFORT, "zai-glm-5-3"), "low");
   assertEquals(resolveMistralEffort(SUMMARY_MISTRAL_EFFORT, "zai-glm-5-3"), "low");
   assertEquals(resolveMistralEffort(FLOW_MISTRAL_EFFORT, "zai-glm-5-3"), "max");
+  // "max" is GLM's deep-reasoning level: it spent whole chat budgets
+  // thinking (2026-10), so chat and Ask/Propose default to "high".
+  assertEquals(resolveMistralEffort(CHAT_MISTRAL_EFFORT, "zai-glm-5-3"), "high");
+  assertEquals(resolveMistralEffort(CONTEXT_MISTRAL_EFFORT, "zai-glm-5-3"), "high");
 });
 
 Deno.test("Mistral's own reasoning models only ever get high or none (low and max are GLM-only)", () => {

@@ -66,18 +66,18 @@ Conversational responses. Quality matters; reasoning effort calibrated per model
 | Model              | Temperature                  | Thinking / Effort                | max_tokens (output) | Notes                                                                 |
 | ------------------ | ---------------------------- | -------------------------------- | ------------------- | --------------------------------------------------------------------- |
 | Claude Sonnet 4.6  | 1.0                          | thinking: off, effort: high      | 4000                | Default chat behavior.                                                |
-| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high | 8000                | Adaptive thinking; raises max_tokens.                                 |
+| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high | 16000               | Adaptive thinking; raises max_tokens.                                 |
 | Mistral Large 3    | 0.7                          | n/a                              | 4000                | Standard chat.                                                        |
-| Mistral Medium 3.5 | 0.7                          | reasoning_effort: high           | 8000                | Mistral "Quality tier" — reasoning enabled.                           |
+| Mistral Medium 3.5 | 0.7                          | reasoning_effort: high           | 16000               | Mistral "Quality tier" — reasoning enabled.                           |
 | Mistral Small 4    | 0.7                          | reasoning_effort: none           | 4000                | Mistral "Speed tier" — no thinking chunk; ideal for cheap, fast chat. |
 | DeepSeek V4 Flash  | 1.0                          | n/a                              | 4000                | Standard, cheap chat.                                                 |
-| Z.ai GLM 5.3       | 0.7                          | reasoning_effort: max            | 8000                | Third-party (Z.ai) via Mistral API; 1M context.                       |
+| Z.ai GLM 5.3       | 0.7                          | reasoning_effort: high           | 16000               | Third-party (Z.ai) via Mistral API; 1M context. "max" is its deep-reasoning level and spent whole chat budgets thinking. |
 
 **Rationale for Chat settings:**
 
 - Temperature at provider default: 1.0 for Claude Sonnet and DeepSeek, 0.7 for Mistral; allows natural variation for conversational warmth.
 - Reasoning effort tier-matched: e.g. GLM 5.3 and Medium 3.5 get reasoning; Small ("speed tier") doesn't.
-- max_tokens 4000, 8000 for reasoning models: same logic as FLOW, smaller bump since chat responses are shorter. 
+- max_tokens 4000, 16000 for reasoning models: same logic as FLOW. Raised from 8000 in October 2026 after GLM 5.3 at "max" spent the whole 8000 thinking and answered with nothing; a ceiling costs nothing until it is hit.
 
 ---
 
@@ -109,17 +109,17 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 | Model | Temperature | Thinking / Effort | max_tokens (summary) (output) | max_tokens (response) (output) | Notes |
 |---|---|---|---|---|---|
 | Claude Sonnet 4.6 | 1.0 | thinking: off, effort: high | 2000 | 4000 | Standard. |
-| Claude Opus 4.8 | undefined (model-controlled) | thinking: adaptive, effort: high | 4000 | 8000 | Adaptive thinking. |
+| Claude Opus 4.8 | undefined (model-controlled) | thinking: adaptive, effort: high | 4000 | 16000 | Adaptive thinking. |
 | Mistral Large 3 | 0.7 | n/a | 2000 | 4000 | Standard. |
-| Mistral Medium 3.5 | 0.7 | reasoning_effort: high | 4000 | 8000 | Mistral quality tier — reasoning helps with nuanced AI features. |
+| Mistral Medium 3.5 | 0.7 | reasoning_effort: high | 4000 | 16000 | Mistral quality tier — reasoning helps with nuanced AI features. |
 | Mistral Small 4 | 0.7 | reasoning_effort: none | 2000 | 4000 | Mistral speed tier. |
 | DeepSeek V4 Flash | 1.0 | n/a | 2000 | 4000 | Standard. |
-| Z.ai GLM 5.3 | 0.7 | reasoning_effort: max | 4000 | 8000 | Third-party via Mistral API. |
+| Z.ai GLM 5.3 | 0.7 | reasoning_effort: high | 4000 | 16000 | Third-party via Mistral API. |
 
 **Rationale for Context-prompt settings:**
 
 - Matches Chat defaults: context-prompt powers Ask/Propose user-facing features, so quality posture should align with chat.
-- max_tokens 4000/8000 for the response and 2000/4000 for the summary (plain / reasoning; `OUTPUT_BUDGETS.CONTEXT_RESPONSE` and `.CONTEXT_SUMMARY`).
+- max_tokens 4000/16000 for the response and 2000/4000 for the summary (plain / reasoning; `OUTPUT_BUDGETS.CONTEXT_RESPONSE` and `.CONTEXT_SUMMARY`).
 
 ---
 

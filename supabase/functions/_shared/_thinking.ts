@@ -57,11 +57,13 @@
 //             risk regressing what's working). Effort "high" both Claudes.
 //             Mistral Small at "high", Medium 3.5 at "none"; GLM 5.3 at "max".
 //   CHAT    — Opus thinking + "high" Claude effort. Mistral Medium 3.5
-//             at "high" (worth the latency); Small at "none" (chat speed).
+//             at "high" (worth the latency); Small at "none" (chat speed);
+//             GLM 5.3 at "high" — its "max" is the deep-reasoning level
+//             and spent whole chat budgets thinking (2026-10).
 //   EDITOR  — inline rewrites; Claude as above; Mistral reasoning OFF
 //             (GLM 5.3 at "low": it cannot switch reasoning off).
 //   CONTEXT — pre-analysis summarization; Claude as above; Mistral Medium
-//             3.5 at "high", Small at "none".
+//             3.5 at "high", Small at "none", GLM 5.3 at "high".
 //   SUMMARY — document-import and conversation-memory summaries
 //             (extract-text, _conversation_memory.ts); Mistral reasoning
 //             OFF, GLM 5.3 at "low".
@@ -122,9 +124,9 @@ export const CONTEXT_EFFORT: EffortTable = { "claude-sonnet-4-6": "high", "claud
 // Small at "none" for latency. GLM 5.3 is reasoning-only, so "low" is
 // its "off" (see the Mistral reasoning note above).
 export const FLOW_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "high", "zai-glm-5-3": "max" };
-export const CHAT_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "none", "zai-glm-5-3": "max" };
+export const CHAT_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "none", "zai-glm-5-3": "high" };
 export const EDITOR_MISTRAL_EFFORT:  MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "none", "zai-glm-5-3": "low" };
-export const CONTEXT_MISTRAL_EFFORT: MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "none", "zai-glm-5-3": "max" };
+export const CONTEXT_MISTRAL_EFFORT: MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "none", "zai-glm-5-3": "high" };
 export const SUMMARY_MISTRAL_EFFORT: MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "none", "zai-glm-5-3": "low" };
 
 export function resolveThinking(table: ThinkingTable, modelId: string): boolean {
