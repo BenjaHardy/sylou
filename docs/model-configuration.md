@@ -144,6 +144,23 @@ Two small summary calls outside the four functions above, both on the user's cha
 
 ---
 
+### User-selectable reasoning (chat and Ask/Propose)
+
+Settings → Models lets each user pick a reasoning level for the selected chat model. It applies to chat and to Ask/Propose, replacing the default from the Chat and Context-prompt tables above; FLOW, editor actions and the summary calls keep their fixed settings. The stored choice (`profiles.preferred_chat_reasoning`, a per-model map) is validated server-side against `CHAT_REASONING_OPTIONS` in `_shared/_thinking.ts`; an unknown or missing entry means the default. The picker labels come from the mirror in `src/lib/models.ts`.
+
+| Model | Options (default in bold) | Wire mapping |
+|---|---|---|
+| Claude Sonnet 4.6 | **Off**, Low, Medium, High | Off = thinking off, effort high; the others = adaptive thinking with that effort |
+| Claude Opus 4.8 | Off, Low, Medium, **High**, Max | as above; Max = effort xhigh |
+| Mistral Medium 3.5 | Off, **High** | reasoning_effort omitted / high |
+| Mistral Small 4 | **Off**, High | reasoning_effort omitted / high |
+| Z.ai GLM 5.3 | Low, **High**, Max | reasoning_effort low / high / max |
+| Mistral Large 3, DeepSeek V4 Flash | — | no reasoning control |
+
+The max_tokens ceiling follows the choice: the reasoning ceiling applies whenever a level other than Off is in force.
+
+---
+
 ## Where to find these settings in code
 
 | Setting                                       | File                                          | Notes                                                                                             |
@@ -154,6 +171,7 @@ Two small summary calls outside the four functions above, both on the user's cha
 | Mistral reasoning_effort per function × model | `supabase/functions/_shared/_thinking.ts`     | Tables: `*_MISTRAL_EFFORT` (FLOW, CHAT, EDITOR, CONTEXT, SUMMARY).                                                                       |
 | Reasoning-supported Mistral models            | `supabase/functions/_shared/_thinking.ts`     | `MISTRAL_REASONING_MODELS` set.                                                                   |
 | max_tokens ceilings (plain / reasoning pairs) | `supabase/functions/_shared/_models.ts`       | `OUTPUT_BUDGETS`; `resolveMaxTokens()` in `_thinking.ts` picks the member that applies.           |
+| User-selectable reasoning (chat, Ask/Propose) | `supabase/functions/_shared/_thinking.ts`     | `CHAT_REASONING_OPTIONS`, `resolveReasoning()`; UI mirror `CHAT_REASONING_OPTIONS` in `src/lib/models.ts`. |
 | Anthropic models without temperature          | `supabase/functions/_shared/_temperatures.ts` | `NO_TEMPERATURE_MODELS` set.                                                                      |
 | Server-side model allowlist + input limits    | `supabase/functions/_shared/_models.ts`       | `ALLOWED_MODELS` (gates the `model` request override), `INPUT_LIMITS` (request text ceilings), `CONTEXT_LIMIT_TOKENS` (per-model context windows, mirrors the registry). |
 | FLOW imported-documents budget                | `supabase/functions/analysis/index.ts`        | `FLOW_IMPORTED_DOCS_BUDGET_TOKENS` cost ceiling; effective allowance = min(policy, model-window remainder after the never-truncated sections). |
@@ -207,6 +225,8 @@ Two small summary calls outside the four functions above, both on the user's cha
         DeepSeek: only if routing to v4-flash's thinking mode; deepseek-v4-flash (non-thinking) has no reasoning toggle.
    
     Check NO_TEMPERATURE_MODELS in _temperatures.ts (Anthropic Opus 4.7+ rejects temperature).
+
+    If users may pick the reasoning level, add the model's options to CHAT_REASONING_OPTIONS in _thinking.ts and to the mirror in src/lib/models.ts (ids, labels, default); the chat/context tables must name a combination one of the options covers (a test checks this).
 
 3. Adjust token budgets (if needed)
    

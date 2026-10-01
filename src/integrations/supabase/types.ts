@@ -447,6 +447,7 @@ export type Database = {
           id: string
           monthly_token_budget: number | null
           preferred_chat_model: string | null
+          preferred_chat_reasoning: Json
           preferred_flow_model: string
           preferred_language: string | null
           token_period_start: string
@@ -462,6 +463,7 @@ export type Database = {
           id: string
           monthly_token_budget?: number | null
           preferred_chat_model?: string | null
+          preferred_chat_reasoning?: Json
           preferred_flow_model?: string
           preferred_language?: string | null
           token_period_start?: string
@@ -477,6 +479,7 @@ export type Database = {
           id?: string
           monthly_token_budget?: number | null
           preferred_chat_model?: string | null
+          preferred_chat_reasoning?: Json
           preferred_flow_model?: string
           preferred_language?: string | null
           token_period_start?: string
