@@ -8,7 +8,7 @@ import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models
 import { sliceSafe } from "../_shared/_text.ts";
 import {
   CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT,
-  resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
+  resolveReasoning, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 import {
   fetchConversationMemory,
@@ -105,9 +105,9 @@ Deno.serve(async (req) => {
       requestedModel || profile.preferred_chat_model || "zai-glm-5-3";
     const provider = providerFor(chatModel);
     const temperature = resolveTemperature(CONTEXT_TEMPERATURE, chatModel);
-    const thinking = resolveThinking(CONTEXT_THINKING, chatModel);
-    const effort = resolveEffort(CONTEXT_EFFORT, chatModel);
-    const mistralEffort = resolveMistralEffort(CONTEXT_MISTRAL_EFFORT, chatModel);
+    const { thinking, effort, mistralEffort } = resolveReasoning(chatModel, profile.preferred_chat_reasoning, {
+      thinking: CONTEXT_THINKING, effort: CONTEXT_EFFORT, mistral: CONTEXT_MISTRAL_EFFORT,
+    });
     const contextMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_RESPONSE, chatModel, thinking, mistralEffort !== undefined);
     const summaryMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_SUMMARY, chatModel, thinking, mistralEffort !== undefined);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
