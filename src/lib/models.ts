@@ -59,17 +59,17 @@ export const MODELS: ModelInfo[] = [
     contextLimit: 256_000,
   },
   {
-    id: "zai-glm-5-2",
-    label: "Z.ai GLM 5.2 (via Mistral)",
+    id: "zai-glm-5-3",
+    label: "Z.ai GLM 5.3 (via Mistral)",
     provider: "mistral",
     pricing: { input: 1.40, output: 4.40 },
     contextLimit: 1_000_000,
     // Third-party open model (Z.ai) hosted unmodified on the Mistral API —
-    // EU infrastructure, available since 2026-08. Routed through the
-    // Mistral path (id has no claude-/deepseek- prefix). Reasoning enabled
-    // 2026-08 after green launch acceptance: GLM-native "max" for FLOW,
-    // chat and context-prompt, "none" for editor actions (see
-    // docs/model-configuration.md and _shared/_thinking.ts). Recommended
+    // EU infrastructure. Routed through the Mistral path (id has no
+    // claude-/deepseek- prefix). Replaced GLM 5.2 in 2026-10 (Mistral
+    // retires zai-glm-5-2 on 2026-10-31) at the same price and context
+    // window; the per-function reasoning levels live in
+    // _shared/_thinking.ts (see docs/model-configuration.md). Recommended
     // for FLOW alongside Claude Sonnet 4.6 after the maintainer's field
     // tests (2026-08/09) — the two are not ranked against each other.
     flowRecommended: true,
@@ -113,6 +113,7 @@ export const MODEL_LABELS: Record<string, string> = MODELS.reduce(
     "mistral-small-latest":  "Mistral Small",
     "deepseek-chat":         "DeepSeek Chat",
     "claude-opus-4-7":       "Claude Opus 4.7",
+    "zai-glm-5-2":           "Z.ai GLM 5.2 (via Mistral)",
   } as Record<string, string>,
 );
 
@@ -172,7 +173,8 @@ export function groupModelsForFlow(models: ModelInfo[] = MODELS): ModelGroup[] {
 }
 
 // Defaults for new profiles (mirrored by the profiles column defaults in
-// migration 20260925140000 and by the edge functions' NULL-preference
-// fallback). GLM 5.2 since 2026-09-25 (was Mistral Medium 3.5).
-export const DEFAULT_CHAT_MODEL = "zai-glm-5-2";
-export const DEFAULT_FLOW_MODEL = "zai-glm-5-2";
+// migration 20261001120000 and by the edge functions' NULL-preference
+// fallback). GLM 5.3 since 2026-10 (GLM 5.2 from 2026-09-25, Mistral
+// Medium 3.5 before).
+export const DEFAULT_CHAT_MODEL = "zai-glm-5-3";
+export const DEFAULT_FLOW_MODEL = "zai-glm-5-3";

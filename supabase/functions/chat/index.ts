@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Only streaming requests are supported (send stream: true)" }, 400);
     }
     const chatModel: string =
-      requestedModel || profile.preferred_chat_model || "zai-glm-5-2";
+      requestedModel || profile.preferred_chat_model || "zai-glm-5-3";
     const temperature = resolveTemperature(CHAT_TEMPERATURE, chatModel);
     const thinking = resolveThinking(CHAT_THINKING, chatModel);
     const effort = resolveEffort(CHAT_EFFORT, chatModel);

@@ -71,7 +71,7 @@ export const CHAT_TEMPERATURE: TemperatureTable = {
   "mistral-small-2603":   0.7,
   "claude-sonnet-4-6":    1.0,
   "deepseek-v4-flash":    1.0,
-  "zai-glm-5-2":          0.7,
+  "zai-glm-5-3":          0.7,
 };
 
 export const EDITOR_TEMPERATURE: TemperatureTable = {
@@ -80,7 +80,7 @@ export const EDITOR_TEMPERATURE: TemperatureTable = {
   "mistral-small-2603":   0.7,
   "claude-sonnet-4-6":    1.0,
   "deepseek-v4-flash":    1.0,
-  "zai-glm-5-2":          0.7,
+  "zai-glm-5-3":          0.7,
 };
 
 export const CONTEXT_TEMPERATURE: TemperatureTable = {
@@ -89,7 +89,7 @@ export const CONTEXT_TEMPERATURE: TemperatureTable = {
   "mistral-small-2603":   0.7,
   "claude-sonnet-4-6":    1.0,
   "deepseek-v4-flash":    1.0,
-  "zai-glm-5-2":          0.7,
+  "zai-glm-5-3":          0.7,
 };
 
 export const FLOW_TEMPERATURE: TemperatureTable = {
@@ -98,7 +98,7 @@ export const FLOW_TEMPERATURE: TemperatureTable = {
   "mistral-small-2603":   0.0,
   "claude-sonnet-4-6":    0.0,
   "deepseek-v4-flash":    0.0,
-  "zai-glm-5-2":          0.0,
+  "zai-glm-5-3":          0.0,
 };
 
 export const SUMMARY_TEMPERATURE: TemperatureTable = {
@@ -107,7 +107,7 @@ export const SUMMARY_TEMPERATURE: TemperatureTable = {
   "mistral-small-2603":   0.3,
   "claude-sonnet-4-6":    0.3,
   "deepseek-v4-flash":    0.3,
-  "zai-glm-5-2":          0.3,
+  "zai-glm-5-3":          0.3,
 };
 
 export function resolveTemperature(

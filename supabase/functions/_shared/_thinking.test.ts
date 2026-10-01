@@ -21,13 +21,13 @@ Deno.test("budget pairs are the agreed ceilings", () => {
 
 Deno.test("plain ceiling when reasoning is off", () => {
   assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CHAT, "claude-sonnet-4-6", false), 4_000);
-  assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.EDITOR_ACTION, "zai-glm-5-2", false, false), 4_000);
+  assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.EDITOR_ACTION, "zai-glm-5-3", false, false), 4_000);
   assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.FLOW, "claude-sonnet-4-6", false), 8_192);
 });
 
 Deno.test("reasoning ceiling for Claude thinking and Mistral reasoning models", () => {
   assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CHAT, "claude-opus-4-8", true), 8_000);
-  assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_RESPONSE, "zai-glm-5-2", false, true), 8_000);
+  assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_RESPONSE, "zai-glm-5-3", false, true), 8_000);
   assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_SUMMARY, "mistral-medium-3-5", false, true), 4_000);
   assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.EDITOR_ACTION, "claude-opus-4-8", true), 6_000);
   assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.FLOW, "claude-opus-4-8", true), 16_000);

@@ -16,7 +16,7 @@ Deno.test("allowlist contains exactly the seven registry models", () => {
     "mistral-large-2512",
     "mistral-medium-3-5",
     "mistral-small-2603",
-    "zai-glm-5-2",
+    "zai-glm-5-3",
   ]);
 });
 

@@ -37,7 +37,7 @@ Apply strict coding standards to avoid future code liabilities for the open-sour
   modules: `_shared/` plus the split function directories — the `deno.json`
   test task holds the collected list)
 - LLM providers: Anthropic (Sonnet 4.6, Opus 4.8), Mistral API (Large 3,
-  Medium 3.5, Small 4, and Z.ai GLM 5.2 — the default chat and FLOW model for
+  Medium 3.5, Small 4, and Z.ai GLM 5.3 — the default chat and FLOW model for
   new profiles), DeepSeek (deepseek-v4-flash).
 
 Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
