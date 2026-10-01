@@ -207,3 +207,32 @@ export const CHAT_REASONING_OPTIONS: Readonly<
   "mistral-small-2603": { options: [OFF, HIGH], defaultId: "off" },
   "zai-glm-5-3": { options: [LOW, HIGH, MAX], defaultId: "high" },
 };
+
+/** Reasoning levels per model id and the one the code applies by default. */
+export type ReasoningOptionsByModel = Readonly<
+  Record<string, { options: ReasoningChoice[]; defaultId: string }>
+>;
+
+/** The option id in force for a chat model: the stored choice when it is
+ *  one of the model's options, else the default; null when the model has no
+ *  reasoning control. */
+export function effectiveReasoningId(
+  modelId: string,
+  choices: Record<string, string> | undefined,
+  table: ReasoningOptionsByModel = CHAT_REASONING_OPTIONS,
+): string | null {
+  const entry = table[modelId];
+  if (!entry) return null;
+  const stored = choices?.[modelId];
+  return entry.options.some((o) => o.id === stored) ? (stored as string) : entry.defaultId;
+}
+
+/** The label of the level in force (see effectiveReasoningId), or null. */
+export function reasoningLabelFor(
+  modelId: string,
+  choices: Record<string, string> | undefined,
+): string | null {
+  const id = effectiveReasoningId(modelId, choices);
+  if (id === null) return null;
+  return CHAT_REASONING_OPTIONS[modelId].options.find((o) => o.id === id)?.label ?? null;
+}

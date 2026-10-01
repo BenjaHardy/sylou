@@ -2,7 +2,13 @@ import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { PROVIDER_LABELS, type ModelGroup, type ModelInfo, type ReasoningChoice } from "@/lib/models";
+import {
+  PROVIDER_LABELS,
+  effectiveReasoningId,
+  type ModelGroup,
+  type ModelInfo,
+  type ReasoningOptionsByModel,
+} from "@/lib/models";
 
 // Grouped model picker for the Settings dialog. The registry keeps growing,
 // so the flat card lists became two long scrolls; each picker now folds its
@@ -12,11 +18,6 @@ import { PROVIDER_LABELS, type ModelGroup, type ModelInfo, type ReasoningChoice 
 // where the choice is made. The chat picker adds a reasoning-level select
 // under the selected card (CHAT_REASONING_OPTIONS in lib/models); the FLOW
 // picker passes no options and shows none.
-
-/** Reasoning levels per model id and the one the code applies by default. */
-export type ReasoningOptionsByModel = Readonly<
-  Record<string, { options: ReasoningChoice[]; defaultId: string }>
->;
 
 function formatPrice(n: number): string {
   return `$${n.toFixed(2)}`;
@@ -158,9 +159,10 @@ export function ModelPicker({
                 )}
                 {group.models.map((m) => {
                   const reasoning = m.id === selectedId ? reasoningOptions?.[m.id] : undefined;
-                  const stored = reasoningChoices[m.id];
                   const current =
-                    reasoning && reasoning.options.some((o) => o.id === stored) ? stored : reasoning?.defaultId;
+                    reasoning && reasoningOptions
+                      ? effectiveReasoningId(m.id, reasoningChoices, reasoningOptions) ?? undefined
+                      : undefined;
                   return (
                     <div key={m.id} className="space-y-1">
                       <ModelOption

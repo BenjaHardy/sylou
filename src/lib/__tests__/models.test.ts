@@ -10,8 +10,10 @@ import {
   MODELS,
   MODEL_LABELS,
   PROVIDER_LABELS,
+  effectiveReasoningId,
   groupModelsByProvider,
   groupModelsForFlow,
+  reasoningLabelFor,
   type ModelInfo,
 } from "@/lib/models";
 
@@ -137,5 +139,17 @@ describe("chat reasoning options (UI mirror of _shared/_thinking.ts)", () => {
   it("GLM 5.3 offers low / high / max with high as the default (max is its deep-reasoning level)", () => {
     expect(CHAT_REASONING_OPTIONS["zai-glm-5-3"].options.map((o) => o.id)).toEqual(["low", "high", "max"]);
     expect(CHAT_REASONING_OPTIONS["zai-glm-5-3"].defaultId).toBe("high");
+  });
+
+  it("the level in force is the stored choice when valid, else the default, and null without a control", () => {
+    expect(effectiveReasoningId("zai-glm-5-3", { "zai-glm-5-3": "max" })).toBe("max");
+    expect(effectiveReasoningId("zai-glm-5-3", { "zai-glm-5-3": "turbo" })).toBe("high");
+    expect(effectiveReasoningId("zai-glm-5-3", undefined)).toBe("high");
+    expect(effectiveReasoningId("claude-sonnet-4-6", { "zai-glm-5-3": "max" })).toBe("off");
+    expect(effectiveReasoningId("mistral-large-2512", { "mistral-large-2512": "high" })).toBeNull();
+
+    expect(reasoningLabelFor("zai-glm-5-3", { "zai-glm-5-3": "max" })).toBe("Max");
+    expect(reasoningLabelFor("claude-opus-4-8", {})).toBe("High");
+    expect(reasoningLabelFor("deepseek-v4-flash", {})).toBeNull();
   });
 });

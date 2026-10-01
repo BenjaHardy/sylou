@@ -130,7 +130,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
               <p className="text-xs text-muted-foreground mb-2">
                 Used for the chat panel and the editor's Ask / Propose actions. The reasoning
                 level under the selected model applies to those two as well; editor actions and
-                document summaries use fixed settings.
+                document summaries use the selected model with fixed settings.
               </p>
               <ModelPicker
                 groups={CHAT_MODEL_GROUPS}

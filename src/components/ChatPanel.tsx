@@ -24,7 +24,7 @@ import { useBookmarks } from "@/hooks/useBookmarks";
 import { format } from "date-fns";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 import { useUserSettings } from "@/hooks/useUserSettings";
-import { MODEL_LABELS } from "@/lib/models";
+import { MODEL_LABELS, reasoningLabelFor } from "@/lib/models";
 import { useInstanceConfig } from "@/hooks/useInstanceConfig";
 
 interface Props {
@@ -282,6 +282,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   const { threads, activeThreadId, setActiveThreadId, createThread, renameThread } = useChatThread(projectId);
   const { messages, loading, sending, phase, sendMessage, budgetRemaining, refreshMessages, appendMessages, setMessages } = useChatMessages(activeThreadId);
   const { settings: userSettings } = useUserSettings();
+  const reasoningLabel = reasoningLabelFor(userSettings.preferred_chat_model, userSettings.preferred_chat_reasoning);
   const { bookmarks, createBookmark, updateBookmark, deleteBookmark, getBookmarkForMessage } = useBookmarks(projectId);
   const { memory, refetch: refetchMemory } = useConversationMemory(activeThreadId);
   const [memoryDialogOpen, setMemoryDialogOpen] = useState(false);
@@ -564,8 +565,12 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
             onCreate={(name) => { createThread(name); }}
             onRename={renameThread}
           />
-          <span className="text-[10px] text-muted-foreground/70 hidden md:inline" title="Active chat model — change in Settings">
+          <span
+            className="text-[10px] text-muted-foreground/70 hidden md:inline"
+            title="Active chat model and reasoning level — change in Settings"
+          >
             {MODEL_LABELS[userSettings.preferred_chat_model] ?? "Model"}
+            {reasoningLabel && ` · Reasoning: ${reasoningLabel}`}
           </span>
         </div>
         <div className="flex items-center gap-2">
