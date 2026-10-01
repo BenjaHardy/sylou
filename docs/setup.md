@@ -263,7 +263,7 @@ Click into the editor and type a few sentences.
 
 **5. Send a chat message**
 
-First choose a chat model in the settings: click on your account at the bottom left → Settings → Models tab. GLM 5.2 (through Mistral API) is the default model, so this is especially important if the Mistral API key is not set.
+First choose a chat model in the settings: click on your account at the bottom left → Settings → Models tab. GLM 5.3 (through Mistral API) is the default model, so this is especially important if the Mistral API key is not set.
 
 *Verifies: the `chat` edge function is deployed and reachable, your LLM provider key is correct, CORS is configured properly. If this fails with a network error, the most likely cause is a mismatch between `ALLOWED_ORIGIN` and your actual deployed URL.*
 
@@ -288,7 +288,7 @@ Create a second project, this time choosing the **Creative** template. Use one o
 
 **9. Run a FLOW analysis**
 
-If not done already, choose a model in the settings among the recommended FLOW analysis models: click on your account at the bottom left → Settings → Models tab → "FLOW analysis model" at the bottom. GLM 5.2 (through Mistral API) is the default model, so this is especially important if the Mistral API key is not set.
+If not done already, choose a model in the settings among the recommended FLOW analysis models: click on your account at the bottom left → Settings → Models tab → "FLOW analysis model" at the bottom. GLM 5.3 (through Mistral API) is the default model, so this is especially important if the Mistral API key is not set.
 Go back to your first project. Click **Analyze with FLOW** at the bottom of the editor. The analysis runs (takes cca. 60 seconds, more or less depending on the size of the project). When complete, a FLOW report appears.
 
 *Verifies: the `analysis` edge function is deployed correctly. This is the most complex backend operation and exercises the LLM, the database, and the streaming response together.*
