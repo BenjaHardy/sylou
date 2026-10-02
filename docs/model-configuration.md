@@ -1,6 +1,6 @@
 # Model Configuration Reference
 
-This document tracks how Sylou configures each LLM model across the four edge functions (FLOW analysis, Chat, Editor actions, Context-prompt). It serves as a single source of truth for what's set where, why, and how the models behave in practice.
+This document tracks how Sylou configures each LLM model across the four main edge functions (FLOW analysis, Chat, Editor actions, Context-prompt) and the two summary calls (document import, conversation memory). It serves as a single source of truth for what's set where, why, and how the models behave in practice.
 
 **When to update this document:**
 
@@ -8,7 +8,7 @@ This document tracks how Sylou configures each LLM model across the four edge fu
 - A temperature, effort, or thinking value is changed in `_temperatures.ts` or `_thinking.ts`
 - Observed model behavior changes (e.g., a model's response quality changes after a provider update)
 
-**Last updated:** September 2026
+**Last updated:** October 2026
 
 ---
 
@@ -22,14 +22,17 @@ This document tracks how Sylou configures each LLM model across the four edge fu
 | Mistral Medium 3.5 | Mistral   | $1.50 / $7.50           | 256K                        | `mistral-medium-3-5` |
 | Mistral Small 4    | Mistral   | $0.15 / $0.60           | 256K                        | `mistral-small-2603` |
 | DeepSeek V4 Flash  | DeepSeek  | $0.14 / $0.28           | 1M                          | `deepseek-v4-flash`  |
-| Z.ai GLM 5.2       | Mistral*  | $1.40 / $4.40           | 1M                          | `zai-glm-5-2`        |
+| Z.ai GLM 5.3       | Mistral*  | $1.40 / $4.40           | 1M                          | `zai-glm-5-3`        |
 
-*Pricing as of July 2026 (GLM 5.2: August 2026); verify against provider pricing pages before publishing.*
+*Pricing as of July 2026 (GLM 5.3: September 2026); verify against provider pricing pages before publishing.*
 
-\* Z.ai GLM 5.2 is a **third-party open model** (Z.ai, MoE 744B/40B) hosted
-unmodified on the Mistral API on EU infrastructure. It routes through Sylou's Mistral path and uses the operator's `MISTRAL_API_KEY`.
-Note: "max" reasoning is **GLM-only** (Mistral's own reasoning models
-top out at "high" and must never be configured with "max").
+\* Z.ai GLM 5.3 is a **third-party open model** (Z.ai) hosted unmodified on
+the Mistral API on EU infrastructure. It routes through Sylou's Mistral path
+and uses the operator's `MISTRAL_API_KEY`. GLM 5.3 is a **reasoning-only**
+model: `reasoning_effort` accepts "low" | "high" | "max", the model's own
+default is "max" when the field is omitted, and reasoning cannot be disabled.
+Note: "low" and "max" are **GLM-only** levels (Mistral's own reasoning models
+accept "high" | "none" and must never be configured with either).
 
 ---
 
@@ -47,7 +50,7 @@ The most analytically demanding function. All models targeted for determinism (t
 | Mistral Medium 3.5 | 0.0                          | reasoning_effort: off                                  | 8192                | *Not* recommended. Good repeatability, but strong Write pillar and provenance data lead to user-bias on other pillars. |
 | Mistral Small 4    | 0.0                          | reasoning_effort: high                                 | 16000               | *Not* recommended, bias towards the user, poor repeatability.  |
 | DeepSeek V4 Flash  | 0.0                          | n/a                                                    | 8192                | *Not* recommended, bias towards the user, poor repeatability.  |
-| Z.ai GLM 5.2       | 0.0                          | reasoning_effort: max (GLM-native level)               | 16000               | *Recommended* for FLOW; quality and repeatability. |
+| Z.ai GLM 5.3       | 0.0                          | reasoning_effort: max (GLM-native level)               | 16000               | *Recommended* for FLOW; quality and repeatability. |
 
 **Rationale for FLOW settings:**
 
@@ -63,18 +66,18 @@ Conversational responses. Quality matters; reasoning effort calibrated per model
 | Model              | Temperature                  | Thinking / Effort                | max_tokens (output) | Notes                                                                 |
 | ------------------ | ---------------------------- | -------------------------------- | ------------------- | --------------------------------------------------------------------- |
 | Claude Sonnet 4.6  | 1.0                          | thinking: off, effort: high      | 4000                | Default chat behavior.                                                |
-| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high | 8000                | Adaptive thinking; raises max_tokens.                                 |
+| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high | 16000               | Adaptive thinking; raises max_tokens.                                 |
 | Mistral Large 3    | 0.7                          | n/a                              | 4000                | Standard chat.                                                        |
-| Mistral Medium 3.5 | 0.7                          | reasoning_effort: high           | 8000                | Mistral "Quality tier" — reasoning enabled.                           |
+| Mistral Medium 3.5 | 0.7                          | reasoning_effort: high           | 16000               | Mistral "Quality tier" — reasoning enabled.                           |
 | Mistral Small 4    | 0.7                          | reasoning_effort: none           | 4000                | Mistral "Speed tier" — no thinking chunk; ideal for cheap, fast chat. |
 | DeepSeek V4 Flash  | 1.0                          | n/a                              | 4000                | Standard, cheap chat.                                                 |
-| Z.ai GLM 5.2       | 0.7                          | reasoning_effort: max            | 8000                | Third-party (Z.ai) via Mistral API; 1M context.                       |
+| Z.ai GLM 5.3       | 0.7                          | reasoning_effort: high           | 16000               | Third-party (Z.ai) via Mistral API; 1M context. "max" is its deep-reasoning level and spent whole chat budgets thinking. |
 
 **Rationale for Chat settings:**
 
 - Temperature at provider default: 1.0 for Claude Sonnet and DeepSeek, 0.7 for Mistral; allows natural variation for conversational warmth.
-- Reasoning effort tier-matched: e.g. GLM 5.2 and Medium 3.5 get reasoning; Small ("speed tier") doesn't.
-- max_tokens 4000, 8000 for reasoning models: same logic as FLOW, smaller bump since chat responses are shorter. 
+- Reasoning effort tier-matched: e.g. GLM 5.3 and Medium 3.5 get reasoning; Small ("speed tier") doesn't.
+- max_tokens 4000, 16000 for reasoning models: same logic as FLOW. Raised from 8000 in October 2026 after GLM 5.3 at "max" spent the whole 8000 thinking and answered with nothing; a ceiling costs nothing until it is hit.
 
 ---
 
@@ -90,11 +93,11 @@ Inline rewrites and proposals from within the editor. Latency-sensitive.
 | Mistral Medium 3.5 | 0.7                          | reasoning_effort: none           | 4000                | No reasoning — editor actions should be snappy. |
 | Mistral Small 4    | 0.7                          | reasoning_effort: none           | 4000                | Same as Medium for editor.                      |
 | DeepSeek V4 Flash  | 1.0                          | n/a                              | 4000                | Standard.                                       |
-| Z.ai GLM 5.2       | 0.7                          | reasoning_effort: none           | 4000                | Third-party via Mistral API; reasoning off, editor actions stay snappy. |
+| Z.ai GLM 5.3       | 0.7                          | reasoning_effort: low            | 6000                | Third-party via Mistral API; reasoning cannot be disabled, so the lightest level keeps editor actions snappy (reasoning ceiling). |
 
 **Rationale for Editor settings:**
 
-- Reasoning disabled by default: editor actions are short, standard, latency-sensitive; thinking-chunk overhead isn't justified.
+- Reasoning disabled by default (or at the lightest level where the model cannot disable it, GLM 5.3): editor actions are short, standard, latency-sensitive; thinking-chunk overhead isn't justified.
 - max_tokens 4000, 6000 with reasoning. NB: The selection window shows a notice (acknowledge to proceed) for selections beyond ~13,600 characters, and a reply the provider cut off at max_tokens arrives flagged `truncated` (through `src/lib/editor-limits.ts`).
 
 ---
@@ -106,17 +109,38 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 | Model | Temperature | Thinking / Effort | max_tokens (summary) (output) | max_tokens (response) (output) | Notes |
 |---|---|---|---|---|---|
 | Claude Sonnet 4.6 | 1.0 | thinking: off, effort: high | 2000 | 4000 | Standard. |
-| Claude Opus 4.8 | undefined (model-controlled) | thinking: adaptive, effort: high | 4000 | 8000 | Adaptive thinking. |
+| Claude Opus 4.8 | undefined (model-controlled) | thinking: adaptive, effort: high | 4000 | 16000 | Adaptive thinking. |
 | Mistral Large 3 | 0.7 | n/a | 2000 | 4000 | Standard. |
-| Mistral Medium 3.5 | 0.7 | reasoning_effort: high | 4000 | 8000 | Mistral quality tier — reasoning helps with nuanced AI features. |
+| Mistral Medium 3.5 | 0.7 | reasoning_effort: high | 4000 | 16000 | Mistral quality tier — reasoning helps with nuanced AI features. |
 | Mistral Small 4 | 0.7 | reasoning_effort: none | 2000 | 4000 | Mistral speed tier. |
 | DeepSeek V4 Flash | 1.0 | n/a | 2000 | 4000 | Standard. |
-| Z.ai GLM 5.2 | 0.7 | reasoning_effort: max | 4000 | 8000 | Third-party via Mistral API. |
+| Z.ai GLM 5.3 | 0.7 | reasoning_effort: high | 4000 | 16000 | Third-party via Mistral API. |
 
 **Rationale for Context-prompt settings:**
 
 - Matches Chat defaults: context-prompt powers Ask/Propose user-facing features, so quality posture should align with chat.
-- max_tokens 4000/8000 for the response and 2000/4000 for the summary (plain / reasoning; `OUTPUT_BUDGETS.CONTEXT_RESPONSE` and `.CONTEXT_SUMMARY`).
+- max_tokens 4000/16000 for the response and 2000/4000 for the summary (plain / reasoning; `OUTPUT_BUDGETS.CONTEXT_RESPONSE` and `.CONTEXT_SUMMARY`).
+
+---
+
+### Summaries (document import, conversation memory)
+
+Two small summary calls outside the four functions above, both on the user's chat model: `extract-text` writes the 3–5 sentence summary of an imported document (the index the assistant reads before deciding whether to open the full text), and `_shared/_conversation_memory.ts` maintains the rolling per-thread chat summary (TRANSPARENCY.md §5.5).
+
+| Model | Temperature (document / memory) | Thinking / Effort | max_tokens (document summary) | max_tokens (conversation memory) | Notes |
+|---|---|---|---|---|---|
+| Claude Sonnet 4.6 | 1.0 / 0.3 | thinking: off | 500 | 3000 | Standard. |
+| Claude Opus 4.8 | undefined (model-controlled) | thinking: off | 500 | 3000 | No thinking requested on these calls. |
+| Mistral Large 3 | 0.7 / 0.3 | n/a | 500 | 3000 | Standard. |
+| Mistral Medium 3.5 | 0.7 / 0.3 | reasoning_effort: none | 500 | 3000 | Short summaries don't need reasoning. |
+| Mistral Small 4 | 0.7 / 0.3 | reasoning_effort: none | 500 | 3000 | Same. |
+| DeepSeek V4 Flash | 1.0 / 0.3 | n/a | 500 | 3000 | Standard. |
+| Z.ai GLM 5.3 | 0.7 / 0.3 | reasoning_effort: low | 2000 | 6000 | Reasoning cannot be disabled; lightest level with the reasoning ceilings. |
+
+**Rationale for Summary settings:**
+
+- Document summaries reuse the chat temperature table; conversation memory uses `SUMMARY_TEMPERATURE` (0.3 — faithful carry-over over prose variety).
+- max_tokens 500 / 2000 (document) and 3000 / 6000 (memory), plain / reasoning (`OUTPUT_BUDGETS.DOC_SUMMARY` and `.MEMORY`).
 
 ---
 
@@ -127,7 +151,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 | Model registry (which models exist)           | `src/lib/models.ts`                           | Pricing, labels, default chat model, the `flowRecommended` flag and the groupings behind the Settings pickers (by API for chat, by FLOW recommendation for FLOW). |
 | Temperature per function × model              | `supabase/functions/_shared/_temperatures.ts` | Five tables: `FLOW_TEMPERATURE`, `CHAT_TEMPERATURE`, `EDITOR_TEMPERATURE`, `CONTEXT_TEMPERATURE`, `SUMMARY_TEMPERATURE` (conversation-memory consolidation, 0.3 — faithful carry-over over prose variety). |
 | Claude thinking + effort per function × model | `supabase/functions/_shared/_thinking.ts`     | Tables: `*_THINKING`, `*_EFFORT`.                                                                 |
-| Mistral reasoning_effort per function × model | `supabase/functions/_shared/_thinking.ts`     | Tables: `*_MISTRAL_EFFORT`.                                                                       |
+| Mistral reasoning_effort per function × model | `supabase/functions/_shared/_thinking.ts`     | Tables: `*_MISTRAL_EFFORT` (FLOW, CHAT, EDITOR, CONTEXT, SUMMARY).                                                                       |
 | Reasoning-supported Mistral models            | `supabase/functions/_shared/_thinking.ts`     | `MISTRAL_REASONING_MODELS` set.                                                                   |
 | max_tokens ceilings (plain / reasoning pairs) | `supabase/functions/_shared/_models.ts`       | `OUTPUT_BUDGETS`; `resolveMaxTokens()` in `_thinking.ts` picks the member that applies.           |
 | Anthropic models without temperature          | `supabase/functions/_shared/_temperatures.ts` | `NO_TEMPERATURE_MODELS` set.                                                                      |
@@ -142,6 +166,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 
 - **Claude Opus 4.7+ family**: Returns 400 if `temperature` is set to any non-default value. Must omit the field entirely via `NO_TEMPERATURE_MODELS`.
 - **Mistral Large 3**: Returns 422 if `reasoning_effort` is set. Field guarded by `MISTRAL_REASONING_MODELS` in `toOpenAIBody`.
+- **Z.ai GLM 5.3**: Reasoning-only. `reasoning_effort` accepts "low" | "high" | "max"; omitting the field means the model's own default ("max"), and reasoning cannot be disabled.
 - **Mistral Magistral models**: Reason natively; reject `reasoning_effort` parameter (not currently in Sylou's registry but worth noting if added).
 - **Anthropic Structured Outputs**: Strips most JSON Schema constraints (`maxItems`, `minLength`, `maximum`, etc.). Schema sanitizer in `_llm.ts` handles this transparently.
 
@@ -167,6 +192,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
         supabase/functions/analysis/index.ts
         supabase/functions/editor-action/index.ts
         supabase/functions/context-prompt/index.ts
+        supabase/functions/extract-text/index.ts
    
     Add temperature entries in supabase/functions/_shared/_temperatures.ts for every function where behavior should differ from the provider default.
    
@@ -177,7 +203,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
     Add reasoning/effort entries in supabase/functions/_shared/_thinking.ts if the model supports configurable reasoning:
    
         Claude: add to *_THINKING and *_EFFORT tables (Sonnet, Opus).
-        Mistral: add to *_MISTRAL_EFFORT tables and to the MISTRAL_REASONING_MODELS allowlist.
+        Mistral: add to the *_MISTRAL_EFFORT tables (FLOW, CHAT, EDITOR, CONTEXT, SUMMARY) and to the MISTRAL_REASONING_MODELS allowlist. A reasoning-only model needs an explicit level in every table (never "none").
         DeepSeek: only if routing to v4-flash's thinking mode; deepseek-v4-flash (non-thinking) has no reasoning toggle.
    
     Check NO_TEMPERATURE_MODELS in _temperatures.ts (Anthropic Opus 4.7+ rejects temperature).
@@ -213,3 +239,5 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 - Anthropic Structured Outputs: https://platform.claude.com/docs/en/build-with-claude/structured-outputs
 - Mistral adjustable reasoning: https://docs.mistral.ai/capabilities/reasoning/adjustable
 - Mistral model overview: https://docs.mistral.ai/getting-started/models/models_overview/
+- Mistral model card, Z.ai GLM 5.3: https://docs.mistral.ai/models/zai-glm-5-3
+- Z.ai GLM-5.3 guide (reasoning levels, reasoning-only): https://docs.z.ai/guides/llm/glm-5.3

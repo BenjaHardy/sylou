@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
       );
     }
     const chatModel: string =
-      requestedModel || profile.preferred_chat_model || "zai-glm-5-2";
+      requestedModel || profile.preferred_chat_model || "zai-glm-5-3";
     const provider = providerFor(chatModel);
     const temperature = resolveTemperature(CONTEXT_TEMPERATURE, chatModel);
     const thinking = resolveThinking(CONTEXT_THINKING, chatModel);

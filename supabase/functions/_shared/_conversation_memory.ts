@@ -27,14 +27,16 @@ import {
   providerFor,
   type LLMMessage,
 } from "./_llm.ts";
+import { OUTPUT_BUDGETS } from "./_models.ts";
 import { SUMMARY_TEMPERATURE, resolveTemperature } from "./_temperatures.ts";
+import { SUMMARY_MISTRAL_EFFORT, resolveMaxTokens, resolveMistralEffort } from "./_thinking.ts";
 import { sliceSafe } from "./_text.ts";
 
 export const MEMORY_REFRESH_THRESHOLD = 50; // uncovered messages before a refresh fires
 export const MEMORY_MAX_SLAB = 120; // per-pass cap; long backlogs catch up one slab per turn
 export const MEMORY_SLAB_CHAR_BUDGET = 48_000; // whole-slab input cap (~12k tokens)
 export const MEMORY_MSG_CHAR_CAP = 4_000; // per-message cap inside the slab
-export const MEMORY_MAX_TOKENS = 3_000; // summarizer output budget
+// summarizer output budget: OUTPUT_BUDGETS.MEMORY (_models.ts), plain / reasoning
 export const MEMORY_STORED_CHAR_CAP = 12_000; // stored summary hard cap (~3k tokens)
 export const MEMORY_TIMEOUT_MS = 60_000; // stream-tail call must stay far under the isolate ceiling
 
@@ -230,11 +232,13 @@ export async function maybeRefreshConversationMemory(opts: {
     }
 
     const messages = buildSummaryMessages(existing?.summary_text ?? null, slab, isCreative);
+    const mistralEffort = resolveMistralEffort(SUMMARY_MISTRAL_EFFORT, model);
     const res = await callLLM({
       model,
       messages,
-      max_tokens: MEMORY_MAX_TOKENS,
+      max_tokens: resolveMaxTokens(OUTPUT_BUDGETS.MEMORY, model, false, mistralEffort !== undefined),
       temperature: resolveTemperature(SUMMARY_TEMPERATURE, model),
+      mistral_effort: mistralEffort,
       timeoutMs: MEMORY_TIMEOUT_MS,
     });
     if (!res.ok) {

@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
       );
     }
     const flowModel: string =
-      requestedModel || profile.preferred_flow_model || "zai-glm-5-2";
+      requestedModel || profile.preferred_flow_model || "zai-glm-5-3";
 
     const provider = providerFor(flowModel);
     if (!Deno.env.get(envKeyFor(provider))) {
@@ -649,7 +649,7 @@ ${writePillarNotice}`;
       // Fallback to "none" defends against a future model being added to
       // MISTRAL_REASONING_MODELS without a corresponding FLOW_MISTRAL_EFFORT
       // entry — silent missing disclosure would be worse than a sane default.
-      reasoningEffort = FLOW_MISTRAL_EFFORT[flowModel] ?? "none";   // "high" | "none"
+      reasoningEffort = FLOW_MISTRAL_EFFORT[flowModel] ?? "none";   // "low" | "high" | "max" | "none"
     }
 
     const flowMeta: Record<string, unknown> = {

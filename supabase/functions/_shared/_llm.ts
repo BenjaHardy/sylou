@@ -21,13 +21,14 @@ export type ProviderId = "mistral" | "anthropic" | "deepseek";
 // Effort taxonomy is provider-specific:
 //   - Anthropic (Claude): "low" | "medium" | "high" | "xhigh"
 //   - Mistral reasoning models (Medium 3.5, Small): "high" | "none";
-//     GLM 5.2 (third-party via Mistral) additionally accepts "max"
+//     GLM 5.3 (third-party via Mistral, reasoning-only) accepts
+//     "low" | "high" | "max" instead
 // See _shared/_thinking.ts for the canonical types and the per-function
 // tables. We re-declare the literal unions here only to keep _llm.ts
 // free of cross-imports from _thinking.ts (avoids a circular dep risk
 // as both files grow).
 export type ClaudeEffort  = "low" | "medium" | "high" | "xhigh";
-export type MistralEffort = "high" | "max" | "none";
+export type MistralEffort = "low" | "high" | "max" | "none";
 
 export interface LLMTool {
   // OpenAI-style tool definition
@@ -311,7 +312,7 @@ export function sanitizeAnthropicSchema<T>(schema: T): T {
 // non-reasoning Mistral models (e.g. mistral-large-2512) and by every
 // DeepSeek chat model. The caller is responsible for gating: pass
 // `reasoning_effort` ONLY when the model is a Mistral reasoning model
-// AND the desired effort is "high". This is exactly what
+// AND the desired level is not "none". This is exactly what
 // resolveMistralEffort() in _thinking.ts already guarantees — it
 // returns undefined whenever the field must be omitted.
 export function toOpenAIBody(opts: {

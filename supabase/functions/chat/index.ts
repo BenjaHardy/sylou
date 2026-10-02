@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Only streaming requests are supported (send stream: true)" }, 400);
     }
     const chatModel: string =
-      requestedModel || profile.preferred_chat_model || "zai-glm-5-2";
+      requestedModel || profile.preferred_chat_model || "zai-glm-5-3";
     const temperature = resolveTemperature(CHAT_TEMPERATURE, chatModel);
     const thinking = resolveThinking(CHAT_THINKING, chatModel);
     const effort = resolveEffort(CHAT_EFFORT, chatModel);
@@ -527,6 +527,7 @@ Deno.serve(async (req) => {
     const readable = new ReadableStream({
       async start(controller) {
         let fullResponse: string;
+        let stopReason: string | null = null;
 
         try {
           fullResponse = await readProviderStream(llmRes, providerFor(chatModel), {
@@ -535,11 +536,15 @@ Deno.serve(async (req) => {
                 controller.enqueue(sseEvent({ token: delta }));
               } catch { /* client gone */ }
             },
+            onStop: (reason) => { stopReason = reason; },
           });
 
           // Persist
           console.log("[stream] flush() started");
           fullResponse = cleanLLMContent(fullResponse);
+          if (!fullResponse.trim()) {
+            console.warn("[stream] reply returned no text", { stop_reason: stopReason });
+          }
 
           const inputChars = llmMessages.reduce(
             (sum, m) => sum + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length),

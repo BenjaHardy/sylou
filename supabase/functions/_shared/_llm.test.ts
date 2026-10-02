@@ -190,6 +190,17 @@ Deno.test("toOpenAIBody: no tools -> neither tools nor tool_choice in body", () 
   assert(!("tool_choice" in body));
 });
 
+Deno.test("toOpenAIBody: reasoning_effort is emitted at any explicit level and omitted for none/undefined", () => {
+  // GLM 5.3 (via Mistral) adds "low" to the vocabulary; the builder passes
+  // every explicit level through unchanged and keeps "none" off the wire.
+  for (const level of ["low", "high", "max"] as const) {
+    const body = toOpenAIBody({ model: "zai-glm-5-3", messages: [], max_tokens: 10, reasoning_effort: level });
+    assertEquals(body.reasoning_effort, level);
+  }
+  assert(!("reasoning_effort" in toOpenAIBody({ model: "mistral-medium-3-5", messages: [], max_tokens: 10, reasoning_effort: "none" })));
+  assert(!("reasoning_effort" in toOpenAIBody({ model: "mistral-large-2512", messages: [], max_tokens: 10 })));
+});
+
 Deno.test("toAnthropicBody: forceTool + disableParallelToolUse sets the flag", () => {
   const body = toAnthropicBody({
     model: "claude-sonnet-4-6",

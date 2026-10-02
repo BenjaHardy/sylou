@@ -7,6 +7,7 @@ import {
   FLOW_OTHER_GROUP_ID,
   FLOW_RECOMMENDED_GROUP_ID,
   MODELS,
+  MODEL_LABELS,
   PROVIDER_LABELS,
   groupModelsByProvider,
   groupModelsForFlow,
@@ -40,9 +41,9 @@ describe("MODELS registry", () => {
     for (const m of MODELS) expect(m.isRollingLatest, m.id).toBeFalsy();
   });
 
-  it("exactly two models are recommended for FLOW: GLM 5.2 and Claude Sonnet 4.6 (maintainer rulings 2026-07 + 2026-09)", () => {
+  it("exactly two models are recommended for FLOW: GLM 5.3 and Claude Sonnet 4.6 (maintainer rulings 2026-07 + 2026-09, carried to GLM 5.3 2026-10)", () => {
     const recommended = MODELS.filter((m) => m.flowRecommended);
-    expect(recommended.map((m) => m.id)).toEqual(["zai-glm-5-2", "claude-sonnet-4-6"]);
+    expect(recommended.map((m) => m.id)).toEqual(["zai-glm-5-3", "claude-sonnet-4-6"]);
   });
 
   it("no recommended model carries the experimental badge", () => {
@@ -55,11 +56,16 @@ describe("MODELS registry", () => {
     for (const m of MODELS) expect(m.note ?? "", m.id).not.toMatch(/recommended/i);
   });
 
-  it("the defaults for new profiles are GLM 5.2 (maintainer decision 2026-09-25) and exist in the registry", () => {
-    expect(DEFAULT_CHAT_MODEL).toBe("zai-glm-5-2");
-    expect(DEFAULT_FLOW_MODEL).toBe("zai-glm-5-2");
+  it("the defaults for new profiles are GLM 5.3 (maintainer decision 2026-09-30) and exist in the registry", () => {
+    expect(DEFAULT_CHAT_MODEL).toBe("zai-glm-5-3");
+    expect(DEFAULT_FLOW_MODEL).toBe("zai-glm-5-3");
     expect(MODELS.map((m) => m.id)).toContain(DEFAULT_CHAT_MODEL);
     expect(MODELS.find((m) => m.id === DEFAULT_FLOW_MODEL)?.flowRecommended).toBe(true);
+  });
+
+  it("a retired id keeps a label so historical reports still render one (GLM 5.2, retired by Mistral 2026-10-31)", () => {
+    expect(MODELS.map((m) => m.id)).not.toContain("zai-glm-5-2");
+    expect(MODEL_LABELS["zai-glm-5-2"]).toBe("Z.ai GLM 5.2 (via Mistral)");
   });
 });
 
@@ -78,7 +84,7 @@ describe("Settings picker groupings", () => {
       "mistral-small-2603",
       "mistral-medium-3-5",
       "mistral-large-2512",
-      "zai-glm-5-2",
+      "zai-glm-5-3",
     ]);
     expect(ids(groups[2].models)).toEqual(["deepseek-v4-flash"]);
   });
@@ -86,7 +92,7 @@ describe("Settings picker groupings", () => {
   it("FLOW: recommended first, everything else in the second group", () => {
     const groups = groupModelsForFlow();
     expect(groups.map((g) => g.id)).toEqual([FLOW_RECOMMENDED_GROUP_ID, FLOW_OTHER_GROUP_ID]);
-    expect(ids(groups[0].models)).toEqual(["zai-glm-5-2", "claude-sonnet-4-6"]);
+    expect(ids(groups[0].models)).toEqual(["zai-glm-5-3", "claude-sonnet-4-6"]);
     expect(groups[1].models.every((m) => !m.flowRecommended)).toBe(true);
   });
 

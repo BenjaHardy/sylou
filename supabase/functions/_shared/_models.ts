@@ -21,7 +21,7 @@ export const ALLOWED_MODELS: ReadonlySet<string> = new Set([
   "mistral-small-2603",
   "mistral-medium-3-5",
   "mistral-large-2512",
-  "zai-glm-5-2",
+  "zai-glm-5-3",
   "claude-sonnet-4-6",
   "claude-opus-4-8",
   "deepseek-v4-flash",
@@ -65,19 +65,31 @@ export interface OutputBudget {
  * nothing ("No response generated"), and non-reasoning replies were seen
  * cut off mid-sentence. The client mirrors EDITOR_ACTION.plain in
  * src/lib/editor-limits.ts to warn before an editor action whose reply
- * would not fit — keep the two in sync.
+ * would not fit — keep the two in sync. The two summary shapes gained
+ * explicit pairs in 2026-10 when GLM 5.3 (reasoning-only) replaced 5.2: an
+ * omitted `reasoning_effort` no longer means "no thinking" there, and a
+ * thinking chunk inside a 500-token budget left no room for the summary.
+ * Chat / context reasoning ceilings 8k→16k (2026-10) after GLM 5.3 at
+ * "max" spent a whole 8k thinking and answered with nothing again: a
+ * reasoning model's thinking must fit under the same ceiling as its
+ * answer, and 16k still ends well inside the hosted wall clock at the
+ * observed ~230 tokens/s.
  */
 export const OUTPUT_BUDGETS = {
   /** chat: one assistant turn (also the two-pass and tool-loop calls). */
-  CHAT: { plain: 4_000, reasoning: 8_000 },
+  CHAT: { plain: 4_000, reasoning: 16_000 },
   /** context-prompt: the Ask/Propose response call. */
-  CONTEXT_RESPONSE: { plain: 4_000, reasoning: 8_000 },
+  CONTEXT_RESPONSE: { plain: 4_000, reasoning: 16_000 },
   /** context-prompt: the writing-summary call. */
   CONTEXT_SUMMARY: { plain: 2_000, reasoning: 4_000 },
   /** editor-action: one inline rewrite of the selection. */
   EDITOR_ACTION: { plain: 4_000, reasoning: 6_000 },
   /** analysis: the FLOW report (Structured Outputs / forced tool call). */
   FLOW: { plain: 8_192, reasoning: 16_000 },
+  /** extract-text: the 3–5 sentence summary of an imported document. */
+  DOC_SUMMARY: { plain: 500, reasoning: 2_000 },
+  /** _conversation_memory: the rolling per-thread chat summary. */
+  MEMORY: { plain: 3_000, reasoning: 6_000 },
 } as const satisfies Record<string, OutputBudget>;
 
 /**
@@ -97,7 +109,7 @@ export const CONTEXT_LIMIT_TOKENS: Readonly<Record<string, number>> = {
   "mistral-small-2603": 256_000,
   "mistral-medium-3-5": 256_000,
   "mistral-large-2512": 256_000,
-  "zai-glm-5-2": 1_000_000,
+  "zai-glm-5-3": 1_000_000,
   "claude-sonnet-4-6": 1_000_000,
   "claude-opus-4-8": 1_000_000,
   "deepseek-v4-flash": 1_000_000,

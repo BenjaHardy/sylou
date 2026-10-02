@@ -1,6 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, envKeyFor } from "../_shared/_llm.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
+import { OUTPUT_BUDGETS } from "../_shared/_models.ts";
+import { SUMMARY_MISTRAL_EFFORT, resolveMaxTokens, resolveMistralEffort } from "../_shared/_thinking.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 
 // --- CORS allow-list (parsed once at module load) ---
@@ -137,7 +139,7 @@ Deno.serve(async (req) => {
         .select("preferred_chat_model")
         .eq("id", user.id)
         .single();
-      const summaryModel = profile?.preferred_chat_model || "zai-glm-5-2";
+      const summaryModel = profile?.preferred_chat_model || "zai-glm-5-3";
       const provider = providerFor(summaryModel);
 
       if (!Deno.env.get(envKeyFor(provider))) {
@@ -148,11 +150,13 @@ Deno.serve(async (req) => {
         const summaryPrompt = `Summarize the following document in 3-5 sentences. Focus on the main topics, arguments, and conclusions. This summary will be used to help an AI assistant decide whether to read the full document when answering user questions.\n\n${textForSummary}`;
 
         try {
+          const mistralEffort = resolveMistralEffort(SUMMARY_MISTRAL_EFFORT, summaryModel);
           const llmRes = await callLLM({
             model: summaryModel,
             messages: [{ role: "user" as const, content: summaryPrompt }],
-            max_tokens: 500,
+            max_tokens: resolveMaxTokens(OUTPUT_BUDGETS.DOC_SUMMARY, summaryModel, false, mistralEffort !== undefined),
             temperature: resolveTemperature(CHAT_TEMPERATURE, summaryModel),
+            mistral_effort: mistralEffort,
           });
 
           if (llmRes.ok) {

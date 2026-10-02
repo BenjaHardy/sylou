@@ -6,6 +6,8 @@
 //   supabase/functions/chat/index.ts          (CHAT_THINKING / CHAT_EFFORT / CHAT_MISTRAL_EFFORT)
 //   supabase/functions/editor-action/index.ts (EDITOR_THINKING / EDITOR_EFFORT / EDITOR_MISTRAL_EFFORT)
 //   supabase/functions/context-prompt/index.ts (CONTEXT_THINKING / CONTEXT_EFFORT / CONTEXT_MISTRAL_EFFORT)
+//   supabase/functions/extract-text/index.ts  (SUMMARY_MISTRAL_EFFORT)
+//   supabase/functions/_shared/_conversation_memory.ts (SUMMARY_MISTRAL_EFFORT)
 //
 // References:
 //   - Adaptive thinking: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking
@@ -34,9 +36,12 @@
 //   single allowlist: resolveMistralEffort returns undefined for any model
 //   not in this set, and the OpenAI-body builder only emits the field when
 //   the value is defined and non-"none".
-//   `zai-glm-5-2` (third-party, GLM-native thinking) has TWO levels,
-//   "high" | "max" — "max" is GLM-only; Mistral's own models top out at
-//   "high" and must never be configured with "max".
+//   `zai-glm-5-3` (third-party, GLM-native thinking) is a reasoning-only
+//   model: it accepts "low" | "high" | "max", defaults to "max" when the
+//   field is omitted, and cannot run without thinking — so it is never
+//   configured "none"; "low" is its lightest level. "low" and "max" are
+//   GLM-only: Mistral's own models accept "high" | "none" and must never
+//   be configured with either.
 //
 // DeepSeek:
 //   `deepseek-v4-flash` (non-thinking mode) has no thinking toggle.
@@ -50,12 +55,18 @@
 //   FLOW    — schema-bound analysis. Thinking ON for Opus only (Sonnet
 //             is at 100% Structured Outputs success without it; don't
 //             risk regressing what's working). Effort "high" both Claudes.
-//             Mistral Medium 3.5 + Small at "high" — determinism matters.
+//             Mistral Small at "high", Medium 3.5 at "none"; GLM 5.3 at "max".
 //   CHAT    — Opus thinking + "high" Claude effort. Mistral Medium 3.5
-//             at "high" (worth the latency); Small at "none" (chat speed).
-//   EDITOR  — inline rewrites; Claude as above; Mistral reasoning OFF.
+//             at "high" (worth the latency); Small at "none" (chat speed);
+//             GLM 5.3 at "high" — its "max" is the deep-reasoning level
+//             and spent whole chat budgets thinking (2026-10).
+//   EDITOR  — inline rewrites; Claude as above; Mistral reasoning OFF
+//             (GLM 5.3 at "low": it cannot switch reasoning off).
 //   CONTEXT — pre-analysis summarization; Claude as above; Mistral Medium
-//             3.5 at "high", Small at "none".
+//             3.5 at "high", Small at "none", GLM 5.3 at "high".
+//   SUMMARY — document-import and conversation-memory summaries
+//             (extract-text, _conversation_memory.ts); Mistral reasoning
+//             OFF, GLM 5.3 at "low".
 //
 // Regression guardrails (operate against baseline elapsed times
 // captured immediately after deploy — see plan):
@@ -68,16 +79,16 @@
 //         reducing effort).
 //   * Average FLOW elapsed > 100s on Mistral Medium 3.5 across ≥5 runs
 //       → flip FLOW_MISTRAL_EFFORT["mistral-medium-3-5"] to "none".
-//   * Average FLOW elapsed > 100s on GLM 5.2 at "max" across ≥5 runs
-//       → drop FLOW_MISTRAL_EFFORT["zai-glm-5-2"] to "high"; any single
+//   * Average FLOW elapsed > 100s on GLM 5.3 at "max" across ≥5 runs
+//       → drop FLOW_MISTRAL_EFFORT["zai-glm-5-3"] to "high"; any single
 //         run past the 145s in-contract timeout → "high" immediately,
-//         then "none" if it persists.
+//         then "low" if it persists.
 // ============================================================
 
 import type { OutputBudget } from "./_models.ts";
 
 export type ClaudeEffort  = "low" | "medium" | "high" | "xhigh";
-export type MistralEffort = "high" | "max" | "none";
+export type MistralEffort = "low" | "high" | "max" | "none";
 
 export type ThinkingTable       = Record<string, boolean>;
 export type EffortTable         = Record<string, ClaudeEffort>;
@@ -93,7 +104,7 @@ export type EffortLevel = ClaudeEffort;
 export const MISTRAL_REASONING_MODELS = new Set<string>([
   "mistral-medium-3-5",
   "mistral-small-2603",
-  "zai-glm-5-2",
+  "zai-glm-5-3",
 ]);
 
 // Defaults: adaptive thinking ON for Opus only. Sonnet stays OFF
@@ -110,11 +121,13 @@ export const CONTEXT_EFFORT: EffortTable = { "claude-sonnet-4-6": "high", "claud
 
 // Mistral reasoning effort — only models in MISTRAL_REASONING_MODELS
 // are eligible. Determinism wins for FLOW; chat-style functions prefer
-// Small at "none" for latency.
-export const FLOW_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "high", "zai-glm-5-2": "max" };
-export const CHAT_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "none", "zai-glm-5-2": "max" };
-export const EDITOR_MISTRAL_EFFORT:  MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "none", "zai-glm-5-2": "none" };
-export const CONTEXT_MISTRAL_EFFORT: MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "none", "zai-glm-5-2": "max" };
+// Small at "none" for latency. GLM 5.3 is reasoning-only, so "low" is
+// its "off" (see the Mistral reasoning note above).
+export const FLOW_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "high", "zai-glm-5-3": "max" };
+export const CHAT_MISTRAL_EFFORT:    MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "none", "zai-glm-5-3": "high" };
+export const EDITOR_MISTRAL_EFFORT:  MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "none", "zai-glm-5-3": "low" };
+export const CONTEXT_MISTRAL_EFFORT: MistralEffortTable = { "mistral-medium-3-5": "high", "mistral-small-2603": "none", "zai-glm-5-3": "high" };
+export const SUMMARY_MISTRAL_EFFORT: MistralEffortTable = { "mistral-medium-3-5": "none", "mistral-small-2603": "none", "zai-glm-5-3": "low" };
 
 export function resolveThinking(table: ThinkingTable, modelId: string): boolean {
   if (!modelId.startsWith("claude-")) return false;
@@ -165,9 +178,9 @@ export function resolveMistralEffort(
 // Adaptive thinking consumes the SAME output budget as response text
 // (max_tokens is a hard limit on total output). Claude+thinking paths
 // therefore need more headroom than the bare prompt would suggest.
-// Mistral reasoning models (Medium 3.5, Small, GLM 5.2) at "high"/"max"
-// effort emit reasoning tokens into the same budget and need the same
-// headroom. Each OUTPUT_BUDGETS entry (_models.ts) carries both ceilings
+// Mistral reasoning models (Medium 3.5, Small, GLM 5.3) at any explicit
+// effort level emit reasoning tokens into the same budget and need the
+// same headroom. Each OUTPUT_BUDGETS entry (_models.ts) carries both ceilings
 // explicitly: `plain` for a non-reasoning call, `reasoning` when thinking
 // or reasoning_effort is on for an eligible model. (Until 2026-09 the
 // reasoning ceiling was inferred from the size of the base value, which
