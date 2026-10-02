@@ -37,8 +37,8 @@ Apply strict coding standards to avoid future code liabilities for the open-sour
   modules: `_shared/` plus the split function directories — the `deno.json`
   test task holds the collected list)
 - LLM providers: Anthropic (Sonnet 4.6, Opus 4.8), Mistral API (Large 3,
-  Medium 3.5, Small 4, and Z.ai GLM 5.3 — the default chat and FLOW model for
-  new profiles), DeepSeek (deepseek-v4-flash).
+  Medium 3.5, Small 4, and Z.ai GLM 5.3 — the default chat model for new
+  profiles; FLOW defaults to Claude Sonnet 4.6), DeepSeek (deepseek-v4-flash).
 
 Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 → `src/components/ProjectContentArea.tsx`.
@@ -264,8 +264,13 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   Response and each function owns a **stream-first `ReadableStream`** (kept
   open until `controller.close()` so the Deno isolate survives long enough
   to persist). `context-prompt` has the richest phase set
-  (`reviewing`/`reading_documents`/`searching_web`); one client consumer,
-  `src/lib/sse-stream.ts`. Phase events + the budget/`done` payloads are
+  (`reviewing`/`reading_documents`/`searching_web`/`thinking`); chat emits
+  `thinking` too, once per streamed reply at the first reasoning chunk
+  (`onThinking` in `_sse.ts`); every chat / context-prompt stream also
+  writes an SSE comment keep-alive every 15 s for its whole life
+  (`startKeepalive`), because a quiet response was observed being closed
+  in front of the function during a long think; one client consumer,
+  `src/lib/sse-stream.ts`, which skips comment lines. Phase events + the budget/`done` payloads are
   load-bearing for the UI. The editor-action and context-prompt `done`
   payloads carry `truncated: true` when the provider stopped at max_tokens
   (`onStop` on `readProviderStream`, `isTruncatedStop` in `_llm.ts`); the

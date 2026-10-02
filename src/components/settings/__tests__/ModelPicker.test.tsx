@@ -54,16 +54,16 @@ describe("ModelPicker", () => {
       />,
     );
 
-    expect(header("Recommended for FLOW", 2)).toHaveAttribute("aria-expanded", "true");
-    expect(header("Not currently recommended", 5)).toHaveAttribute("aria-expanded", "false");
+    expect(header("Recommended for FLOW", 1)).toHaveAttribute("aria-expanded", "true");
+    expect(header("Not currently recommended", 6)).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Not currently recommended notice")).not.toBeInTheDocument();
     // Provider tag on the FLOW cards.
     expect(screen.getByText("· Anthropic")).toBeInTheDocument();
-    expect(screen.getByText("· Mistral API")).toBeInTheDocument();
 
     fireEvent.click(header("Not currently recommended"));
     expect(screen.getByText("Not currently recommended notice")).toBeInTheDocument();
     expect(screen.getByText("Mistral Large 3")).toBeInTheDocument();
+    expect(screen.getAllByText("· Mistral API").length).toBeGreaterThan(0);
   });
 
   it("FLOW: a selection inside the not-recommended group opens it too", () => {

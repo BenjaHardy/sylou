@@ -6,7 +6,7 @@
 // test here means the §7 streaming contract changed; that needs a
 // checkpoint, not a test edit.
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { makeSSEHelpers, readProviderStream, replayTokenBurst } from "./_sse.ts";
+import { makeSSEHelpers, readProviderStream, replayTokenBurst, startKeepalive, type StreamStats } from "./_sse.ts";
 import { isTruncatedStop } from "./_llm.ts";
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -246,4 +246,79 @@ Deno.test("readProviderStream: without onStop the loop is unchanged; isTruncated
   assertEquals(isTruncatedStop("length"), true);
   assertEquals(isTruncatedStop("max_tokens"), true);
   assertEquals(isTruncatedStop(null), false);
+});
+
+Deno.test("readProviderStream: onThinking fires once, at the first reasoning chunk; text still streams and reasoning never accumulates", async () => {
+  const thinkingChunk = `data: ${
+    JSON.stringify({ choices: [{ delta: { content: [{ type: "thinking", thinking: [{ type: "text", text: "…" }] }] } }] })
+  }\n`;
+  let fired = 0;
+  const tokens: string[] = [];
+  const result = await readProviderStream(
+    sseResponse([thinkingChunk, thinkingChunk, openaiDelta("an"), thinkingChunk, openaiDelta("swer")]),
+    "mistral",
+    { onToken: (d) => tokens.push(d), onThinking: () => { fired++; } },
+  );
+  assertEquals(fired, 1);
+  assertEquals(tokens, ["an", "swer"]);
+  assertEquals(result, "answer");
+});
+
+Deno.test("readProviderStream: onEnd reports what arrived by kind and how the stream ended", async () => {
+  const thinkingChunk = `data: ${
+    JSON.stringify({ choices: [{ delta: { content: [{ type: "thinking", thinking: [{ type: "text", text: "…" }] }] } }] })
+  }\n`;
+  const last = `data: ${JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: "length" }], usage: { completion_tokens: 3 } })}\n`;
+  let stats: StreamStats | null = null;
+  const result = await readProviderStream(
+    sseResponse([thinkingChunk, thinkingChunk, openaiDelta("an"), openaiDelta("swer"), last, "data: [DONE]\n"]),
+    "mistral",
+    { onToken: () => {}, onEnd: (s) => { stats = s; } },
+  );
+  assertEquals(result, "answer");
+  const s = stats!;
+  assertEquals([s.chunks, s.thinking, s.text, s.finish, s.sawDone], [5, 2, 2, "length", true]);
+  assertEquals(s.lastKeys, ["choices", "usage"]);
+  assertEquals(s.providerError, null);
+  assert(s.ms >= 0);
+});
+
+Deno.test("readProviderStream: onEnd keeps a provider error object (its wording only) and records a stream that ended without a finish reason", async () => {
+  const err = `data: ${JSON.stringify({ error: { type: "server_error", message: "upstream reset", request_id: "r1" } })}\n`;
+  let stats: StreamStats | null = null;
+  const result = await readProviderStream(sseResponse([openaiDelta("partial"), err]), "mistral", {
+    onToken: () => {},
+    onEnd: (s) => { stats = s; },
+  });
+  assertEquals(result, "partial");
+  const s = stats!;
+  assertEquals([s.chunks, s.text, s.finish, s.sawDone], [2, 1, null, false]);
+  assertEquals(s.lastKeys, ["error"]);
+  assertEquals(s.providerError, { type: "server_error", message: "upstream reset" });
+});
+
+Deno.test("startKeepalive: ticks on the interval and stops when told", async () => {
+  let ticks = 0;
+  const stop = startKeepalive(() => { ticks++; }, 5);
+  // Timer granularity varies; wait long enough for at least two ticks.
+  await new Promise((r) => setTimeout(r, 80));
+  stop();
+  const seen = ticks;
+  assert(seen >= 2, `expected at least two ticks, saw ${seen}`);
+  await new Promise((r) => setTimeout(r, 30));
+  assertEquals(ticks, seen);
+});
+
+Deno.test("makeSSEHelpers: the keep-alive is an SSE comment line, which our own client parser skips", () => {
+  const { sseKeepalive } = makeSSEHelpers({});
+  assertEquals(new TextDecoder().decode(sseKeepalive()), ": keep-alive\n\n");
+});
+
+Deno.test("readProviderStream: without onThinking, reasoning chunks are skipped exactly as before (Anthropic shape)", async () => {
+  const thinkingChunk = `data: ${
+    JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "…" } })
+  }\n`;
+  const text = `data: ${JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "ok" } })}\n`;
+  const result = await readProviderStream(sseResponse([thinkingChunk, text]), "anthropic", { onToken: () => {} });
+  assertEquals(result, "ok");
 });

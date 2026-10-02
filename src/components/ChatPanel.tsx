@@ -10,6 +10,7 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/comp
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
+import { ThinkingIndicator } from "@/components/ThinkingIndicator";
 import { useChatThread } from "@/hooks/useChatThread";
 import { useConversationMemory } from "@/hooks/useConversationMemory";
 import {
@@ -664,7 +665,9 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
               <img src={sylouShiba} alt="Sylou" className="h-3.5 w-3.5 object-contain" />
             </div>
             <div className="bg-muted rounded-xl px-3.5 py-2.5">
-              {phase === "searching_web" ? (
+              {phase === "thinking" ? (
+                <ThinkingIndicator />
+              ) : phase === "searching_web" ? (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3 w-3 animate-spin" />
                   <span>Searching the web…</span>

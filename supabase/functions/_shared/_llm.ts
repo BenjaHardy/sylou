@@ -417,9 +417,10 @@ interface RawResponse {
   usage?: RawUsage;
 }
 interface RawStreamChunk {
-  choices?: Array<{ delta?: { content?: unknown }; finish_reason?: string }>;
+  choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown }; finish_reason?: string }>;
   type?: string;
-  delta?: { text?: string; stop_reason?: string };
+  delta?: { type?: string; text?: string; stop_reason?: string };
+  content_block?: { type?: string };
 }
 
 export function normaliseResponse(
@@ -612,6 +613,29 @@ export function extractStopReason(parsed: unknown): string | null {
     if (typeof stop === "string" && stop) return stop;
   }
   return null;
+}
+
+/**
+ * True when a streaming chunk carries the model's reasoning rather than
+ * answer text: an OpenAI-shape delta whose content array holds a "thinking"
+ * block (Mistral reasoning models, GLM via the Mistral API) or a non-empty
+ * `reasoning_content` (DeepSeek-style), or Anthropic's thinking block start
+ * / thinking_delta. Only ever used as a signal (the "thinking" phase): the
+ * reasoning text itself is neither forwarded nor stored.
+ */
+export function isThinkingDelta(parsed: unknown): boolean {
+  if (!parsed || typeof parsed !== "object") return false;
+  const p = parsed as RawStreamChunk;
+  const delta = p.choices?.[0]?.delta;
+  if (delta) {
+    if (typeof delta.reasoning_content === "string" && delta.reasoning_content.length > 0) return true;
+    if (Array.isArray(delta.content) && (delta.content as RawContentBlock[]).some((b) => b?.type === "thinking")) {
+      return true;
+    }
+  }
+  if (p.type === "content_block_delta" && p.delta?.type === "thinking_delta") return true;
+  if (p.type === "content_block_start" && p.content_block?.type === "thinking") return true;
+  return false;
 }
 
 /** True when a stop reason means the output hit max_tokens: Anthropic

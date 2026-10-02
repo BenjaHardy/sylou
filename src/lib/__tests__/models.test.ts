@@ -44,9 +44,9 @@ describe("MODELS registry", () => {
     for (const m of MODELS) expect(m.isRollingLatest, m.id).toBeFalsy();
   });
 
-  it("exactly two models are recommended for FLOW: GLM 5.3 and Claude Sonnet 4.6 (maintainer rulings 2026-07 + 2026-09, carried to GLM 5.3 2026-10)", () => {
+  it("exactly one model is recommended for FLOW: Claude Sonnet 4.6 (GLM 5.3 failed the field test, 2026-10-02)", () => {
     const recommended = MODELS.filter((m) => m.flowRecommended);
-    expect(recommended.map((m) => m.id)).toEqual(["zai-glm-5-3", "claude-sonnet-4-6"]);
+    expect(recommended.map((m) => m.id)).toEqual(["claude-sonnet-4-6"]);
   });
 
   it("no recommended model carries the experimental badge", () => {
@@ -59,9 +59,9 @@ describe("MODELS registry", () => {
     for (const m of MODELS) expect(m.note ?? "", m.id).not.toMatch(/recommended/i);
   });
 
-  it("the defaults for new profiles are GLM 5.3 (maintainer decision 2026-09-30) and exist in the registry", () => {
+  it("the defaults for new profiles are GLM 5.3 for chat and Claude Sonnet 4.6 for FLOW (maintainer decisions 2026-09-30 / 2026-10-02), and the FLOW default is a recommended model", () => {
     expect(DEFAULT_CHAT_MODEL).toBe("zai-glm-5-3");
-    expect(DEFAULT_FLOW_MODEL).toBe("zai-glm-5-3");
+    expect(DEFAULT_FLOW_MODEL).toBe("claude-sonnet-4-6");
     expect(MODELS.map((m) => m.id)).toContain(DEFAULT_CHAT_MODEL);
     expect(MODELS.find((m) => m.id === DEFAULT_FLOW_MODEL)?.flowRecommended).toBe(true);
   });
@@ -95,7 +95,7 @@ describe("Settings picker groupings", () => {
   it("FLOW: recommended first, everything else in the second group", () => {
     const groups = groupModelsForFlow();
     expect(groups.map((g) => g.id)).toEqual([FLOW_RECOMMENDED_GROUP_ID, FLOW_OTHER_GROUP_ID]);
-    expect(ids(groups[0].models)).toEqual(["zai-glm-5-3", "claude-sonnet-4-6"]);
+    expect(ids(groups[0].models)).toEqual(["claude-sonnet-4-6"]);
     expect(groups[1].models.every((m) => !m.flowRecommended)).toBe(true);
   });
 
@@ -148,7 +148,7 @@ describe("chat reasoning options (UI mirror of _shared/_thinking.ts)", () => {
     expect(effectiveReasoningId("claude-sonnet-4-6", { "zai-glm-5-3": "max" })).toBe("off");
     expect(effectiveReasoningId("mistral-large-2512", { "mistral-large-2512": "high" })).toBeNull();
 
-    expect(reasoningLabelFor("zai-glm-5-3", { "zai-glm-5-3": "max" })).toBe("Max");
+    expect(reasoningLabelFor("zai-glm-5-3", { "zai-glm-5-3": "max" })).toBe("Max (slow)");
     expect(reasoningLabelFor("claude-opus-4-8", {})).toBe("High");
     expect(reasoningLabelFor("deepseek-v4-flash", {})).toBeNull();
   });

@@ -69,10 +69,10 @@ export const MODELS: ModelInfo[] = [
     // claude-/deepseek- prefix). Replaced GLM 5.2 in 2026-10 (Mistral
     // retires zai-glm-5-2 on 2026-10-31) at the same price and context
     // window; the per-function reasoning levels live in
-    // _shared/_thinking.ts (see docs/model-configuration.md). Recommended
-    // for FLOW alongside Claude Sonnet 4.6 after the maintainer's field
-    // tests (2026-08/09) — the two are not ranked against each other.
-    flowRecommended: true,
+    // _shared/_thinking.ts (see docs/model-configuration.md). The default
+    // chat model. NOT recommended for FLOW (field test 2026-10-02): at
+    // every reasoning level its scores lean towards the user, unlike GLM
+    // 5.2 at "max", which was recommended.
     note: "Third-party model hosted on the Mistral API",
   },
   {
@@ -173,11 +173,13 @@ export function groupModelsForFlow(models: ModelInfo[] = MODELS): ModelGroup[] {
 }
 
 // Defaults for new profiles (mirrored by the profiles column defaults in
-// migration 20261001120000 and by the edge functions' NULL-preference
-// fallback). GLM 5.3 since 2026-10 (GLM 5.2 from 2026-09-25, Mistral
-// Medium 3.5 before).
+// migrations 20261001120000 / 20261002120000 and by the edge functions'
+// NULL-preference fallback). Chat: GLM 5.3 since 2026-10 (GLM 5.2 from
+// 2026-09-25, Mistral Medium 3.5 before). FLOW: Claude Sonnet 4.6 since
+// 2026-10-02 — the one model still recommended for FLOW once GLM 5.3
+// failed the field test (GLM 5.2 was the default from 2026-09-25).
 export const DEFAULT_CHAT_MODEL = "zai-glm-5-3";
-export const DEFAULT_FLOW_MODEL = "zai-glm-5-3";
+export const DEFAULT_FLOW_MODEL = "claude-sonnet-4-6";
 
 /** A reasoning level a user can pick for a chat model. */
 export interface ReasoningChoice {
@@ -190,6 +192,9 @@ const LOW: ReasoningChoice = { id: "low", label: "Low" };
 const MEDIUM: ReasoningChoice = { id: "medium", label: "Medium" };
 const HIGH: ReasoningChoice = { id: "high", label: "High" };
 const MAX: ReasoningChoice = { id: "max", label: "Max" };
+// GLM 5.3's deep-reasoning level thinks for a minute or more before the
+// first answer token (2026-10 measurements): say so where it is chosen.
+const MAX_SLOW: ReasoningChoice = { id: "max", label: "Max (slow)" };
 
 /** Reasoning levels per chat model (Settings → Models, chat picker) and the
  *  level the code applies when nothing is chosen. Mirror of
@@ -205,7 +210,7 @@ export const CHAT_REASONING_OPTIONS: Readonly<
   "claude-opus-4-8": { options: [OFF, LOW, MEDIUM, HIGH, MAX], defaultId: "high" },
   "mistral-medium-3-5": { options: [OFF, HIGH], defaultId: "high" },
   "mistral-small-2603": { options: [OFF, HIGH], defaultId: "off" },
-  "zai-glm-5-3": { options: [LOW, HIGH, MAX], defaultId: "high" },
+  "zai-glm-5-3": { options: [LOW, HIGH, MAX_SLOW], defaultId: "high" },
 };
 
 /** Reasoning levels per model id and the one the code applies by default. */
