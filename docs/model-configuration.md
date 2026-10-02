@@ -54,8 +54,8 @@ The most analytically demanding function. All models targeted for determinism (t
 
 **Rationale for FLOW settings:**
 
-- max_tokens 24000 for reasoning models (in step with chat and context-prompt): thinking chunks consume output budget; insufficient headroom causes truncation and validation failures. FLOW is a single non-streamed call aborted at 145 s, and 24000 tokens take about 80 s at the ~300 tokens/s seen on GLM 5.3, so one attempt fits; an attempt the provider cut at the ceiling is not retried (the retry exists for format slips, and a budget overrun at temperature 0 would only repeat).
-- GLM 5.3 (October 2026 field test): at "low", "high" and "max" alike the scores lean toward the user and lack the independence GLM 5.2 showed at "max"; at "max" it also needs the whole ceiling for its think (at 16000 it never reached the submit tool). Hence not recommended, left at "high" for anyone who selects it. Claude Sonnet 4.6 is the default FLOW model for new profiles since 2026-10-02.
+- max_tokens 24000 for reasoning models (in step with chat and context-prompt): thinking chunks consume output budget; insufficient headroom causes truncation and validation failures. FLOW is a single non-streamed call aborted at 145 s; an attempt the provider cut at the ceiling is not retried (the retry exists for format slips, and a budget overrun at temperature 0 would only repeat).
+- GLM 5.3 (October 2026 field test): at "low", "high" and "max" alike the scores lean toward the user and lack the independence GLM 5.2 (retiring from Mistral API) showed at "max". Hence not recommended, left at "high" for anyone who selects it. Claude Sonnet 4.6 is the default FLOW model for new profiles since 2026-10-02.
 - Opus 4.7+ excluded from temperature setting (returns 400 if non-default temperature is sent).
 
 ---
@@ -78,7 +78,7 @@ Conversational responses. Quality matters; reasoning effort calibrated per model
 
 - Temperature at provider default: 1.0 for Claude Sonnet and DeepSeek, 0.7 for Mistral; allows natural variation for conversational warmth.
 - Reasoning effort tier-matched: e.g. GLM 5.3 and Medium 3.5 get reasoning; Small ("speed tier") doesn't.
-- max_tokens 4000, 24000 for reasoning models: same logic as FLOW. Raised from 8000 in October 2026 after GLM 5.3 at "max" spent whole budgets thinking (a direct capture showed ~15k tokens of thinking before the first answer token); a ceiling costs nothing until it is hit. Sized for a Pro plan's 400 s wall clock: on the free plan (150 s) a "max" think can outrun the limit before it reaches the ceiling, which drops the request instead of truncating the reply — the option is labelled "Max (slow)" for that reason.
+- max_tokens 4000, 24000 for reasoning models: same logic as FLOW. Raised from 8000 in October 2026 after GLM 5.3 at "max" spent whole budgets thinking. 
 - Streams send an SSE keep-alive comment every 15 s for their whole life: a response with no bytes for ~50 s during a long think was observed being closed in front of the function (the provider read then ends with no finish reason and no text).
 
 ---
@@ -108,7 +108,7 @@ Inline rewrites and proposals from within the editor. Latency-sensitive.
 
 Provides AI features with context grounded in the written work. Used by Ask/Propose and underlying work summaries.
 
-| Model | Temperature | Thinking / Effort | max_tokens (summary) (output) | max_tokens (response) (output) | Notes |
+| Model | Temperature | Thinking / Effort(*) | max_tokens (summary) (output) | max_tokens (response) (output) | Notes |
 |---|---|---|---|---|---|
 | Claude Sonnet 4.6 | 1.0 | thinking: off, effort: high | 2000 | 4000 | Standard. |
 | Claude Opus 4.8 | undefined (model-controlled) | thinking: adaptive, effort: high | 4000 | 24000 | Adaptive thinking. |
@@ -122,7 +122,7 @@ Provides AI features with context grounded in the written work. Used by Ask/Prop
 
 - Matches Chat defaults: context-prompt powers Ask/Propose user-facing features, so quality posture should align with chat.
 - max_tokens 4000/24000 for the response and 2000/4000 for the summary (plain / reasoning; `OUTPUT_BUDGETS.CONTEXT_RESPONSE` and `.CONTEXT_SUMMARY`).
-- The writing-summary call (Call #1) keeps fixed settings whatever reasoning level the user picked: Claude as in the table, Mistral / GLM per the Summaries table (GLM at "low"). It runs before the stream starts and is a delta summary, not a reply.
+- (*)The writing-summary call (Call #1) keeps fixed settings whatever reasoning level the user picked: Claude as in the table, Mistral / GLM per the Summaries table (GLM at "low"). It runs before the stream starts and is a delta summary, not a reply.
 
 ---
 
