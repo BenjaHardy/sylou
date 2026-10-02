@@ -10,9 +10,12 @@
 //     call already produced the full answer).
 //
 // Everything path-specific deliberately stays in the callers: phase
-// events, done/error payload construction, enqueue-guard styles
-// (per-event try/catch vs editor-action's clientDisconnected latch),
-// stream-first persistence tails, and controller.close() placement.
+// events, done/error payload construction, stream-first persistence
+// tails, and controller.close() placement. chat and context-prompt share
+// one enqueue-guard style (swallow — the client is gone), so their relay
+// of a provider stream and their keep-alive live here too
+// (relayProviderStream, keepAlive); editor-action keeps its
+// clientDisconnected latch and calls readProviderStream itself.
 
 import { extractDeltaText, extractStopReason, isThinkingDelta, type ProviderId } from "./_llm.ts";
 
@@ -46,15 +49,24 @@ export function makeSSEHelpers(corsHeaders: Record<string, string>) {
     return encoder.encode(": keep-alive\n\n");
   }
 
-  return { sseEvent, createSSEResponse, sseKeepalive };
+  /** Keep-alive comments for the life of a stream. Start it when the
+   *  ReadableStream starts; call the returned stop() right before
+   *  controller.close(). Enqueue errors are swallowed (client gone). */
+  function keepAlive(
+    controller: ReadableStreamDefaultController<Uint8Array>,
+    intervalMs = KEEPALIVE_INTERVAL_MS,
+  ): () => void {
+    return startKeepalive(() => {
+      try { controller.enqueue(sseKeepalive()); } catch { /* client gone */ }
+    }, intervalMs);
+  }
+
+  return { sseEvent, createSSEResponse, sseKeepalive, keepAlive };
 }
 
-/** How often a quiet stream gets a keep-alive comment. A reasoning model
- *  can think for a minute before its first answer token; a response with
- *  no bytes for that long was observed being closed in front of the
- *  function (2026-10, GLM 5.3 at "max": the provider read ended at ~49 s
- *  with no finish reason, while the same request from a PC ran to its
- *  token ceiling). */
+/** Keep-alive cadence. A reasoning model can think for a minute before its
+ *  first answer token, and a response with no bytes for that long was
+ *  observed being closed in front of the function (2026-10). */
 export const KEEPALIVE_INTERVAL_MS = 15_000;
 
 /** Call `tick` every `intervalMs` until the returned stop() runs. Callers
@@ -144,6 +156,22 @@ export async function readProviderStream(
     onEnd?: (stats: StreamStats) => void;
   },
 ): Promise<string> {
+  const { text, stats } = await readProviderStreamWithStats(res, provider, handlers);
+  handlers.onEnd?.(stats);
+  return text;
+}
+
+/** readProviderStream's loop, returning the stats alongside the raw text
+ *  (the callback form above is kept for editor-action and the pins). */
+export async function readProviderStreamWithStats(
+  res: Response,
+  provider: ProviderId,
+  handlers: {
+    onToken: (delta: string) => void;
+    onStop?: (reason: string) => void;
+    onThinking?: () => void;
+  },
+): Promise<{ text: string; stats: StreamStats }> {
   let fullResponse = "";
   let thinkingSignalled = false;
   const stats: StreamStats = {
@@ -203,8 +231,33 @@ export async function readProviderStream(
   }
 
   stats.ms = Date.now() - startedAt;
-  handlers.onEnd?.(stats);
-  return fullResponse;
+  return { text: fullResponse, stats };
+}
+
+/**
+ * Relay a provider stream to the client the way chat and context-prompt
+ * do: every text delta as a `{token}` event, one `{phase:"thinking"}` at
+ * the first reasoning chunk, nothing else forwarded. Enqueue errors are
+ * swallowed (the client is gone) — the guard style both functions used
+ * inline. Returns the RAW text (cleaning stays caller policy), the
+ * provider's stop reason and the StreamStats for the empty-reply warning.
+ */
+export async function relayProviderStream(
+  res: Response,
+  provider: ProviderId,
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  sseEvent: (data: Record<string, unknown>) => Uint8Array,
+): Promise<{ text: string; stopReason: string | null; stats: StreamStats }> {
+  let stopReason: string | null = null;
+  const enqueue = (bytes: Uint8Array) => {
+    try { controller.enqueue(bytes); } catch { /* client gone */ }
+  };
+  const { text, stats } = await readProviderStreamWithStats(res, provider, {
+    onToken: (delta) => enqueue(sseEvent({ token: delta })),
+    onStop: (reason) => { stopReason = reason; },
+    onThinking: () => enqueue(sseEvent({ phase: "thinking" })),
+  });
+  return { text, stopReason, stats };
 }
 
 /** Re-emit already-complete text as a PACED burst of 20-char chunks so

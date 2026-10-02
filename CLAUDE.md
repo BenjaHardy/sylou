@@ -264,14 +264,15 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   Response and each function owns a **stream-first `ReadableStream`** (kept
   open until `controller.close()` so the Deno isolate survives long enough
   to persist). `context-prompt` has the richest phase set
-  (`reviewing`/`reading_documents`/`searching_web`/`thinking`); chat emits
-  `thinking` too, once per streamed reply at the first reasoning chunk
-  (`onThinking` in `_sse.ts`); every chat / context-prompt stream also
-  writes an SSE comment keep-alive every 15 s for its whole life
-  (`startKeepalive`), because a quiet response was observed being closed
-  in front of the function during a long think; one client consumer,
-  `src/lib/sse-stream.ts`, which skips comment lines. Phase events + the budget/`done` payloads are
-  load-bearing for the UI. The editor-action and context-prompt `done`
+  (`reviewing`/`reading_documents`/`searching_web`/`thinking`). Chat and
+  context-prompt relay the provider stream through `relayProviderStream`
+  (`_sse.ts`: `{token}` per text delta, one `thinking` phase at the first
+  reasoning chunk, nothing else forwarded) and keep the response alive with
+  an SSE comment every 15 s (`keepAlive`) — a quiet response was observed
+  being closed in front of the function during a long think. Editor-action
+  keeps its own `readProviderStream` call and disconnect latch. One client
+  consumer, `src/lib/sse-stream.ts`, which skips comment lines. Phase
+  events + the budget/`done` payloads are load-bearing for the UI. The editor-action and context-prompt `done`
   payloads carry `truncated: true` when the provider stopped at max_tokens
   (`onStop` on `readProviderStream`, `isTruncatedStop` in `_llm.ts`); the
   selection window warns before Accept. Output budgets live in

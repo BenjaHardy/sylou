@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
-import { makeSSEHelpers, readProviderStream, replayTokenBurst, startKeepalive, type StreamStats } from "../_shared/_sse.ts";
+import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
@@ -270,7 +270,7 @@ Deno.serve(async (req) => {
     // =========================================================
     console.log("[stream] entering streaming path for thread", threadId, "hasTools:", hasTools);
 
-    const { sseEvent, createSSEResponse, sseKeepalive } = makeSSEHelpers(corsHeaders);
+    const { sseEvent, createSSEResponse, keepAlive } = makeSSEHelpers(corsHeaders);
 
     // ---- TWO-PASS FLOW when tools exist ----
     if (hasTools) {
@@ -379,9 +379,7 @@ Deno.serve(async (req) => {
 
       const readable = new ReadableStream({
         async start(controller) {
-          const stopKeepalive = startKeepalive(() => {
-            try { controller.enqueue(sseKeepalive()); } catch { /* client gone */ }
-          });
+          const stopKeepalive = keepAlive(controller);
           try {
             // Build conversation with tool results
             const toolMessages: LLMMessage[] = [
@@ -437,25 +435,12 @@ Deno.serve(async (req) => {
             totalInputChars += promptChars(toolMessages);
 
             // Read Call #2 stream and forward tokens
-            let call2Stop: string | null = null;
-            // Assigned inside the onEnd callback: keep the declared union so
-            // the spread below type-checks (CFA would narrow a bare null).
-            let call2Stats = null as StreamStats | null;
-            let fullResponse = await readProviderStream(call2Res, providerFor(chatModel), {
-              onToken: (delta) => {
-                try { controller.enqueue(sseEvent({ token: delta })); } catch { /* client gone */ }
-              },
-              onStop: (reason) => { call2Stop = reason; },
-              onThinking: () => {
-                try { controller.enqueue(sseEvent({ phase: "thinking" })); } catch { /* client gone */ }
-              },
-              onEnd: (stats) => { call2Stats = stats; },
-            });
+            const call2 = await relayProviderStream(call2Res, providerFor(chatModel), controller, sseEvent);
 
             // Clean and persist
-            fullResponse = cleanLLMContent(fullResponse);
+            const fullResponse = cleanLLMContent(call2.text);
             if (!fullResponse.trim()) {
-              console.warn("[stream] Call #2 returned no text", { stop_reason: call2Stop, ...call2Stats });
+              console.warn("[stream] Call #2 returned no text", { stop_reason: call2.stopReason, ...call2.stats });
             }
             totalOutputChars += fullResponse.length;
 
@@ -538,32 +523,16 @@ Deno.serve(async (req) => {
 
     const readable = new ReadableStream({
       async start(controller) {
-        let fullResponse: string;
-        let stopReason: string | null = null;
-        let streamStats = null as StreamStats | null;
-        const stopKeepalive = startKeepalive(() => {
-          try { controller.enqueue(sseKeepalive()); } catch { /* client gone */ }
-        });
+        const stopKeepalive = keepAlive(controller);
 
         try {
-          fullResponse = await readProviderStream(llmRes, providerFor(chatModel), {
-            onToken: (delta) => {
-              try {
-                controller.enqueue(sseEvent({ token: delta }));
-              } catch { /* client gone */ }
-            },
-            onStop: (reason) => { stopReason = reason; },
-            onThinking: () => {
-              try { controller.enqueue(sseEvent({ phase: "thinking" })); } catch { /* client gone */ }
-            },
-            onEnd: (stats) => { streamStats = stats; },
-          });
+          const relay = await relayProviderStream(llmRes, providerFor(chatModel), controller, sseEvent);
 
           // Persist
           console.log("[stream] flush() started");
-          fullResponse = cleanLLMContent(fullResponse);
+          const fullResponse = cleanLLMContent(relay.text);
           if (!fullResponse.trim()) {
-            console.warn("[stream] reply returned no text", { stop_reason: stopReason, ...streamStats });
+            console.warn("[stream] reply returned no text", { stop_reason: relay.stopReason, ...relay.stats });
           }
 
           const inputChars = llmMessages.reduce(
