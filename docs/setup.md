@@ -11,7 +11,7 @@ If you get stuck at any step, please [open an issue](https://github.com/BenjaHar
 
 **Accounts:**
 - A [Supabase](https://supabase.com) account (free tier works for personal and small-team use)
-- An API key from at least one LLM provider (among the usable APIs, both Anthropic/Claude and Mistral provide accurate and reliable FLOW analysis results and either of them is therefore recommended as a default option for the FLOW analysis):
+- An API key from at least one LLM provider (among the usable APIs, with Anthropic models being required for the FLOW analysis):
   - [Anthropic](https://console.anthropic.com) for Claude models
   - [Mistral](https://console.mistral.ai) for Mistral models
   - Make sure to check and review the confidentiality settings of the API and adjust as desired 
@@ -288,7 +288,7 @@ Create a second project, this time choosing the **Creative** template. Use one o
 
 **9. Run a FLOW analysis**
 
-If not done already, choose a model in the settings among the recommended FLOW analysis models: click on your account at the bottom left → Settings → Models tab → "FLOW analysis model" at the bottom. GLM 5.3 (through Mistral API) is the default model, so this is especially important if the Mistral API key is not set.
+If not done already, choose a model in the settings among the recommended FLOW analysis models: click on your account at the bottom left → Settings → Models tab → "FLOW analysis model" at the bottom. Claude Sonnet 4.6 is the default model, so this is especially important if the Anthropic API key is not set.
 Go back to your first project. Click **Analyze with FLOW** at the bottom of the editor. The analysis runs (takes cca. 60 seconds, more or less depending on the size of the project). When complete, a FLOW report appears.
 
 *Verifies: the `analysis` edge function is deployed correctly. This is the most complex backend operation and exercises the LLM, the database, and the streaming response together.*
