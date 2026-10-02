@@ -116,7 +116,7 @@ Sylou's edge functions read several configuration values as Supabase secrets. Yo
 Before setting secrets, decide:
 
 - **Which LLM providers** you want available; Sylou currently works with Anthropic/Claude, Mistral, and DeepSeek. 
-Set the API key for each you wish to use; and you need to have at least either Anthropic/Claude or Mistral (recommended models for FLOW analysis). The provider whose key isn't set will appear in Sylou's model picker but fail at runtime if a user selects it; set keys for the providers you want users to actually have access to.
+Set the API key for each you wish to use; and you should have at least Anthropic/Claude (recommended models for FLOW analysis). The provider whose key isn't set will appear in Sylou's model picker but fail at runtime if a user selects it; set keys for the providers you want users to actually have access to.
 
 - **Whether you want web search.** Web search uses [Brave Search](https://api.search.brave.com); it's optional. If you don't set the Brave key, the web search toggle in Sylou's UI is greyed out with an explanatory tooltip.
 
