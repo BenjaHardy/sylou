@@ -58,23 +58,15 @@ export interface OutputBudget {
  * Output budgets (max_tokens ceilings) per LLM call shape — the ONE place
  * these numbers live server-side; resolveMaxTokens in _thinking.ts picks
  * the applicable member. Ceilings, not targets: a reply stops when the
- * model is done, so raising one costs nothing on ordinary replies and only
- * lets long ones finish. Raised 2026-09 (chat / context 2k→4k plain and
- * 4k→8k reasoning; editor 1k→4k / 2.5k→6k) after GLM 5.2 at "max" spent a
- * whole 4k budget thinking about web-search results and answered with
- * nothing ("No response generated"), and non-reasoning replies were seen
- * cut off mid-sentence. The client mirrors EDITOR_ACTION.plain in
- * src/lib/editor-limits.ts to warn before an editor action whose reply
- * would not fit — keep the two in sync. The two summary shapes gained
- * explicit pairs in 2026-10 when GLM 5.3 (reasoning-only) replaced 5.2: an
- * omitted `reasoning_effort` no longer means "no thinking" there, and a
- * thinking chunk inside a 500-token budget left no room for the summary.
- * Chat / context reasoning ceilings 8k→24k (2026-10): GLM 5.3 at "max"
- * thinks ~15k tokens before its first answer token on an ordinary prompt
- * (direct capture), so a reasoning model's thinking must fit under the
- * same ceiling as its answer. 24k is ~105 s at the observed ~230 tokens/s:
- * inside a Pro plan's 400 s wall clock, but a "max" think can outrun the
- * free plan's 150 s — the user-facing option is labelled slow for that.
+ * model is done, so a ceiling costs nothing until it is hit. A reasoning
+ * model's thinking counts against the same ceiling as its answer, which is
+ * why the `reasoning` member is several times the `plain` one — an
+ * exhausted ceiling leaves no answer text at all ("No response generated").
+ * The reasoning ceilings suit a Pro plan's 400 s wall clock at the
+ * ~300 tokens/s observed on GLM 5.3; a "max" think can outrun the free
+ * plan's 150 s, hence the "Max (slow)" label in the picker. The client
+ * mirrors EDITOR_ACTION.plain in src/lib/editor-limits.ts to warn before an
+ * editor action whose reply would not fit — keep the two in sync.
  */
 export const OUTPUT_BUDGETS = {
   /** chat: one assistant turn (also the two-pass and tool-loop calls). */
@@ -85,10 +77,9 @@ export const OUTPUT_BUDGETS = {
   CONTEXT_SUMMARY: { plain: 2_000, reasoning: 4_000 },
   /** editor-action: one inline rewrite of the selection. */
   EDITOR_ACTION: { plain: 4_000, reasoning: 6_000 },
-  /** analysis: the FLOW report (Structured Outputs / forced tool call).
-   *  Reasoning ceiling in step with chat / context: ~80 s at the ~300
-   *  tokens/s seen on GLM 5.3, inside the 145 s abort of FLOW's single
-   *  non-streamed call; a truncated attempt is not retried (attempt.ts). */
+  /** analysis: the FLOW report (Structured Outputs / forced tool call) —
+   *  one non-streamed call under a 145 s abort, so ~80 s of generation;
+   *  a truncated attempt is not retried (attempt.ts). */
   FLOW: { plain: 8_192, reasoning: 24_000 },
   /** extract-text: the 3–5 sentence summary of an imported document. */
   DOC_SUMMARY: { plain: 500, reasoning: 2_000 },

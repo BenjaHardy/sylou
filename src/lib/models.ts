@@ -64,15 +64,11 @@ export const MODELS: ModelInfo[] = [
     provider: "mistral",
     pricing: { input: 1.40, output: 4.40 },
     contextLimit: 1_000_000,
-    // Third-party open model (Z.ai) hosted unmodified on the Mistral API —
-    // EU infrastructure. Routed through the Mistral path (id has no
-    // claude-/deepseek- prefix). Replaced GLM 5.2 in 2026-10 (Mistral
-    // retires zai-glm-5-2 on 2026-10-31) at the same price and context
-    // window; the per-function reasoning levels live in
-    // _shared/_thinking.ts (see docs/model-configuration.md). The default
-    // chat model. NOT recommended for FLOW (field test 2026-10-02): at
-    // every reasoning level its scores lean towards the user, unlike GLM
-    // 5.2 at "max", which was recommended.
+    // Third-party open model (Z.ai) hosted unmodified on the Mistral API
+    // (EU); routed through the Mistral path (id has no claude-/deepseek-
+    // prefix). The default chat model; not recommended for FLOW (2026-10
+    // field test: scores lean towards the user at every reasoning level,
+    // unlike GLM 5.2 at "max", which Mistral retired).
     note: "Third-party model hosted on the Mistral API",
   },
   {
@@ -172,12 +168,10 @@ export function groupModelsForFlow(models: ModelInfo[] = MODELS): ModelGroup[] {
   return groups.filter((g) => g.models.length > 0);
 }
 
-// Defaults for new profiles (mirrored by the profiles column defaults in
-// migrations 20261001120000 / 20261002120000 and by the edge functions'
-// NULL-preference fallback). Chat: GLM 5.3 since 2026-10 (GLM 5.2 from
-// 2026-09-25, Mistral Medium 3.5 before). FLOW: Claude Sonnet 4.6 since
-// 2026-10-02 — the one model still recommended for FLOW once GLM 5.3
-// failed the field test (GLM 5.2 was the default from 2026-09-25).
+// Defaults for new profiles, mirrored by the profiles column defaults
+// (migrations 20261001120000 / 20261002120000) and by the edge functions'
+// NULL-preference fallback. The FLOW default must be a recommended model
+// (pinned by models.test.ts).
 export const DEFAULT_CHAT_MODEL = "zai-glm-5-3";
 export const DEFAULT_FLOW_MODEL = "claude-sonnet-4-6";
 
@@ -220,8 +214,9 @@ export type ReasoningOptionsByModel = Readonly<
 
 /** The option id in force for a chat model: the stored choice when it is
  *  one of the model's options, else the default; null when the model has no
- *  reasoning control. */
-export function effectiveReasoningId(
+ *  reasoning control. (The server-side twin is resolveReasoning in
+ *  _shared/_thinking.ts.) */
+export function resolveReasoningId(
   modelId: string,
   choices: Record<string, string> | undefined,
   table: ReasoningOptionsByModel = CHAT_REASONING_OPTIONS,
@@ -232,12 +227,12 @@ export function effectiveReasoningId(
   return entry.options.some((o) => o.id === stored) ? (stored as string) : entry.defaultId;
 }
 
-/** The label of the level in force (see effectiveReasoningId), or null. */
-export function reasoningLabelFor(
+/** The label of the level in force (see resolveReasoningId), or null. */
+export function resolveReasoningLabel(
   modelId: string,
   choices: Record<string, string> | undefined,
 ): string | null {
-  const id = effectiveReasoningId(modelId, choices);
+  const id = resolveReasoningId(modelId, choices);
   if (id === null) return null;
   return CHAT_REASONING_OPTIONS[modelId].options.find((o) => o.id === id)?.label ?? null;
 }
