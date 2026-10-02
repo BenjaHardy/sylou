@@ -72,7 +72,7 @@ Conversational responses. Quality matters; reasoning effort calibrated per model
 | Mistral Medium 3.5 | 0.7                          | reasoning_effort: high           | 24000               | Mistral "Quality tier" — reasoning enabled.                           |
 | Mistral Small 4    | 0.7                          | reasoning_effort: none           | 4000                | Mistral "Speed tier" — no thinking chunk; ideal for cheap, fast chat. |
 | DeepSeek V4 Flash  | 1.0                          | n/a                              | 4000                | Standard, cheap chat.                                                 |
-| Z.ai GLM 5.3       | 0.7                          | reasoning_effort: high           | 24000               | Third-party (Z.ai) via Mistral API; 1M context. "max" is its deep-reasoning level: a minute or more of thinking before the first answer token. |
+| Z.ai GLM 5.3       | 0.7                          | reasoning_effort: high           | 24000               | Third-party (Z.ai) via Mistral API; 1M context. "max" is its deep-reasoning level: occasionally significant thinking before the first answer token. |
 
 **Rationale for Chat settings:**
 
