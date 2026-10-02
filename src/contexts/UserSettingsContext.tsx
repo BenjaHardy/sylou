@@ -16,6 +16,9 @@ export interface UserSettings {
   preferred_language: string | null;
   preferred_chat_model: string;
   preferred_flow_model: string;
+  /** Reasoning level per chat model id (see CHAT_REASONING_OPTIONS); a
+   *  missing entry means the code default. */
+  preferred_chat_reasoning: Record<string, string>;
   default_concise_mode: boolean;
   email: string;
   // Read-only budget fields. Operators set monthly_token_budget per user via
@@ -30,6 +33,7 @@ const DEFAULTS: UserSettings = {
   preferred_language: "English",
   preferred_chat_model: DEFAULT_CHAT_MODEL,
   preferred_flow_model: DEFAULT_FLOW_MODEL,
+  preferred_chat_reasoning: {},
   default_concise_mode: false,
   email: "",
   tokens_used_this_period: 0,
@@ -47,6 +51,17 @@ const UserSettingsContext = createContext<UserSettingsContextType | undefined>(
   undefined,
 );
 
+/** The stored per-model reasoning map, kept to string values (jsonb can
+ *  hold anything; the server validates the ids themselves). */
+function parseReasoningMap(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string") out[k] = v;
+  }
+  return out;
+}
+
 export function UserSettingsProvider({ children }: { children: ReactNode }) {
   const { user, session } = useAuth();
   const [settings, setSettings] = useState<UserSettings>(DEFAULTS);
@@ -62,7 +77,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     const { data } = await supabase
       .from("profiles")
       .select(
-        "display_name, preferred_language, preferred_chat_model, preferred_flow_model, default_concise_mode, email, tokens_used_this_period, monthly_token_budget",
+        "display_name, preferred_language, preferred_chat_model, preferred_flow_model, preferred_chat_reasoning, default_concise_mode, email, tokens_used_this_period, monthly_token_budget",
       )
       .eq("id", user.id)
       .maybeSingle();
@@ -73,6 +88,9 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
         preferred_chat_model: data.preferred_chat_model ?? DEFAULT_CHAT_MODEL,
         preferred_flow_model:
           (data as { preferred_flow_model?: string }).preferred_flow_model ?? DEFAULT_FLOW_MODEL,
+        preferred_chat_reasoning: parseReasoningMap(
+          (data as { preferred_chat_reasoning?: unknown }).preferred_chat_reasoning,
+        ),
         default_concise_mode:
           (data as { default_concise_mode?: boolean }).default_concise_mode ?? false,
         email: data.email ?? user.email ?? "",
@@ -102,6 +120,8 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
         dbPatch.preferred_chat_model = patch.preferred_chat_model;
       if (patch.preferred_flow_model !== undefined)
         dbPatch.preferred_flow_model = patch.preferred_flow_model;
+      if (patch.preferred_chat_reasoning !== undefined)
+        dbPatch.preferred_chat_reasoning = patch.preferred_chat_reasoning;
       if (patch.default_concise_mode !== undefined)
         dbPatch.default_concise_mode = patch.default_concise_mode;
       // tokens_used_this_period and monthly_token_budget are intentionally

@@ -7,7 +7,7 @@ import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models
 import { sliceSafe } from "../_shared/_text.ts";
 import {
   CHAT_THINKING, CHAT_EFFORT, CHAT_MISTRAL_EFFORT,
-  resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
+  resolveReasoning, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 import {
   buildMemoryInjection,
@@ -99,14 +99,15 @@ Deno.serve(async (req) => {
     const chatModel: string =
       requestedModel || profile.preferred_chat_model || "zai-glm-5-3";
     const temperature = resolveTemperature(CHAT_TEMPERATURE, chatModel);
-    const thinking = resolveThinking(CHAT_THINKING, chatModel);
-    const effort = resolveEffort(CHAT_EFFORT, chatModel);
-    const mistralEffort = resolveMistralEffort(CHAT_MISTRAL_EFFORT, chatModel);
+    const reasoning = resolveReasoning(chatModel, profile.preferred_chat_reasoning, {
+      thinking: CHAT_THINKING, effort: CHAT_EFFORT, mistral: CHAT_MISTRAL_EFFORT,
+    });
+    const { thinking, effort, mistralEffort } = reasoning;
     const chatMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CHAT, chatModel, thinking, mistralEffort !== undefined);
     console.log(
       `[chat] model=${chatModel} provider=${providerFor(chatModel)} source=${
         requestedModel ? "request" : profile.preferred_chat_model ? "profile" : "default"
-      }`,
+      } reasoning=${reasoning.optionId ?? "fixed"}${reasoning.userChosen ? " (user)" : ""}`,
     );
 
 

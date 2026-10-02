@@ -34,6 +34,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import {
+  CHAT_REASONING_OPTIONS,
   FLOW_OTHER_GROUP_ID,
   FLOW_RECOMMENDED_GROUP_ID,
   MODEL_CONFIG_DOC_URL,
@@ -127,19 +128,29 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
             <div>
               <Label className="text-sm font-semibold text-primary">Chat model</Label>
               <p className="text-xs text-muted-foreground mb-2">
-                Used for the chat panel and the editor's Ask / Propose actions.
+                Used for the chat panel and the editor's Ask / Propose actions. The reasoning
+                level under the selected model applies to those two as well; editor actions and
+                document summaries use the selected model with fixed settings.
               </p>
               <ModelPicker
                 groups={CHAT_MODEL_GROUPS}
                 selectedId={settings.preferred_chat_model}
                 onSelect={(id) => update({ preferred_chat_model: id })}
+                reasoningOptions={CHAT_REASONING_OPTIONS}
+                reasoningChoices={settings.preferred_chat_reasoning}
+                onReasoningChange={(modelId, optionId) =>
+                  update({
+                    preferred_chat_reasoning: { ...settings.preferred_chat_reasoning, [modelId]: optionId },
+                  })
+                }
               />
             </div>
 
             <div>
               <Label className="text-sm font-semibold text-primary">FLOW analysis model</Label>
               <p className="text-xs text-muted-foreground mb-2">
-                Used when running a FLOW report on your project.
+                Used when running a FLOW report on your project. Its reasoning settings are fixed
+                in code (see the {modelConfigLink}).
               </p>
               <ModelPicker
                 groups={FLOW_MODEL_GROUPS}

@@ -196,3 +196,126 @@ export function resolveMaxTokens(
   if (!modelId.startsWith("claude-") && !MISTRAL_REASONING_MODELS.has(modelId)) return budget.plain;
   return budget.reasoning;
 }
+
+// ── User-selectable reasoning (Settings → Models, chat picker) ────────────
+// Chat and context-prompt (Ask/Propose) let the user pick a reasoning level
+// per chat model, stored as a per-model map in
+// profiles.preferred_chat_reasoning (e.g. {"zai-glm-5-3": "max"}).
+// CHAT_REASONING_OPTIONS lists what each model accepts; the UI mirror is
+// CHAT_REASONING_OPTIONS in src/lib/models.ts (ids + default per model) —
+// KEEP IN SYNC. The default stays whatever the per-function tables above
+// say (resolveReasoning falls back to them for a missing or unknown
+// choice), so the tables remain the single source of truth for defaults and
+// the options only add alternatives. FLOW, editor actions and the summary
+// calls never read the user's choice.
+
+export interface ReasoningOption {
+  /** Stored id; "off" means no thinking / no reasoning_effort. */
+  id: string;
+  /** Claude: adaptive thinking on or off. */
+  thinking?: boolean;
+  /** Claude effort level. */
+  effort?: ClaudeEffort;
+  /** Mistral / GLM reasoning_effort ("none" is omitted from the request). */
+  mistral_effort?: MistralEffort;
+}
+
+export const CHAT_REASONING_OPTIONS: Readonly<Record<string, readonly ReasoningOption[]>> = {
+  "claude-sonnet-4-6": [
+    { id: "off",    thinking: false, effort: "high" },
+    { id: "low",    thinking: true,  effort: "low" },
+    { id: "medium", thinking: true,  effort: "medium" },
+    { id: "high",   thinking: true,  effort: "high" },
+  ],
+  "claude-opus-4-8": [
+    { id: "off",    thinking: false, effort: "high" },
+    { id: "low",    thinking: true,  effort: "low" },
+    { id: "medium", thinking: true,  effort: "medium" },
+    { id: "high",   thinking: true,  effort: "high" },
+    { id: "max",    thinking: true,  effort: "xhigh" },
+  ],
+  "mistral-medium-3-5": [
+    { id: "off",  mistral_effort: "none" },
+    { id: "high", mistral_effort: "high" },
+  ],
+  "mistral-small-2603": [
+    { id: "off",  mistral_effort: "none" },
+    { id: "high", mistral_effort: "high" },
+  ],
+  "zai-glm-5-3": [
+    { id: "low",  mistral_effort: "low" },
+    { id: "high", mistral_effort: "high" },
+    { id: "max",  mistral_effort: "max" },
+  ],
+};
+
+/** The per-function default tables a call resolves against. */
+export interface ReasoningTables {
+  thinking: ThinkingTable;
+  effort: EffortTable;
+  mistral: MistralEffortTable;
+}
+
+export interface ResolvedReasoning {
+  thinking: boolean;
+  effort: ClaudeEffort | undefined;
+  mistralEffort: MistralEffort | undefined;
+  /** The option in force: the user's valid choice, else the default option
+   *  id when the model has options, else null (fixed settings only). */
+  optionId: string | null;
+  /** True when a stored user choice was applied. */
+  userChosen: boolean;
+}
+
+function knobsOf(
+  modelId: string,
+  option: ReasoningOption,
+): Pick<ResolvedReasoning, "thinking" | "effort" | "mistralEffort"> {
+  if (modelId.startsWith("claude-")) {
+    return { thinking: option.thinking ?? false, effort: option.effort, mistralEffort: undefined };
+  }
+  const level = option.mistral_effort;
+  return {
+    thinking: false,
+    effort: undefined,
+    mistralEffort: MISTRAL_REASONING_MODELS.has(modelId) && level && level !== "none" ? level : undefined,
+  };
+}
+
+function defaultsOf(modelId: string, tables: ReasoningTables) {
+  return {
+    thinking: resolveThinking(tables.thinking, modelId),
+    effort: resolveEffort(tables.effort, modelId),
+    mistralEffort: resolveMistralEffort(tables.mistral, modelId),
+  };
+}
+
+/** The option id the tables amount to for a model (what the picker shows as
+ *  the default), or null when the model has no options or the tables name a
+ *  combination no option covers (a configuration drift — pinned by tests). */
+export function defaultReasoningId(modelId: string, tables: ReasoningTables): string | null {
+  const options = CHAT_REASONING_OPTIONS[modelId];
+  if (!options) return null;
+  const d = defaultsOf(modelId, tables);
+  const match = options.find((o) => {
+    const k = knobsOf(modelId, o);
+    return k.thinking === d.thinking && k.effort === d.effort && k.mistralEffort === d.mistralEffort;
+  });
+  return match?.id ?? null;
+}
+
+/** Reasoning knobs for one call: the user's stored choice for this model
+ *  when it is one of CHAT_REASONING_OPTIONS, else the per-function tables.
+ *  `stored` is the raw profiles.preferred_chat_reasoning value (jsonb, so
+ *  anything) and is trusted no further than "is it a known option id". */
+export function resolveReasoning(modelId: string, stored: unknown, tables: ReasoningTables): ResolvedReasoning {
+  const options = CHAT_REASONING_OPTIONS[modelId];
+  const choice = stored && typeof stored === "object" && !Array.isArray(stored)
+    ? (stored as Record<string, unknown>)[modelId]
+    : undefined;
+  const option = typeof choice === "string" ? options?.find((o) => o.id === choice) : undefined;
+  if (option) {
+    return { ...knobsOf(modelId, option), optionId: option.id, userChosen: true };
+  }
+  return { ...defaultsOf(modelId, tables), optionId: defaultReasoningId(modelId, tables), userChosen: false };
+}

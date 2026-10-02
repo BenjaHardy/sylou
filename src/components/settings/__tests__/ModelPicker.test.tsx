@@ -5,6 +5,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ModelPicker } from "@/components/settings/ModelPicker";
 import {
+  CHAT_REASONING_OPTIONS,
   FLOW_OTHER_GROUP_ID,
   FLOW_RECOMMENDED_GROUP_ID,
   groupModelsByProvider,
@@ -93,5 +94,76 @@ describe("ModelPicker", () => {
     expect(header("Mistral API")).toHaveAttribute("aria-expanded", "true");
     expect(header("Anthropic (Claude)")).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("button", { name: /^Claude Opus 4\.8/, pressed: true })).toBeInTheDocument();
+  });
+
+  it("reasoning: one select under the selected model, showing the default, reporting a change", () => {
+    const onReasoningChange = vi.fn();
+    render(
+      <ModelPicker
+        groups={groupModelsByProvider()}
+        selectedId="zai-glm-5-3"
+        onSelect={() => {}}
+        reasoningOptions={CHAT_REASONING_OPTIONS}
+        reasoningChoices={{}}
+        onReasoningChange={onReasoningChange}
+      />,
+    );
+    const select = screen.getByLabelText("Reasoning") as HTMLSelectElement;
+    expect(select.value).toBe("high");
+    expect(screen.getByRole("option", { name: "High (default)" })).toBeInTheDocument();
+    expect(screen.getAllByRole("combobox")).toHaveLength(1);
+
+    fireEvent.change(select, { target: { value: "max" } });
+    expect(onReasoningChange).toHaveBeenCalledWith("zai-glm-5-3", "max");
+  });
+
+  it("reasoning: a stored choice is shown, an unknown one falls back to the default, and models without options get no control", () => {
+    const { rerender } = render(
+      <ModelPicker
+        groups={groupModelsByProvider()}
+        selectedId="zai-glm-5-3"
+        onSelect={() => {}}
+        reasoningOptions={CHAT_REASONING_OPTIONS}
+        reasoningChoices={{ "zai-glm-5-3": "max" }}
+        onReasoningChange={() => {}}
+      />,
+    );
+    expect((screen.getByLabelText("Reasoning") as HTMLSelectElement).value).toBe("max");
+
+    rerender(
+      <ModelPicker
+        groups={groupModelsByProvider()}
+        selectedId="zai-glm-5-3"
+        onSelect={() => {}}
+        reasoningOptions={CHAT_REASONING_OPTIONS}
+        reasoningChoices={{ "zai-glm-5-3": "turbo" }}
+        onReasoningChange={() => {}}
+      />,
+    );
+    expect((screen.getByLabelText("Reasoning") as HTMLSelectElement).value).toBe("high");
+
+    rerender(
+      <ModelPicker
+        groups={groupModelsByProvider()}
+        selectedId="mistral-large-2512"
+        onSelect={() => {}}
+        reasoningOptions={CHAT_REASONING_OPTIONS}
+        reasoningChoices={{ "zai-glm-5-3": "max" }}
+        onReasoningChange={() => {}}
+      />,
+    );
+    expect(screen.queryByLabelText("Reasoning")).not.toBeInTheDocument();
+  });
+
+  it("FLOW: without reasoning options the picker shows no control at all", () => {
+    render(
+      <ModelPicker
+        groups={groupModelsForFlow()}
+        selectedId="zai-glm-5-3"
+        onSelect={() => {}}
+        defaultOpenGroupIds={[FLOW_RECOMMENDED_GROUP_ID]}
+      />,
+    );
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 });

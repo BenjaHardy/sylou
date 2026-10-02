@@ -5,15 +5,23 @@
 // guards against the old size-inferred tiering coming back.
 // Run with: deno test supabase/functions/_shared/_thinking.test.ts
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { OUTPUT_BUDGETS } from "./_models.ts";
+import { ALLOWED_MODELS, OUTPUT_BUDGETS } from "./_models.ts";
 import {
+  CHAT_EFFORT,
   CHAT_MISTRAL_EFFORT,
+  CHAT_REASONING_OPTIONS,
+  CHAT_THINKING,
+  CONTEXT_EFFORT,
   CONTEXT_MISTRAL_EFFORT,
+  CONTEXT_THINKING,
   EDITOR_MISTRAL_EFFORT,
   FLOW_MISTRAL_EFFORT,
+  MISTRAL_REASONING_MODELS,
   SUMMARY_MISTRAL_EFFORT,
+  defaultReasoningId,
   resolveMaxTokens,
   resolveMistralEffort,
+  resolveReasoning,
 } from "./_thinking.ts";
 
 Deno.test("budget pairs are the agreed ceilings", () => {
@@ -95,4 +103,84 @@ Deno.test("summary calls: GLM 5.3 reasons at low with the reasoning ceiling; eve
     assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.DOC_SUMMARY, id, false, effort !== undefined), 500, id);
     assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.MEMORY, id, false, effort !== undefined), 3_000, id);
   }
+});
+
+// ── User-selectable reasoning (CHAT_REASONING_OPTIONS / resolveReasoning) ──
+
+const CHAT_TABLES = { thinking: CHAT_THINKING, effort: CHAT_EFFORT, mistral: CHAT_MISTRAL_EFFORT };
+const CONTEXT_TABLES = { thinking: CONTEXT_THINKING, effort: CONTEXT_EFFORT, mistral: CONTEXT_MISTRAL_EFFORT };
+
+Deno.test("reasoning options: registry models only, unique ids, every option permitted for its provider", () => {
+  for (const [model, options] of Object.entries(CHAT_REASONING_OPTIONS)) {
+    assert(ALLOWED_MODELS.has(model), `${model} is not an allowed model`);
+    const ids = options.map((o) => o.id);
+    assertEquals(new Set(ids).size, ids.length, `${model}: duplicate option ids`);
+    for (const o of options) {
+      if (model.startsWith("claude-")) {
+        assertEquals(o.mistral_effort, undefined, `${model}/${o.id}: Claude options carry no mistral_effort`);
+        assert(typeof o.thinking === "boolean" && o.effort !== undefined, `${model}/${o.id}: Claude options set thinking + effort`);
+      } else {
+        assert(MISTRAL_REASONING_MODELS.has(model), `${model}: only Mistral reasoning models have options`);
+        assertEquals(o.thinking, undefined, `${model}/${o.id}: no Claude knobs on a Mistral model`);
+        assert(o.mistral_effort !== undefined, `${model}/${o.id}: Mistral options set mistral_effort`);
+      }
+    }
+  }
+  // Sonnet 4.6 rejects xhigh; GLM 5.3 cannot run without reasoning; Mistral's
+  // own reasoning models know only high / none.
+  assert(!CHAT_REASONING_OPTIONS["claude-sonnet-4-6"].some((o) => o.effort === "xhigh"));
+  assert(!CHAT_REASONING_OPTIONS["zai-glm-5-3"].some((o) => o.mistral_effort === "none"));
+  for (const id of ["mistral-medium-3-5", "mistral-small-2603"]) {
+    for (const o of CHAT_REASONING_OPTIONS[id]) {
+      assert(o.mistral_effort === "high" || o.mistral_effort === "none", `${id}/${o.id}`);
+    }
+  }
+});
+
+Deno.test("reasoning options: the chat and context tables name a default that exists as an option", () => {
+  for (const model of Object.keys(CHAT_REASONING_OPTIONS)) {
+    assert(defaultReasoningId(model, CHAT_TABLES) !== null, `${model}: CHAT tables match no option`);
+    assert(defaultReasoningId(model, CONTEXT_TABLES) !== null, `${model}: CONTEXT tables match no option`);
+  }
+  assertEquals(defaultReasoningId("zai-glm-5-3", CHAT_TABLES), "high");
+  assertEquals(defaultReasoningId("claude-sonnet-4-6", CHAT_TABLES), "off");
+  assertEquals(defaultReasoningId("claude-opus-4-8", CHAT_TABLES), "high");
+  assertEquals(defaultReasoningId("mistral-medium-3-5", CHAT_TABLES), "high");
+  assertEquals(defaultReasoningId("mistral-small-2603", CHAT_TABLES), "off");
+  assertEquals(defaultReasoningId("mistral-large-2512", CHAT_TABLES), null);
+  assertEquals(defaultReasoningId("deepseek-v4-flash", CHAT_TABLES), null);
+});
+
+Deno.test("resolveReasoning: a stored valid choice wins and is reported as the user's", () => {
+  const stored = { "zai-glm-5-3": "max", "claude-opus-4-8": "low", "claude-sonnet-4-6": "off" };
+  assertEquals(resolveReasoning("zai-glm-5-3", stored, CHAT_TABLES), {
+    thinking: false, effort: undefined, mistralEffort: "max", optionId: "max", userChosen: true,
+  });
+  assertEquals(resolveReasoning("claude-opus-4-8", stored, CHAT_TABLES), {
+    thinking: true, effort: "low", mistralEffort: undefined, optionId: "low", userChosen: true,
+  });
+  assertEquals(resolveReasoning("claude-sonnet-4-6", stored, CHAT_TABLES), {
+    thinking: false, effort: "high", mistralEffort: undefined, optionId: "off", userChosen: true,
+  });
+  // "off" on a Mistral reasoning model omits the field (undefined, never "none").
+  const off = resolveReasoning("mistral-medium-3-5", { "mistral-medium-3-5": "off" }, CHAT_TABLES);
+  assertEquals(off.mistralEffort, undefined);
+  assertEquals(off.optionId, "off");
+  assertEquals(off.userChosen, true);
+});
+
+Deno.test("resolveReasoning: missing, unknown or malformed choices fall back to the tables", () => {
+  const def = resolveReasoning("zai-glm-5-3", undefined, CHAT_TABLES);
+  assertEquals(def, { thinking: false, effort: undefined, mistralEffort: "high", optionId: "high", userChosen: false });
+  for (const stored of [null, "max", 42, ["max"], {}, { "zai-glm-5-3": "turbo" }, { "zai-glm-5-3": 1 }, { "claude-opus-4-8": "max" }]) {
+    assertEquals(resolveReasoning("zai-glm-5-3", stored, CHAT_TABLES), def, JSON.stringify(stored));
+  }
+  // A model without options keeps its fixed settings and reports no option,
+  // whatever is stored under its id.
+  assertEquals(resolveReasoning("mistral-large-2512", { "mistral-large-2512": "high" }, CHAT_TABLES), {
+    thinking: false, effort: undefined, mistralEffort: undefined, optionId: null, userChosen: false,
+  });
+  assertEquals(resolveReasoning("deepseek-v4-flash", {}, CHAT_TABLES).optionId, null);
+  // Another model's choice never leaks across ids.
+  assertEquals(resolveReasoning("claude-sonnet-4-6", { "claude-opus-4-8": "max" }, CHAT_TABLES).userChosen, false);
 });

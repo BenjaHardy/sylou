@@ -26,6 +26,9 @@ export interface BudgetProfile {
   monthly_token_budget: number | null;
   tokens_used_this_period: number;
   preferred_chat_model: string | null;
+  /** jsonb per-model reasoning choice, raw; resolveReasoning in
+   *  _thinking.ts validates it. Absent from pre-20261001130000 rows. */
+  preferred_chat_reasoning?: unknown;
 }
 
 export function isOverBudget(profile: {
@@ -64,7 +67,7 @@ export async function getBudgetedProfile(
   await c.rpc("reset_tokens_if_stale", { user_uuid: userId });
   const { data, error } = await c
     .from("profiles")
-    .select("tokens_used_this_period, monthly_token_budget, preferred_chat_model")
+    .select("tokens_used_this_period, monthly_token_budget, preferred_chat_model, preferred_chat_reasoning")
     .eq("id", userId)
     .single();
   return { profile: data ?? null, profileErr: error };

@@ -2,6 +2,7 @@
 // the client-side mirror of the edge functions' _shared/_models checks.
 import { describe, it, expect } from "vitest";
 import {
+  CHAT_REASONING_OPTIONS,
   DEFAULT_CHAT_MODEL,
   DEFAULT_FLOW_MODEL,
   FLOW_OTHER_GROUP_ID,
@@ -9,8 +10,10 @@ import {
   MODELS,
   MODEL_LABELS,
   PROVIDER_LABELS,
+  effectiveReasoningId,
   groupModelsByProvider,
   groupModelsForFlow,
+  reasoningLabelFor,
   type ModelInfo,
 } from "@/lib/models";
 
@@ -116,5 +119,37 @@ describe("Settings picker groupings", () => {
 
   it("every provider has a tag label for the FLOW cards", () => {
     for (const m of MODELS) expect(PROVIDER_LABELS[m.provider], m.id).toBeTruthy();
+  });
+});
+
+describe("chat reasoning options (UI mirror of _shared/_thinking.ts)", () => {
+  it("lists registry models only, with unique labelled options and a default that exists", () => {
+    const registryIds = MODELS.map((m) => m.id);
+    for (const [id, entry] of Object.entries(CHAT_REASONING_OPTIONS)) {
+      expect(registryIds, id).toContain(id);
+      const ids = entry.options.map((o) => o.id);
+      expect(new Set(ids).size, id).toBe(ids.length);
+      expect(ids, id).toContain(entry.defaultId);
+      for (const o of entry.options) expect(o.label.trim(), `${id}/${o.id}`).not.toBe("");
+    }
+    // No reasoning control on models without one.
+    for (const id of ["mistral-large-2512", "deepseek-v4-flash"]) expect(CHAT_REASONING_OPTIONS[id]).toBeUndefined();
+  });
+
+  it("GLM 5.3 offers low / high / max with high as the default (max is its deep-reasoning level)", () => {
+    expect(CHAT_REASONING_OPTIONS["zai-glm-5-3"].options.map((o) => o.id)).toEqual(["low", "high", "max"]);
+    expect(CHAT_REASONING_OPTIONS["zai-glm-5-3"].defaultId).toBe("high");
+  });
+
+  it("the level in force is the stored choice when valid, else the default, and null without a control", () => {
+    expect(effectiveReasoningId("zai-glm-5-3", { "zai-glm-5-3": "max" })).toBe("max");
+    expect(effectiveReasoningId("zai-glm-5-3", { "zai-glm-5-3": "turbo" })).toBe("high");
+    expect(effectiveReasoningId("zai-glm-5-3", undefined)).toBe("high");
+    expect(effectiveReasoningId("claude-sonnet-4-6", { "zai-glm-5-3": "max" })).toBe("off");
+    expect(effectiveReasoningId("mistral-large-2512", { "mistral-large-2512": "high" })).toBeNull();
+
+    expect(reasoningLabelFor("zai-glm-5-3", { "zai-glm-5-3": "max" })).toBe("Max");
+    expect(reasoningLabelFor("claude-opus-4-8", {})).toBe("High");
+    expect(reasoningLabelFor("deepseek-v4-flash", {})).toBeNull();
   });
 });

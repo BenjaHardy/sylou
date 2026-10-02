@@ -7,8 +7,8 @@ import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperature
 import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 import {
-  CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT,
-  resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
+  CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT, SUMMARY_MISTRAL_EFFORT,
+  resolveReasoning, resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 import {
   fetchConversationMemory,
@@ -105,11 +105,19 @@ Deno.serve(async (req) => {
       requestedModel || profile.preferred_chat_model || "zai-glm-5-3";
     const provider = providerFor(chatModel);
     const temperature = resolveTemperature(CONTEXT_TEMPERATURE, chatModel);
-    const thinking = resolveThinking(CONTEXT_THINKING, chatModel);
-    const effort = resolveEffort(CONTEXT_EFFORT, chatModel);
-    const mistralEffort = resolveMistralEffort(CONTEXT_MISTRAL_EFFORT, chatModel);
+    // Reply call (#2): the user's reasoning level, else the context defaults.
+    const { thinking, effort, mistralEffort } = resolveReasoning(chatModel, profile.preferred_chat_reasoning, {
+      thinking: CONTEXT_THINKING, effort: CONTEXT_EFFORT, mistral: CONTEXT_MISTRAL_EFFORT,
+    });
     const contextMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_RESPONSE, chatModel, thinking, mistralEffort !== undefined);
-    const summaryMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_SUMMARY, chatModel, thinking, mistralEffort !== undefined);
+    // Writing-summary call (#1) keeps fixed settings whatever the user picked:
+    // it runs before the stream starts (the hosted idle limit is counting)
+    // and is a delta summary, not a reply — Claude per the context tables,
+    // Mistral / GLM per the summary table (GLM at "low").
+    const summaryThinking = resolveThinking(CONTEXT_THINKING, chatModel);
+    const summaryEffort = resolveEffort(CONTEXT_EFFORT, chatModel);
+    const summaryMistralEffort = resolveMistralEffort(SUMMARY_MISTRAL_EFFORT, chatModel);
+    const summaryMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_SUMMARY, chatModel, summaryThinking, summaryMistralEffort !== undefined);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
     if (!Deno.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
@@ -256,7 +264,7 @@ Deno.serve(async (req) => {
       creativeDataSection,
     );
 
-    const summaryResult = await callChatModel(chatModel, summaryMessages, summaryMaxTokens, temperature, thinking, effort, mistralEffort);
+    const summaryResult = await callChatModel(chatModel, summaryMessages, summaryMaxTokens, temperature, summaryThinking, summaryEffort, summaryMistralEffort);
     const summaryText = summaryResult.text.trim();
 
     // --- 5. Determine summary update (protocol + merge live in prompts.ts) ---

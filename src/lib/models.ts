@@ -178,3 +178,61 @@ export function groupModelsForFlow(models: ModelInfo[] = MODELS): ModelGroup[] {
 // Medium 3.5 before).
 export const DEFAULT_CHAT_MODEL = "zai-glm-5-3";
 export const DEFAULT_FLOW_MODEL = "zai-glm-5-3";
+
+/** A reasoning level a user can pick for a chat model. */
+export interface ReasoningChoice {
+  id: string;
+  label: string;
+}
+
+const OFF: ReasoningChoice = { id: "off", label: "Off" };
+const LOW: ReasoningChoice = { id: "low", label: "Low" };
+const MEDIUM: ReasoningChoice = { id: "medium", label: "Medium" };
+const HIGH: ReasoningChoice = { id: "high", label: "High" };
+const MAX: ReasoningChoice = { id: "max", label: "Max" };
+
+/** Reasoning levels per chat model (Settings → Models, chat picker) and the
+ *  level the code applies when nothing is chosen. Mirror of
+ *  CHAT_REASONING_OPTIONS in supabase/functions/_shared/_thinking.ts — KEEP
+ *  IN SYNC (the server validates the stored choice, so a drift here only
+ *  mislabels the picker). Applies to chat and Ask/Propose; FLOW, editor
+ *  actions and document summaries keep the settings fixed in code. Models
+ *  absent here (Mistral Large 3, DeepSeek) have no reasoning control. */
+export const CHAT_REASONING_OPTIONS: Readonly<
+  Record<string, { options: ReasoningChoice[]; defaultId: string }>
+> = {
+  "claude-sonnet-4-6": { options: [OFF, LOW, MEDIUM, HIGH], defaultId: "off" },
+  "claude-opus-4-8": { options: [OFF, LOW, MEDIUM, HIGH, MAX], defaultId: "high" },
+  "mistral-medium-3-5": { options: [OFF, HIGH], defaultId: "high" },
+  "mistral-small-2603": { options: [OFF, HIGH], defaultId: "off" },
+  "zai-glm-5-3": { options: [LOW, HIGH, MAX], defaultId: "high" },
+};
+
+/** Reasoning levels per model id and the one the code applies by default. */
+export type ReasoningOptionsByModel = Readonly<
+  Record<string, { options: ReasoningChoice[]; defaultId: string }>
+>;
+
+/** The option id in force for a chat model: the stored choice when it is
+ *  one of the model's options, else the default; null when the model has no
+ *  reasoning control. */
+export function effectiveReasoningId(
+  modelId: string,
+  choices: Record<string, string> | undefined,
+  table: ReasoningOptionsByModel = CHAT_REASONING_OPTIONS,
+): string | null {
+  const entry = table[modelId];
+  if (!entry) return null;
+  const stored = choices?.[modelId];
+  return entry.options.some((o) => o.id === stored) ? (stored as string) : entry.defaultId;
+}
+
+/** The label of the level in force (see effectiveReasoningId), or null. */
+export function reasoningLabelFor(
+  modelId: string,
+  choices: Record<string, string> | undefined,
+): string | null {
+  const id = effectiveReasoningId(modelId, choices);
+  if (id === null) return null;
+  return CHAT_REASONING_OPTIONS[modelId].options.find((o) => o.id === id)?.label ?? null;
+}

@@ -2,14 +2,22 @@ import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { PROVIDER_LABELS, type ModelGroup, type ModelInfo } from "@/lib/models";
+import {
+  PROVIDER_LABELS,
+  effectiveReasoningId,
+  type ModelGroup,
+  type ModelInfo,
+  type ReasoningOptionsByModel,
+} from "@/lib/models";
 
 // Grouped model picker for the Settings dialog. The registry keeps growing,
 // so the flat card lists became two long scrolls; each picker now folds its
 // cards into titled groups (by serving API for chat, by FLOW recommendation
 // for FLOW — see groupModelsByProvider / groupModelsForFlow in lib/models).
 // The cards themselves are unchanged: price, badges and notes stay visible
-// where the choice is made.
+// where the choice is made. The chat picker adds a reasoning-level select
+// under the selected card (CHAT_REASONING_OPTIONS in lib/models); the FLOW
+// picker passes no options and shows none.
 
 function formatPrice(n: number): string {
   return `$${n.toFixed(2)}`;
@@ -74,6 +82,13 @@ interface ModelPickerProps {
   groupNotices?: Record<string, ReactNode>;
   /** Show the serving API as a muted tag on each card. */
   showProviderTag?: boolean;
+  /** Reasoning levels per model id, rendered as a select under the selected
+   *  card; models absent from the map get no control. */
+  reasoningOptions?: ReasoningOptionsByModel;
+  /** The user's stored level per model id; a missing or unknown entry shows
+   *  the default. */
+  reasoningChoices?: Record<string, string>;
+  onReasoningChange?: (modelId: string, optionId: string) => void;
 }
 
 export function ModelPicker({
@@ -83,6 +98,9 @@ export function ModelPicker({
   defaultOpenGroupIds = [],
   groupNotices = {},
   showProviderTag = false,
+  reasoningOptions,
+  reasoningChoices = {},
+  onReasoningChange,
 }: ModelPickerProps) {
   // Only explicit toggles are stored. Until the user touches a group it is
   // open when it holds the selection (or is listed as default-open), which
@@ -139,15 +157,41 @@ export function ModelPicker({
                     {groupNotices[group.id]}
                   </div>
                 )}
-                {group.models.map((m) => (
-                  <ModelOption
-                    key={m.id}
-                    model={m}
-                    selected={m.id === selectedId}
-                    onSelect={() => handleSelect(m.id)}
-                    showProviderTag={showProviderTag}
-                  />
-                ))}
+                {group.models.map((m) => {
+                  const reasoning = m.id === selectedId ? reasoningOptions?.[m.id] : undefined;
+                  const current =
+                    reasoning && reasoningOptions
+                      ? effectiveReasoningId(m.id, reasoningChoices, reasoningOptions) ?? undefined
+                      : undefined;
+                  return (
+                    <div key={m.id} className="space-y-1">
+                      <ModelOption
+                        model={m}
+                        selected={m.id === selectedId}
+                        onSelect={() => handleSelect(m.id)}
+                        showProviderTag={showProviderTag}
+                      />
+                      {reasoning && (
+                        <div className="flex items-center gap-2 px-3 text-[11px] text-muted-foreground">
+                          <label htmlFor={`reasoning-${m.id}`}>Reasoning</label>
+                          <select
+                            id={`reasoning-${m.id}`}
+                            className="h-7 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+                            value={current}
+                            onChange={(e) => onReasoningChange?.(m.id, e.target.value)}
+                          >
+                            {reasoning.options.map((o) => (
+                              <option key={o.id} value={o.id}>
+                                {o.label}
+                                {o.id === reasoning.defaultId ? " (default)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </CollapsibleContent>
           </Collapsible>
