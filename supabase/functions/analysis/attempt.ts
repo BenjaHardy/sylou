@@ -7,7 +7,8 @@
 // Contract notes:
 // - The retry (attempt 2) rebuilds messages from the RAW prompts and
 //   appends the nudge — it does not reuse baseLlmArgs.messages.
-// - Refusal/max_tokens failures set noRetry: retrying a deterministic
+// - Refusal and max_tokens ("length") failures set noRetry on both the
+//   Structured Outputs and the tool-calling path: retrying a deterministic
 //   failure would only burn tokens and mask the signal (P3-7c).
 // - AttemptOk returns flowResult/repairedPillars BY REFERENCE on
 //   purpose: index.ts mutates both afterwards (pillar defaulting, score
@@ -86,6 +87,8 @@ export interface AttemptDeps {
   /** Operator-log context only (structured-output error logging). */
   projectId: string;
   jsonResponse: (body: Record<string, unknown>, status?: number) => Response;
+  /** Test seam (the _tool_loop.ts pattern); production leaves it unset. */
+  llm?: typeof callLLM;
 }
 
 export async function attemptFlowCall(
@@ -121,7 +124,7 @@ export async function attemptFlowCall(
     ...(contentLogsEnabled() ? { request_body: requestBody } : {}),
   });
 
-  const llmRes = await callLLM(llmArgs);
+  const llmRes = await (deps.llm ?? callLLM)(llmArgs);
 
   if (!llmRes.ok) {
     const errText = await llmRes.text();
@@ -150,11 +153,9 @@ export async function attemptFlowCall(
     ...(contentLogsEnabled() ? { raw_response: rawResponse } : {}),
   });
 
-  // A reply the provider cut at max_tokens is deterministic at FLOW's
-  // temperature 0 — a reasoning model that spent the ceiling thinking will
-  // spend it again — so it is not retried on the tool-calling path either
-  // (the Structured Outputs path has had this rule since P3-7c). Keeps a
-  // FLOW request to one long attempt, inside the hosted request limit.
+  // A reply cut at max_tokens is deterministic at temperature 0 (a model
+  // that spent the ceiling thinking will spend it again): no retry, so a
+  // FLOW request stays one long attempt, inside the hosted request limit.
   const truncatedFailure = (usage: AttemptFail["usage"]): AttemptFail => ({
     ok: false,
     usage,
@@ -184,7 +185,7 @@ export async function attemptFlowCall(
         model: flowModel,
         project_id: projectId,
         attempt,
-        stop_reason: rawData?.stop_reason ?? null,
+        stop_reason: stopReason,
         ...(contentLogsEnabled() ? { message: e.message, raw_response: rawResponse } : {}),
       });
 
