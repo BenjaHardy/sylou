@@ -231,7 +231,7 @@ Whatever the size of the your work, structured feedback is always welcome. That 
 
 ### Note on LLM calibration
 
-Based on our tests (Claude/Mistral/DeepSeek, and Z.ai GLM via the Mistral API), the following models deliver accurate FLOW analysis outputs: Claude Sonnet 4.6 (and up) and Z.ai GLM 5.3. Both showed strong repeatability (i.e. consistent outcomes from one run to another), less bias toward the user, did not mix up different pillars, and were consistently in line with the tester's own critical self-evaluation. The other LLMs tend to overscore the user's involvement, or show less repeatability.
+Based on our tests (Claude/Mistral/DeepSeek, and Z.ai GLM via the Mistral API), the following models deliver accurate FLOW analysis outputs: Claude Sonnet 4.6 (and up) and Z.ai GLM 5.2 at max. Both showed strong repeatability (i.e. consistent outcomes from one run to another), less bias toward the user, did not mix up different pillars, and were consistently in line with the tester's own critical self-evaluation. The other LLMs tend to overscore the user's involvement, or show less repeatability. GLM 5.2 is however getting retired from Mistral API and replaced with GLM 5.3, which shows strong bias toward the user and did *not* pass the maintainer's smoke tests.
 Where this is possible, temperature for the FLOW analysis is set at 0.0, which does appear to make the grounding slightly better for some models; temperature is set in a dedicated file: supabase/functions/_shared/_temperatures.ts
 Whatever the feedback, it is important to be careful not to propose calibration changes to the FLOW prompt that may improve the outputs of one LLM at the detriment of the others.
 
