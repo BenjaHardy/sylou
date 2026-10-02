@@ -58,8 +58,7 @@
 //             Mistral Small at "high", Medium 3.5 at "none", GLM 5.3 at "high".
 //   CHAT    — Opus thinking + "high" Claude effort. Mistral Medium 3.5
 //             at "high" (worth the latency); Small at "none" (chat speed);
-//             GLM 5.3 at "high" — its "max" is the deep-reasoning level
-//             and spent whole chat budgets thinking (2026-10).
+//             GLM 5.3 at "high" ("max" thinks for a minute or more).
 //   EDITOR  — inline rewrites; Claude as above; Mistral reasoning OFF
 //             (GLM 5.3 at "low": it cannot switch reasoning off).
 //   CONTEXT — pre-analysis summarization; Claude as above; Mistral Medium
@@ -79,12 +78,9 @@
 //         reducing effort).
 //   * Average FLOW elapsed > 100s on Mistral Medium 3.5 across ≥5 runs
 //       → flip FLOW_MISTRAL_EFFORT["mistral-medium-3-5"] to "none".
-//   * GLM 5.3 is NOT recommended for FLOW (field test 2026-10-02): at
-//     "low", "high" and "max" alike its scores lean towards the user,
-//     unlike GLM 5.2 at "max". Left at "high" for anyone who selects it
-//     anyway — fast, and the FLOW reasoning ceiling never binds there
-//     ("max" needed the whole ceiling for its think and still failed the
-//     test).
+//   * GLM 5.3 is not recommended for FLOW (2026-10 field test:
+//     user-leaning scores at every level); it stays at "high" for
+//     whoever selects it.
 // ============================================================
 
 import type { OutputBudget } from "./_models.ts";

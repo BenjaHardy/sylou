@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   PROVIDER_LABELS,
-  effectiveReasoningId,
+  resolveReasoningId,
   type ModelGroup,
   type ModelInfo,
   type ReasoningOptionsByModel,
@@ -98,7 +98,7 @@ export function ModelPicker({
   defaultOpenGroupIds = [],
   groupNotices = {},
   showProviderTag = false,
-  reasoningOptions,
+  reasoningOptions = {},
   reasoningChoices = {},
   onReasoningChange,
 }: ModelPickerProps) {
@@ -158,11 +158,8 @@ export function ModelPicker({
                   </div>
                 )}
                 {group.models.map((m) => {
-                  const reasoning = m.id === selectedId ? reasoningOptions?.[m.id] : undefined;
-                  const current =
-                    reasoning && reasoningOptions
-                      ? effectiveReasoningId(m.id, reasoningChoices, reasoningOptions) ?? undefined
-                      : undefined;
+                  const reasoning = m.id === selectedId ? reasoningOptions[m.id] : undefined;
+                  const current = resolveReasoningId(m.id, reasoningChoices, reasoningOptions) ?? undefined;
                   return (
                     <div key={m.id} className="space-y-1">
                       <ModelOption

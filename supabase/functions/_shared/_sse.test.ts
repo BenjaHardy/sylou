@@ -6,7 +6,15 @@
 // test here means the §7 streaming contract changed; that needs a
 // checkpoint, not a test edit.
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { makeSSEHelpers, readProviderStream, replayTokenBurst, startKeepalive, type StreamStats } from "./_sse.ts";
+import {
+  makeSSEHelpers,
+  readProviderStream,
+  readProviderStreamWithStats,
+  relayProviderStream,
+  replayTokenBurst,
+  startKeepalive,
+  type StreamStats,
+} from "./_sse.ts";
 import { isTruncatedStop } from "./_llm.ts";
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -312,6 +320,78 @@ Deno.test("startKeepalive: ticks on the interval and stops when told", async () 
 Deno.test("makeSSEHelpers: the keep-alive is an SSE comment line, which our own client parser skips", () => {
   const { sseKeepalive } = makeSSEHelpers({});
   assertEquals(new TextDecoder().decode(sseKeepalive()), ": keep-alive\n\n");
+});
+
+/** A controller stand-in that records enqueued frames; `broken` throws like a gone client. */
+function fakeController(broken = false) {
+  const frames: string[] = [];
+  const dec = new TextDecoder();
+  const controller = {
+    enqueue(bytes: Uint8Array) {
+      if (broken) throw new TypeError("Invalid state: Controller is already closed");
+      frames.push(dec.decode(bytes));
+    },
+  } as unknown as ReadableStreamDefaultController<Uint8Array>;
+  return { controller, frames };
+}
+
+Deno.test("relayProviderStream: tokens become {token} frames, one {phase:thinking} precedes them, nothing else is forwarded", async () => {
+  const { sseEvent } = makeSSEHelpers({});
+  const thinkingChunk = `data: ${
+    JSON.stringify({ choices: [{ delta: { content: [{ type: "thinking", thinking: [{ type: "text", text: "…" }] }] } }] })
+  }\n`;
+  const last = `data: ${JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: "length" }] })}\n`;
+  const { controller, frames } = fakeController();
+  const relay = await relayProviderStream(
+    sseResponse([thinkingChunk, thinkingChunk, openaiDelta("an"), openaiDelta("swer"), last, "data: [DONE]\n"]),
+    "mistral",
+    controller,
+    sseEvent,
+  );
+  assertEquals(frames, [
+    'data: {"phase":"thinking"}\n\n',
+    'data: {"token":"an"}\n\n',
+    'data: {"token":"swer"}\n\n',
+  ]);
+  assertEquals(relay.text, "answer");
+  assertEquals(relay.stopReason, "length");
+  assertEquals([relay.stats.chunks, relay.stats.thinking, relay.stats.text, relay.stats.sawDone], [5, 2, 2, true]);
+});
+
+Deno.test("relayProviderStream: a gone client (enqueue throws) never breaks the read; text and stats still come back", async () => {
+  const { sseEvent } = makeSSEHelpers({});
+  const { controller } = fakeController(true);
+  const relay = await relayProviderStream(sseResponse([openaiDelta("still "), openaiDelta("read")]), "mistral", controller, sseEvent);
+  assertEquals(relay.text, "still read");
+  assertEquals(relay.stopReason, null);
+  assertEquals(relay.stats.text, 2);
+});
+
+Deno.test("readProviderStreamWithStats returns what readProviderStream reports through onEnd", async () => {
+  let viaCallback = null as StreamStats | null;
+  const chunks = [openaiDelta("a"), openaiDelta("b"), "data: [DONE]\n"];
+  const text1 = await readProviderStream(sseResponse(chunks), "mistral", { onToken: () => {}, onEnd: (s) => { viaCallback = s; } });
+  const { text: text2, stats } = await readProviderStreamWithStats(sseResponse(chunks), "mistral", { onToken: () => {} });
+  assertEquals(text1, "ab");
+  assertEquals(text2, "ab");
+  assert(viaCallback !== null);
+  assertEquals([viaCallback.chunks, viaCallback.text, viaCallback.sawDone], [stats.chunks, stats.text, stats.sawDone]);
+});
+
+Deno.test("makeSSEHelpers.keepAlive: writes the comment on each tick, stops when told, and survives a gone client", async () => {
+  const { keepAlive } = makeSSEHelpers({});
+  const live = fakeController();
+  const gone = fakeController(true);
+  const stopLive = keepAlive(live.controller, 5);
+  const stopGone = keepAlive(gone.controller, 5);
+  await new Promise((r) => setTimeout(r, 80));
+  stopLive();
+  stopGone();
+  const seen = live.frames.length;
+  assert(seen >= 2, `expected at least two keep-alives, saw ${seen}`);
+  assert(live.frames.every((f) => f === ": keep-alive\n\n"));
+  await new Promise((r) => setTimeout(r, 30));
+  assertEquals(live.frames.length, seen);
 });
 
 Deno.test("readProviderStream: without onThinking, reasoning chunks are skipped exactly as before (Anthropic shape)", async () => {
