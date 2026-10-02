@@ -313,6 +313,14 @@ Deno.serve(async (req) => {
       if (toolCalls.length === 0) {
         // No tool use — emit Call #1 text as rapid SSE sequence
         console.log("[stream] no tool use, emitting Call #1 response directly");
+        if (!call1Content.trim()) {
+          // Non-streamed, so no StreamStats: the finish reason and usage are
+          // what tells a budget cut from a provider turn that ended empty.
+          console.warn("[stream] Call #1 returned no text and no tool call", {
+            stop_reason: norm1.stopReason,
+            usage: norm1.usage ?? null,
+          });
+        }
         const responseText = call1Content || "No response generated.";
 
         const readable = new ReadableStream({
