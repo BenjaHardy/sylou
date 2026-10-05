@@ -36,7 +36,8 @@ Apply strict coding standards to avoid future code liabilities for the open-sour
 - Vitest 4 (frontend units) + `deno test` (edge-function units beside their
   modules: `_shared/` plus the split function directories — the `deno.json`
   test task holds the collected list)
-- LLM providers: Anthropic (Sonnet 4.6, Opus 4.8), Mistral API (Large 3,
+- LLM providers: Anthropic (Sonnet 4.6, Sonnet 5.5, Opus 4.8, Opus 5.5,
+  Fable 5.1), Mistral API (Large 3,
   Medium 3.5, Small 4, and Z.ai GLM 5.3 — the default chat model for new
   profiles; FLOW defaults to Claude Sonnet 4.6), DeepSeek (deepseek-v4-flash).
 
@@ -202,12 +203,17 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   converge through `normaliseResponse`.
 - Per-model knobs live in `supabase/functions/_shared/`:
   - `_temperatures.ts` — `{FLOW,CHAT,EDITOR,CONTEXT}_TEMPERATURE` tables
-    + `NO_TEMPERATURE_MODELS` (Opus 4.7 and 4.8 reject any non-default
-    temperature with HTTP 400 — do NOT generalize to all Claude models).
+    + `NO_TEMPERATURE_MODELS` (Opus 4.7 and later, Sonnet 5.5 and Fable 5.1
+    reject any non-default temperature with HTTP 400 — do NOT generalize to
+    all Claude models: Sonnet 4.6 accepts it).
   - `_thinking.ts` — `*_THINKING` / `*_EFFORT` (Claude),
     `*_MISTRAL_EFFORT` + `MISTRAL_REASONING_MODELS` allowlist
     (Mistral Large 3 returns 422 if `reasoning_effort` is sent),
     and `resolveMaxTokens()` for thinking-aware budget headroom.
+  - `_models.ts` — the model facts that gate the wire format and the
+    effort unions (`CLAUDE_ALWAYS_THINKING`, `CLAUDE_THINKING_OFF_BETWEEN_TOOLS`,
+    `ClaudeEffort`, `MistralEffort`): the one module `_llm.ts` and
+    `_thinking.ts` both import without a cycle.
 - **No router bypasses**: every LLM call goes through `_llm.ts`.
   (`extract-text`'s former hardcoded Mistral call was removed in #10 — it
   now summarizes with the user's `preferred_chat_model` and silently falls
@@ -275,7 +281,13 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   events + the budget/`done` payloads are load-bearing for the UI. The editor-action and context-prompt `done`
   payloads carry `truncated: true` when the provider stopped at max_tokens
   (`onStop` on `readProviderStream`, `isTruncatedStop` in `_llm.ts`); the
-  selection window warns before Accept. Output budgets live in
+  selection window warns before Accept. They carry `refused: true` on a
+  provider safety refusal (`isRefusalStop`); the window then shows the
+  message as a notice and offers only Reject. Chat answers a provider
+  timeout (Call #1, a loop check call, or a streamed call before its first
+  byte) with `PROVIDER_TIMEOUT_MESSAGE` persisted as the reply, like
+  refusals and empty replies, so the notice survives a thread switch;
+  context-prompt keeps its transient error event. Output budgets live in
   `_models.ts` (`OUTPUT_BUDGETS`), mirrored by `src/lib/editor-limits.ts`.
 - Transparency logging invariants (see §4): withheld `writing_summary_log`,
   `not_assessed` summary flagging, delivery-time logging of Ask and Propose

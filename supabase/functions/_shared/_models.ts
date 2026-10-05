@@ -23,9 +23,39 @@ export const ALLOWED_MODELS: ReadonlySet<string> = new Set([
   "mistral-large-2512",
   "zai-glm-5-3",
   "claude-sonnet-4-6",
+  "claude-sonnet-5-5",
   "claude-opus-4-8",
+  "claude-opus-5-5",
+  "claude-fable-5-1",
   "deepseek-v4-flash",
 ]);
+
+/**
+ * Claude models whose thinking cannot be turned off: the API runs adaptive
+ * thinking when the field is omitted and rejects "disabled". resolveThinking
+ * (_thinking.ts) reports them as thinking whatever a table says, so the
+ * reasoning ceiling always applies, and the picker never offers "Off".
+ */
+export const CLAUDE_ALWAYS_THINKING: ReadonlySet<string> = new Set([
+  "claude-opus-5-5",
+  "claude-fable-5-1",
+]);
+
+/**
+ * Claude models where "thinking off" is spelled `thinking: {type: "between_tools"}`
+ * ("disabled" is a 400): no up-front thinking, progress notes between tool
+ * calls only; accepted at effort high or below. Spelled by toAnthropicBody.
+ */
+export const CLAUDE_THINKING_OFF_BETWEEN_TOOLS: ReadonlySet<string> = new Set([
+  "claude-sonnet-5-5",
+]);
+
+/** Reasoning-depth vocabularies, provider-specific. Claude: `output_config.effort`
+ *  (Sonnet 4.6 stops at high; the others go to max). Mistral API:
+ *  `reasoning_effort` ("high" | "none" on Mistral's own models, "low" |
+ *  "high" | "max" on GLM 5.3). */
+export type ClaudeEffort = "low" | "medium" | "high" | "xhigh" | "max";
+export type MistralEffort = "low" | "high" | "max" | "none";
 
 /**
  * Per-request ceilings for user-supplied text fields, in characters
@@ -106,7 +136,10 @@ export const CONTEXT_LIMIT_TOKENS: Readonly<Record<string, number>> = {
   "mistral-large-2512": 256_000,
   "zai-glm-5-3": 1_000_000,
   "claude-sonnet-4-6": 1_000_000,
+  "claude-sonnet-5-5": 1_000_000,
   "claude-opus-4-8": 1_000_000,
+  "claude-opus-5-5": 1_000_000,
+  "claude-fable-5-1": 1_000_000,
   "deepseek-v4-flash": 1_000_000,
 };
 

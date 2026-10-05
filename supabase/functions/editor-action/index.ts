@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, normaliseResponse, extractProviderError, isTruncatedStop } from "../_shared/_llm.ts";
+import { callLLM, providerFor, normaliseResponse, extractProviderError, fallbackReplyText, isRefusalStop, isTruncatedStop } from "../_shared/_llm.ts";
 import { makeSSEHelpers, readProviderStream } from "../_shared/_sse.ts";
 import { EDITOR_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
@@ -246,7 +246,7 @@ Deno.serve(async (req) => {
             }
 
             try {
-              const proposedText = fullResponse || "No response generated.";
+              const proposedText = fullResponse || fallbackReplyText(stopReason);
               const inputChars = llmMessages.reduce((sum, m) => sum + m.content.length, 0);
               const outputChars = proposedText.length;
               const estimatedTokens = Math.ceil((inputChars + outputChars) / 4);
@@ -310,6 +310,7 @@ Deno.serve(async (req) => {
                         done: true,
                         result: proposedText,
                         truncated: isTruncatedStop(stopReason),
+                        refused: isRefusalStop(stopReason),
                         action_id: actionRow?.id ?? null,
                         budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
                       })
@@ -380,7 +381,8 @@ Deno.serve(async (req) => {
     const llmData = await llmRes.json();
     // Provider-agnostic parse via the router's normaliser (replaces a
     // hand-rolled provider branch that duplicated the same logic).
-    const proposedText = normaliseResponse(provider, llmData).text || "No response generated.";
+    const norm = normaliseResponse(provider, llmData);
+    const proposedText = norm.text || fallbackReplyText(norm.stopReason);
 
     // --- Estimate tokens ---
     const inputChars = llmMessages.reduce((sum, m) => sum + m.content.length, 0);
@@ -437,6 +439,7 @@ Deno.serve(async (req) => {
 
     return jsonResponse({
       proposed_text: proposedText,
+      refused: isRefusalStop(norm.stopReason),
       action_id: actionRow?.id ?? null,
       tokens_used: estimatedTokens,
       budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,

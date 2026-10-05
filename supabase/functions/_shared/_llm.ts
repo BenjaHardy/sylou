@@ -15,20 +15,10 @@
 // ============================================================
 
 import { sliceSafe } from "./_text.ts";
+import { CLAUDE_THINKING_OFF_BETWEEN_TOOLS, type ClaudeEffort, type MistralEffort } from "./_models.ts";
 
 export type ProviderId = "mistral" | "anthropic" | "deepseek";
-
-// Effort taxonomy is provider-specific:
-//   - Anthropic (Claude): "low" | "medium" | "high" | "xhigh"
-//   - Mistral reasoning models (Medium 3.5, Small): "high" | "none";
-//     GLM 5.3 (third-party via Mistral, reasoning-only) accepts
-//     "low" | "high" | "max" instead
-// See _shared/_thinking.ts for the canonical types and the per-function
-// tables. We re-declare the literal unions here only to keep _llm.ts
-// free of cross-imports from _thinking.ts (avoids a circular dep risk
-// as both files grow).
-export type ClaudeEffort  = "low" | "medium" | "high" | "xhigh";
-export type MistralEffort = "low" | "high" | "max" | "none";
+export type { ClaudeEffort, MistralEffort };
 
 export interface LLMTool {
   // OpenAI-style tool definition
@@ -50,6 +40,11 @@ export interface LLMMessage {
     type: "function";
     function: { name: string; arguments: string };
   }>;
+  /** Anthropic only: the assistant turn's content blocks exactly as the API
+   *  returned them (thinking, redacted_thinking, text, tool_use). Set by
+   *  normaliseResponse and echoed verbatim by toAnthropicBody so the thinking
+   *  blocks survive a tool loop; toOpenAIBody drops the field. */
+  raw_content?: unknown[];
 }
 
 export function providerFor(modelId: string): ProviderId {
@@ -93,6 +88,7 @@ export function toAnthropicBody(opts: {
   stream?: boolean;
   forceTool?: string;
   disableParallelToolUse?: boolean;
+  tool_choice?: "auto" | "none";
   temperature?: number;
   json_schema?: { name: string; schema: Record<string, unknown> };
   thinking?: boolean;
@@ -116,6 +112,13 @@ export function toAnthropicBody(opts: {
           },
         ],
       });
+      continue;
+    }
+    // An Anthropic assistant turn goes back as received: inside a tool-use
+    // turn the API requires its thinking blocks complete and unmodified, and
+    // the 5.5 family binds them to this exact prefix (preserved thinking).
+    if (m.role === "assistant" && Array.isArray(m.raw_content) && m.raw_content.length > 0) {
+      msgs.push({ role: "assistant", content: m.raw_content });
       continue;
     }
     if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
@@ -151,13 +154,24 @@ export function toAnthropicBody(opts: {
     // Anthropic API caps temperature at 1.0; clamp defensively.
     body.temperature = Math.min(1.0, Math.max(0.0, opts.temperature));
   }
-  // Adaptive thinking — opt-in on Sonnet 4.6 / Opus 4.7+. The model
-  // decides when and how much to think on each request. Thinking
-  // blocks come back inside content[] alongside text/tool_use and
-  // are silently dropped by normaliseResponse (which filters by
-  // block.type). See _thinking.ts for per-function defaults.
+  // Adaptive thinking: the model decides when and how much to think.
+  // Omitted = no thinking on Sonnet 4.6 / Opus 4.8; Opus 5.5 and Fable 5.1
+  // think regardless (always on). Sonnet 5.5 rejects "disabled", so its
+  // "off" is between_tools. Thinking blocks come back inside content[];
+  // normaliseResponse reads only the text / tool_use ones and keeps the
+  // whole array as raw_content for the echo. Defaults: _thinking.ts.
+  const betweenTools = !opts.thinking && CLAUDE_THINKING_OFF_BETWEEN_TOOLS.has(opts.model);
   if (opts.thinking) {
     body.thinking = { type: "adaptive" };
+  } else if (betweenTools) {
+    body.thinking = { type: "between_tools" };
+  }
+  // between_tools is accepted at effort high or below; clamp loudly, as
+  // resolveEffort does for Sonnet 4.6 and xhigh.
+  let effort = opts.effort;
+  if (betweenTools && (effort === "xhigh" || effort === "max")) {
+    console.warn(`[effort] ${opts.model}: between_tools does not accept ${effort}; clamped to high`);
+    effort = "high";
   }
   // Structured Outputs (JSON outputs) — GA on Sonnet 4.6 / Opus 4.7+ on the
   // Claude API; no beta header required. When set, we do NOT also send
@@ -172,8 +186,8 @@ export function toAnthropicBody(opts: {
       schema: sanitizeAnthropicSchema(opts.json_schema.schema),
     };
   }
-  if (opts.effort) {
-    outputConfig.effort = opts.effort;
+  if (effort) {
+    outputConfig.effort = effort;
   }
   if (Object.keys(outputConfig).length > 0) {
     body.output_config = outputConfig;
@@ -190,6 +204,8 @@ export function toAnthropicBody(opts: {
         name: opts.forceTool,
         ...(opts.disableParallelToolUse ? { disable_parallel_tool_use: true } : {}),
       };
+    } else if (opts.tool_choice === "none") {
+      body.tool_choice = { type: "none" };
     }
   }
   return body;
@@ -328,7 +344,8 @@ export function toOpenAIBody(opts: {
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: opts.model,
-    messages: opts.messages,
+    // raw_content is the Anthropic echo; Mistral 422-rejects unknown fields.
+    messages: opts.messages.map(({ raw_content: _raw, ...m }) => m),
     max_tokens: opts.max_tokens,
   };
   if (opts.stream) body.stream = true;
@@ -363,6 +380,9 @@ export interface NormalisedResponse {
    *  `stop_reason`, OpenAI-shape `finish_reason`); null when absent. Feed
    *  it to isTruncatedStop() to detect a reply cut off at max_tokens. */
   stopReason: string | null;
+  /** Anthropic `stop_details` (the refusal category and explanation, only
+   *  on a refusal); null otherwise. Logged as metadata, never shown. */
+  stopDetails: unknown;
 }
 
 /**
@@ -413,13 +433,15 @@ interface RawUsage {
 interface RawResponse {
   content?: RawContentBlock[];
   stop_reason?: string;
+  stop_details?: unknown;
   choices?: Array<{ message?: RawMessage; finish_reason?: string }>;
   usage?: RawUsage;
 }
 interface RawStreamChunk {
   choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown }; finish_reason?: string }>;
   type?: string;
-  delta?: { type?: string; text?: string; stop_reason?: string };
+  delta?: { type?: string; text?: string; stop_reason?: string; stop_details?: unknown };
+  stop_details?: unknown;
   content_block?: { type?: string };
 }
 
@@ -456,7 +478,7 @@ export function normaliseResponse(
     // throw a tagged StructuredOutputError so callers can branch deterministically.
     if (opts?.structuredOutputName) {
       const stopReason = r.stop_reason ?? null;
-      if (stopReason === "refusal") {
+      if (isRefusalStop(stopReason)) {
         throw new StructuredOutputError(
           STRUCTURED_OUTPUT_REFUSAL,
           "Claude declined to produce a structured output for this request.",
@@ -501,11 +523,13 @@ export function normaliseResponse(
         role: "assistant",
         content: text,
         ...(oaToolCalls.length ? { tool_calls: oaToolCalls } : {}),
+        ...(blocks.length ? { raw_content: blocks } : {}),
       },
       usage: r.usage
         ? { input_tokens: r.usage.input_tokens, output_tokens: r.usage.output_tokens }
         : undefined,
       stopReason: r.stop_reason ?? null,
+      stopDetails: r.stop_details ?? null,
     };
   }
   // OpenAI-shape (Mistral/DeepSeek)
@@ -559,6 +583,7 @@ export function normaliseResponse(
         }
       : undefined,
     stopReason: r.choices?.[0]?.finish_reason ?? null,
+    stopDetails: null,
   };
 }
 
@@ -638,10 +663,50 @@ export function isThinkingDelta(parsed: unknown): boolean {
   return false;
 }
 
+/** Anthropic's `stop_details` from a streaming `message_delta` chunk (the
+ *  refusal category and explanation); null when the chunk carries none. */
+export function extractStopDetails(parsed: unknown): unknown {
+  if (!parsed || typeof parsed !== "object") return null;
+  const p = parsed as RawStreamChunk;
+  if (p.type !== "message_delta") return null;
+  return p.delta?.stop_details ?? p.stop_details ?? null;
+}
+
 /** True when a stop reason means the output hit max_tokens: Anthropic
  *  "max_tokens", OpenAI-shape (Mistral/DeepSeek/GLM) "length". */
 export function isTruncatedStop(reason: string | null | undefined): boolean {
   return reason === "max_tokens" || reason === "length";
+}
+
+/** True when the provider's safety classifier declined the request
+ *  (Anthropic `stop_reason: "refusal"`: an HTTP 200 with no answer). */
+export function isRefusalStop(reason: string | null | undefined): boolean {
+  return reason === "refusal";
+}
+
+/** The reply text when the model returned none: an explicit message for a
+ *  refusal or a ceiling spent on thinking, the historical placeholder
+ *  otherwise. No fallback model is ever tried, so the disclosed model is
+ *  always the one that answered. Persisted as the reply, so the model reads
+ *  it on the next turn too. */
+export function fallbackReplyText(stopReason: string | null | undefined): string {
+  if (isRefusalStop(stopReason)) {
+    return "The AI declined this request (its provider's safety classifier flagged the content). Try rephrasing it, or switch to a different model in Settings.";
+  }
+  if (isTruncatedStop(stopReason)) {
+    return "The model used its whole output limit on thinking and returned no answer. Try a lower reasoning level in Settings, or a more focused question.";
+  }
+  return "No response generated.";
+}
+
+/** The error shown when a non-streamed provider call hit callLLM's timeout
+ *  (a long think inside a tool round or the writing summary). */
+export const PROVIDER_TIMEOUT_MESSAGE =
+  "The model did not answer within the time limit. Try a lower reasoning level in Settings, or a more focused question.";
+
+/** True for the error fetchWithTimeout throws on abort. */
+export function isProviderTimeout(err: unknown): boolean {
+  return err instanceof Error && err.message.startsWith("Provider request timed out");
 }
 
 /**
@@ -682,8 +747,9 @@ export async function callLLM(opts: {
    *  so exactly one call to the forced tool comes back. The OpenAI path sends no
    *  equivalent — named forcing already yields a single call there. */
   disableParallelToolUse?: boolean;
-  /** OpenAI-path plain mode when tools are present and forceTool is not set;
-   *  ignored by the Anthropic path (its default is already auto). */
+  /** Plain mode when tools are present and forceTool is not set: "auto" is
+   *  the default on both paths; "none" keeps the tool list on the wire while
+   *  forbidding calls (OpenAI path verbatim, Anthropic as {type: "none"}). */
   tool_choice?: "auto" | "none";
   temperature?: number;
   json_schema?: { name: string; schema: Record<string, unknown> };
@@ -750,6 +816,15 @@ export async function callLLM(opts: {
     if (b.output_config !== undefined) logLine.output_config = b.output_config;
     if (b.reasoning_effort !== undefined) logLine.reasoning_effort = b.reasoning_effort;
     if (b.top_p !== undefined) logLine.top_p = b.top_p;
+    // Echoed Anthropic assistant turns (a tool loop in progress), counts only.
+    const echoed = opts.messages.filter((m) => Array.isArray(m.raw_content) && m.raw_content.length > 0);
+    if (echoed.length > 0) {
+      logLine.echoed_turns = echoed.length;
+      logLine.echoed_thinking_blocks = echoed.reduce(
+        (n, m) => n + (m.raw_content as RawContentBlock[]).filter((blk) => blk?.type === "thinking" || blk?.type === "redacted_thinking").length,
+        0,
+      );
+    }
     console.log("[callLLM] outbound", JSON.stringify(logLine));
   }
   return await fetchWithTimeout(endpointFor(provider), {

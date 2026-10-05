@@ -10,15 +10,13 @@
 // Anthropic temperature constraints (migration guide):
 //   https://platform.claude.com/docs/en/about-claude/models/migration-guide
 //
-//   - Opus 4.7 and 4.8: the API returns a 400 error if `temperature`
-//     is set to any non-default value. We MUST omit the field for
-//     these models — see NO_TEMPERATURE_MODELS below.
-//   - Sonnet 4.6: accepts `temperature` normally in [0, 1]. The
-//     "non-default returns 400" rule applies to Opus 4.7+ ONLY, not
-//     to Sonnet 4.6. Do not "consolidate" the safeguard to all
-//     Claude models — that would silently strip a working knob for
-//     Sonnet, where most FLOW runs happen and where 0.0 is exactly
-//     the determinism we want.
+//   - Opus 4.7 and later, Sonnet 5.5 and Fable 5.1: the API returns a
+//     400 if `temperature` is set to any non-default value. We MUST omit
+//     the field for these models — see NO_TEMPERATURE_MODELS below.
+//   - Sonnet 4.6: accepts `temperature` normally in [0, 1]. Do not
+//     "consolidate" the safeguard to all Claude models — that would
+//     silently strip a working knob for Sonnet 4.6, where 0.0 is exactly
+//     the determinism FLOW wants.
 //   - Mistral and DeepSeek: standard `[0, 2]`-ish range; we stay at
 //     conservative provider defaults outside FLOW.
 //
@@ -60,9 +58,12 @@ export type TemperatureTable = Record<string, number>;
 // the field entirely. As Anthropic ships new models, add them here
 // only if they share this constraint — do NOT generalize to "all
 // Claude models" (Sonnet 4.6 explicitly accepts temperature).
-const NO_TEMPERATURE_MODELS = new Set<string>([
+export const NO_TEMPERATURE_MODELS: ReadonlySet<string> = new Set<string>([
   "claude-opus-4-7",
   "claude-opus-4-8",
+  "claude-sonnet-5-5",
+  "claude-opus-5-5",
+  "claude-fable-5-1",
 ]);
 
 export const CHAT_TEMPERATURE: TemperatureTable = {

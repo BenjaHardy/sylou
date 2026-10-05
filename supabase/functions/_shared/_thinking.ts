@@ -5,28 +5,26 @@
 //   supabase/functions/analysis/index.ts      (FLOW_THINKING / FLOW_EFFORT / FLOW_MISTRAL_EFFORT)
 //   supabase/functions/chat/index.ts          (CHAT_THINKING / CHAT_EFFORT / CHAT_MISTRAL_EFFORT)
 //   supabase/functions/editor-action/index.ts (EDITOR_THINKING / EDITOR_EFFORT / EDITOR_MISTRAL_EFFORT)
-//   supabase/functions/context-prompt/index.ts (CONTEXT_THINKING / CONTEXT_EFFORT / CONTEXT_MISTRAL_EFFORT)
-//   supabase/functions/extract-text/index.ts  (SUMMARY_MISTRAL_EFFORT)
-//   supabase/functions/_shared/_conversation_memory.ts (SUMMARY_MISTRAL_EFFORT)
+//   supabase/functions/context-prompt/index.ts (CONTEXT_* for the reply, SUMMARY_* for the writing summary)
+//   supabase/functions/extract-text/index.ts  (SUMMARY_THINKING / SUMMARY_EFFORT / SUMMARY_MISTRAL_EFFORT)
+//   supabase/functions/_shared/_conversation_memory.ts (the same SUMMARY_* tables)
 //
 // References:
-//   - Adaptive thinking: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking
+//   - Thinking:          https://platform.claude.com/docs/en/build-with-claude/thinking
 //   - Effort parameter:  https://platform.claude.com/docs/en/build-with-claude/effort
 //   - Migration guide:   https://platform.claude.com/docs/en/about-claude/models/migration-guide
 //   - Mistral reasoning: https://docs.mistral.ai/capabilities/reasoning/
 //
-// Verified defaults at the Anthropic API (Dec 2025):
-//   - Effort default on Opus 4.7/4.8 and Sonnet 4.6 is already `"high"`
-//     (migration guide §"Start at `high` effort"). Sending `high`
-//     explicitly is therefore a documentation-grade no-op against the
-//     current provider default. We keep it set explicitly so a future
-//     default shift doesn't silently regress us, and so per-function
-//     overrides (e.g. dropping FLOW Opus to "medium") are a one-line
-//     table edit rather than a code change.
-//   - When no `thinking` field is sent, Opus 4.7/4.8 and Sonnet 4.6
-//     run WITHOUT thinking. Adaptive thinking is opt-in on these
-//     models (it is always-on on Fable 5 / Mythos 5, which we do not
-//     yet use).
+// Claude (verified October 2026):
+//   - Effort is sent explicitly even where it equals the API default
+//     (high everywhere but Opus 5.5, whose default is medium), so a
+//     provider default shift never silently changes a function, and a
+//     per-function override is a one-line table edit.
+//   - When no `thinking` field is sent, Sonnet 4.6 and Opus 4.8 run
+//     WITHOUT thinking. Opus 5.5 and Fable 5.1 think regardless (always
+//     on; CLAUDE_ALWAYS_THINKING in _models.ts), and resolveThinking
+//     reports them as thinking whatever a table says. Sonnet 5.5's "off"
+//     is `between_tools` (effort high or below), spelled by toAnthropicBody.
 //
 // Mistral reasoning:
 //   `mistral-medium-3-5` and `mistral-small-2603` accept an OpenAI-shape
@@ -44,33 +42,27 @@
 //   be configured with either.
 //
 // DeepSeek:
-//   `deepseek-v4-flash` (non-thinking mode) has no thinking toggle.
-//   DeepSeek's reasoning lives in v4-flash's separate thinking mode
-//   (exposed as `deepseek-reasoner` until that legacy id's 2026-07-24
-//   discontinuation), which we do not currently route to.
-//   resolveThinking / resolveEffort / resolveMistralEffort all return
-//   falsy for DeepSeek so the request body is untouched.
+//   `deepseek-v4-flash` (served by DeepSeek-V4.1-Flash) runs in thinking
+//   mode by default with its own `thinking` / `reasoning_effort` fields,
+//   which Sylou does not send yet. resolveThinking / resolveEffort /
+//   resolveMistralEffort all return falsy for DeepSeek so the request body
+//   is untouched.
 //
-// Per-function intent:
-//   FLOW    — schema-bound analysis. Thinking ON for Opus only (Sonnet
-//             is at 100% Structured Outputs success without it; don't
-//             risk regressing what's working). Effort "high" both Claudes.
-//             Mistral Small at "high", Medium 3.5 at "none", GLM 5.3 at "high".
-//   CHAT    — Opus thinking + "high" Claude effort. Mistral Medium 3.5
-//             at "high" (worth the latency); Small at "none" (chat speed);
-//             GLM 5.3 at "high" ("max" thinks for a minute or more).
-//   EDITOR  — inline rewrites; Claude as above; Mistral reasoning OFF
-//             (GLM 5.3 at "low": it cannot switch reasoning off).
-//   CONTEXT — pre-analysis summarization; Claude as above; Mistral Medium
-//             3.5 at "high", Small at "none", GLM 5.3 at "high".
-//   SUMMARY — document-import and conversation-memory summaries
-//             (extract-text, _conversation_memory.ts); Mistral reasoning
-//             OFF, GLM 5.3 at "low".
+// Per-function intent (the cells below are the decisions; only the reasons
+// live here):
+//   FLOW    — Sonnet 4.6 without thinking: 100% Structured Outputs success.
+//             Fable 5.1 at medium: one non-streamed call under the 145 s abort.
+//   CHAT / CONTEXT — the 5.5 models and Fable 5.1 at medium (the providers'
+//             recommended start); GLM 5.3 at "high" ("max" thinks for a
+//             minute or more); Mistral Small at "none" for chat speed.
+//   EDITOR / SUMMARY — the lightest level that still answers: low on the
+//             thinking Claude models, "low" on GLM 5.3 (it cannot switch
+//             reasoning off), off elsewhere.
 //
 // Regression guardrails (operate against baseline elapsed times
-// captured immediately after deploy — see plan):
-//   * Average FLOW elapsed > 120s on Opus across ≥5 runs
-//       → change FLOW_EFFORT["claude-opus-4-8"] to "medium".
+// captured immediately after deploy):
+//   * Average FLOW elapsed > 120s on a Claude model across ≥5 runs
+//       → drop that model's FLOW_EFFORT one level.
 //   * Any single FLOW analysis > 150s wall-clock
 //       → roll back this change.
 //   * First-attempt Structured Outputs success rate < 90% on Claude
@@ -83,10 +75,15 @@
 //     whoever selects it.
 // ============================================================
 
-import type { OutputBudget } from "./_models.ts";
+import {
+  CLAUDE_ALWAYS_THINKING,
+  CLAUDE_THINKING_OFF_BETWEEN_TOOLS,
+  type ClaudeEffort,
+  type MistralEffort,
+  type OutputBudget,
+} from "./_models.ts";
 
-export type ClaudeEffort  = "low" | "medium" | "high" | "xhigh";
-export type MistralEffort = "low" | "high" | "max" | "none";
+export type { ClaudeEffort, MistralEffort };
 
 export type ThinkingTable       = Record<string, boolean>;
 export type EffortTable         = Record<string, ClaudeEffort>;
@@ -105,17 +102,51 @@ export const MISTRAL_REASONING_MODELS = new Set<string>([
   "zai-glm-5-3",
 ]);
 
-// Defaults: adaptive thinking ON for Opus only. Sonnet stays OFF
-// (currently 100% Structured Outputs success — don't risk it).
-export const FLOW_THINKING:    ThinkingTable = { "claude-sonnet-4-6": false, "claude-opus-4-8": true };
-export const CHAT_THINKING:    ThinkingTable = { "claude-sonnet-4-6": false, "claude-opus-4-8": true };
-export const EDITOR_THINKING:  ThinkingTable = { "claude-sonnet-4-6": false, "claude-opus-4-8": true };
-export const CONTEXT_THINKING: ThinkingTable = { "claude-sonnet-4-6": false, "claude-opus-4-8": true };
+// Adaptive thinking per model and function. Sonnet 4.6 stays OFF (100%
+// Structured Outputs success on FLOW); Opus 5.5 and Fable 5.1 are reported
+// as ON by resolveThinking whatever these say (always-on models). Every
+// Claude model is listed explicitly in every table (pinned by tests).
+export const FLOW_THINKING: ThinkingTable = {
+  "claude-sonnet-4-6": false, "claude-sonnet-5-5": true,
+  "claude-opus-4-8": true, "claude-opus-5-5": true, "claude-fable-5-1": true,
+};
+export const CHAT_THINKING: ThinkingTable = {
+  "claude-sonnet-4-6": false, "claude-sonnet-5-5": true,
+  "claude-opus-4-8": true, "claude-opus-5-5": true, "claude-fable-5-1": true,
+};
+export const EDITOR_THINKING: ThinkingTable = {
+  "claude-sonnet-4-6": false, "claude-sonnet-5-5": true,
+  "claude-opus-4-8": true, "claude-opus-5-5": true, "claude-fable-5-1": true,
+};
+export const CONTEXT_THINKING: ThinkingTable = {
+  "claude-sonnet-4-6": false, "claude-sonnet-5-5": true,
+  "claude-opus-4-8": true, "claude-opus-5-5": true, "claude-fable-5-1": true,
+};
+export const SUMMARY_THINKING: ThinkingTable = {
+  "claude-sonnet-4-6": false, "claude-sonnet-5-5": true,
+  "claude-opus-4-8": false, "claude-opus-5-5": true, "claude-fable-5-1": true,
+};
 
-export const FLOW_EFFORT:    EffortTable = { "claude-sonnet-4-6": "high", "claude-opus-4-8": "high" };
-export const CHAT_EFFORT:    EffortTable = { "claude-sonnet-4-6": "high", "claude-opus-4-8": "high" };
-export const EDITOR_EFFORT:  EffortTable = { "claude-sonnet-4-6": "high", "claude-opus-4-8": "high" };
-export const CONTEXT_EFFORT: EffortTable = { "claude-sonnet-4-6": "high", "claude-opus-4-8": "high" };
+export const FLOW_EFFORT: EffortTable = {
+  "claude-sonnet-4-6": "high", "claude-sonnet-5-5": "xhigh",
+  "claude-opus-4-8": "high", "claude-opus-5-5": "xhigh", "claude-fable-5-1": "medium",
+};
+export const CHAT_EFFORT: EffortTable = {
+  "claude-sonnet-4-6": "high", "claude-sonnet-5-5": "medium",
+  "claude-opus-4-8": "high", "claude-opus-5-5": "medium", "claude-fable-5-1": "medium",
+};
+export const EDITOR_EFFORT: EffortTable = {
+  "claude-sonnet-4-6": "high", "claude-sonnet-5-5": "low",
+  "claude-opus-4-8": "high", "claude-opus-5-5": "low", "claude-fable-5-1": "low",
+};
+export const CONTEXT_EFFORT: EffortTable = {
+  "claude-sonnet-4-6": "high", "claude-sonnet-5-5": "medium",
+  "claude-opus-4-8": "high", "claude-opus-5-5": "medium", "claude-fable-5-1": "medium",
+};
+export const SUMMARY_EFFORT: EffortTable = {
+  "claude-sonnet-4-6": "high", "claude-sonnet-5-5": "low",
+  "claude-opus-4-8": "high", "claude-opus-5-5": "low", "claude-fable-5-1": "low",
+};
 
 // Mistral reasoning effort — only models in MISTRAL_REASONING_MODELS
 // are eligible. Determinism wins for FLOW; chat-style functions prefer
@@ -129,6 +160,7 @@ export const SUMMARY_MISTRAL_EFFORT: MistralEffortTable = { "mistral-medium-3-5"
 
 export function resolveThinking(table: ThinkingTable, modelId: string): boolean {
   if (!modelId.startsWith("claude-")) return false;
+  if (CLAUDE_ALWAYS_THINKING.has(modelId)) return true;
   return table[modelId] ?? false;
 }
 
@@ -189,7 +221,10 @@ export function resolveMaxTokens(
   thinkingOn: boolean,
   mistralEffortOn = false,
 ): number {
-  const reasoningOn = thinkingOn || mistralEffortOn;
+  // Reasoning is on when a table or the user asked for it, and always on a
+  // model that cannot stop thinking or only pauses it between tool calls.
+  const reasoningOn = thinkingOn || mistralEffortOn ||
+    CLAUDE_ALWAYS_THINKING.has(modelId) || CLAUDE_THINKING_OFF_BETWEEN_TOOLS.has(modelId);
   if (!reasoningOn) return budget.plain;
   if (!modelId.startsWith("claude-") && !MISTRAL_REASONING_MODELS.has(modelId)) return budget.plain;
   return budget.reasoning;
@@ -218,20 +253,19 @@ export interface ReasoningOption {
   mistral_effort?: MistralEffort;
 }
 
+// Claude options: "off" is thinking off at the default effort (between_tools
+// on Sonnet 5.5); every other option is adaptive thinking at that effort,
+// so the option id doubles as the effort level.
+const CLAUDE_OFF: ReasoningOption = { id: "off", thinking: false, effort: "high" };
+const claudeLevel = (effort: ClaudeEffort): ReasoningOption => ({ id: effort, thinking: true, effort });
+const CLAUDE_LEVELS = (["low", "medium", "high", "xhigh", "max"] as const).map(claudeLevel);
+
 export const CHAT_REASONING_OPTIONS: Readonly<Record<string, readonly ReasoningOption[]>> = {
-  "claude-sonnet-4-6": [
-    { id: "off",    thinking: false, effort: "high" },
-    { id: "low",    thinking: true,  effort: "low" },
-    { id: "medium", thinking: true,  effort: "medium" },
-    { id: "high",   thinking: true,  effort: "high" },
-  ],
-  "claude-opus-4-8": [
-    { id: "off",    thinking: false, effort: "high" },
-    { id: "low",    thinking: true,  effort: "low" },
-    { id: "medium", thinking: true,  effort: "medium" },
-    { id: "high",   thinking: true,  effort: "high" },
-    { id: "max",    thinking: true,  effort: "xhigh" },
-  ],
+  "claude-sonnet-4-6": [CLAUDE_OFF, ...(["low", "medium", "high"] as const).map(claudeLevel)],
+  "claude-sonnet-5-5": [CLAUDE_OFF, ...CLAUDE_LEVELS],
+  "claude-opus-4-8": [CLAUDE_OFF, ...CLAUDE_LEVELS],
+  "claude-opus-5-5": CLAUDE_LEVELS,
+  "claude-fable-5-1": CLAUDE_LEVELS,
   "mistral-medium-3-5": [
     { id: "off",  mistral_effort: "none" },
     { id: "high", mistral_effort: "high" },
@@ -254,6 +288,14 @@ export interface ReasoningTables {
   mistral: MistralEffortTable;
 }
 
+/** The fixed settings of the summary calls (document import, conversation
+ *  memory, writing summary): resolveReasoning(model, undefined, SUMMARY_TABLES). */
+export const SUMMARY_TABLES: ReasoningTables = {
+  thinking: SUMMARY_THINKING,
+  effort: SUMMARY_EFFORT,
+  mistral: SUMMARY_MISTRAL_EFFORT,
+};
+
 export interface ResolvedReasoning {
   thinking: boolean;
   effort: ClaudeEffort | undefined;
@@ -270,7 +312,11 @@ function knobsOf(
   option: ReasoningOption,
 ): Pick<ResolvedReasoning, "thinking" | "effort" | "mistralEffort"> {
   if (modelId.startsWith("claude-")) {
-    return { thinking: option.thinking ?? false, effort: option.effort, mistralEffort: undefined };
+    return {
+      thinking: CLAUDE_ALWAYS_THINKING.has(modelId) || (option.thinking ?? false),
+      effort: option.effort,
+      mistralEffort: undefined,
+    };
   }
   const level = option.mistral_effort;
   return {

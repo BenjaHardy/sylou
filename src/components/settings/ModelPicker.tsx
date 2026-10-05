@@ -1,7 +1,12 @@
 import { useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+/** Shown beside the reasoning select of a model that offers "Max (slow)". */
+const MAX_LEVEL_NOTICE =
+  "Max can exceed the app's time and output limits and come back with no answer. Use it for an occasional deep question, not everyday chat.";
 import {
   PROVIDER_LABELS,
   resolveReasoningId,
@@ -184,6 +189,20 @@ export function ModelPicker({
                               </option>
                             ))}
                           </select>
+                          {reasoning.options.some((o) => o.id === "max") && (
+                            <TooltipProvider delayDuration={300}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button type="button" aria-label="About the Max level" className="text-muted-foreground hover:text-foreground">
+                                    <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-xs text-xs">
+                                  {MAX_LEVEL_NOTICE}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                         </div>
                       )}
                     </div>

@@ -10,7 +10,7 @@ export interface ModelInfo {
   id: string;
   label: string;
   provider: ModelProvider;
-  /** Indicative provider price per 1M tokens, USD. June 2026. */
+  /** Indicative provider price per 1M tokens, USD. October 2026. */
   pricing: { input: number; output: number };
   /** Maximum context window in tokens. */
   contextLimit: number;
@@ -80,6 +80,14 @@ export const MODELS: ModelInfo[] = [
     flowRecommended: true,
   },
   {
+    id: "claude-sonnet-5-5",
+    label: "Claude Sonnet 5.5",
+    provider: "anthropic",
+    pricing: { input: 2.0, output: 10.0 },
+    contextLimit: 1_000_000,
+    flowRecommended: true,
+  },
+  {
     id: "claude-opus-4-8",
     label: "Claude Opus 4.8",
     provider: "anthropic",
@@ -87,12 +95,33 @@ export const MODELS: ModelInfo[] = [
     contextLimit: 1_000_000,
   },
   {
+    id: "claude-opus-5-5",
+    label: "Claude Opus 5.5",
+    provider: "anthropic",
+    pricing: { input: 4.0, output: 20.0 },
+    contextLimit: 1_000_000,
+    flowRecommended: true,
+  },
+  {
+    id: "claude-fable-5-1",
+    label: "Claude Fable 5.1",
+    provider: "anthropic",
+    pricing: { input: 10.0, output: 50.0 },
+    contextLimit: 1_000_000,
+    // Not recommended for FLOW (2026-10 field test): no gain over Opus 5.5
+    // at 2.5x the price.
+    note: "Anthropic's most capable model. Slower, and needs an Anthropic account with 30-day data retention.",
+  },
+  {
     id: "deepseek-v4-flash",
     label: "DeepSeek V4 Flash",
     provider: "deepseek",
-    pricing: { input: 0.14, output: 0.28 },
+    // Legacy id: DeepSeek retired V4 Flash and serves this id with
+    // DeepSeek-V4.1-Flash at the Flash price (peak rate; half off-peak).
+    pricing: { input: 0.30, output: 1.20 },
     contextLimit: 1_000_000,
     isExperimental: true,
+    note: "Served by DeepSeek V4.1 Flash since DeepSeek retired V4 Flash",
   },
 ];
 
@@ -185,9 +214,10 @@ const OFF: ReasoningChoice = { id: "off", label: "Off" };
 const LOW: ReasoningChoice = { id: "low", label: "Low" };
 const MEDIUM: ReasoningChoice = { id: "medium", label: "Medium" };
 const HIGH: ReasoningChoice = { id: "high", label: "High" };
-const MAX: ReasoningChoice = { id: "max", label: "Max" };
-// GLM 5.3's deep-reasoning level thinks for a minute or more before the
-// first answer token (2026-10 measurements): say so where it is chosen.
+/** Claude's xhigh. */
+const EXTRA: ReasoningChoice = { id: "xhigh", label: "Extra" };
+// The deepest level (GLM 5.3's max, Claude's uncapped max) thinks for a
+// minute or more before the first answer token: say so where it is chosen.
 const MAX_SLOW: ReasoningChoice = { id: "max", label: "Max (slow)" };
 
 /** Reasoning levels per chat model (Settings → Models, chat picker) and the
@@ -201,7 +231,10 @@ export const CHAT_REASONING_OPTIONS: Readonly<
   Record<string, { options: ReasoningChoice[]; defaultId: string }>
 > = {
   "claude-sonnet-4-6": { options: [OFF, LOW, MEDIUM, HIGH], defaultId: "off" },
-  "claude-opus-4-8": { options: [OFF, LOW, MEDIUM, HIGH, MAX], defaultId: "high" },
+  "claude-sonnet-5-5": { options: [OFF, LOW, MEDIUM, HIGH, EXTRA, MAX_SLOW], defaultId: "medium" },
+  "claude-opus-4-8": { options: [OFF, LOW, MEDIUM, HIGH, EXTRA, MAX_SLOW], defaultId: "high" },
+  "claude-opus-5-5": { options: [LOW, MEDIUM, HIGH, EXTRA, MAX_SLOW], defaultId: "medium" },
+  "claude-fable-5-1": { options: [LOW, MEDIUM, HIGH, EXTRA, MAX_SLOW], defaultId: "medium" },
   "mistral-medium-3-5": { options: [OFF, HIGH], defaultId: "high" },
   "mistral-small-2603": { options: [OFF, HIGH], defaultId: "off" },
   "zai-glm-5-3": { options: [LOW, HIGH, MAX_SLOW], defaultId: "high" },

@@ -1,14 +1,17 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, isTruncatedStop, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
+import {
+  callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, fallbackReplyText,
+  isProviderTimeout, isRefusalStop, isTruncatedStop, PROVIDER_TIMEOUT_MESSAGE, type LLMMessage, type LLMTool,
+} from "../_shared/_llm.ts";
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
-import { promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
+import { finalCallMessages, finalCallTools, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 import {
-  CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT, SUMMARY_MISTRAL_EFFORT,
-  resolveReasoning, resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
+  CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT, SUMMARY_TABLES,
+  resolveReasoning, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 import {
   fetchConversationMemory,
@@ -112,12 +115,9 @@ Deno.serve(async (req) => {
     const contextMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_RESPONSE, chatModel, thinking, mistralEffort !== undefined);
     // Writing-summary call (#1) keeps fixed settings whatever the user picked:
     // it runs before the stream starts (the hosted idle limit is counting)
-    // and is a delta summary, not a reply — Claude per the context tables,
-    // Mistral / GLM per the summary table (GLM at "low").
-    const summaryThinking = resolveThinking(CONTEXT_THINKING, chatModel);
-    const summaryEffort = resolveEffort(CONTEXT_EFFORT, chatModel);
-    const summaryMistralEffort = resolveMistralEffort(SUMMARY_MISTRAL_EFFORT, chatModel);
-    const summaryMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_SUMMARY, chatModel, summaryThinking, summaryMistralEffort !== undefined);
+    // and is a delta summary, not a reply.
+    const summary = resolveReasoning(chatModel, undefined, SUMMARY_TABLES);
+    const summaryMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_SUMMARY, chatModel, summary.thinking, summary.mistralEffort !== undefined);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
     if (!Deno.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
@@ -264,7 +264,7 @@ Deno.serve(async (req) => {
       creativeDataSection,
     );
 
-    const summaryResult = await callChatModel(chatModel, summaryMessages, summaryMaxTokens, temperature, summaryThinking, summaryEffort, summaryMistralEffort);
+    const summaryResult = await callChatModel(chatModel, summaryMessages, summaryMaxTokens, temperature, summary.thinking, summary.effort, summary.mistralEffort);
     const summaryText = summaryResult.text.trim();
 
     // --- 5. Determine summary update (protocol + merge live in prompts.ts) ---
@@ -340,6 +340,8 @@ Always search when the user asks about: current events, recent news and developm
 Never search for: simple conversational messages (greetings, thanks, acknowledgments), questions about well-established facts, concepts, or definitions, requests for creative writing or brainstorming, follow-up questions where the answer is already in the conversation history, or opinions and advice based on general knowledge.
 
 When in doubt, prefer searching - an unnecessary search is better than an outdated answer.
+
+Limits: you can call tools in up to 5 rounds per reply, and at most 5 tool calls run per round (further calls in the same round are skipped with a notice). Prefer a few precise searches over many broad ones, and spread a longer investigation over several rounds.
 
 When citing information from web search results, always include the source URL inline in your response text (e.g. "According to [Source Title](URL), ..."). This ensures the user can verify and revisit the sources later.`;
     }
@@ -459,7 +461,7 @@ When citing information from web search results, always include the source URL i
             if (toolCalls.length === 0) {
               // No tool use — emit Call #2a text as rapid SSE tokens
               console.log("[stream:context-prompt] no tool use, emitting Call #2a directly");
-              const responseText = call2aContent || "No response generated.";
+              const responseText = call2aContent || fallbackReplyText(norm2a.stopReason);
 
               controller.enqueue(sseEvent({ phase: "responding" }));
 
@@ -474,6 +476,7 @@ When citing information from web search results, always include the source URL i
                   done: true,
                   ai_response: responseText,
                   truncated: isTruncatedStop(norm2a.stopReason),
+                  refused: isRefusalStop(norm2a.stopReason),
                   summary_update: summaryUpdate,
                   action_id: actionRow?.id ?? null,
                   budget_remaining: budgetRemaining,
@@ -518,13 +521,16 @@ When citing information from web search results, always include the source URL i
               totalInputChars += inputCharsAdded;
               totalOutputChars += outputCharsAdded;
 
-              // Call #2b: streaming with tool results (provider-aware via callLLM)
+              // Call #2b: streaming with tool results; no tool calls allowed
+              // (finalCallTools: the list itself stays on the wire for Anthropic)
               console.log("[stream:context-prompt] starting Call #2b streaming");
+              const finalMessages = finalCallMessages(chatModel, toolMessages);
               const call2bRes = await callLLM({
                 model: chatModel,
-                messages: toolMessages,
+                messages: finalMessages,
                 max_tokens: contextMaxTokens,
                 stream: true,
+                ...finalCallTools(chatModel, tools),
                 temperature,
                 thinking,
                 effort,
@@ -537,7 +543,7 @@ When citing information from web search results, always include the source URL i
                 controller.enqueue(sseEvent({ done: true, error: extractProviderError(providerFor(chatModel), call2bRes.status, errText) }));
                 return;
               }
-              totalInputChars += promptChars(toolMessages);
+              totalInputChars += promptChars(finalMessages);
 
               // Read Call #2b stream and forward tokens
               const call2b = await relayProviderStream(call2bRes, providerFor(chatModel), controller, sseEvent);
@@ -547,7 +553,7 @@ When citing information from web search results, always include the source URL i
               if (!fullResponse.trim()) {
                 console.warn("[stream:context-prompt] Call #2b returned no text", { stop_reason: call2b.stopReason, ...call2b.stats });
               }
-              const aiResponse = fullResponse.trim() || "No response generated.";
+              const aiResponse = fullResponse.trim() || fallbackReplyText(call2b.stopReason);
               const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars, totalOutputChars + aiResponse.length);
 
               try {
@@ -558,6 +564,7 @@ When citing information from web search results, always include the source URL i
                     done: true,
                     ai_response: aiResponse,
                     truncated: isTruncatedStop(call2b.stopReason),
+                    refused: isRefusalStop(call2b.stopReason),
                     summary_update: summaryUpdate,
                     action_id: actionRow?.id ?? null,
                     budget_remaining: budgetRemaining,
@@ -570,7 +577,9 @@ When citing information from web search results, always include the source URL i
             }
           } catch (err) {
             console.error("[stream:context-prompt] error in tool-use path:", err);
-            const msg = err instanceof Error && err.message ? sliceSafe(err.message, 200) : "AI service temporarily unavailable.";
+            const msg = isProviderTimeout(err)
+              ? PROVIDER_TIMEOUT_MESSAGE
+              : err instanceof Error && err.message ? sliceSafe(err.message, 200) : "AI service temporarily unavailable.";
             try { controller.enqueue(sseEvent({ done: true, error: msg })); } catch { /* */ }
           } finally {
             // conversation-memory: refresh in the tail, after `done` —
@@ -631,7 +640,7 @@ When citing information from web search results, always include the source URL i
           if (!fullResponse.trim()) {
             console.warn("[stream:context-prompt] reply returned no text", { stop_reason: relay.stopReason, ...relay.stats });
           }
-          const aiResponse = fullResponse.trim() || "No response generated.";
+          const aiResponse = fullResponse.trim() || fallbackReplyText(relay.stopReason);
           const extraInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
           const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars + extraInputChars, totalOutputChars + aiResponse.length);
 
@@ -643,6 +652,7 @@ When citing information from web search results, always include the source URL i
                 done: true,
                 ai_response: aiResponse,
                 truncated: isTruncatedStop(relay.stopReason),
+                refused: isRefusalStop(relay.stopReason),
                 summary_update: summaryUpdate,
                 action_id: actionRow?.id ?? null,
                 budget_remaining: budgetRemaining,

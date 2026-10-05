@@ -44,9 +44,9 @@ describe("MODELS registry", () => {
     for (const m of MODELS) expect(m.isRollingLatest, m.id).toBeFalsy();
   });
 
-  it("exactly one model is recommended for FLOW: Claude Sonnet 4.6 (GLM 5.3 failed the field test, 2026-10-02)", () => {
+  it("the FLOW recommendations are Claude Sonnet 4.6, Sonnet 5.5 and Opus 5.5 (field tests 2026-10-02 / 2026-10-05); Fable 5.1 and GLM 5.3 are not", () => {
     const recommended = MODELS.filter((m) => m.flowRecommended);
-    expect(recommended.map((m) => m.id)).toEqual(["claude-sonnet-4-6"]);
+    expect(recommended.map((m) => m.id)).toEqual(["claude-sonnet-4-6", "claude-sonnet-5-5", "claude-opus-5-5"]);
   });
 
   it("no recommended model carries the experimental badge", () => {
@@ -82,7 +82,13 @@ describe("Settings picker groupings", () => {
       ["mistral", "Mistral API"],
       ["other", "Other providers"],
     ]);
-    expect(ids(groups[0].models)).toEqual(["claude-sonnet-4-6", "claude-opus-4-8"]);
+    expect(ids(groups[0].models)).toEqual([
+      "claude-sonnet-4-6",
+      "claude-sonnet-5-5",
+      "claude-opus-4-8",
+      "claude-opus-5-5",
+      "claude-fable-5-1",
+    ]);
     expect(ids(groups[1].models)).toEqual([
       "mistral-small-2603",
       "mistral-medium-3-5",
@@ -95,7 +101,7 @@ describe("Settings picker groupings", () => {
   it("FLOW: recommended first, everything else in the second group", () => {
     const groups = groupModelsForFlow();
     expect(groups.map((g) => g.id)).toEqual([FLOW_RECOMMENDED_GROUP_ID, FLOW_OTHER_GROUP_ID]);
-    expect(ids(groups[0].models)).toEqual(["claude-sonnet-4-6"]);
+    expect(ids(groups[0].models)).toEqual(["claude-sonnet-4-6", "claude-sonnet-5-5", "claude-opus-5-5"]);
     expect(groups[1].models.every((m) => !m.flowRecommended)).toBe(true);
   });
 
@@ -139,6 +145,28 @@ describe("chat reasoning options (UI mirror of _shared/_thinking.ts)", () => {
   it("GLM 5.3 offers low / high / max with high as the default (max is its deep-reasoning level)", () => {
     expect(CHAT_REASONING_OPTIONS["zai-glm-5-3"].options.map((o) => o.id)).toEqual(["low", "high", "max"]);
     expect(CHAT_REASONING_OPTIONS["zai-glm-5-3"].defaultId).toBe("high");
+  });
+
+  it("Claude: five levels with Extra (xhigh) and Max (slow); no Off on the always-on models; Sonnet 4.6 unchanged", () => {
+    const six = ["off", "low", "medium", "high", "xhigh", "max"];
+    expect(CHAT_REASONING_OPTIONS["claude-sonnet-5-5"].options.map((o) => o.id)).toEqual(six);
+    expect(CHAT_REASONING_OPTIONS["claude-opus-4-8"].options.map((o) => o.id)).toEqual(six);
+    for (const id of ["claude-opus-5-5", "claude-fable-5-1"]) {
+      expect(CHAT_REASONING_OPTIONS[id].options.map((o) => o.id), id).toEqual(["low", "medium", "high", "xhigh", "max"]);
+      expect(CHAT_REASONING_OPTIONS[id].defaultId, id).toBe("medium");
+    }
+    expect(CHAT_REASONING_OPTIONS["claude-sonnet-5-5"].defaultId).toBe("medium");
+    expect(CHAT_REASONING_OPTIONS["claude-opus-4-8"].defaultId).toBe("high");
+    expect(CHAT_REASONING_OPTIONS["claude-sonnet-4-6"].options.map((o) => o.id)).toEqual(["off", "low", "medium", "high"]);
+    expect(resolveReasoningLabel("claude-opus-4-8", { "claude-opus-4-8": "xhigh" })).toBe("Extra");
+    expect(resolveReasoningLabel("claude-fable-5-1", { "claude-fable-5-1": "max" })).toBe("Max (slow)");
+  });
+
+  it("no Claude model carries the experimental badge since the field tests (2026-10-05), and a note only where it matters", () => {
+    for (const m of MODELS.filter((m) => m.provider === "anthropic")) {
+      expect(m.isExperimental, m.id).toBeFalsy();
+    }
+    expect(MODELS.find((m) => m.id === "claude-fable-5-1")?.note).toMatch(/30-day data retention/);
   });
 
   it("the level in force is the stored choice when valid, else the default, and null without a control", () => {

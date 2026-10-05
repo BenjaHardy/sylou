@@ -1,6 +1,6 @@
 // analysis/prompts.test.ts — byte-level pins of the FLOW methodology
 // surface (P4-1 Phase D split). The two templates are versioned
-// methodology artifacts (v1.3_070926): the SHA-256 pins cover their
+// methodology artifacts (v1.4_051026): the SHA-256 pins cover their
 // exact runtime bytes, so ANY edit — even an en-dash swapped for a
 // hyphen or a dropped escaped backtick — goes red here. A red test means
 // the methodology changed; that needs a deliberate version bump and a
@@ -20,19 +20,19 @@ import {
 const sha256 = async (s: string) =>
   encodeHex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
 
-Deno.test("FLOW template bytes are pinned (methodology v1.3_070926)", async () => {
-  assertEquals(FLOW_PROMPT_TEMPLATE.length, 8984);
+Deno.test("FLOW template bytes are pinned (methodology v1.4_051026)", async () => {
+  assertEquals(FLOW_PROMPT_TEMPLATE.length, 8996);
   assertEquals(
     await sha256(FLOW_PROMPT_TEMPLATE),
-    "c65e6e8f13e7c747d33ecd92198b48d5aeac0d34f4fe623b577fe03219249b87",
+    "f793edc5aa94ceffbd51898b81658d9bc56726ef895b6917e914e6bf350c970f",
   );
 });
 
-Deno.test("creative FLOW template bytes are pinned (methodology v1.3_070926)", async () => {
-  assertEquals(CREATIVE_FLOW_PROMPT_TEMPLATE.length, 9380);
+Deno.test("creative FLOW template bytes are pinned (methodology v1.4_051026)", async () => {
+  assertEquals(CREATIVE_FLOW_PROMPT_TEMPLATE.length, 9392);
   assertEquals(
     await sha256(CREATIVE_FLOW_PROMPT_TEMPLATE),
-    "92f9557ba667a90e17252c2d42bb601d233f735a5aa0952c25bdeb76aff381ea",
+    "a94ba4e2ee3c0ee3dc69340d5f552d63c4aecf471e2da485f8dbe52ac09b34fa",
   );
 });
 

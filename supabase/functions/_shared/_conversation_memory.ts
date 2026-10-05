@@ -29,7 +29,7 @@ import {
 } from "./_llm.ts";
 import { OUTPUT_BUDGETS } from "./_models.ts";
 import { SUMMARY_TEMPERATURE, resolveTemperature } from "./_temperatures.ts";
-import { SUMMARY_MISTRAL_EFFORT, resolveMaxTokens, resolveMistralEffort } from "./_thinking.ts";
+import { SUMMARY_TABLES, resolveMaxTokens, resolveReasoning } from "./_thinking.ts";
 import { sliceSafe } from "./_text.ts";
 
 export const MEMORY_REFRESH_THRESHOLD = 50; // uncovered messages before a refresh fires
@@ -232,12 +232,14 @@ export async function maybeRefreshConversationMemory(opts: {
     }
 
     const messages = buildSummaryMessages(existing?.summary_text ?? null, slab, isCreative);
-    const mistralEffort = resolveMistralEffort(SUMMARY_MISTRAL_EFFORT, model);
+    const { thinking, effort, mistralEffort } = resolveReasoning(model, undefined, SUMMARY_TABLES);
     const res = await callLLM({
       model,
       messages,
-      max_tokens: resolveMaxTokens(OUTPUT_BUDGETS.MEMORY, model, false, mistralEffort !== undefined),
+      max_tokens: resolveMaxTokens(OUTPUT_BUDGETS.MEMORY, model, thinking, mistralEffort !== undefined),
       temperature: resolveTemperature(SUMMARY_TEMPERATURE, model),
+      thinking,
+      effort,
       mistral_effort: mistralEffort,
       timeoutMs: MEMORY_TIMEOUT_MS,
     });
