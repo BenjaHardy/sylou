@@ -57,6 +57,22 @@ export function finalCallTools(
   return providerFor(model) === "anthropic" ? { tools, tool_choice: "none" } : {};
 }
 
+/** Appended to the final call on Anthropic: with the tool list still on the
+ *  wire and calls forbidden, a model could otherwise spend the reply planning
+ *  a round it cannot run (seen on Fable 5.1). */
+export const FINAL_CALL_NOTE =
+  "No further tool calls are possible in this reply: write your answer now from the information above.";
+
+/** The final call's messages: on Anthropic the loop's messages plus
+ *  FINAL_CALL_NOTE as a trailing user message (appended after the tool
+ *  results, so the echoed thinking blocks' prefix is untouched); the loop's
+ *  messages unchanged elsewhere. */
+export function finalCallMessages(model: string, toolMessages: LLMMessage[]): LLMMessage[] {
+  return providerFor(model) === "anthropic"
+    ? [...toolMessages, { role: "user", content: FINAL_CALL_NOTE }]
+    : toolMessages;
+}
+
 /** Prompt size in characters for the usage estimate: every message's
  *  content plus any echoed tool calls. */
 export function promptChars(messages: LLMMessage[]): number {

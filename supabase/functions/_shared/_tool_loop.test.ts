@@ -1,7 +1,10 @@
 // Deno unit tests for the shared tool-resolution loop.
 // Run with: deno test --allow-read supabase/functions/_shared/_tool_loop.test.ts
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { finalCallTools, promptChars, ROUND_LIMIT_NOTE, runToolLoop, type ToolLoopDeps } from "./_tool_loop.ts";
+import {
+  FINAL_CALL_NOTE, finalCallMessages, finalCallTools, promptChars, ROUND_LIMIT_NOTE, runToolLoop,
+  type ToolLoopDeps,
+} from "./_tool_loop.ts";
 import { buildWebSearchTool } from "./_tools.ts";
 import type { LLMMessage } from "./_llm.ts";
 
@@ -132,5 +135,21 @@ Deno.test("finalCallTools: Anthropic keeps the tool list with tool_choice none; 
   assertEquals(finalCallTools("claude-sonnet-5-5", tools), { tools, tool_choice: "none" });
   for (const model of ["zai-glm-5-3", "mistral-medium-3-5", "deepseek-v4-flash"]) {
     assertEquals(finalCallTools(model, tools), {}, model);
+  }
+});
+
+Deno.test("finalCallMessages: Anthropic gets the note appended after the tool results; the other providers get the same array", () => {
+  const toolMessages: LLMMessage[] = [
+    { role: "system", content: "S" },
+    { role: "assistant", content: "", tool_calls: [{ id: "c1", type: "function", function: { name: "web_search", arguments: "{}" } }] },
+    { role: "tool", tool_call_id: "c1", content: "results" },
+  ];
+  const anthropic = finalCallMessages("claude-fable-5-1", toolMessages);
+  assertEquals(anthropic.length, 4);
+  assertEquals(anthropic.slice(0, 3), toolMessages);
+  assertEquals(anthropic.at(-1), { role: "user", content: FINAL_CALL_NOTE });
+  assertEquals(toolMessages.length, 3, "the loop's array is not mutated");
+  for (const model of ["zai-glm-5-3", "mistral-small-2603", "deepseek-v4-flash"]) {
+    assert(finalCallMessages(model, toolMessages) === toolMessages, model);
   }
 });

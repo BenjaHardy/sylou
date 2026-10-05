@@ -5,7 +5,7 @@ import {
 } from "../_shared/_llm.ts";
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
-import { finalCallTools, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
+import { finalCallMessages, finalCallTools, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
@@ -524,9 +524,10 @@ When citing information from web search results, always include the source URL i
               // Call #2b: streaming with tool results; no tool calls allowed
               // (finalCallTools: the list itself stays on the wire for Anthropic)
               console.log("[stream:context-prompt] starting Call #2b streaming");
+              const finalMessages = finalCallMessages(chatModel, toolMessages);
               const call2bRes = await callLLM({
                 model: chatModel,
-                messages: toolMessages,
+                messages: finalMessages,
                 max_tokens: contextMaxTokens,
                 stream: true,
                 ...finalCallTools(chatModel, tools),
@@ -542,7 +543,7 @@ When citing information from web search results, always include the source URL i
                 controller.enqueue(sseEvent({ done: true, error: extractProviderError(providerFor(chatModel), call2bRes.status, errText) }));
                 return;
               }
-              totalInputChars += promptChars(toolMessages);
+              totalInputChars += promptChars(finalMessages);
 
               // Read Call #2b stream and forward tokens
               const call2b = await relayProviderStream(call2bRes, providerFor(chatModel), controller, sseEvent);
