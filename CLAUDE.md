@@ -210,6 +210,10 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
     `*_MISTRAL_EFFORT` + `MISTRAL_REASONING_MODELS` allowlist
     (Mistral Large 3 returns 422 if `reasoning_effort` is sent),
     and `resolveMaxTokens()` for thinking-aware budget headroom.
+  - `_models.ts` — the model facts that gate the wire format and the
+    effort unions (`CLAUDE_ALWAYS_THINKING`, `CLAUDE_THINKING_OFF_BETWEEN_TOOLS`,
+    `ClaudeEffort`, `MistralEffort`): the one module `_llm.ts` and
+    `_thinking.ts` both import without a cycle.
 - **No router bypasses**: every LLM call goes through `_llm.ts`.
   (`extract-text`'s former hardcoded Mistral call was removed in #10 — it
   now summarizes with the user's `preferred_chat_model` and silently falls

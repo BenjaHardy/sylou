@@ -48,23 +48,16 @@
 //   resolveMistralEffort all return falsy for DeepSeek so the request body
 //   is untouched.
 //
-// Per-function intent:
-//   FLOW    — schema-bound analysis. Sonnet 4.6 without thinking (100%
-//             Structured Outputs success); Opus 4.8 adaptive at high;
-//             Sonnet 5.5 and Opus 5.5 at xhigh, Fable 5.1 at medium (one
-//             non-streamed call under the 145 s abort). Mistral Small at
-//             "high", Medium 3.5 at "none", GLM 5.3 at "high".
-//   CHAT    — Opus 4.8 at high; Sonnet 5.5, Opus 5.5 and Fable 5.1 at
-//             medium. Mistral Medium 3.5 at "high" (worth the latency);
-//             Small at "none" (chat speed); GLM 5.3 at "high" ("max"
-//             thinks for a minute or more).
-//   EDITOR  — inline rewrites: the 5.5 models and Fable 5.1 at low;
-//             Mistral reasoning OFF (GLM 5.3 at "low": it cannot switch
-//             reasoning off).
-//   CONTEXT — the Ask/Propose reply: as CHAT.
-//   SUMMARY — document-import, conversation-memory and writing-summary
-//             calls: Claude 4.x without thinking, the 5.5 models and
-//             Fable 5.1 at low; Mistral reasoning OFF, GLM 5.3 at "low".
+// Per-function intent (the cells below are the decisions; only the reasons
+// live here):
+//   FLOW    — Sonnet 4.6 without thinking: 100% Structured Outputs success.
+//             Fable 5.1 at medium: one non-streamed call under the 145 s abort.
+//   CHAT / CONTEXT — the 5.5 models and Fable 5.1 at medium (the providers'
+//             recommended start); GLM 5.3 at "high" ("max" thinks for a
+//             minute or more); Mistral Small at "none" for chat speed.
+//   EDITOR / SUMMARY — the lightest level that still answers: low on the
+//             thinking Claude models, "low" on GLM 5.3 (it cannot switch
+//             reasoning off), off elsewhere.
 //
 // Regression guardrails (operate against baseline elapsed times
 // captured immediately after deploy):
@@ -82,10 +75,15 @@
 //     whoever selects it.
 // ============================================================
 
-import { CLAUDE_ALWAYS_THINKING, type OutputBudget } from "./_models.ts";
+import {
+  CLAUDE_ALWAYS_THINKING,
+  CLAUDE_THINKING_OFF_BETWEEN_TOOLS,
+  type ClaudeEffort,
+  type MistralEffort,
+  type OutputBudget,
+} from "./_models.ts";
 
-export type ClaudeEffort  = "low" | "medium" | "high" | "xhigh" | "max";
-export type MistralEffort = "low" | "high" | "max" | "none";
+export type { ClaudeEffort, MistralEffort };
 
 export type ThinkingTable       = Record<string, boolean>;
 export type EffortTable         = Record<string, ClaudeEffort>;
@@ -223,7 +221,10 @@ export function resolveMaxTokens(
   thinkingOn: boolean,
   mistralEffortOn = false,
 ): number {
-  const reasoningOn = thinkingOn || mistralEffortOn;
+  // Reasoning is on when a table or the user asked for it, and always on a
+  // model that cannot stop thinking or only pauses it between tool calls.
+  const reasoningOn = thinkingOn || mistralEffortOn ||
+    CLAUDE_ALWAYS_THINKING.has(modelId) || CLAUDE_THINKING_OFF_BETWEEN_TOOLS.has(modelId);
   if (!reasoningOn) return budget.plain;
   if (!modelId.startsWith("claude-") && !MISTRAL_REASONING_MODELS.has(modelId)) return budget.plain;
   return budget.reasoning;
@@ -252,43 +253,19 @@ export interface ReasoningOption {
   mistral_effort?: MistralEffort;
 }
 
+// Claude options: "off" is thinking off at the default effort (between_tools
+// on Sonnet 5.5); every other option is adaptive thinking at that effort,
+// so the option id doubles as the effort level.
+const CLAUDE_OFF: ReasoningOption = { id: "off", thinking: false, effort: "high" };
+const claudeLevel = (effort: ClaudeEffort): ReasoningOption => ({ id: effort, thinking: true, effort });
+const CLAUDE_LEVELS = (["low", "medium", "high", "xhigh", "max"] as const).map(claudeLevel);
+
 export const CHAT_REASONING_OPTIONS: Readonly<Record<string, readonly ReasoningOption[]>> = {
-  "claude-sonnet-4-6": [
-    { id: "off",    thinking: false, effort: "high" },
-    { id: "low",    thinking: true,  effort: "low" },
-    { id: "medium", thinking: true,  effort: "medium" },
-    { id: "high",   thinking: true,  effort: "high" },
-  ],
-  "claude-sonnet-5-5": [
-    { id: "off",    thinking: false, effort: "high" },
-    { id: "low",    thinking: true,  effort: "low" },
-    { id: "medium", thinking: true,  effort: "medium" },
-    { id: "high",   thinking: true,  effort: "high" },
-    { id: "xhigh",  thinking: true,  effort: "xhigh" },
-    { id: "max",    thinking: true,  effort: "max" },
-  ],
-  "claude-opus-4-8": [
-    { id: "off",    thinking: false, effort: "high" },
-    { id: "low",    thinking: true,  effort: "low" },
-    { id: "medium", thinking: true,  effort: "medium" },
-    { id: "high",   thinking: true,  effort: "high" },
-    { id: "xhigh",  thinking: true,  effort: "xhigh" },
-    { id: "max",    thinking: true,  effort: "max" },
-  ],
-  "claude-opus-5-5": [
-    { id: "low",    thinking: true,  effort: "low" },
-    { id: "medium", thinking: true,  effort: "medium" },
-    { id: "high",   thinking: true,  effort: "high" },
-    { id: "xhigh",  thinking: true,  effort: "xhigh" },
-    { id: "max",    thinking: true,  effort: "max" },
-  ],
-  "claude-fable-5-1": [
-    { id: "low",    thinking: true,  effort: "low" },
-    { id: "medium", thinking: true,  effort: "medium" },
-    { id: "high",   thinking: true,  effort: "high" },
-    { id: "xhigh",  thinking: true,  effort: "xhigh" },
-    { id: "max",    thinking: true,  effort: "max" },
-  ],
+  "claude-sonnet-4-6": [CLAUDE_OFF, ...(["low", "medium", "high"] as const).map(claudeLevel)],
+  "claude-sonnet-5-5": [CLAUDE_OFF, ...CLAUDE_LEVELS],
+  "claude-opus-4-8": [CLAUDE_OFF, ...CLAUDE_LEVELS],
+  "claude-opus-5-5": CLAUDE_LEVELS,
+  "claude-fable-5-1": CLAUDE_LEVELS,
   "mistral-medium-3-5": [
     { id: "off",  mistral_effort: "none" },
     { id: "high", mistral_effort: "high" },
@@ -311,6 +288,14 @@ export interface ReasoningTables {
   mistral: MistralEffortTable;
 }
 
+/** The fixed settings of the summary calls (document import, conversation
+ *  memory, writing summary): resolveReasoning(model, undefined, SUMMARY_TABLES). */
+export const SUMMARY_TABLES: ReasoningTables = {
+  thinking: SUMMARY_THINKING,
+  effort: SUMMARY_EFFORT,
+  mistral: SUMMARY_MISTRAL_EFFORT,
+};
+
 export interface ResolvedReasoning {
   thinking: boolean;
   effort: ClaudeEffort | undefined;
@@ -327,7 +312,11 @@ function knobsOf(
   option: ReasoningOption,
 ): Pick<ResolvedReasoning, "thinking" | "effort" | "mistralEffort"> {
   if (modelId.startsWith("claude-")) {
-    return { thinking: option.thinking ?? false, effort: option.effort, mistralEffort: undefined };
+    return {
+      thinking: CLAUDE_ALWAYS_THINKING.has(modelId) || (option.thinking ?? false),
+      effort: option.effort,
+      mistralEffort: undefined,
+    };
   }
   const level = option.mistral_effort;
   return {

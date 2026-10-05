@@ -6,18 +6,23 @@ import { ALLOWED_MODELS } from "./_models.ts";
 import {
   CHAT_TEMPERATURE,
   FLOW_TEMPERATURE,
+  NO_TEMPERATURE_MODELS,
   SUMMARY_TEMPERATURE,
   resolveTemperature,
 } from "./_temperatures.ts";
 
-const NO_TEMPERATURE = ["claude-opus-4-8", "claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1"];
-
-Deno.test("Opus 4.7+, Sonnet 5.5 and Fable 5.1 never receive a temperature, even from a table entry", () => {
-  for (const id of NO_TEMPERATURE) {
+Deno.test("the temperature-free set is Opus 4.7+, Sonnet 5.5 and Fable 5.1, and never receives a value, even from a table entry", () => {
+  assertEquals([...NO_TEMPERATURE_MODELS].sort(), [
+    "claude-fable-5-1",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-opus-5-5",
+    "claude-sonnet-5-5",
+  ]);
+  for (const id of NO_TEMPERATURE_MODELS) {
     assertEquals(resolveTemperature(FLOW_TEMPERATURE, id), undefined, id);
     assertEquals(resolveTemperature({ [id]: 0 }, id), undefined, id);
   }
-  assertEquals(resolveTemperature({ "claude-opus-4-7": 0.5 }, "claude-opus-4-7"), undefined);
 });
 
 Deno.test("Sonnet 4.6 keeps its temperatures (FLOW at 0), clamped to Claude's [0, 1]", () => {
@@ -29,8 +34,7 @@ Deno.test("Sonnet 4.6 keeps its temperatures (FLOW at 0), clamped to Claude's [0
 
 Deno.test("every allowed Claude model is either temperature-free or in every table; unknown ids get nothing", () => {
   for (const id of [...ALLOWED_MODELS].filter((m) => m.startsWith("claude-"))) {
-    const free = NO_TEMPERATURE.includes(id);
-    assertEquals(resolveTemperature(FLOW_TEMPERATURE, id) === undefined, free, id);
+    assertEquals(resolveTemperature(FLOW_TEMPERATURE, id) === undefined, NO_TEMPERATURE_MODELS.has(id), id);
   }
   assertEquals(resolveTemperature(FLOW_TEMPERATURE, "claude-haiku-4-5"), undefined);
 });

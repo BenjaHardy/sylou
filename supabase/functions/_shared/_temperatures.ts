@@ -58,7 +58,7 @@ export type TemperatureTable = Record<string, number>;
 // the field entirely. As Anthropic ships new models, add them here
 // only if they share this constraint — do NOT generalize to "all
 // Claude models" (Sonnet 4.6 explicitly accepts temperature).
-const NO_TEMPERATURE_MODELS = new Set<string>([
+export const NO_TEMPERATURE_MODELS: ReadonlySet<string> = new Set<string>([
   "claude-opus-4-7",
   "claude-opus-4-8",
   "claude-sonnet-5-5",

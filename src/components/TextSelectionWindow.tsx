@@ -129,6 +129,10 @@ export function TextSelectionWindow({
   // confirmation. The editor actions hide behind a notice for selections
   // their budget cannot rewrite, until the user acknowledges it.
   const [resultTruncated, setResultTruncated] = useState(false);
+  // A provider safety refusal (`refused` on the done event): the server's
+  // explanation arrives as the result text, shown as a notice, never offered
+  // for insertion; Reject still records the outcome on the action row.
+  const [resultRefused, setResultRefused] = useState(false);
   const [confirmAcceptOpen, setConfirmAcceptOpen] = useState(false);
   const [largeSelectionAcknowledged, setLargeSelectionAcknowledged] = useState(false);
 
@@ -318,10 +322,12 @@ export function TextSelectionWindow({
             },
             onDone: (evt) => {
               const result = (evt.result as string) || "";
+              const refused = evt.refused === true;
               setProposedText(result);
               setResultTruncated(evt.truncated === true);
+              setResultRefused(refused);
               setCurrentActionId((evt.action_id as string) ?? null);
-              provenanceTracker?.registerAiResultText(result);
+              if (!refused) provenanceTracker?.registerAiResultText(result);
               setPhase("result");
             },
             onError: (err) => {
@@ -485,10 +491,12 @@ export function TextSelectionWindow({
                   }
                 }
                 const aiResponse = (evt.ai_response as string) || "";
+                const refused = evt.refused === true;
                 setProposedText(aiResponse);
                 setResultTruncated(evt.truncated === true);
+                setResultRefused(refused);
                 setCurrentActionId((evt.action_id as string) ?? null);
-                provenanceTracker?.registerAiResultText(aiResponse);
+                if (!refused) provenanceTracker?.registerAiResultText(aiResponse);
                 setPhase("result");
               }
             },
@@ -774,12 +782,18 @@ export function TextSelectionWindow({
                   {selectedText.length > 200 && "…"}
                 </p>
               </div>
-              <div>
-                <span className="font-semibold text-muted-foreground">Proposed:</span>
-                <p className="mt-0.5 p-2 rounded-md bg-primary/10 text-foreground leading-relaxed max-h-24 overflow-y-auto">
+              {resultRefused ? (
+                <p role="status" className="p-2 rounded-md border border-border bg-muted text-foreground">
                   {proposedText}
                 </p>
-              </div>
+              ) : (
+                <div>
+                  <span className="font-semibold text-muted-foreground">Proposed:</span>
+                  <p className="mt-0.5 p-2 rounded-md bg-primary/10 text-foreground leading-relaxed max-h-24 overflow-y-auto">
+                    {proposedText}
+                  </p>
+                </div>
+              )}
               {resultTruncated && (
                 <p role="status" className="p-2 rounded-md border border-border bg-muted text-foreground">
                   The AI stopped at its output limit, this result is incomplete. Accepting will
@@ -788,24 +802,26 @@ export function TextSelectionWindow({
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                className="h-7 text-xs gap-1"
-                onClick={() => (resultTruncated ? setConfirmAcceptOpen(true) : void handleAccept())}
-                disabled={accepting}
-              >
-                {accepting ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Inserting…
-                  </>
-                ) : (
-                  <>
-                    <Check className="h-3.5 w-3.5" />
-                    Accept
-                  </>
-                )}
-              </Button>
+              {!resultRefused && (
+                <Button
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => (resultTruncated ? setConfirmAcceptOpen(true) : void handleAccept())}
+                  disabled={accepting}
+                >
+                  {accepting ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Inserting…
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      Accept
+                    </>
+                  )}
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="ghost"

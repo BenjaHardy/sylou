@@ -2,10 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, envKeyFor } from "../_shared/_llm.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { OUTPUT_BUDGETS } from "../_shared/_models.ts";
-import {
-  SUMMARY_EFFORT, SUMMARY_MISTRAL_EFFORT, SUMMARY_THINKING,
-  resolveEffort, resolveMaxTokens, resolveMistralEffort, resolveThinking,
-} from "../_shared/_thinking.ts";
+import { SUMMARY_TABLES, resolveMaxTokens, resolveReasoning } from "../_shared/_thinking.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 
 // --- CORS allow-list (parsed once at module load) ---
@@ -153,15 +150,14 @@ Deno.serve(async (req) => {
         const summaryPrompt = `Summarize the following document in 3-5 sentences. Focus on the main topics, arguments, and conclusions. This summary will be used to help an AI assistant decide whether to read the full document when answering user questions.\n\n${textForSummary}`;
 
         try {
-          const thinking = resolveThinking(SUMMARY_THINKING, summaryModel);
-          const mistralEffort = resolveMistralEffort(SUMMARY_MISTRAL_EFFORT, summaryModel);
+          const { thinking, effort, mistralEffort } = resolveReasoning(summaryModel, undefined, SUMMARY_TABLES);
           const llmRes = await callLLM({
             model: summaryModel,
             messages: [{ role: "user" as const, content: summaryPrompt }],
             max_tokens: resolveMaxTokens(OUTPUT_BUDGETS.DOC_SUMMARY, summaryModel, thinking, mistralEffort !== undefined),
             temperature: resolveTemperature(CHAT_TEMPERATURE, summaryModel),
             thinking,
-            effort: resolveEffort(SUMMARY_EFFORT, summaryModel),
+            effort,
             mistral_effort: mistralEffort,
           });
 

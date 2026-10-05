@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, fallbackReplyText, isTruncatedStop, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
+import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, fallbackReplyText, isRefusalStop, isTruncatedStop, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { finalCallTools, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
@@ -7,9 +7,8 @@ import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperature
 import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 import {
-  CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT,
-  SUMMARY_THINKING, SUMMARY_EFFORT, SUMMARY_MISTRAL_EFFORT,
-  resolveReasoning, resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
+  CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT, SUMMARY_TABLES,
+  resolveReasoning, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 import {
   fetchConversationMemory,
@@ -113,12 +112,9 @@ Deno.serve(async (req) => {
     const contextMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_RESPONSE, chatModel, thinking, mistralEffort !== undefined);
     // Writing-summary call (#1) keeps fixed settings whatever the user picked:
     // it runs before the stream starts (the hosted idle limit is counting)
-    // and is a delta summary, not a reply — the summary tables (Claude 4.x
-    // without thinking, the 5.5 models and Fable at low, GLM at "low").
-    const summaryThinking = resolveThinking(SUMMARY_THINKING, chatModel);
-    const summaryEffort = resolveEffort(SUMMARY_EFFORT, chatModel);
-    const summaryMistralEffort = resolveMistralEffort(SUMMARY_MISTRAL_EFFORT, chatModel);
-    const summaryMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_SUMMARY, chatModel, summaryThinking, summaryMistralEffort !== undefined);
+    // and is a delta summary, not a reply.
+    const summary = resolveReasoning(chatModel, undefined, SUMMARY_TABLES);
+    const summaryMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_SUMMARY, chatModel, summary.thinking, summary.mistralEffort !== undefined);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
     if (!Deno.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
@@ -265,7 +261,7 @@ Deno.serve(async (req) => {
       creativeDataSection,
     );
 
-    const summaryResult = await callChatModel(chatModel, summaryMessages, summaryMaxTokens, temperature, summaryThinking, summaryEffort, summaryMistralEffort);
+    const summaryResult = await callChatModel(chatModel, summaryMessages, summaryMaxTokens, temperature, summary.thinking, summary.effort, summary.mistralEffort);
     const summaryText = summaryResult.text.trim();
 
     // --- 5. Determine summary update (protocol + merge live in prompts.ts) ---
@@ -475,6 +471,7 @@ When citing information from web search results, always include the source URL i
                   done: true,
                   ai_response: responseText,
                   truncated: isTruncatedStop(norm2a.stopReason),
+                  refused: isRefusalStop(norm2a.stopReason),
                   summary_update: summaryUpdate,
                   action_id: actionRow?.id ?? null,
                   budget_remaining: budgetRemaining,
@@ -561,6 +558,7 @@ When citing information from web search results, always include the source URL i
                     done: true,
                     ai_response: aiResponse,
                     truncated: isTruncatedStop(call2b.stopReason),
+                    refused: isRefusalStop(call2b.stopReason),
                     summary_update: summaryUpdate,
                     action_id: actionRow?.id ?? null,
                     budget_remaining: budgetRemaining,
@@ -646,6 +644,7 @@ When citing information from web search results, always include the source URL i
                 done: true,
                 ai_response: aiResponse,
                 truncated: isTruncatedStop(relay.stopReason),
+                refused: isRefusalStop(relay.stopReason),
                 summary_update: summaryUpdate,
                 action_id: actionRow?.id ?? null,
                 budget_remaining: budgetRemaining,

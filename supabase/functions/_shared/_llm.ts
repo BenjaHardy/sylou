@@ -15,21 +15,10 @@
 // ============================================================
 
 import { sliceSafe } from "./_text.ts";
-import { CLAUDE_THINKING_OFF_BETWEEN_TOOLS } from "./_models.ts";
+import { CLAUDE_THINKING_OFF_BETWEEN_TOOLS, type ClaudeEffort, type MistralEffort } from "./_models.ts";
 
 export type ProviderId = "mistral" | "anthropic" | "deepseek";
-
-// Effort taxonomy is provider-specific:
-//   - Anthropic (Claude): "low" | "medium" | "high" | "xhigh" | "max"
-//   - Mistral reasoning models (Medium 3.5, Small): "high" | "none";
-//     GLM 5.3 (third-party via Mistral, reasoning-only) accepts
-//     "low" | "high" | "max" instead
-// See _shared/_thinking.ts for the canonical types and the per-function
-// tables. We re-declare the literal unions here only to keep _llm.ts
-// free of cross-imports from _thinking.ts (avoids a circular dep risk
-// as both files grow).
-export type ClaudeEffort  = "low" | "medium" | "high" | "xhigh" | "max";
-export type MistralEffort = "low" | "high" | "max" | "none";
+export type { ClaudeEffort, MistralEffort };
 
 export interface LLMTool {
   // OpenAI-style tool definition
@@ -171,10 +160,18 @@ export function toAnthropicBody(opts: {
   // "off" is between_tools. Thinking blocks come back inside content[];
   // normaliseResponse reads only the text / tool_use ones and keeps the
   // whole array as raw_content for the echo. Defaults: _thinking.ts.
+  const betweenTools = !opts.thinking && CLAUDE_THINKING_OFF_BETWEEN_TOOLS.has(opts.model);
   if (opts.thinking) {
     body.thinking = { type: "adaptive" };
-  } else if (CLAUDE_THINKING_OFF_BETWEEN_TOOLS.has(opts.model)) {
+  } else if (betweenTools) {
     body.thinking = { type: "between_tools" };
+  }
+  // between_tools is accepted at effort high or below; clamp loudly, as
+  // resolveEffort does for Sonnet 4.6 and xhigh.
+  let effort = opts.effort;
+  if (betweenTools && (effort === "xhigh" || effort === "max")) {
+    console.warn(`[effort] ${opts.model}: between_tools does not accept ${effort}; clamped to high`);
+    effort = "high";
   }
   // Structured Outputs (JSON outputs) — GA on Sonnet 4.6 / Opus 4.7+ on the
   // Claude API; no beta header required. When set, we do NOT also send
@@ -189,8 +186,8 @@ export function toAnthropicBody(opts: {
       schema: sanitizeAnthropicSchema(opts.json_schema.schema),
     };
   }
-  if (opts.effort) {
-    outputConfig.effort = opts.effort;
+  if (effort) {
+    outputConfig.effort = effort;
   }
   if (Object.keys(outputConfig).length > 0) {
     body.output_config = outputConfig;
@@ -476,7 +473,7 @@ export function normaliseResponse(
     // throw a tagged StructuredOutputError so callers can branch deterministically.
     if (opts?.structuredOutputName) {
       const stopReason = r.stop_reason ?? null;
-      if (stopReason === "refusal") {
+      if (isRefusalStop(stopReason)) {
         throw new StructuredOutputError(
           STRUCTURED_OUTPUT_REFUSAL,
           "Claude declined to produce a structured output for this request.",

@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, normaliseResponse, extractProviderError, fallbackReplyText, isTruncatedStop } from "../_shared/_llm.ts";
+import { callLLM, providerFor, normaliseResponse, extractProviderError, fallbackReplyText, isRefusalStop, isTruncatedStop } from "../_shared/_llm.ts";
 import { makeSSEHelpers, readProviderStream } from "../_shared/_sse.ts";
 import { EDITOR_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
@@ -310,6 +310,7 @@ Deno.serve(async (req) => {
                         done: true,
                         result: proposedText,
                         truncated: isTruncatedStop(stopReason),
+                        refused: isRefusalStop(stopReason),
                         action_id: actionRow?.id ?? null,
                         budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
                       })
@@ -438,6 +439,7 @@ Deno.serve(async (req) => {
 
     return jsonResponse({
       proposed_text: proposedText,
+      refused: isRefusalStop(norm.stopReason),
       action_id: actionRow?.id ?? null,
       tokens_used: estimatedTokens,
       budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,

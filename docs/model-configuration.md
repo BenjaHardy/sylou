@@ -259,7 +259,7 @@ The max_tokens ceiling follows the choice: the reasoning ceiling applies wheneve
    
         Claude: add to every *_THINKING and *_EFFORT table (FLOW, CHAT, EDITOR, CONTEXT, SUMMARY; a test checks every Claude model is in every table). If the model cannot turn thinking off, add it to CLAUDE_ALWAYS_THINKING in _models.ts; if its "off" is `between_tools`, to CLAUDE_THINKING_OFF_BETWEEN_TOOLS.
         Mistral: add to the *_MISTRAL_EFFORT tables (FLOW, CHAT, EDITOR, CONTEXT, SUMMARY) and to the MISTRAL_REASONING_MODELS allowlist. A reasoning-only model needs an explicit level in every table (never "none").
-        DeepSeek: only if routing to v4-flash's thinking mode; deepseek-v4-flash (non-thinking) has no reasoning toggle.
+        DeepSeek: deepseek-v4-flash is served in thinking mode by default (V4.1 Flash); its thinking / reasoning_effort fields are not configured yet (follow-up).
    
     Check NO_TEMPERATURE_MODELS in _temperatures.ts (Anthropic Opus 4.7+ rejects temperature).
 

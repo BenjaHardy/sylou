@@ -2,7 +2,8 @@
 // Run with: deno test --allow-read supabase/functions/_shared/_tool_loop.test.ts
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { finalCallTools, promptChars, ROUND_LIMIT_NOTE, runToolLoop, type ToolLoopDeps } from "./_tool_loop.ts";
-import type { LLMMessage, LLMTool } from "./_llm.ts";
+import { buildWebSearchTool } from "./_tools.ts";
+import type { LLMMessage } from "./_llm.ts";
 
 // Document reads always succeed, so no network is needed.
 const docClient = {
@@ -126,7 +127,7 @@ Deno.test("tool loop: counts the whole re-sent prompt of every check call", asyn
 });
 
 Deno.test("finalCallTools: Anthropic keeps the tool list with tool_choice none; the other providers send nothing", () => {
-  const tools: LLMTool[] = [{ type: "function", function: { name: "web_search", description: "d", parameters: {} } }];
+  const tools = [buildWebSearchTool()];
   assertEquals(finalCallTools("claude-opus-4-8", tools), { tools, tool_choice: "none" });
   assertEquals(finalCallTools("claude-sonnet-5-5", tools), { tools, tool_choice: "none" });
   for (const model of ["zai-glm-5-3", "mistral-medium-3-5", "deepseek-v4-flash"]) {

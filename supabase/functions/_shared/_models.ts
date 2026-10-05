@@ -50,6 +50,13 @@ export const CLAUDE_THINKING_OFF_BETWEEN_TOOLS: ReadonlySet<string> = new Set([
   "claude-sonnet-5-5",
 ]);
 
+/** Reasoning-depth vocabularies, provider-specific. Claude: `output_config.effort`
+ *  (Sonnet 4.6 stops at high; the others go to max). Mistral API:
+ *  `reasoning_effort` ("high" | "none" on Mistral's own models, "low" |
+ *  "high" | "max" on GLM 5.3). */
+export type ClaudeEffort = "low" | "medium" | "high" | "xhigh" | "max";
+export type MistralEffort = "low" | "high" | "max" | "none";
+
 /**
  * Per-request ceilings for user-supplied text fields, in characters
  * (~4 chars ≈ 1 token). Generous multiples of anything the shipped UI can

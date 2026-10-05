@@ -516,6 +516,12 @@ Deno.test("toAnthropicBody: thinking on is adaptive; off is between_tools on Son
   for (const model of ["claude-sonnet-4-6", "claude-opus-4-8", "claude-opus-5-5", "claude-fable-5-1"]) {
     assert(!("thinking" in toAnthropicBody({ model, messages: [], max_tokens: 10, thinking: false })), model);
   }
+  // between_tools is accepted at effort high or below: higher levels clamp.
+  const clamped = toAnthropicBody({ model: "claude-sonnet-5-5", messages: [], max_tokens: 10, thinking: false, effort: "xhigh" });
+  assertEquals(clamped.thinking, { type: "between_tools" });
+  assertEquals(clamped.output_config, { effort: "high" });
+  const adaptiveMax = toAnthropicBody({ model: "claude-sonnet-5-5", messages: [], max_tokens: 10, thinking: true, effort: "max" });
+  assertEquals(adaptiveMax.output_config, { effort: "max" });
 });
 
 Deno.test("fallbackReplyText: an explicit message on a refusal, the placeholder otherwise", () => {

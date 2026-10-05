@@ -171,7 +171,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
             </div>
 
             <p className="text-[11px] text-muted-foreground italic border-t pt-3">
-              Indicative provider rates as of June 2026 — shown for transparency.
+              Indicative provider rates as of October 2026 — shown for transparency.
               Switching models takes effect on your next prompt; in-flight
               requests finish on the previous model.
             </p>

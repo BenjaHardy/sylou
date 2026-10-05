@@ -23,6 +23,7 @@ import {
   MISTRAL_REASONING_MODELS,
   SUMMARY_EFFORT,
   SUMMARY_MISTRAL_EFFORT,
+  SUMMARY_TABLES,
   SUMMARY_THINKING,
   defaultReasoningId,
   resolveEffort,
@@ -149,7 +150,10 @@ Deno.test("always-on models think whatever a table says, and the reasoning ceili
     assertEquals(resolveThinking({}, id), true, `${id}: forced on even without an entry`);
     assertEquals(resolveThinking({ [id]: false }, id), true, `${id}: forced on even when a table says false`);
     assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CHAT, id, resolveThinking({}, id)), 24_000, id);
-    assert(!CHAT_REASONING_OPTIONS[id].some((o) => o.thinking === false), `${id}: no "off" option`);
+    // The ceiling is structural: a caller passing false still gets the reasoning member.
+    assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.DOC_SUMMARY, id, false), 2_000, id);
+    assert(CHAT_REASONING_OPTIONS[id].every((o) => o.thinking === true), `${id}: no "off" option`);
+    assertEquals(resolveReasoning(id, undefined, SUMMARY_TABLES).thinking, true, id);
   }
   // The rule is specific: Sonnet 4.6 and Opus 4.8 still follow their tables.
   assertEquals(resolveThinking({}, "claude-sonnet-4-6"), false);
@@ -161,6 +165,9 @@ Deno.test("Sonnet 5.5: the off option is between_tools territory (effort high or
   assert(off && off.thinking === false);
   assert(["low", "medium", "high"].includes(off.effort ?? ""), "between_tools is rejected at xhigh and max");
   for (const [name, table] of Object.entries(THINKING_TABLES)) assertEquals(table["claude-sonnet-5-5"], true, name);
+  // Off still writes progress notes between tool calls, so the reasoning ceiling applies.
+  assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CHAT, "claude-sonnet-5-5", false), 24_000);
+  assertEquals(resolveMaxTokens(OUTPUT_BUDGETS.CHAT, "claude-sonnet-4-6", false), 4_000);
 });
 
 Deno.test("the decided knobs: FLOW at xhigh (Fable medium), chat and context at medium, editor and summaries at low", () => {
