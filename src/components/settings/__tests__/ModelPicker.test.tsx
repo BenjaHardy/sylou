@@ -54,11 +54,11 @@ describe("ModelPicker", () => {
       />,
     );
 
-    expect(header("Recommended for FLOW", 1)).toHaveAttribute("aria-expanded", "true");
-    expect(header("Not currently recommended", 9)).toHaveAttribute("aria-expanded", "false");
+    expect(header("Recommended for FLOW", 3)).toHaveAttribute("aria-expanded", "true");
+    expect(header("Not currently recommended", 7)).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Not currently recommended notice")).not.toBeInTheDocument();
-    // Provider tag on the FLOW cards.
-    expect(screen.getByText("· Anthropic")).toBeInTheDocument();
+    // Provider tag on the FLOW cards (one per recommended model).
+    expect(screen.getAllByText("· Anthropic")).toHaveLength(3);
 
     fireEvent.click(header("Not currently recommended"));
     expect(screen.getByText("Not currently recommended notice")).toBeInTheDocument();

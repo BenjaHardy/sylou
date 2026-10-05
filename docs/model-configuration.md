@@ -53,10 +53,10 @@ The most analytically demanding function. All models targeted for determinism (t
 | Model              | Temperature                  | Thinking / Effort                                      | max_tokens (output) | Notes                                                                                           |
 | ------------------ | ---------------------------- | ------------------------------------------------------ | ------------------- | ----------------------------------------------------------------------------------------------- |
 | Claude Sonnet 4.6  | 0.0                          | thinking: off, effort: high (matches provider default) | 8192                | *Recommended* for FLOW; quality and repeatability. |
-| Claude Sonnet 5.5  | undefined (rejects any value) | thinking: adaptive, effort: xhigh                     | 24000               | Not yet recommended: field tests pending (experimental badge). |
+| Claude Sonnet 5.5  | undefined (rejects any value) | thinking: adaptive, effort: xhigh                     | 24000               | *Recommended* for FLOW (field test, October 2026). |
 | Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high                       | 24000               | Adaptive thinking; consumes more tokens than Sonnet, not recommended by default except for specific scenarios.         |
-| Claude Opus 5.5    | undefined (rejects any value) | thinking: always on, effort: xhigh                    | 24000               | Not yet recommended: field tests pending (experimental badge). |
-| Claude Fable 5.1   | undefined (rejects any value) | thinking: always on, effort: medium                   | 24000               | Not yet recommended: field tests pending. Slower turns, hence medium; needs an Anthropic account with 30-day data retention. |
+| Claude Opus 5.5    | undefined (rejects any value) | thinking: always on, effort: xhigh                    | 24000               | *Recommended* for FLOW (field test, October 2026). |
+| Claude Fable 5.1   | undefined (rejects any value) | thinking: always on, effort: medium                   | 24000               | *Not* recommended: the field test (October 2026) showed no gain over Opus 5.5 at 2.5× the price. Slower turns, hence medium; needs an Anthropic account with 30-day data retention. |
 | Mistral Large 3    | 0.0                          | n/a (no reasoning support)                             | 8192                | *Not* recommended, strong inherent bias towards the user.                                       |
 | Mistral Medium 3.5 | 0.0                          | reasoning_effort: off                                  | 8192                | *Not* recommended. Good repeatability, but strong Write pillar and provenance data lead to user-bias on other pillars. |
 | Mistral Small 4    | 0.0                          | reasoning_effort: high                                 | 24000               | *Not* recommended, bias towards the user, poor repeatability.  |
@@ -68,7 +68,7 @@ The most analytically demanding function. All models targeted for determinism (t
 - max_tokens 24000 for reasoning models (in step with chat and context-prompt): thinking chunks consume output budget; insufficient headroom causes truncation and validation failures. FLOW is a single non-streamed call aborted at 145 s; an attempt the provider cut at the ceiling is not retried (the retry exists for format slips, and a budget overrun at temperature 0 would only repeat).
 - GLM 5.3 (October 2026 field test): at "low", "high" and "max" alike the scores lean toward the user and lack the independence GLM 5.2 (retiring from Mistral API) showed at "max". Hence not recommended, left at "high" for anyone who selects it. Claude Sonnet 4.6 is the default FLOW model for new profiles since 2026-10-02.
 - Opus 4.7 and later, Sonnet 5.5 and Fable 5.1 are excluded from the temperature setting (any non-default sampling parameter returns 400), so FLOW repeatability on them rests on the model and the prompt.
-- Sonnet 5.5 and Opus 5.5 start at xhigh ("extra"), the level below max: a starting point for the field tests, one table entry away from high if runs approach the 145 s limit or truncate. Fable 5.1 starts at medium because its turns are the slowest.
+- Sonnet 5.5 and Opus 5.5 run at xhigh ("extra"), the level below max, which passed the October 2026 field test; one table entry away from high if runs approach the 145 s limit or truncate. Fable 5.1 runs at medium because its turns are the slowest.
 
 ---
 

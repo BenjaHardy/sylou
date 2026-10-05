@@ -162,7 +162,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                   [FLOW_OTHER_GROUP_ID]: (
                     <>
                       These models are currently not recommended for FLOW analysis, because of
-                      reliability or speed constraints. See the {modelConfigLink} for details.
+                      reliability, speed or cost constraints. See the {modelConfigLink} for details.
                       These lists may change as testing continues.
                     </>
                   ),

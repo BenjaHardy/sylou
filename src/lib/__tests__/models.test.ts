@@ -44,9 +44,9 @@ describe("MODELS registry", () => {
     for (const m of MODELS) expect(m.isRollingLatest, m.id).toBeFalsy();
   });
 
-  it("exactly one model is recommended for FLOW: Claude Sonnet 4.6 (GLM 5.3 failed the field test, 2026-10-02)", () => {
+  it("the FLOW recommendations are Claude Sonnet 4.6, Sonnet 5.5 and Opus 5.5 (field tests 2026-10-02 / 2026-10-05); Fable 5.1 and GLM 5.3 are not", () => {
     const recommended = MODELS.filter((m) => m.flowRecommended);
-    expect(recommended.map((m) => m.id)).toEqual(["claude-sonnet-4-6"]);
+    expect(recommended.map((m) => m.id)).toEqual(["claude-sonnet-4-6", "claude-sonnet-5-5", "claude-opus-5-5"]);
   });
 
   it("no recommended model carries the experimental badge", () => {
@@ -101,7 +101,7 @@ describe("Settings picker groupings", () => {
   it("FLOW: recommended first, everything else in the second group", () => {
     const groups = groupModelsForFlow();
     expect(groups.map((g) => g.id)).toEqual([FLOW_RECOMMENDED_GROUP_ID, FLOW_OTHER_GROUP_ID]);
-    expect(ids(groups[0].models)).toEqual(["claude-sonnet-4-6"]);
+    expect(ids(groups[0].models)).toEqual(["claude-sonnet-4-6", "claude-sonnet-5-5", "claude-opus-5-5"]);
     expect(groups[1].models.every((m) => !m.flowRecommended)).toBe(true);
   });
 
@@ -162,9 +162,9 @@ describe("chat reasoning options (UI mirror of _shared/_thinking.ts)", () => {
     expect(resolveReasoningLabel("claude-fable-5-1", { "claude-fable-5-1": "max" })).toBe("Max (slow)");
   });
 
-  it("the three new Claude models carry the experimental badge until the field tests, and a note only where it matters", () => {
-    for (const id of ["claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1"]) {
-      expect(MODELS.find((m) => m.id === id)?.isExperimental, id).toBe(true);
+  it("no Claude model carries the experimental badge since the field tests (2026-10-05), and a note only where it matters", () => {
+    for (const m of MODELS.filter((m) => m.provider === "anthropic")) {
+      expect(m.isExperimental, m.id).toBeFalsy();
     }
     expect(MODELS.find((m) => m.id === "claude-fable-5-1")?.note).toMatch(/30-day data retention/);
   });

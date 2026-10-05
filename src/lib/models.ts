@@ -85,7 +85,7 @@ export const MODELS: ModelInfo[] = [
     provider: "anthropic",
     pricing: { input: 2.0, output: 10.0 },
     contextLimit: 1_000_000,
-    isExperimental: true,
+    flowRecommended: true,
   },
   {
     id: "claude-opus-4-8",
@@ -100,7 +100,7 @@ export const MODELS: ModelInfo[] = [
     provider: "anthropic",
     pricing: { input: 4.0, output: 20.0 },
     contextLimit: 1_000_000,
-    isExperimental: true,
+    flowRecommended: true,
   },
   {
     id: "claude-fable-5-1",
@@ -108,7 +108,8 @@ export const MODELS: ModelInfo[] = [
     provider: "anthropic",
     pricing: { input: 10.0, output: 50.0 },
     contextLimit: 1_000_000,
-    isExperimental: true,
+    // Not recommended for FLOW (2026-10 field test): no gain over Opus 5.5
+    // at 2.5x the price.
     note: "Anthropic's most capable model. Slower, and needs an Anthropic account with 30-day data retention.",
   },
   {
