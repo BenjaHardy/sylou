@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, isTruncatedStop, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
+import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, fallbackReplyText, isTruncatedStop, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { finalCallTools, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
@@ -7,7 +7,8 @@ import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperature
 import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 import {
-  CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT, SUMMARY_MISTRAL_EFFORT,
+  CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT,
+  SUMMARY_THINKING, SUMMARY_EFFORT, SUMMARY_MISTRAL_EFFORT,
   resolveReasoning, resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 import {
@@ -112,10 +113,10 @@ Deno.serve(async (req) => {
     const contextMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_RESPONSE, chatModel, thinking, mistralEffort !== undefined);
     // Writing-summary call (#1) keeps fixed settings whatever the user picked:
     // it runs before the stream starts (the hosted idle limit is counting)
-    // and is a delta summary, not a reply — Claude per the context tables,
-    // Mistral / GLM per the summary table (GLM at "low").
-    const summaryThinking = resolveThinking(CONTEXT_THINKING, chatModel);
-    const summaryEffort = resolveEffort(CONTEXT_EFFORT, chatModel);
+    // and is a delta summary, not a reply — the summary tables (Claude 4.x
+    // without thinking, the 5.5 models and Fable at low, GLM at "low").
+    const summaryThinking = resolveThinking(SUMMARY_THINKING, chatModel);
+    const summaryEffort = resolveEffort(SUMMARY_EFFORT, chatModel);
     const summaryMistralEffort = resolveMistralEffort(SUMMARY_MISTRAL_EFFORT, chatModel);
     const summaryMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_SUMMARY, chatModel, summaryThinking, summaryMistralEffort !== undefined);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
@@ -459,7 +460,7 @@ When citing information from web search results, always include the source URL i
             if (toolCalls.length === 0) {
               // No tool use — emit Call #2a text as rapid SSE tokens
               console.log("[stream:context-prompt] no tool use, emitting Call #2a directly");
-              const responseText = call2aContent || "No response generated.";
+              const responseText = call2aContent || fallbackReplyText(norm2a.stopReason);
 
               controller.enqueue(sseEvent({ phase: "responding" }));
 
@@ -549,7 +550,7 @@ When citing information from web search results, always include the source URL i
               if (!fullResponse.trim()) {
                 console.warn("[stream:context-prompt] Call #2b returned no text", { stop_reason: call2b.stopReason, ...call2b.stats });
               }
-              const aiResponse = fullResponse.trim() || "No response generated.";
+              const aiResponse = fullResponse.trim() || fallbackReplyText(call2b.stopReason);
               const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars, totalOutputChars + aiResponse.length);
 
               try {
@@ -633,7 +634,7 @@ When citing information from web search results, always include the source URL i
           if (!fullResponse.trim()) {
             console.warn("[stream:context-prompt] reply returned no text", { stop_reason: relay.stopReason, ...relay.stats });
           }
-          const aiResponse = fullResponse.trim() || "No response generated.";
+          const aiResponse = fullResponse.trim() || fallbackReplyText(relay.stopReason);
           const extraInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
           const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars + extraInputChars, totalOutputChars + aiResponse.length);
 

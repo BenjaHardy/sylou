@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
+import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, fallbackReplyText, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
@@ -321,7 +321,7 @@ Deno.serve(async (req) => {
             usage: norm1.usage ?? null,
           });
         }
-        const responseText = call1Content || "No response generated.";
+        const responseText = call1Content || fallbackReplyText(norm1.stopReason);
 
         const readable = new ReadableStream({
           async start(controller) {
@@ -461,7 +461,7 @@ Deno.serve(async (req) => {
               newTotal,
             } = await persistChatExchange(
               persistCtx,
-              fullResponse || "No response generated.",
+              fullResponse || fallbackReplyText(call2.stopReason),
               totalInputChars,
               totalOutputChars,
               { documentsReferenced, webSearchesPerformed },
@@ -557,7 +557,7 @@ Deno.serve(async (req) => {
             newTotal,
           } = await persistChatExchange(
             persistCtx,
-            fullResponse || "No response generated.",
+            fullResponse || fallbackReplyText(relay.stopReason),
             inputChars,
             outputChars,
           );

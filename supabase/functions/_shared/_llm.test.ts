@@ -5,6 +5,8 @@ import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.t
 import {
   extractDeltaText,
   extractStopReason,
+  fallbackReplyText,
+  isRefusalStop,
   isThinkingDelta,
   isTruncatedStop,
   fetchWithTimeout,
@@ -503,6 +505,26 @@ Deno.test("toAnthropicBody: tool_choice none keeps the tool list on the wire as 
   assert(!("tool_choice" in auto));
   // Nothing to decline without tools.
   assert(!("tool_choice" in toAnthropicBody({ model: "claude-sonnet-5-5", messages: [], max_tokens: 100, tool_choice: "none" })));
+});
+
+Deno.test("toAnthropicBody: thinking on is adaptive; off is between_tools on Sonnet 5.5 and omitted elsewhere", () => {
+  const on = toAnthropicBody({ model: "claude-opus-4-8", messages: [], max_tokens: 10, thinking: true, effort: "max" });
+  assertEquals(on.thinking, { type: "adaptive" });
+  assertEquals(on.output_config, { effort: "max" });
+  assertEquals(toAnthropicBody({ model: "claude-sonnet-5-5", messages: [], max_tokens: 10, thinking: false, effort: "high" }).thinking, { type: "between_tools" });
+  assertEquals(toAnthropicBody({ model: "claude-sonnet-5-5", messages: [], max_tokens: 10, thinking: true }).thinking, { type: "adaptive" });
+  for (const model of ["claude-sonnet-4-6", "claude-opus-4-8", "claude-opus-5-5", "claude-fable-5-1"]) {
+    assert(!("thinking" in toAnthropicBody({ model, messages: [], max_tokens: 10, thinking: false })), model);
+  }
+});
+
+Deno.test("fallbackReplyText: an explicit message on a refusal, the placeholder otherwise", () => {
+  assert(fallbackReplyText("refusal").includes("declined"));
+  assertEquals(fallbackReplyText("end_turn"), "No response generated.");
+  assertEquals(fallbackReplyText(null), "No response generated.");
+  assertEquals(fallbackReplyText(undefined), "No response generated.");
+  assertEquals(isRefusalStop("refusal"), true);
+  assertEquals(isRefusalStop("max_tokens"), false);
 });
 
 Deno.test("toOpenAIBody: raw_content never reaches the OpenAI-shape wire", () => {

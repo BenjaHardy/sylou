@@ -15,11 +15,12 @@
 // ============================================================
 
 import { sliceSafe } from "./_text.ts";
+import { CLAUDE_THINKING_OFF_BETWEEN_TOOLS } from "./_models.ts";
 
 export type ProviderId = "mistral" | "anthropic" | "deepseek";
 
 // Effort taxonomy is provider-specific:
-//   - Anthropic (Claude): "low" | "medium" | "high" | "xhigh"
+//   - Anthropic (Claude): "low" | "medium" | "high" | "xhigh" | "max"
 //   - Mistral reasoning models (Medium 3.5, Small): "high" | "none";
 //     GLM 5.3 (third-party via Mistral, reasoning-only) accepts
 //     "low" | "high" | "max" instead
@@ -27,7 +28,7 @@ export type ProviderId = "mistral" | "anthropic" | "deepseek";
 // tables. We re-declare the literal unions here only to keep _llm.ts
 // free of cross-imports from _thinking.ts (avoids a circular dep risk
 // as both files grow).
-export type ClaudeEffort  = "low" | "medium" | "high" | "xhigh";
+export type ClaudeEffort  = "low" | "medium" | "high" | "xhigh" | "max";
 export type MistralEffort = "low" | "high" | "max" | "none";
 
 export interface LLMTool {
@@ -164,13 +165,16 @@ export function toAnthropicBody(opts: {
     // Anthropic API caps temperature at 1.0; clamp defensively.
     body.temperature = Math.min(1.0, Math.max(0.0, opts.temperature));
   }
-  // Adaptive thinking — opt-in on Sonnet 4.6 / Opus 4.7+. The model
-  // decides when and how much to think on each request. Thinking
-  // blocks come back inside content[] alongside text/tool_use and
-  // are silently dropped by normaliseResponse (which filters by
-  // block.type). See _thinking.ts for per-function defaults.
+  // Adaptive thinking: the model decides when and how much to think.
+  // Omitted = no thinking on Sonnet 4.6 / Opus 4.8; Opus 5.5 and Fable 5.1
+  // think regardless (always on). Sonnet 5.5 rejects "disabled", so its
+  // "off" is between_tools. Thinking blocks come back inside content[];
+  // normaliseResponse reads only the text / tool_use ones and keeps the
+  // whole array as raw_content for the echo. Defaults: _thinking.ts.
   if (opts.thinking) {
     body.thinking = { type: "adaptive" };
+  } else if (CLAUDE_THINKING_OFF_BETWEEN_TOOLS.has(opts.model)) {
+    body.thinking = { type: "between_tools" };
   }
   // Structured Outputs (JSON outputs) — GA on Sonnet 4.6 / Opus 4.7+ on the
   // Claude API; no beta header required. When set, we do NOT also send
@@ -659,6 +663,21 @@ export function isThinkingDelta(parsed: unknown): boolean {
  *  "max_tokens", OpenAI-shape (Mistral/DeepSeek/GLM) "length". */
 export function isTruncatedStop(reason: string | null | undefined): boolean {
   return reason === "max_tokens" || reason === "length";
+}
+
+/** True when the provider's safety classifier declined the request
+ *  (Anthropic `stop_reason: "refusal"`: an HTTP 200 with no answer). */
+export function isRefusalStop(reason: string | null | undefined): boolean {
+  return reason === "refusal";
+}
+
+/** The reply text when the model returned none: an explicit message for a
+ *  refusal, the historical placeholder otherwise. No fallback model is ever
+ *  tried, so the disclosed model is always the one that answered. */
+export function fallbackReplyText(stopReason: string | null | undefined): string {
+  return isRefusalStop(stopReason)
+    ? "The AI declined this request (its provider's safety classifier flagged the content). Try rephrasing it, or switch to a different model in Settings."
+    : "No response generated.";
 }
 
 /**
