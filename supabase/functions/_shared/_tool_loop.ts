@@ -145,7 +145,7 @@ export async function runToolLoop(
         toolMessages.push({
           role: "tool",
           tool_call_id: tc.id,
-          content: "Not executed: per-turn tool-call limit reached. Ask again in a follow-up if still needed.",
+          content: "Not executed: at most 5 tool calls run per round. Make the remaining calls in your next round if still needed.",
         });
       } else if (tc.name === "read_imported_document") {
         const docId = tc.arguments.document_id as string;

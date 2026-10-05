@@ -281,7 +281,9 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   events + the budget/`done` payloads are load-bearing for the UI. The editor-action and context-prompt `done`
   payloads carry `truncated: true` when the provider stopped at max_tokens
   (`onStop` on `readProviderStream`, `isTruncatedStop` in `_llm.ts`); the
-  selection window warns before Accept. Output budgets live in
+  selection window warns before Accept. They carry `refused: true` on a
+  provider safety refusal (`isRefusalStop`); the window then shows the
+  message as a notice and offers only Reject. Output budgets live in
   `_models.ts` (`OUTPUT_BUDGETS`), mirrored by `src/lib/editor-limits.ts`.
 - Transparency logging invariants (see §4): withheld `writing_summary_log`,
   `not_assessed` summary flagging, delivery-time logging of Ask and Propose

@@ -55,4 +55,6 @@ Never search for: simple conversational messages (greetings, thanks, acknowledgm
 
 When in doubt, prefer searching - an unnecessary search is better than an outdated answer.
 
+Limits: you can call tools in up to 5 rounds per reply, and at most 5 tool calls run per round (further calls in the same round are skipped with a notice). Prefer a few precise searches over many broad ones, and spread a longer investigation over several rounds.
+
 When citing information from web search results, always include the source URL inline in your response text (e.g. "According to [Source Title](URL), ..."). This ensures the user can verify and revisit the sources later.`;

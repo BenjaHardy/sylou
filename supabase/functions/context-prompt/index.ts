@@ -1,5 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, fallbackReplyText, isRefusalStop, isTruncatedStop, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
+import {
+  callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, fallbackReplyText,
+  isProviderTimeout, isRefusalStop, isTruncatedStop, PROVIDER_TIMEOUT_MESSAGE, type LLMMessage, type LLMTool,
+} from "../_shared/_llm.ts";
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { finalCallTools, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
@@ -338,6 +341,8 @@ Never search for: simple conversational messages (greetings, thanks, acknowledgm
 
 When in doubt, prefer searching - an unnecessary search is better than an outdated answer.
 
+Limits: you can call tools in up to 5 rounds per reply, and at most 5 tool calls run per round (further calls in the same round are skipped with a notice). Prefer a few precise searches over many broad ones, and spread a longer investigation over several rounds.
+
 When citing information from web search results, always include the source URL inline in your response text (e.g. "According to [Source Title](URL), ..."). This ensures the user can verify and revisit the sources later.`;
     }
 
@@ -571,7 +576,9 @@ When citing information from web search results, always include the source URL i
             }
           } catch (err) {
             console.error("[stream:context-prompt] error in tool-use path:", err);
-            const msg = err instanceof Error && err.message ? sliceSafe(err.message, 200) : "AI service temporarily unavailable.";
+            const msg = isProviderTimeout(err)
+              ? PROVIDER_TIMEOUT_MESSAGE
+              : err instanceof Error && err.message ? sliceSafe(err.message, 200) : "AI service temporarily unavailable.";
             try { controller.enqueue(sseEvent({ done: true, error: msg })); } catch { /* */ }
           } finally {
             // conversation-memory: refresh in the tail, after `done` —

@@ -1,5 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, fallbackReplyText, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
+import {
+  callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, fallbackReplyText,
+  isProviderTimeout, PROVIDER_TIMEOUT_MESSAGE, type LLMMessage, type LLMTool,
+} from "../_shared/_llm.ts";
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
@@ -318,6 +321,7 @@ Deno.serve(async (req) => {
           // what tells a budget cut from a provider turn that ended empty.
           console.warn("[stream] Call #1 returned no text and no tool call", {
             stop_reason: norm1.stopReason,
+            stop_details: norm1.stopDetails,
             usage: norm1.usage ?? null,
           });
         }
@@ -495,7 +499,10 @@ Deno.serve(async (req) => {
           } catch (err) {
             console.error("[stream] error in tool-use path:", err);
             try {
-              controller.enqueue(sseEvent({ done: true, error: "AI service temporarily unavailable." }));
+              controller.enqueue(sseEvent({
+                done: true,
+                error: isProviderTimeout(err) ? PROVIDER_TIMEOUT_MESSAGE : "AI service temporarily unavailable.",
+              }));
             } catch { /* client gone */ }
           } finally {
             stopKeepalive();
@@ -613,6 +620,9 @@ Deno.serve(async (req) => {
     return createSSEResponse(readable);
   } catch (err) {
     console.error("Chat function error:", err);
+    // Call #1 (tools offered, non-streamed) runs before the stream exists, so
+    // its timeout lands here.
+    if (isProviderTimeout(err)) return jsonResponse({ error: PROVIDER_TIMEOUT_MESSAGE }, 502);
     return jsonResponse({ error: "Internal server error" }, 500);
   }
 });

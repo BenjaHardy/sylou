@@ -36,6 +36,8 @@ Deno.test("web-search block: leading separator, rules, and the deliberate ASCII 
     "prefer searching - an unnecessary search is better than an outdated answer",
   ));
   assert(WEB_SEARCH_PROMPT.includes("always include the source URL inline"));
+  // The model is told the loop's limits up front (5 rounds, 5 calls per round).
+  assert(WEB_SEARCH_PROMPT.includes("up to 5 rounds per reply, and at most 5 tool calls run per round"));
 });
 
 Deno.test("builders return empty-input shells rather than throwing", () => {

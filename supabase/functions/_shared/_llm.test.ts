@@ -4,8 +4,10 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   extractDeltaText,
+  extractStopDetails,
   extractStopReason,
   fallbackReplyText,
+  isProviderTimeout,
   isRefusalStop,
   isThinkingDelta,
   isTruncatedStop,
@@ -524,13 +526,30 @@ Deno.test("toAnthropicBody: thinking on is adaptive; off is between_tools on Son
   assertEquals(adaptiveMax.output_config, { effort: "max" });
 });
 
-Deno.test("fallbackReplyText: an explicit message on a refusal, the placeholder otherwise", () => {
+Deno.test("fallbackReplyText: explicit messages on a refusal and on a ceiling spent thinking, the placeholder otherwise", () => {
   assert(fallbackReplyText("refusal").includes("declined"));
+  assert(fallbackReplyText("max_tokens").includes("output limit"));
+  assert(fallbackReplyText("length").includes("output limit"));
   assertEquals(fallbackReplyText("end_turn"), "No response generated.");
   assertEquals(fallbackReplyText(null), "No response generated.");
   assertEquals(fallbackReplyText(undefined), "No response generated.");
   assertEquals(isRefusalStop("refusal"), true);
   assertEquals(isRefusalStop("max_tokens"), false);
+  assertEquals(isProviderTimeout(new Error("Provider request timed out after 120s")), true);
+  assertEquals(isProviderTimeout(new Error("boom")), false);
+  assertEquals(isProviderTimeout("Provider request timed out after 120s"), false);
+});
+
+Deno.test("stop_details: carried from a non-streamed Anthropic refusal and from a streaming message_delta, null elsewhere", () => {
+  const details = { type: "refusal", category: "reasoning_extraction", explanation: "x" };
+  const refused = normaliseResponse("anthropic", { content: [], stop_reason: "refusal", stop_details: details });
+  assertEquals(refused.stopDetails, details);
+  assertEquals(normaliseResponse("anthropic", { content: [{ type: "text", text: "hi" }], stop_reason: "end_turn" }).stopDetails, null);
+  assertEquals(normaliseResponse("mistral", { choices: [{ message: { content: "hi" }, finish_reason: "stop" }] }).stopDetails, null);
+  assertEquals(extractStopDetails({ type: "message_delta", delta: { stop_reason: "refusal", stop_details: details } }), details);
+  assertEquals(extractStopDetails({ type: "message_delta", delta: { stop_reason: "end_turn" } }), null);
+  assertEquals(extractStopDetails({ type: "content_block_delta", delta: { text: "x" } }), null);
+  assertEquals(extractStopDetails(null), null);
 });
 
 Deno.test("toOpenAIBody: raw_content never reaches the OpenAI-shape wire", () => {

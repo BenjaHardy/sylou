@@ -380,6 +380,9 @@ export interface NormalisedResponse {
    *  `stop_reason`, OpenAI-shape `finish_reason`); null when absent. Feed
    *  it to isTruncatedStop() to detect a reply cut off at max_tokens. */
   stopReason: string | null;
+  /** Anthropic `stop_details` (the refusal category and explanation, only
+   *  on a refusal); null otherwise. Logged as metadata, never shown. */
+  stopDetails: unknown;
 }
 
 /**
@@ -430,13 +433,15 @@ interface RawUsage {
 interface RawResponse {
   content?: RawContentBlock[];
   stop_reason?: string;
+  stop_details?: unknown;
   choices?: Array<{ message?: RawMessage; finish_reason?: string }>;
   usage?: RawUsage;
 }
 interface RawStreamChunk {
   choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown }; finish_reason?: string }>;
   type?: string;
-  delta?: { type?: string; text?: string; stop_reason?: string };
+  delta?: { type?: string; text?: string; stop_reason?: string; stop_details?: unknown };
+  stop_details?: unknown;
   content_block?: { type?: string };
 }
 
@@ -524,6 +529,7 @@ export function normaliseResponse(
         ? { input_tokens: r.usage.input_tokens, output_tokens: r.usage.output_tokens }
         : undefined,
       stopReason: r.stop_reason ?? null,
+      stopDetails: r.stop_details ?? null,
     };
   }
   // OpenAI-shape (Mistral/DeepSeek)
@@ -577,6 +583,7 @@ export function normaliseResponse(
         }
       : undefined,
     stopReason: r.choices?.[0]?.finish_reason ?? null,
+    stopDetails: null,
   };
 }
 
@@ -656,6 +663,15 @@ export function isThinkingDelta(parsed: unknown): boolean {
   return false;
 }
 
+/** Anthropic's `stop_details` from a streaming `message_delta` chunk (the
+ *  refusal category and explanation); null when the chunk carries none. */
+export function extractStopDetails(parsed: unknown): unknown {
+  if (!parsed || typeof parsed !== "object") return null;
+  const p = parsed as RawStreamChunk;
+  if (p.type !== "message_delta") return null;
+  return p.delta?.stop_details ?? p.stop_details ?? null;
+}
+
 /** True when a stop reason means the output hit max_tokens: Anthropic
  *  "max_tokens", OpenAI-shape (Mistral/DeepSeek/GLM) "length". */
 export function isTruncatedStop(reason: string | null | undefined): boolean {
@@ -669,12 +685,28 @@ export function isRefusalStop(reason: string | null | undefined): boolean {
 }
 
 /** The reply text when the model returned none: an explicit message for a
- *  refusal, the historical placeholder otherwise. No fallback model is ever
- *  tried, so the disclosed model is always the one that answered. */
+ *  refusal or a ceiling spent on thinking, the historical placeholder
+ *  otherwise. No fallback model is ever tried, so the disclosed model is
+ *  always the one that answered. Persisted as the reply, so the model reads
+ *  it on the next turn too. */
 export function fallbackReplyText(stopReason: string | null | undefined): string {
-  return isRefusalStop(stopReason)
-    ? "The AI declined this request (its provider's safety classifier flagged the content). Try rephrasing it, or switch to a different model in Settings."
-    : "No response generated.";
+  if (isRefusalStop(stopReason)) {
+    return "The AI declined this request (its provider's safety classifier flagged the content). Try rephrasing it, or switch to a different model in Settings.";
+  }
+  if (isTruncatedStop(stopReason)) {
+    return "The model used its whole output limit on thinking and returned no answer. Try a lower reasoning level in Settings, or a more focused question.";
+  }
+  return "No response generated.";
+}
+
+/** The error shown when a non-streamed provider call hit callLLM's timeout
+ *  (a long think inside a tool round or the writing summary). */
+export const PROVIDER_TIMEOUT_MESSAGE =
+  "The model did not answer within the time limit. Try a lower reasoning level in Settings, or a more focused question.";
+
+/** True for the error fetchWithTimeout throws on abort. */
+export function isProviderTimeout(err: unknown): boolean {
+  return err instanceof Error && err.message.startsWith("Provider request timed out");
 }
 
 /**
@@ -784,6 +816,15 @@ export async function callLLM(opts: {
     if (b.output_config !== undefined) logLine.output_config = b.output_config;
     if (b.reasoning_effort !== undefined) logLine.reasoning_effort = b.reasoning_effort;
     if (b.top_p !== undefined) logLine.top_p = b.top_p;
+    // Echoed Anthropic assistant turns (a tool loop in progress), counts only.
+    const echoed = opts.messages.filter((m) => Array.isArray(m.raw_content) && m.raw_content.length > 0);
+    if (echoed.length > 0) {
+      logLine.echoed_turns = echoed.length;
+      logLine.echoed_thinking_blocks = echoed.reduce(
+        (n, m) => n + (m.raw_content as RawContentBlock[]).filter((blk) => blk?.type === "thinking" || blk?.type === "redacted_thinking").length,
+        0,
+      );
+    }
     console.log("[callLLM] outbound", JSON.stringify(logLine));
   }
   return await fetchWithTimeout(endpointFor(provider), {

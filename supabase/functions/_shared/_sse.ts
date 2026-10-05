@@ -17,7 +17,7 @@
 // (relayProviderStream, keepAlive); editor-action keeps its
 // clientDisconnected latch and calls readProviderStream itself.
 
-import { extractDeltaText, extractStopReason, isThinkingDelta, type ProviderId } from "./_llm.ts";
+import { extractDeltaText, extractStopDetails, extractStopReason, isThinkingDelta, type ProviderId } from "./_llm.ts";
 
 /** Per-request factory for the SSE envelope helpers. corsHeaders is the
  *  only request-scoped dependency; the two helpers were byte-identical
@@ -88,6 +88,8 @@ export interface StreamStats {
   text: number;
   /** Last finish / stop reason seen, null when the stream ended without one. */
   finish: string | null;
+  /** Anthropic `stop_details` (refusal category), null unless a refusal. */
+  stopDetails: unknown;
   /** Whether the `[DONE]` sentinel was seen. */
   sawDone: boolean;
   /** Top-level keys of the last parsed chunk. */
@@ -175,7 +177,7 @@ export async function readProviderStreamWithStats(
   let fullResponse = "";
   let thinkingSignalled = false;
   const stats: StreamStats = {
-    chunks: 0, thinking: 0, text: 0, finish: null, sawDone: false, lastKeys: [], providerError: null, ms: 0,
+    chunks: 0, thinking: 0, text: 0, finish: null, stopDetails: null, sawDone: false, lastKeys: [], providerError: null, ms: 0,
   };
   const startedAt = Date.now();
   const decoder = new TextDecoder();
@@ -226,6 +228,8 @@ export async function readProviderStreamWithStats(
           stats.finish = stop;
           handlers.onStop?.(stop);
         }
+        const details = extractStopDetails(parsed);
+        if (details !== null) stats.stopDetails = details;
       } catch { /* skip malformed chunk */ }
     }
   }

@@ -186,6 +186,7 @@ export async function attemptFlowCall(
         project_id: projectId,
         attempt,
         stop_reason: stopReason,
+        stop_details: rawData?.stop_details ?? null,
         ...(contentLogsEnabled() ? { message: e.message, raw_response: rawResponse } : {}),
       });
 
