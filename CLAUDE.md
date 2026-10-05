@@ -36,7 +36,8 @@ Apply strict coding standards to avoid future code liabilities for the open-sour
 - Vitest 4 (frontend units) + `deno test` (edge-function units beside their
   modules: `_shared/` plus the split function directories — the `deno.json`
   test task holds the collected list)
-- LLM providers: Anthropic (Sonnet 4.6, Opus 4.8), Mistral API (Large 3,
+- LLM providers: Anthropic (Sonnet 4.6, Sonnet 5.5, Opus 4.8, Opus 5.5,
+  Fable 5.1), Mistral API (Large 3,
   Medium 3.5, Small 4, and Z.ai GLM 5.3 — the default chat model for new
   profiles; FLOW defaults to Claude Sonnet 4.6), DeepSeek (deepseek-v4-flash).
 
@@ -202,8 +203,9 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   converge through `normaliseResponse`.
 - Per-model knobs live in `supabase/functions/_shared/`:
   - `_temperatures.ts` — `{FLOW,CHAT,EDITOR,CONTEXT}_TEMPERATURE` tables
-    + `NO_TEMPERATURE_MODELS` (Opus 4.7 and 4.8 reject any non-default
-    temperature with HTTP 400 — do NOT generalize to all Claude models).
+    + `NO_TEMPERATURE_MODELS` (Opus 4.7 and later, Sonnet 5.5 and Fable 5.1
+    reject any non-default temperature with HTTP 400 — do NOT generalize to
+    all Claude models: Sonnet 4.6 accepts it).
   - `_thinking.ts` — `*_THINKING` / `*_EFFORT` (Claude),
     `*_MISTRAL_EFFORT` + `MISTRAL_REASONING_MODELS` allowlist
     (Mistral Large 3 returns 422 if `reasoning_effort` is sent),
