@@ -283,7 +283,11 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   (`onStop` on `readProviderStream`, `isTruncatedStop` in `_llm.ts`); the
   selection window warns before Accept. They carry `refused: true` on a
   provider safety refusal (`isRefusalStop`); the window then shows the
-  message as a notice and offers only Reject. Output budgets live in
+  message as a notice and offers only Reject. Chat answers a provider
+  timeout (Call #1, a loop check call, or a streamed call before its first
+  byte) with `PROVIDER_TIMEOUT_MESSAGE` persisted as the reply, like
+  refusals and empty replies, so the notice survives a thread switch;
+  context-prompt keeps its transient error event. Output budgets live in
   `_models.ts` (`OUTPUT_BUDGETS`), mirrored by `src/lib/editor-limits.ts`.
 - Transparency logging invariants (see §4): withheld `writing_summary_log`,
   `not_assessed` summary flagging, delivery-time logging of Ask and Propose

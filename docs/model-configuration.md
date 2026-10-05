@@ -208,7 +208,7 @@ The max_tokens ceiling follows the choice: the reasoning ceiling applies wheneve
 | Refusal message                               | `supabase/functions/_shared/_llm.ts`          | `fallbackReplyText` (an explicit message on `stop_reason: "refusal"`, no fallback model). |
 | Server-side model allowlist + input limits    | `supabase/functions/_shared/_models.ts`       | `ALLOWED_MODELS` (gates the `model` request override), `INPUT_LIMITS` (request text ceilings), `CONTEXT_LIMIT_TOKENS` (per-model context windows, mirrors the registry). |
 | FLOW imported-documents budget                | `supabase/functions/analysis/index.ts`        | `FLOW_IMPORTED_DOCS_BUDGET_TOKENS` cost ceiling; effective allowance = min(policy, model-window remainder after the never-truncated sections). |
-| Provider request timeout                      | `supabase/functions/_shared/_llm.ts`          | `callLLM` `timeoutMs` — default 120s; analysis passes 145s (hosted request-idle limit is 150s); Brave web-search fetches use a 10s `AbortSignal.timeout`. |
+| Provider request timeout                      | `supabase/functions/_shared/_llm.ts`          | `callLLM` `timeoutMs` — default 120s; analysis passes 145s (hosted request-idle limit is 150s); Brave web-search fetches use a 10s `AbortSignal.timeout`. A chat call that hits it is answered with a persisted notice (`PROVIDER_TIMEOUT_MESSAGE`), on every provider, so the explanation survives a thread switch; Ask/Propose report it in the selection window. |
 | Body-level wire format (per provider)         | `supabase/functions/_shared/_llm.ts`          | `toAnthropicBody`, `toOpenAIBody`.                                                                |
 
 ---

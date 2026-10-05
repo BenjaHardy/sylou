@@ -275,6 +275,46 @@ Deno.serve(async (req) => {
 
     const { sseEvent, createSSEResponse, keepAlive } = makeSSEHelpers(corsHeaders);
 
+    // The `done` event of a persisted exchange: the rows and the remaining
+    // budget, or the persistence warning.
+    type PersistResult = Awaited<ReturnType<typeof persistChatExchange>>;
+    const doneEvent = (r: Pick<PersistResult, "insertedUser" | "insertedAssistant" | "persistenceFailed" | "newTotal">) =>
+      sseEvent(
+        r.persistenceFailed
+          ? { done: true, error: "Messages may not have been saved." }
+          : {
+            done: true,
+            user_message: r.insertedUser,
+            assistant_message: r.insertedAssistant,
+            budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - r.newTotal,
+          },
+      );
+
+    // A provider timeout is a reply like the other failure notices
+    // (refusals, empty replies): the exchange is persisted with the notice
+    // as the assistant message, so it survives a thread switch or a reload,
+    // and `done` carries the rows. The transient error event remains the
+    // fallback when that write throws. Every provider shares callLLM's
+    // timeout, so this is model-agnostic.
+    const finishWithTimeoutNotice = async (controller: ReadableStreamDefaultController, inputChars: number) => {
+      const event = await persistChatExchange(
+        persistCtx, PROVIDER_TIMEOUT_MESSAGE, inputChars, 0, { documentsReferenced, webSearchesPerformed },
+      ).then(doneEvent, (err) => {
+        console.error("[stream] timeout notice not persisted:", err);
+        return sseEvent({ done: true, error: PROVIDER_TIMEOUT_MESSAGE });
+      });
+      try { controller.enqueue(event); } catch { /* client gone */ }
+    };
+
+    // The response when a call timed out before any stream existed: a
+    // stream whose only event is the persisted notice.
+    const timeoutNoticeResponse = (inputChars: number) =>
+      createSSEResponse(new ReadableStream({
+        async start(controller) {
+          try { await finishWithTimeoutNotice(controller, inputChars); } finally { controller.close(); }
+        },
+      }));
+
     // ---- TWO-PASS FLOW when tools exist ----
     if (hasTools) {
       console.log("[stream] tools available, using two-pass flow");
@@ -293,7 +333,14 @@ Deno.serve(async (req) => {
       };
 
 
-      const call1Res = await callLLM(call1Body);
+      let call1Res: Response;
+      try {
+        call1Res = await callLLM(call1Body);
+      } catch (err) {
+        if (!isProviderTimeout(err)) throw err;
+        console.error("[stream] Call #1 timed out");
+        return timeoutNoticeResponse(promptChars(llmMessages));
+      }
 
       if (!call1Res.ok) {
         const errText = await call1Res.text();
@@ -346,18 +393,7 @@ Deno.serve(async (req) => {
 
               // Failed message writes take the same path a thrown persistence
               // error does — never report success over missing rows.
-              if (persistenceFailed) {
-                controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
-              } else {
-                controller.enqueue(
-                  sseEvent({
-                    done: true,
-                    user_message: insertedUser,
-                    assistant_message: insertedAssistant,
-                    budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
-                  })
-                );
-              }
+              controller.enqueue(doneEvent({ insertedUser, insertedAssistant, persistenceFailed, newTotal }));
 
               // conversation-memory: refresh in the tail, after `done` is
               // sent — the user never waits on it, and the stream-first
@@ -389,16 +425,13 @@ Deno.serve(async (req) => {
       // Use ReadableStream so Deno keeps the isolate alive until controller.close()
       console.log("[stream] tool use detected:", toolCalls.length, "calls — using stream-first approach");
 
+      // The conversation with tool results; grows by reference in the loop.
+      const toolMessages: LLMMessage[] = [...llmMessages, norm1.assistantMessage];
+
       const readable = new ReadableStream({
         async start(controller) {
           const stopKeepalive = keepAlive(controller);
           try {
-            // Build conversation with tool results
-            const toolMessages: LLMMessage[] = [
-              ...llmMessages,
-              norm1.assistantMessage,
-            ];
-
             // Resolve tool calls iteratively (_shared/_tool_loop.ts); the char
             // counters return as VALUES and must be folded in — numbers
             // cannot mutate across the module boundary.
@@ -473,18 +506,7 @@ Deno.serve(async (req) => {
             );
 
             try {
-              if (persistenceFailed) {
-                controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
-              } else {
-                controller.enqueue(
-                  sseEvent({
-                    done: true,
-                    user_message: insertedUser,
-                    assistant_message: insertedAssistant,
-                    budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
-                  })
-                );
-              }
+              controller.enqueue(doneEvent({ insertedUser, insertedAssistant, persistenceFailed, newTotal }));
             } catch { /* client gone */ }
 
             // conversation-memory: refresh in the tail, after `done` is
@@ -499,12 +521,17 @@ Deno.serve(async (req) => {
             });
           } catch (err) {
             console.error("[stream] error in tool-use path:", err);
-            try {
-              controller.enqueue(sseEvent({
-                done: true,
-                error: isProviderTimeout(err) ? PROVIDER_TIMEOUT_MESSAGE : "AI service temporarily unavailable.",
-              }));
-            } catch { /* client gone */ }
+            if (isProviderTimeout(err)) {
+              // Bills the timed-out call's prompt on top of the completed
+              // ones; on a loop timeout the check calls that completed
+              // before it are lost with the throw (the loop returns its
+              // counters by value).
+              await finishWithTimeoutNotice(controller, totalInputChars + promptChars(toolMessages));
+            } else {
+              try {
+                controller.enqueue(sseEvent({ done: true, error: "AI service temporarily unavailable." }));
+              } catch { /* client gone */ }
+            }
           } finally {
             stopKeepalive();
             controller.close();
@@ -517,7 +544,9 @@ Deno.serve(async (req) => {
     // ---- NO TOOLS — streaming path using ReadableStream ----
     console.log("[stream] no tools, standard streaming path");
 
-    const llmRes = await callLLM({
+    let llmRes: Response;
+    try {
+      llmRes = await callLLM({
         model: chatModel,
         messages: llmMessages,
         max_tokens: chatMaxTokens,
@@ -527,6 +556,12 @@ Deno.serve(async (req) => {
         effort,
         mistral_effort: mistralEffort,
       });
+    } catch (err) {
+      // A streamed call times out only before its first byte.
+      if (!isProviderTimeout(err)) throw err;
+      console.error("[stream] no-tools call timed out");
+      return timeoutNoticeResponse(promptChars(llmMessages));
+    }
 
     if (!llmRes.ok) {
       const errText = await llmRes.text();
@@ -571,18 +606,7 @@ Deno.serve(async (req) => {
           );
 
           try {
-            if (persistenceFailed) {
-              controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
-            } else {
-              controller.enqueue(
-                sseEvent({
-                  done: true,
-                  user_message: insertedUser,
-                  assistant_message: insertedAssistant,
-                  budget_remaining: profile.monthly_token_budget === null ? null : profile.monthly_token_budget - newTotal,
-                })
-              );
-            }
+            controller.enqueue(doneEvent({ insertedUser, insertedAssistant, persistenceFailed, newTotal }));
           } catch { /* client gone */ }
 
           console.log("[stream] flush() completed — persistence done");
@@ -621,9 +645,6 @@ Deno.serve(async (req) => {
     return createSSEResponse(readable);
   } catch (err) {
     console.error("Chat function error:", err);
-    // Call #1 (tools offered, non-streamed) runs before the stream exists, so
-    // its timeout lands here.
-    if (isProviderTimeout(err)) return jsonResponse({ error: PROVIDER_TIMEOUT_MESSAGE }, 502);
     return jsonResponse({ error: "Internal server error" }, 500);
   }
 });
