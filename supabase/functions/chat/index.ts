@@ -23,7 +23,7 @@ import {
   TUTOR_MODE_SYSTEM_PROMPT,
 } from "../_shared/_prompts.ts";
 import { buildDocIndex, buildFavBlock, WEB_SEARCH_PROMPT } from "./context.ts";
-import { promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
+import { finalCallTools, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { persistChatExchange } from "./persist.ts";
 
 
@@ -420,13 +420,15 @@ Deno.serve(async (req) => {
             totalInputChars += inputCharsAdded;
             totalOutputChars += outputCharsAdded;
 
-            // LLM Call #2: streaming with tool results (no tools this time)
+            // LLM Call #2: streaming with tool results; no tool calls allowed
+            // (finalCallTools: the list itself stays on the wire for Anthropic)
             console.log("[stream] starting Call #2 streaming");
             const call2Res = await callLLM({
                 model: chatModel,
                 messages: toolMessages,
                 max_tokens: chatMaxTokens,
                 stream: true,
+                ...finalCallTools(chatModel, tools),
                 temperature,
                 thinking,
                 effort,

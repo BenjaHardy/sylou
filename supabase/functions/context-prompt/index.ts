@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, isTruncatedStop, type LLMMessage, type LLMTool } from "../_shared/_llm.ts";
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
-import { promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
+import { finalCallTools, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
@@ -518,13 +518,15 @@ When citing information from web search results, always include the source URL i
               totalInputChars += inputCharsAdded;
               totalOutputChars += outputCharsAdded;
 
-              // Call #2b: streaming with tool results (provider-aware via callLLM)
+              // Call #2b: streaming with tool results; no tool calls allowed
+              // (finalCallTools: the list itself stays on the wire for Anthropic)
               console.log("[stream:context-prompt] starting Call #2b streaming");
               const call2bRes = await callLLM({
                 model: chatModel,
                 messages: toolMessages,
                 max_tokens: contextMaxTokens,
                 stream: true,
+                ...finalCallTools(chatModel, tools),
                 temperature,
                 thinking,
                 effort,

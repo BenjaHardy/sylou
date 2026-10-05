@@ -50,6 +50,11 @@ export interface LLMMessage {
     type: "function";
     function: { name: string; arguments: string };
   }>;
+  /** Anthropic only: the assistant turn's content blocks exactly as the API
+   *  returned them (thinking, redacted_thinking, text, tool_use). Set by
+   *  normaliseResponse and echoed verbatim by toAnthropicBody so the thinking
+   *  blocks survive a tool loop; toOpenAIBody drops the field. */
+  raw_content?: unknown[];
 }
 
 export function providerFor(modelId: string): ProviderId {
@@ -93,6 +98,7 @@ export function toAnthropicBody(opts: {
   stream?: boolean;
   forceTool?: string;
   disableParallelToolUse?: boolean;
+  tool_choice?: "auto" | "none";
   temperature?: number;
   json_schema?: { name: string; schema: Record<string, unknown> };
   thinking?: boolean;
@@ -116,6 +122,13 @@ export function toAnthropicBody(opts: {
           },
         ],
       });
+      continue;
+    }
+    // An Anthropic assistant turn goes back as received: inside a tool-use
+    // turn the API requires its thinking blocks complete and unmodified, and
+    // the 5.5 family binds them to this exact prefix (preserved thinking).
+    if (m.role === "assistant" && Array.isArray(m.raw_content) && m.raw_content.length > 0) {
+      msgs.push({ role: "assistant", content: m.raw_content });
       continue;
     }
     if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
@@ -190,6 +203,8 @@ export function toAnthropicBody(opts: {
         name: opts.forceTool,
         ...(opts.disableParallelToolUse ? { disable_parallel_tool_use: true } : {}),
       };
+    } else if (opts.tool_choice === "none") {
+      body.tool_choice = { type: "none" };
     }
   }
   return body;
@@ -328,7 +343,8 @@ export function toOpenAIBody(opts: {
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: opts.model,
-    messages: opts.messages,
+    // raw_content is the Anthropic echo; Mistral 422-rejects unknown fields.
+    messages: opts.messages.map(({ raw_content: _raw, ...m }) => m),
     max_tokens: opts.max_tokens,
   };
   if (opts.stream) body.stream = true;
@@ -501,6 +517,7 @@ export function normaliseResponse(
         role: "assistant",
         content: text,
         ...(oaToolCalls.length ? { tool_calls: oaToolCalls } : {}),
+        ...(blocks.length ? { raw_content: blocks } : {}),
       },
       usage: r.usage
         ? { input_tokens: r.usage.input_tokens, output_tokens: r.usage.output_tokens }
@@ -682,8 +699,9 @@ export async function callLLM(opts: {
    *  so exactly one call to the forced tool comes back. The OpenAI path sends no
    *  equivalent — named forcing already yields a single call there. */
   disableParallelToolUse?: boolean;
-  /** OpenAI-path plain mode when tools are present and forceTool is not set;
-   *  ignored by the Anthropic path (its default is already auto). */
+  /** Plain mode when tools are present and forceTool is not set: "auto" is
+   *  the default on both paths; "none" keeps the tool list on the wire while
+   *  forbidding calls (OpenAI path verbatim, Anthropic as {type: "none"}). */
   tool_choice?: "auto" | "none";
   temperature?: number;
   json_schema?: { name: string; schema: Record<string, unknown> };

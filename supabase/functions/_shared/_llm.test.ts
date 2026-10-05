@@ -428,3 +428,91 @@ Deno.test("normaliseResponse: exposes the provider stop reason for both wire sha
   const none = normaliseResponse("mistral", { choices: [{ message: { content: "hi" } }] });
   assertEquals(none.stopReason, null);
 });
+
+// ── Anthropic assistant turns echoed as received (2026-10) ──────────────
+// Inside a tool-use turn the API wants the thinking blocks back complete and
+// unmodified; the 5.5 family binds them to the prefix that produced them.
+
+const ANTHROPIC_TURN = [
+  { type: "thinking", thinking: "", signature: "sig-1" },
+  { type: "redacted_thinking", data: "opaque" },
+  { type: "text", text: "Let me check." },
+  { type: "tool_use", id: "toolu_1", name: "web_search", input: { query: "x" } },
+];
+
+const ECHOED_TOOL_CALL = {
+  id: "toolu_1",
+  type: "function" as const,
+  function: { name: "web_search", arguments: "{\"query\":\"x\"}" },
+};
+
+Deno.test("normaliseResponse (Anthropic): keeps the content blocks as received on the assistant message", () => {
+  const norm = normaliseResponse("anthropic", { content: ANTHROPIC_TURN, stop_reason: "tool_use" });
+  assertEquals(norm.text, "Let me check.");
+  assertEquals(norm.toolCalls, [{ id: "toolu_1", name: "web_search", arguments: { query: "x" } }]);
+  assertEquals(norm.assistantMessage.raw_content, ANTHROPIC_TURN);
+  assertEquals(norm.assistantMessage.content, "Let me check.");
+  assertEquals(norm.assistantMessage.tool_calls, [ECHOED_TOOL_CALL]);
+  // A reply with no blocks (a refusal before any output) carries no raw_content.
+  const empty = normaliseResponse("anthropic", { content: [], stop_reason: "refusal" });
+  assertEquals("raw_content" in empty.assistantMessage, false);
+  // The OpenAI shape never sets it.
+  const openai = normaliseResponse("mistral", { choices: [{ message: { content: "hi" } }] });
+  assertEquals("raw_content" in openai.assistantMessage, false);
+});
+
+Deno.test("toAnthropicBody: an assistant turn with raw_content is echoed verbatim, thinking blocks included", () => {
+  const body = toAnthropicBody({
+    model: "claude-sonnet-5-5",
+    max_tokens: 100,
+    messages: [
+      { role: "user", content: "search x" },
+      { role: "assistant", content: "Let me check.", tool_calls: [ECHOED_TOOL_CALL], raw_content: ANTHROPIC_TURN },
+      { role: "tool", tool_call_id: "toolu_1", content: "results" },
+    ],
+  });
+  const msgs = body.messages as Array<Record<string, unknown>>;
+  assertEquals(msgs[1], { role: "assistant", content: ANTHROPIC_TURN });
+  assertEquals(msgs[2], { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "results" }] });
+});
+
+Deno.test("toAnthropicBody: without raw_content the assistant turn is rebuilt from text and tool calls", () => {
+  const body = toAnthropicBody({
+    model: "claude-opus-4-8",
+    max_tokens: 100,
+    messages: [
+      { role: "user", content: "search x" },
+      { role: "assistant", content: "Let me check.", tool_calls: [ECHOED_TOOL_CALL] },
+    ],
+  });
+  const msgs = body.messages as Array<Record<string, unknown>>;
+  assertEquals(msgs[1], {
+    role: "assistant",
+    content: [
+      { type: "text", text: "Let me check." },
+      { type: "tool_use", id: "toolu_1", name: "web_search", input: { query: "x" } },
+    ],
+  });
+});
+
+Deno.test("toAnthropicBody: tool_choice none keeps the tool list on the wire as {type: none}; auto sends no tool_choice", () => {
+  const none = toAnthropicBody({ model: "claude-sonnet-5-5", messages: [{ role: "user", content: "hi" }], max_tokens: 100, tools: [SAMPLE_TOOL], tool_choice: "none" });
+  assertEquals((none.tools as unknown[]).length, 1);
+  assertEquals(none.tool_choice, { type: "none" });
+  const auto = toAnthropicBody({ model: "claude-sonnet-5-5", messages: [{ role: "user", content: "hi" }], max_tokens: 100, tools: [SAMPLE_TOOL], tool_choice: "auto" });
+  assert(!("tool_choice" in auto));
+  // Nothing to decline without tools.
+  assert(!("tool_choice" in toAnthropicBody({ model: "claude-sonnet-5-5", messages: [], max_tokens: 100, tool_choice: "none" })));
+});
+
+Deno.test("toOpenAIBody: raw_content never reaches the OpenAI-shape wire", () => {
+  const body = toOpenAIBody({
+    model: "zai-glm-5-3",
+    max_tokens: 100,
+    messages: [
+      { role: "assistant", content: "x", raw_content: [{ type: "text", text: "x" }] },
+      { role: "user", content: "y" },
+    ],
+  });
+  assertEquals(body.messages, [{ role: "assistant", content: "x" }, { role: "user", content: "y" }]);
+});

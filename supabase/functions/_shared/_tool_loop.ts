@@ -42,6 +42,20 @@ import { contentLogsEnabled } from "./_debug.ts";
 export const ROUND_LIMIT_NOTE =
   "Tool-use limit reached for this request: write your answer now from the information above.";
 
+/** Tool fields for the caller's final, streaming call after the loop. On
+ *  Anthropic the tool list stays on the wire with `tool_choice: "none"`: the
+ *  thinking blocks echoed through the loop are bound to the prefix that
+ *  produced them (system prompt, tools, earlier messages), so dropping
+ *  `tools` would turn the final call into a history edit, a 400 on the
+ *  preserved-thinking models for accounts enforced by default. Mistral and
+ *  DeepSeek keep the tool-less final call. */
+export function finalCallTools(
+  model: string,
+  tools: LLMTool[],
+): { tools?: LLMTool[]; tool_choice?: "none" } {
+  return providerFor(model) === "anthropic" ? { tools, tool_choice: "none" } : {};
+}
+
 /** Prompt size in characters for the usage estimate: every message's
  *  content plus any echoed tool calls. */
 export function promptChars(messages: LLMMessage[]): number {
