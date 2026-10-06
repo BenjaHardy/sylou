@@ -37,6 +37,11 @@ export function createSSEParser() {
   };
 }
 
+/** Shown when a stream ends without any event: the function was stopped
+ *  before it could answer, most often at the host's request time limit. */
+export const STREAM_CUT_OFF_MESSAGE =
+  "The request was cut off. Try a lower reasoning level in Settings, or a more focused question.";
+
 /** A failure the function reported itself, in an event's `error` field:
  *  user-facing text, as opposed to a connection problem. */
 export class SSEServerError extends Error {

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { consumeSSEStream, SSEServerError } from "@/lib/sse-stream";
+import { consumeSSEStream, SSEServerError, STREAM_CUT_OFF_MESSAGE } from "@/lib/sse-stream";
 
 export interface ChatMessage {
   id: string;
@@ -250,13 +250,14 @@ export function useChatMessages(threadId: string | null) {
             },
           });
 
-          // Neither a done event nor a server-reported error arrived (a
-          // connection drop): show the generic bubble instead of silently removing
+          // Neither a done event nor a server-reported error arrived (the
+          // function was stopped, or the connection dropped): say so instead
+          // of silently removing
           if (!settled && isActive()) {
             setMessages((prev) => [
               // Keep the optimistic user message visible
               ...prev.filter((m) => m.id !== streamingId),
-              errorBubble(),
+              errorBubble(STREAM_CUT_OFF_MESSAGE),
             ]);
           }
         } else {

@@ -280,7 +280,8 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   consumer, `src/lib/sse-stream.ts`, which skips comment lines and reports a
   server-sent `error` once as `SSEServerError`, an error-carrying `done`
   ending the stream (the chat bubble and the selection window show that
-  text; a connection drop keeps a generic message). Phase
+  text; a stream that ends with no event at all, the host's time limit
+  typically, shows `STREAM_CUT_OFF_MESSAGE`). Phase
   events + the budget/`done` payloads are load-bearing for the UI. The editor-action and context-prompt `done`
   payloads carry `truncated: true` when the provider stopped at max_tokens
   (`onStop` on `readProviderStream`, `isTruncatedStop` in `_llm.ts`); the

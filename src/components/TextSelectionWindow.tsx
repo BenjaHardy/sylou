@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
-import { consumeSSEStream, SSEServerError } from "@/lib/sse-stream";
+import { consumeSSEStream, SSEServerError, STREAM_CUT_OFF_MESSAGE } from "@/lib/sse-stream";
 import { assessSelectionSize } from "@/lib/editor-limits";
 import { LargeSelectionNotice } from "@/components/text-selection/LargeSelectionNotice";
 import { TruncatedAcceptDialog } from "@/components/text-selection/TruncatedAcceptDialog";
@@ -348,7 +348,7 @@ export function TextSelectionWindow({
             },
             onError: (err) => {
               console.error("Editor action stream error:", err);
-              failAction(err instanceof SSEServerError ? err.message : "AI action failed. Please try again.", backTo);
+              failAction(err instanceof SSEServerError ? err.message : STREAM_CUT_OFF_MESSAGE, backTo);
             },
           });
         } else {
@@ -519,7 +519,7 @@ export function TextSelectionWindow({
               if (actionType === "ask" && setMessages) {
                 setMessages((prev) => prev.filter((m) => m.id !== "streaming-ask"));
               }
-              failAction(err instanceof SSEServerError ? err.message : "AI action failed. Please try again.", backTo);
+              failAction(err instanceof SSEServerError ? err.message : STREAM_CUT_OFF_MESSAGE, backTo);
             },
           });
         } else {

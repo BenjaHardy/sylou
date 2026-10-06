@@ -65,11 +65,11 @@ describe("useChatMessages failure paths", () => {
     expect(result.current.sending).toBe(false);
   });
 
-  it("a stream that drops without done keeps the generic bubble", async () => {
+  it("a stream that ends without any event shows the cut-off message", async () => {
     const result = await sendAgainst(sseResponse('{"token":"par"}'));
     expect(result.current.messages.map((m) => m.content)).toEqual([
       "hello",
-      "Sorry, something went wrong. Please try again.",
+      "The request was cut off. Try a lower reasoning level in Settings, or a more focused question.",
     ]);
   });
 
