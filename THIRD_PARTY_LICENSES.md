@@ -53,7 +53,7 @@ Packages bundled into (or supporting) the shipped application.
 
 ### BSD-3-Clause (1)
 
-- source-map-js@1.2.1
+- source-map-js@1.2.2
 
 ### ISC (10)
 
