@@ -277,7 +277,10 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   an SSE comment every 15 s (`keepAlive`) — a quiet response was observed
   being closed in front of the function during a long think. Editor-action
   keeps its own `readProviderStream` call and disconnect latch. One client
-  consumer, `src/lib/sse-stream.ts`, which skips comment lines. Phase
+  consumer, `src/lib/sse-stream.ts`, which skips comment lines and reports a
+  server-sent `error` once as `SSEServerError`, an error-carrying `done`
+  ending the stream (the chat bubble and the selection window show that
+  text; a connection drop keeps a generic message). Phase
   events + the budget/`done` payloads are load-bearing for the UI. The editor-action and context-prompt `done`
   payloads carry `truncated: true` when the provider stopped at max_tokens
   (`onStop` on `readProviderStream`, `isTruncatedStop` in `_llm.ts`); the

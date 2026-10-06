@@ -6,7 +6,7 @@
 // split across chunk boundaries, malformed payloads, streams that die
 // without a `done`. Each hazard gets a test here.
 import { describe, it, expect } from "vitest";
-import { createSSEParser, consumeSSEStream } from "@/lib/sse-stream";
+import { createSSEParser, consumeSSEStream, SSEServerError } from "@/lib/sse-stream";
 
 // ---------- createSSEParser ----------
 
@@ -72,15 +72,25 @@ function streamOfBytes(...chunks: Uint8Array[]): ReadableStream<Uint8Array> {
   });
 }
 
-type Recorded = { tokens: string[]; phases: string[]; done: Record<string, unknown>[]; errors: string[] };
+type Recorded = {
+  tokens: string[];
+  phases: string[];
+  done: Record<string, unknown>[];
+  errors: string[];
+  /** The subset of errors the server reported itself (SSEServerError). */
+  server: string[];
+};
 
 async function consume(body: ReadableStream<Uint8Array>): Promise<Recorded> {
-  const rec: Recorded = { tokens: [], phases: [], done: [], errors: [] };
+  const rec: Recorded = { tokens: [], phases: [], done: [], errors: [], server: [] };
   await consumeSSEStream(body, {
     onToken: (t) => rec.tokens.push(t),
     onPhase: (p) => rec.phases.push(p),
     onDone: (d) => rec.done.push(d),
-    onError: (e) => rec.errors.push(e.message),
+    onError: (e) => {
+      rec.errors.push(e.message);
+      if (e instanceof SSEServerError) rec.server.push(e.message);
+    },
   });
   return rec;
 }
@@ -124,12 +134,23 @@ describe("consumeSSEStream", () => {
     expect(rec.errors).toEqual([]);
   });
 
-  it("routes error events to onError and keeps consuming", async () => {
+  it("routes an error event to onError as a server error and keeps consuming", async () => {
     const rec = await consume(
       streamOfText('data: {"error":"boom"}\n\ndata: {"done":true}\n\n'),
     );
     expect(rec.errors).toEqual(["boom"]);
+    expect(rec.server).toEqual(["boom"]);
     expect(rec.done).toHaveLength(1);
+  });
+
+  it("an error-carrying done event ends the stream: one server error, no done, no missing-done report", async () => {
+    const rec = await consume(
+      streamOfText('data: {"token":"par"}\n\ndata: {"done":true,"error":"Provider says no"}\n\n'),
+    );
+    expect(rec.tokens).toEqual(["par"]);
+    expect(rec.errors).toEqual(["Provider says no"]);
+    expect(rec.server).toEqual(["Provider says no"]);
+    expect(rec.done).toEqual([]);
   });
 
   it("reports a stream that ends without done", async () => {
@@ -152,5 +173,7 @@ describe("consumeSSEStream", () => {
     expect(rec.tokens).toEqual(["pre"]);
     // Both the stream failure and the missing-done are reported — deliberate.
     expect(rec.errors).toEqual(["network dropped", "Stream ended without done event"]);
+    // Neither came from the server.
+    expect(rec.server).toEqual([]);
   });
 });

@@ -37,9 +37,20 @@ export function createSSEParser() {
   };
 }
 
+/** A failure the function reported itself, in an event's `error` field:
+ *  user-facing text, as opposed to a connection problem. */
+export class SSEServerError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SSEServerError";
+  }
+}
+
 /**
  * Higher-level SSE stream consumer. Reads a ReadableStream, parses SSE events,
- * and dispatches to callbacks.
+ * and dispatches to callbacks. An event carrying `error` goes to onError as an
+ * SSEServerError, never to onDone; when it also carries `done`, it ends the
+ * stream (no "ended without done" report follows).
  *
  * @returns Promise that resolves when the stream ends (whether or not `done` was received).
  */
@@ -67,7 +78,8 @@ export async function consumeSSEStream(
 
       for (const evt of events) {
         if (evt.error) {
-          callbacks.onError?.(new Error(evt.error as string));
+          if (evt.done === true) receivedDone = true;
+          callbacks.onError?.(new SSEServerError(String(evt.error)));
           continue;
         }
         if (evt.phase && typeof evt.phase === "string") {

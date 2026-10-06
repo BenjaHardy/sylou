@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { consumeSSEStream } from "@/lib/sse-stream";
+import { consumeSSEStream, SSEServerError } from "@/lib/sse-stream";
 
 export interface ChatMessage {
   id: string;
@@ -172,7 +172,9 @@ export function useChatMessages(threadId: string | null) {
 
         // ---- SSE streaming path ----
         if (contentType.includes("text/event-stream") && res.body) {
-          let receivedDone = false;
+          // True once a done event or a server-reported error has painted the
+          // outcome; the fallback after the stream covers everything else.
+          let settled = false;
           // Accumulated regardless of visibility so a switch-away-and-back
           // mid-stream repaints the bubble with everything received so far.
           // (An "already inserted" boolean would lie after the return
@@ -207,22 +209,13 @@ export function useChatMessages(threadId: string | null) {
               if (isActive()) setPhase(p);
             },
             onDone: (evt) => {
-              receivedDone = true;
+              settled = true;
               // Account-level, not thread-level — deliberately unguarded.
               if (evt.budget_remaining != null) {
                 setBudgetRemaining(evt.budget_remaining as number);
               }
               if (!isActive()) return; // persisted server-side; refetch shows it
               setPhase(null);
-              if (evt.error) {
-                const serverMsg = typeof evt.error === "string" ? evt.error.slice(0, 200) : "";
-                // Server-side error — show inline error bubble, keep user message
-                setMessages((prev) => [
-                  ...prev.filter((m) => m.id !== streamingId),
-                  errorBubble(serverMsg),
-                ]);
-                return;
-              }
               setMessages((prev) => {
                 const without = prev.filter(
                   (m) => m.id !== optimisticId && m.id !== streamingId
@@ -240,13 +233,26 @@ export function useChatMessages(threadId: string | null) {
                 return next;
               });
             },
-            onError: () => {
-              if (isActive()) setPhase(null);
+            onError: (err) => {
+              // The function's own message (a provider error, the persistence
+              // warning) becomes the bubble, the user message kept; a
+              // connection drop falls through to the generic bubble below.
+              const reported = err instanceof SSEServerError;
+              if (reported) settled = true;
+              if (!isActive()) return;
+              setPhase(null);
+              if (reported) {
+                setMessages((prev) => [
+                  ...prev.filter((m) => m.id !== streamingId),
+                  errorBubble(err.message.slice(0, 200)),
+                ]);
+              }
             },
           });
 
-          // If we never got a done event, show error instead of silently removing
-          if (!receivedDone && isActive()) {
+          // Neither a done event nor a server-reported error arrived (a
+          // connection drop): show the generic bubble instead of silently removing
+          if (!settled && isActive()) {
             setMessages((prev) => [
               // Keep the optimistic user message visible
               ...prev.filter((m) => m.id !== streamingId),
