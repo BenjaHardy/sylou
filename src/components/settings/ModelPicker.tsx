@@ -3,10 +3,6 @@ import { ChevronDown, ChevronRight, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-
-/** Shown beside the reasoning select of a model that offers "Max (slow)". */
-const MAX_LEVEL_NOTICE =
-  "Max can exceed the app's time and output limits and come back with no answer. Use it for an occasional deep question, not everyday chat.";
 import {
   PROVIDER_LABELS,
   resolveReasoningId,
@@ -14,6 +10,10 @@ import {
   type ModelInfo,
   type ReasoningOptionsByModel,
 } from "@/lib/models";
+
+/** Shown beside the reasoning select of a model that offers "Max (slow)". */
+const MAX_LEVEL_NOTICE =
+  "Max can exceed the app's time and output limits and come back with no answer. Use it for an occasional deep question, not everyday chat.";
 
 // Grouped model picker for the Settings dialog. The registry keeps growing,
 // so the flat card lists became two long scrolls; each picker now folds its

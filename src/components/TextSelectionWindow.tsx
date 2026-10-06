@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
-import { consumeSSEStream } from "@/lib/sse-stream";
+import { consumeSSEStream, SSEServerError, STREAM_CUT_OFF_MESSAGE } from "@/lib/sse-stream";
 import { assessSelectionSize } from "@/lib/editor-limits";
 import { LargeSelectionNotice } from "@/components/text-selection/LargeSelectionNotice";
 import { TruncatedAcceptDialog } from "@/components/text-selection/TruncatedAcceptDialog";
@@ -133,6 +133,11 @@ export function TextSelectionWindow({
   // explanation arrives as the result text, shown as a notice, never offered
   // for insertion; Reject still records the outcome on the action row.
   const [resultRefused, setResultRefused] = useState(false);
+  // A failed action: the function's own message when it sent one (an HTTP
+  // error body, the `error` of a stream event), a generic one for a
+  // connection problem. Shown inline until the next action starts, so it is
+  // still there after a tab switch; the typed instruction is kept for a retry.
+  const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [confirmAcceptOpen, setConfirmAcceptOpen] = useState(false);
   const [largeSelectionAcknowledged, setLargeSelectionAcknowledged] = useState(false);
 
@@ -271,12 +276,23 @@ export function TextSelectionWindow({
     return undefined;
   }, [provenanceTracker, selectionFrom, selectionTo, isCreativeModule]);
 
+  /** Shows the failure inline and returns to where a retry is one click:
+   *  the input phase for an action that took an instruction, the actions
+   *  phase otherwise. */
+  const failAction = useCallback((message: string, backTo: "actions" | "input") => {
+    setErrorNotice(message);
+    setStreamingText("");
+    setPhase(backTo);
+  }, []);
+
   // ── Streaming editor-action (predefined actions) ──
   const callEditorActionStreaming = useCallback(
     async (actionType: string, targetLanguage?: string) => {
+      const backTo = targetLanguage ? "input" : "actions";
       setPhase("loading");
       setLoadingStage("preparing");
       setStreamingText("");
+      setErrorNotice(null);
 
       const headers = await getAuthHeaders();
       if (!headers) {
@@ -306,8 +322,7 @@ export function TextSelectionWindow({
           const errText = await res.text();
           let errMsg = "AI action failed. Please try again.";
           try { errMsg = JSON.parse(errText).error || errMsg; } catch { /* keep default errMsg */ }
-          toast.error(errMsg);
-          setPhase("actions");
+          failAction(errMsg, backTo);
           return;
         }
 
@@ -328,36 +343,33 @@ export function TextSelectionWindow({
               setResultRefused(refused);
               setCurrentActionId((evt.action_id as string) ?? null);
               if (!refused) provenanceTracker?.registerAiResultText(result);
+              setInputText("");
               setPhase("result");
             },
             onError: (err) => {
               console.error("Editor action stream error:", err);
-              toast.error("AI action failed. Please try again.");
-              setPhase("actions");
-              setStreamingText("");
+              failAction(err instanceof SSEServerError ? err.message : STREAM_CUT_OFF_MESSAGE, backTo);
             },
           });
         } else {
           // JSON fallback
           const data = await res.json();
           if (data?.error) {
-            toast.error(data.error);
-            setPhase("actions");
+            failAction(data.error, backTo);
             return;
           }
           setProposedText(data.proposed_text);
           setCurrentActionId(data.action_id);
           provenanceTracker?.registerAiResultText(data.proposed_text);
+          setInputText("");
           setPhase("result");
         }
       } catch (err) {
         console.error("Editor action failed:", err);
-        toast.error("Failed to process AI action.");
-        setPhase("actions");
-        setStreamingText("");
+        failAction("Failed to process AI action.", backTo);
       }
     },
-    [projectId, selectedText, getSourceBreakdown, provenanceTracker]
+    [projectId, selectedText, getSourceBreakdown, provenanceTracker, failAction]
   );
 
   // ── Streaming context-prompt (Ask / Propose) ──
@@ -369,9 +381,11 @@ export function TextSelectionWindow({
         return;
       }
 
+      const backTo = "input";
       setPhase("loading");
       setLoadingStage("reviewing");
       setStreamingText("");
+      setErrorNotice(null);
 
       const headers = await getAuthHeaders();
       if (!headers) {
@@ -405,8 +419,7 @@ export function TextSelectionWindow({
           const errText = await res.text();
           let errMsg = "AI action failed. Please try again.";
           try { errMsg = JSON.parse(errText).error || errMsg; } catch { /* keep default errMsg */ }
-          toast.error(errMsg);
-          setPhase("actions");
+          failAction(errMsg, backTo);
           return;
         }
 
@@ -497,6 +510,7 @@ export function TextSelectionWindow({
                 setResultRefused(refused);
                 setCurrentActionId((evt.action_id as string) ?? null);
                 if (!refused) provenanceTracker?.registerAiResultText(aiResponse);
+                setInputText("");
                 setPhase("result");
               }
             },
@@ -505,17 +519,14 @@ export function TextSelectionWindow({
               if (actionType === "ask" && setMessages) {
                 setMessages((prev) => prev.filter((m) => m.id !== "streaming-ask"));
               }
-              toast.error("AI action failed. Please try again.");
-              setPhase("actions");
-              setStreamingText("");
+              failAction(err instanceof SSEServerError ? err.message : STREAM_CUT_OFF_MESSAGE, backTo);
             },
           });
         } else {
           // JSON fallback (non-streaming)
           const data = await res.json();
           if (data?.error) {
-            toast.error(data.error);
-            setPhase("actions");
+            failAction(data.error, backTo);
             return;
           }
 
@@ -529,23 +540,23 @@ export function TextSelectionWindow({
             setProposedText(data.ai_response);
             setCurrentActionId(data.action_id);
             provenanceTracker?.registerAiResultText(data.ai_response);
+            setInputText("");
             setPhase("result");
           }
         }
       } catch (err) {
         console.error("Context prompt failed:", err);
-        toast.error("Failed to process AI action.");
-        setPhase("actions");
-        setStreamingText("");
+        failAction("Failed to process AI action.", backTo);
       }
     },
-    [projectId, threadId, selectedText, onAskComplete, onClose, getSourceBreakdown, conciseMode, provenanceTracker, setMessages]
+    [projectId, threadId, selectedText, onAskComplete, onClose, getSourceBreakdown, conciseMode, provenanceTracker, setMessages, failAction]
   );
 
   const handleAction = useCallback(
     (actionId: ActionId) => {
       setActiveAction(actionId);
       setResultTruncated(false);
+      setErrorNotice(null);
 
 
 
@@ -568,19 +579,18 @@ export function TextSelectionWindow({
 
   const handleInputSubmit = () => {
     if (!inputText.trim()) return;
+    // The text stays until the action succeeds, so a failed one is retried
+    // from the same box.
     if (activeAction === "ask") {
       callContextPromptStreaming("ask", inputText.trim());
-      setInputText("");
       return;
     }
     if (activeAction === "propose") {
       callContextPromptStreaming("propose", inputText.trim());
-      setInputText("");
       return;
     }
     if (activeAction === "translate") {
       callEditorActionStreaming("translate", inputText.trim());
-      setInputText("");
       return;
     }
   };
@@ -692,6 +702,11 @@ export function TextSelectionWindow({
         {/* Actions phase */}
         {phase === "actions" && (
           <div className="space-y-2">
+            {errorNotice && (
+              <p role="alert" className="p-2 rounded-md border border-border bg-muted text-foreground text-xs">
+                {errorNotice}
+              </p>
+            )}
             {editorActionsGated ? (
               <>
                 <LargeSelectionNotice
@@ -848,6 +863,11 @@ export function TextSelectionWindow({
         {/* Input phase (Ask / Propose / Translate) */}
         {phase === "input" && (
           <div className="space-y-3">
+            {errorNotice && (
+              <p role="alert" className="p-2 rounded-md border border-border bg-muted text-foreground text-xs">
+                {errorNotice}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
               {activeAction === "ask"
                 ? "Type your question about the selected text…"
@@ -892,6 +912,7 @@ export function TextSelectionWindow({
                   setPhase("actions");
                   setActiveAction(null);
                   setInputText("");
+                  setErrorNotice(null);
                 }}
               >
                 Back
