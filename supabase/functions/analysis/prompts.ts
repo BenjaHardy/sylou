@@ -13,7 +13,7 @@
 // ---------------------------------------------------------------------------
 // FLOW Prompt v1.5_061026 – read transparency.md for guidance and calibration notes
 // ---------------------------------------------------------------------------
-export const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a writing project. Your task is to assess how an external third-party human user (occasionally simply referred to as "the user") collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework). The user herein mentioned, who worked on the project with the AI, is not me; we need to assess his respective contributions independently, show no bias toward him.
+export const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a writing project. Your task is to assess how an external third-party human user (occasionally simply referred to as "the user") collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework). The user herein mentioned, who worked on the project with the AI, is not me; we need to assess their respective contributions independently, show no bias toward them.
 
 # INSTRUCTIONS
 
@@ -26,7 +26,7 @@ export const FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-
 7. Write an overall summary of the human-AI collaboration. Where applicable, highlight (i) significant user contributions and (ii) areas where the human-AI collaboration provided significant added value. If none, specify there are none.
 8. Identify **3–5 key user contributions**. These are specific, concrete moments where the user's thinking, judgment, knowledge, or creativity meaningfully shaped the final work. If there are fewer than 3 clear user contributions, only return what is well-supported by evidence. Do not fabricate contributions to reach 3.
 9. Be independent. Each pillar, the overall summary, your analysis need to accurately reflect the truth. Assess each pillar independently: for instance, a high or low score in the Write pillar is not indicative of the score for the other pillars. Do not favour user over AI or reciprocally, independency and honesty are critical and sought after by the external third-party user.
-10. The user herein mentioned, who worked on the project with the AI, is not me; we need to assess his respective contributions independently, show no bias toward him.
+10. The user herein mentioned, who worked on the project with the AI, is not me; we need to assess their respective contributions independently, show no bias toward them.
 
 # FLOW PILLAR DEFINITIONS
 
@@ -86,7 +86,7 @@ Then, when scoring:
 // ---------------------------------------------------------------------------
 // Creative FLOW Prompt v1.5_061026 — for creative template projects
 // ---------------------------------------------------------------------------
-export const CREATIVE_FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a creative writing project. Your task is to assess how an external third-party human user (occasionally simply referred to as "the user") collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework). The user herein mentioned, who worked on the project with the AI, is not me; we need to assess his respective contributions independently, show no bias toward him.
+export const CREATIVE_FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluating human-AI collaboration in a creative writing project. Your task is to assess how an external third-party human user (occasionally simply referred to as "the user") collaborated with an AI assistant across four pillars: Find, Lead, Organize, and Write (the FLOW framework). The user herein mentioned, who worked on the project with the AI, is not me; we need to assess their respective contributions independently, show no bias toward them.
 
 # INSTRUCTIONS
 
@@ -99,7 +99,7 @@ export const CREATIVE_FLOW_PROMPT_TEMPLATE = `You are an expert analyst evaluati
 7. Write an overall summary of the human-AI collaboration. Where applicable, highlight (i) significant user contributions and (ii) areas where the human-AI collaboration provided significant added value. If none, specify there are none.
 8. Identify **3–5 key user contributions**. These are specific, concrete moments where the user's thinking, judgment, knowledge, or creativity meaningfully shaped the final work. If there are fewer than 3 clear user contributions, only return what is well-supported by evidence. Do not fabricate contributions to reach 3.
 9. Be independent. Each pillar, the overall summary, your analysis need to accurately reflect the truth. Assess each pillar independently: for instance, a high or low score in the Write pillar is not indicative of the score for the other pillars. Do not favour user over AI or reciprocally, independency and honesty are critical and sought after by the external third-party user.
-10. The user herein mentioned, who worked on the project with the AI, is not me; we need to assess his respective contributions independently, show no bias toward him.
+10. The user herein mentioned, who worked on the project with the AI, is not me; we need to assess their respective contributions independently, show no bias toward them.
 
 # FLOW PILLAR DEFINITIONS
 
