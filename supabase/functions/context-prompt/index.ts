@@ -408,6 +408,27 @@ Deno.serve(async (req) => {
 
     const { sseEvent, createSSEResponse, keepAlive } = makeSSEHelpers(corsHeaders);
 
+    // The `done` event of a persisted exchange: the reply with its stop
+    // flags, the rows and the remaining budget, or the persistence warning.
+    type PersistResult = Awaited<ReturnType<typeof persistContextExchange>>;
+    const doneEvent = (aiResponse: string, stopReason: string | null, r: PersistResult) =>
+      sseEvent(
+        r.persistenceFailed
+          ? { done: true, error: "Messages may not have been saved." }
+          : {
+            done: true,
+            ai_response: aiResponse,
+            truncated: isTruncatedStop(stopReason),
+            refused: isRefusalStop(stopReason),
+            summary_update: summaryUpdate,
+            action_id: r.actionRow?.id ?? null,
+            budget_remaining: r.budgetRemaining,
+            inserted_messages: r.insertedMessages,
+            ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
+            ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
+          },
+      );
+
     // ── TWO-PASS FLOW when tools exist ──
     // Move entire Call #2a inside ReadableStream so phase events stream immediately
     if (hasTools) {
@@ -456,24 +477,8 @@ Deno.serve(async (req) => {
 
               await replayTokenBurst(responseText, (chunk) => controller.enqueue(sseEvent({ token: chunk })));
 
-              const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, responseText, totalInputChars, totalOutputChars);
-
-              if (persistenceFailed) {
-                controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
-              } else {
-                controller.enqueue(sseEvent({
-                  done: true,
-                  ai_response: responseText,
-                  truncated: isTruncatedStop(norm2a.stopReason),
-                  refused: isRefusalStop(norm2a.stopReason),
-                  summary_update: summaryUpdate,
-                  action_id: actionRow?.id ?? null,
-                  budget_remaining: budgetRemaining,
-                  inserted_messages: insertedMessages,
-                  ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
-                  ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
-                }));
-              }
+              const persisted = await persistContextExchange(persistCtx, responseText, totalInputChars, totalOutputChars);
+              controller.enqueue(doneEvent(responseText, norm2a.stopReason, persisted));
             } else {
               // ── Tool use detected ──
               console.log("[stream:context-prompt] tool use detected:", toolCalls.length, "calls");
@@ -541,25 +546,9 @@ Deno.serve(async (req) => {
                 console.warn("[stream:context-prompt] Call #2b returned no text", { stop_reason: call2b.stopReason, ...call2b.stats });
               }
               const aiResponse = fullResponse.trim() || fallbackReplyText(call2b.stopReason);
-              const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars, totalOutputChars + aiResponse.length);
-
+              const persisted = await persistContextExchange(persistCtx, aiResponse, totalInputChars, totalOutputChars + aiResponse.length);
               try {
-                if (persistenceFailed) {
-                  controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
-                } else {
-                  controller.enqueue(sseEvent({
-                    done: true,
-                    ai_response: aiResponse,
-                    truncated: isTruncatedStop(call2b.stopReason),
-                    refused: isRefusalStop(call2b.stopReason),
-                    summary_update: summaryUpdate,
-                    action_id: actionRow?.id ?? null,
-                    budget_remaining: budgetRemaining,
-                    inserted_messages: insertedMessages,
-                    ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
-                    ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
-                  }));
-                }
+                controller.enqueue(doneEvent(aiResponse, call2b.stopReason, persisted));
               } catch { /* client gone */ }
             }
           } catch (err) {
@@ -629,23 +618,9 @@ Deno.serve(async (req) => {
           }
           const aiResponse = fullResponse.trim() || fallbackReplyText(relay.stopReason);
           const extraInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
-          const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars + extraInputChars, totalOutputChars + aiResponse.length);
-
+          const persisted = await persistContextExchange(persistCtx, aiResponse, totalInputChars + extraInputChars, totalOutputChars + aiResponse.length);
           try {
-            if (persistenceFailed) {
-              controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
-            } else {
-              controller.enqueue(sseEvent({
-                done: true,
-                ai_response: aiResponse,
-                truncated: isTruncatedStop(relay.stopReason),
-                refused: isRefusalStop(relay.stopReason),
-                summary_update: summaryUpdate,
-                action_id: actionRow?.id ?? null,
-                budget_remaining: budgetRemaining,
-                inserted_messages: insertedMessages,
-              }));
-            }
+            controller.enqueue(doneEvent(aiResponse, relay.stopReason, persisted));
           } catch { /* client gone */ }
 
           console.log("[stream:context-prompt] persistence complete");
