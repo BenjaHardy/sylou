@@ -15,6 +15,7 @@ import {
 } from "../_shared/_thinking.ts";
 import {
   fetchConversationMemory,
+  fetchVerbatimWindow,
   maybeRefreshConversationMemory,
 } from "../_shared/_conversation_memory.ts";
 import { WEB_SEARCH_PROMPT } from "../_shared/_prompts.ts";
@@ -235,24 +236,13 @@ Deno.serve(async (req) => {
 
     const existingSummary = summaryRow?.summary_text ?? null;
 
-    // --- 3. Fetch recent chat messages (last 20, cross-thread) ---
-    const { data: projectThreads } = await supabase
-      .from("chat_threads")
-      .select("id")
-      .eq("project_id", project_id);
-
-    const threadIds = (projectThreads ?? []).map((t: { id: string }) => t.id);
-
-    const { data: recentMessages } = threadIds.length > 0
-      ? await supabase
-          .from("chat_messages")
-          .select("role, content")
-          .in("thread_id", threadIds)
-          .order("created_at", { ascending: false })
-          .limit(50)
-      : { data: [] };
-
-    const recentChat = (recentMessages ?? []).reverse();
+    // --- 3. Conversation memory + the verbatim window of the active thread ---
+    // Read via the user-context client so RLS scopes both to the caller's
+    // own threads. The memory renders next to RECENT CHAT HISTORY inside the
+    // same context container that carries the raw messages — identical
+    // relative privilege.
+    const conversationMemory = await fetchConversationMemory(supabase, thread_id);
+    const recentChat = await fetchVerbatimWindow(supabase, thread_id, conversationMemory);
 
     // --- 4. LLM Call #1: Writing Summary (non-streamed) ---
     const summaryMessages = buildSummaryPrompt(
@@ -334,13 +324,6 @@ Deno.serve(async (req) => {
     if (webSearchActive) {
       systemPrompt += WEB_SEARCH_PROMPT;
     }
-
-    // conversation-memory: the ACTIVE thread's rolling summary (the recent
-    // window above is project-wide; the memory is per-thread). Read via the
-    // user-context client so RLS scopes it to the caller's own threads. It
-    // renders next to RECENT CHAT HISTORY inside the same context container
-    // that already carries the raw messages — identical relative privilege.
-    const conversationMemory = await fetchConversationMemory(supabase, thread_id);
 
     const responseMessages = buildResponsePrompt(
       systemPrompt,

@@ -15,6 +15,7 @@ import {
 import {
   buildMemoryInjection,
   fetchConversationMemory,
+  fetchVerbatimWindow,
   maybeRefreshConversationMemory,
 } from "../_shared/_conversation_memory.ts";
 
@@ -196,25 +197,14 @@ Deno.serve(async (req) => {
       systemPrompt += WEB_SEARCH_PROMPT;
     }
 
-    // --- Fetch the 50 most recent messages ---
-    // Order descending + limit to get the *newest* 50 (the tail of a long
-    // thread), then reverse back to chronological order for the model.
-    // Ascending + limit would send the oldest 50 and hide recent context
-    // once a thread passes 50 messages. (context-prompt does the same.)
-    const { data: recentHistory } = await supabase
-      .from("chat_messages")
-      .select("role, content")
-      .eq("thread_id", threadId)
-      .order("created_at", { ascending: false })
-      .limit(50);
-    const history = (recentHistory ?? []).reverse();
-
-    // conversation-memory: inject the rolling thread summary (if one
-    // exists) ahead of the verbatim window. User zone, deliberately never
-    // the system prompt — it is condensed USER conversation and must stay
-    // exactly as privileged as the raw messages it summarizes. Read via the
-    // user-context client so RLS scopes it to the caller's own threads.
+    // conversation-memory: the rolling thread summary (if one exists) ahead
+    // of the verbatim window that follows it (fetchVerbatimWindow). User
+    // zone, deliberately never the system prompt — it is condensed USER
+    // conversation and must stay exactly as privileged as the raw messages
+    // it summarizes. Read via the user-context client so RLS scopes both to
+    // the caller's own threads.
     const conversationMemory = await fetchConversationMemory(supabase, threadId);
+    const history = await fetchVerbatimWindow(supabase, threadId, conversationMemory);
 
     // --- Build messages array ---
     const llmMessages: LLMMessage[] = [
@@ -225,7 +215,7 @@ Deno.serve(async (req) => {
             content: buildMemoryInjection(conversationMemory.summary_text),
           }]
         : []),
-      ...(history ?? []).map((m: { role: string; content: string }): LLMMessage => ({
+      ...history.map((m): LLMMessage => ({
         role: m.role as LLMMessage["role"],
         content: m.content,
       })),
