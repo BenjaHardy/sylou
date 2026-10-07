@@ -238,14 +238,22 @@ These simple inline editor actions (Fix grammar, Translate, Rewrite, Simplify, E
 ### 5.5 Conversation memory (coherence of long chat discussions)
 
 On every message, the assistant re-reads only the most recent stretch of the
-conversation (about 50 messages). To avoid long collaborations losing their
-earlier decisions, each thread past that size gets a rolling **conversation
-memory**: an AI-written summary (decisions and direction, structure and
-plans, established facts and names, open threads, and a short narrative of the
-work so far) regenerated (not appended) roughly every 50 messages, capped in
-size, and stored with the thread. Chat replies and Ask/Propose actions then
-work from this memory plus the newest messages verbatim. The summarization
-runs on the selected chat model and is billed like any other call.
+conversation (between 20 and 70 messages, see below). To avoid long
+collaborations losing their earlier decisions, each thread past 50 messages
+gets a rolling **conversation memory**: an AI-written summary (decisions and
+direction, structure and plans, established facts and names, open threads, and
+a short narrative of the work so far) regenerated (not appended) roughly every
+50 messages, capped in size, and stored with the thread. Chat replies and
+Ask/Propose actions then work from this memory plus the newest messages
+verbatim: the last 20 messages the memory already covers, and everything
+written since. The summarization runs on the selected chat model and is billed
+like any other call.
+
+Chat requests also use the model providers' prompt caching: the provider keeps
+the processed beginning of a prompt for a few minutes, so that the next request
+in a lively exchange re-reads it at a fraction of the price. This changes
+nothing in what the model sees or answers, and nothing is stored beyond the
+provider's short-lived cache (details in `docs/model-configuration.md`).
 
 It is stored per thread, and FLOW never reads it: instead the analysis reads the full raw chat history itself (5.3).
 

@@ -114,7 +114,10 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   (`chat_thread_summaries`, maintained by `_shared/_conversation_memory.ts`
   in the chat/context-prompt stream tails) follows the same pattern —
   user-read-only, service-role writes, injected into chat and
-  context-prompt prompts — and is **never** read by FLOW (same principle
+  context-prompt prompts ahead of the verbatim window (`fetchVerbatimWindow`:
+  the 20 newest covered messages, then everything after the watermark, so
+  the prompt prefix only grows between refreshes) — and is **never** read
+  by FLOW (same principle
   as the withheld `writing_summary_log`: continuity aid, not assessment
   evidence). Don't collapse these paths.
 - **RLS**: security-definer functions (`owns_project`, `owns_thread`)
@@ -214,6 +217,12 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
     effort unions (`CLAUDE_ALWAYS_THINKING`, `CLAUDE_THINKING_OFF_BETWEEN_TOOLS`,
     `ClaudeEffort`, `MistralEffort`): the one module `_llm.ts` and
     `_thinking.ts` both import without a cycle.
+- **Prompt caching** (`CacheHint` on `callLLM`, passed by chat only): Anthropic
+  `cache_control` on the system block and on the last message block (the
+  final call after a loop marks the system only — its `tool_choice: none`
+  drops the conversation entry), Mistral `prompt_cache_key` = thread id,
+  DeepSeek nothing. `[usage]` log lines carry the providers' cache fields.
+  See `docs/model-configuration.md` § Prompt caching.
 - **No router bypasses**: every LLM call goes through `_llm.ts`.
   (`extract-text`'s former hardcoded Mistral call was removed in #10 — it
   now summarizes with the user's `preferred_chat_model` and silently falls

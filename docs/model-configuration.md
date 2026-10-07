@@ -192,6 +192,26 @@ The max_tokens ceiling follows the choice: the reasoning ceiling applies wheneve
 
 ---
 
+### Prompt caching
+
+Chat calls ask the provider to cache the prompt prefix, so that the next call that re-sends it — the tool loop's check calls within the same request, and the next turn of a lively exchange — reads it at the cache price instead of the full input price. Outputs are unaffected: the cache is the provider's own intermediate computation for the same bytes, and a changed byte simply misses.
+
+| Provider | Mechanism | What Sylou sends (`CacheHint` on `callLLM`) |
+|---|---|---|
+| Anthropic | Explicit `cache_control` marks on content blocks; an entry lives 5 minutes from the start of the last request that read or wrote it; minimum cacheable prefix 1,024 tokens on Sonnet 4.6 and Opus 4.8, 512 on the 5.5 family and Fable 5.1 | A mark on the system block and, for the "conversation" scope, on the last message block (the first call, the loop's check calls, the no-tools call). The final call after a loop marks the system block only: its `tool_choice: none` drops the conversation entry by Anthropic's rules. |
+| Mistral API (GLM 5.3 included) | `prompt_cache_key`, a routing hint without guarantee; 64-token blocks; cached tokens at 10 % of the input price | The thread id as the key |
+| DeepSeek | Automatic | Nothing |
+
+Anthropic prices: a cache write costs 1.25× the input price, a read 0.1× (0.05× on Opus 5.5, 0.025× on Fable 5.1). A written prefix that nothing reads within 5 minutes therefore costs 25 % more than an uncached one. A tool loop always reads what it wrote; a follow-up turn reads it when it starts within 5 minutes of the previous request's start, so a long think eats into that window. Ask/Propose, FLOW, editor actions and the summary calls send no hint: their prompts are per-request or single-shot, and a write there would never be read.
+
+Verification: every call logs `[usage] {provider, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens}` (streams add `stream: true`). On the second call of a loop, or the second turn within 5 minutes, `cache_read_tokens` covers the previous prefix and `cache_write_tokens` only the delta. Zero reads on an unchanged conversation mean an invalidator: web search or concise mode toggled, a document imported, removed or favourited, a changed reasoning level, a memory refresh — each an expected one-time miss.
+
+The verbatim history window is anchored to the conversation memory so that it only grows between refreshes (`fetchVerbatimWindow` in `_shared/_conversation_memory.ts`: the 20 newest messages the memory already covers, then everything after its watermark; the newest 70 messages before the first memory exists). A window sliding by one message per turn would have missed on every turn past its size.
+
+Turning it off: drop the `cache` option from the chat call sites in `chat/index.ts` (the loop forwards it); the router then sends exactly the previous bytes.
+
+---
+
 ## Where to find these settings in code
 
 | Setting                                       | File                                          | Notes                                                                                             |
@@ -206,6 +226,8 @@ The max_tokens ceiling follows the choice: the reasoning ceiling applies wheneve
 | Anthropic models without temperature          | `supabase/functions/_shared/_temperatures.ts` | `NO_TEMPERATURE_MODELS` set.                                                                      |
 | Claude thinking rules per model               | `supabase/functions/_shared/_models.ts`       | `CLAUDE_ALWAYS_THINKING` (thinking cannot be turned off; forced on by `resolveThinking`), `CLAUDE_THINKING_OFF_BETWEEN_TOOLS` ("off" is sent as `between_tools`). |
 | Refusal message                               | `supabase/functions/_shared/_llm.ts`          | `fallbackReplyText` (an explicit message on `stop_reason: "refusal"`, no fallback model). |
+| Prompt caching                                | `supabase/functions/_shared/_llm.ts`          | `CacheHint` on `callLLM` (passed by `chat/index.ts`); Anthropic `cache_control` marks, Mistral `prompt_cache_key`; `[usage]` log lines carry the providers' cache fields (`normaliseUsage`). |
+| Verbatim history window                       | `supabase/functions/_shared/_conversation_memory.ts` | `fetchVerbatimWindow`, `VERBATIM_TAIL` (20), `VERBATIM_CAP` (100): the memory-anchored window chat and context-prompt inject. |
 | Server-side model allowlist + input limits    | `supabase/functions/_shared/_models.ts`       | `ALLOWED_MODELS` (gates the `model` request override), `INPUT_LIMITS` (request text ceilings), `CONTEXT_LIMIT_TOKENS` (per-model context windows, mirrors the registry). |
 | FLOW imported-documents budget                | `supabase/functions/analysis/index.ts`        | `FLOW_IMPORTED_DOCS_BUDGET_TOKENS` cost ceiling; effective allowance = min(policy, model-window remainder after the never-truncated sections). |
 | Provider request timeout                      | `supabase/functions/_shared/_llm.ts`          | `callLLM` `timeoutMs` — default 120s; analysis passes 145s (hosted request-idle limit is 150s); Brave web-search fetches use a 10s `AbortSignal.timeout`. A chat call that hits it is answered with a persisted notice (`PROVIDER_TIMEOUT_MESSAGE`), on every provider, so the explanation survives a thread switch; Ask/Propose report it in the selection window. |
