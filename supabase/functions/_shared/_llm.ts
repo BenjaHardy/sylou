@@ -704,9 +704,16 @@ export function fallbackReplyText(stopReason: string | null | undefined): string
 export const PROVIDER_TIMEOUT_MESSAGE =
   "The model did not answer within the time limit. Try a lower reasoning level in Settings, or a more focused question.";
 
-/** True for the error fetchWithTimeout throws on abort. */
+/** fetchWithTimeout's abort: the provider's response had not started within the limit. */
+export class ProviderTimeoutError extends Error {
+  constructor(timeoutMs: number, cause: unknown) {
+    super(`Provider request timed out after ${Math.round(timeoutMs / 1000)}s`, { cause });
+    this.name = "ProviderTimeoutError";
+  }
+}
+
 export function isProviderTimeout(err: unknown): boolean {
-  return err instanceof Error && err.message.startsWith("Provider request timed out");
+  return err instanceof ProviderTimeoutError;
 }
 
 /**
@@ -846,8 +853,8 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
  * arrived), so a streaming body is never cut mid-stream — the timeout only
  * bounds the wait for the stream to begin. Non-streaming provider APIs send
  * headers together with the finished body, so there it bounds the whole
- * generation. Abort surfaces as a plain Error (not a DOMException) so the
- * callers' existing catch paths render a clean message.
+ * generation. Abort surfaces as a ProviderTimeoutError (isProviderTimeout),
+ * never as the raw DOMException.
  * `fetchImpl` is injectable for tests; production always uses global fetch.
  */
 export async function fetchWithTimeout(
@@ -861,12 +868,7 @@ export async function fetchWithTimeout(
   try {
     return await fetchImpl(url, { ...init, signal: controller.signal });
   } catch (err) {
-    if (controller.signal.aborted) {
-      throw new Error(
-        `Provider request timed out after ${Math.round(timeoutMs / 1000)}s`,
-        { cause: err },
-      );
-    }
+    if (controller.signal.aborted) throw new ProviderTimeoutError(timeoutMs, err);
     throw err;
   } finally {
     clearTimeout(timer);

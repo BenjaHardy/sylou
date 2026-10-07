@@ -13,6 +13,7 @@ import {
   isTruncatedStop,
   fetchWithTimeout,
   normaliseResponse,
+  ProviderTimeoutError,
   sanitizeAnthropicSchema,
   toAnthropicBody,
   toOpenAIBody,
@@ -362,13 +363,14 @@ Deno.test("fetchWithTimeout: aborts a fetch that never settles", async () => {
       init?.signal?.addEventListener("abort", () =>
         reject(new DOMException("The signal has been aborted", "AbortError")));
     });
-  let message = "";
+  let caught: unknown = null;
   try {
     await fetchWithTimeout("https://example.invalid/", {}, 50, hangingFetch);
   } catch (err) {
-    message = (err as Error).message;
+    caught = err;
   }
-  assert(message.includes("timed out after"), `unexpected: "${message}"`);
+  assert(caught instanceof ProviderTimeoutError, `unexpected: ${String(caught)}`);
+  assert((caught as Error).message.includes("timed out after"));
 });
 
 Deno.test("fetchWithTimeout: passes a settled response through and clears the timer", async () => {
@@ -535,9 +537,10 @@ Deno.test("fallbackReplyText: explicit messages on a refusal and on a ceiling sp
   assertEquals(fallbackReplyText(undefined), "No response generated.");
   assertEquals(isRefusalStop("refusal"), true);
   assertEquals(isRefusalStop("max_tokens"), false);
-  assertEquals(isProviderTimeout(new Error("Provider request timed out after 120s")), true);
+  assertEquals(isProviderTimeout(new ProviderTimeoutError(120_000, null)), true);
   assertEquals(isProviderTimeout(new Error("boom")), false);
-  assertEquals(isProviderTimeout("Provider request timed out after 120s"), false);
+  // The class is the signal, never the wording.
+  assertEquals(isProviderTimeout(new Error("Provider request timed out after 120s")), false);
 });
 
 Deno.test("stop_details: carried from a non-streamed Anthropic refusal and from a streaming message_delta, null elsewhere", () => {
