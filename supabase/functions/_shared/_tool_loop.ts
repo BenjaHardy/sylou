@@ -32,6 +32,7 @@ import {
   cleanLLMContent,
   normaliseResponse,
   providerFor,
+  type CacheHint,
   type LLMMessage,
   type LLMTool,
   type NormalisedResponse,
@@ -113,6 +114,8 @@ export interface ToolLoopDeps {
   thinking: Parameters<typeof callLLM>[0]["thinking"];
   effort: Parameters<typeof callLLM>[0]["effort"];
   mistralEffort: Parameters<typeof callLLM>[0]["mistral_effort"];
+  /** Forwarded to every check call: each one re-sends the previous call's prefix. */
+  cache?: CacheHint;
   /** Log prefix, so each function keeps its own log lines. */
   logTag: string;
   /** Replaces callLLM in unit tests. */
@@ -127,7 +130,7 @@ export async function runToolLoop(
   const {
     toolMessages, toolCalls, documentsReferenced, webSearchesPerformed,
     emitPhase, projectId, chatModel, chatMaxTokens, tools, temperature,
-    thinking, effort, mistralEffort, logTag,
+    thinking, effort, mistralEffort, cache, logTag,
   } = deps;
   const adminSupabase = deps.adminSupabase as DocReadClient;
   const llm = deps.llm ?? callLLM;
@@ -219,6 +222,7 @@ export async function runToolLoop(
           thinking,
           effort,
           mistral_effort: mistralEffort,
+          cache,
         });
 
       if (!nextRes.ok) {

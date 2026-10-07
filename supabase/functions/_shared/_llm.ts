@@ -79,6 +79,33 @@ export function authHeadersFor(provider: ProviderId, key: string): Record<string
   };
 }
 
+/** Prompt caching for a call whose prefix is re-sent within minutes: the
+ *  tool loop's next call, or the next turn of a lively chat. "prefix" marks
+ *  the system prefix only (the final call after a loop, whose changed
+ *  tool_choice drops the conversation entry anyway); "conversation" also
+ *  marks the last message, so the growing tail is cached too. Anthropic:
+ *  cache_control marks; Mistral: prompt_cache_key = key; DeepSeek: automatic.
+ *  docs/model-configuration.md § Prompt caching. */
+export interface CacheHint {
+  key: string;
+  scope: "prefix" | "conversation";
+}
+
+const EPHEMERAL = { type: "ephemeral" } as const;
+
+/** Marks the last content block of the last message, copying what it touches. */
+function markLastBlock(msgs: Array<Record<string, unknown>>): void {
+  const last = msgs[msgs.length - 1];
+  if (!last) return;
+  if (typeof last.content === "string") {
+    last.content = [{ type: "text", text: last.content, cache_control: EPHEMERAL }];
+  } else if (Array.isArray(last.content) && last.content.length > 0) {
+    const blocks = [...(last.content as Record<string, unknown>[])];
+    blocks[blocks.length - 1] = { ...blocks[blocks.length - 1], cache_control: EPHEMERAL };
+    last.content = blocks;
+  }
+}
+
 // Translate OpenAI-style messages + tools into Anthropic Messages format.
 export function toAnthropicBody(opts: {
   model: string;
@@ -93,6 +120,7 @@ export function toAnthropicBody(opts: {
   json_schema?: { name: string; schema: Record<string, unknown> };
   thinking?: boolean;
   effort?: ClaudeEffort;
+  cache?: CacheHint;
 }): Record<string, unknown> {
   let system = "";
   const msgs: Array<Record<string, unknown>> = [];
@@ -143,10 +171,11 @@ export function toAnthropicBody(opts: {
     });
   }
 
+  if (opts.cache?.scope === "conversation") markLastBlock(msgs);
   const body: Record<string, unknown> = {
     model: opts.model,
     max_tokens: opts.max_tokens,
-    system: system || undefined,
+    system: !system ? undefined : opts.cache ? [{ type: "text", text: system, cache_control: EPHEMERAL }] : system,
     messages: msgs,
   };
   if (opts.stream) body.stream = true;
@@ -341,6 +370,8 @@ export function toOpenAIBody(opts: {
   forceTool?: string;
   temperature?: number;
   reasoning_effort?: MistralEffort;
+  /** Mistral's cache routing hint (CacheHint.key); never sent to DeepSeek. */
+  prompt_cache_key?: string;
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: opts.model,
@@ -349,6 +380,7 @@ export function toOpenAIBody(opts: {
     max_tokens: opts.max_tokens,
   };
   if (opts.stream) body.stream = true;
+  if (opts.prompt_cache_key) body.prompt_cache_key = opts.prompt_cache_key;
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     // Named forcing (OpenAI form, supported by both Mistral and DeepSeek)
@@ -819,6 +851,8 @@ export async function callLLM(opts: {
    *  150s, and an in-contract timeout (billing + honest error) must beat
    *  the platform's opaque 504. */
   timeoutMs?: number;
+  /** See CacheHint. */
+  cache?: CacheHint;
 }): Promise<Response> {
   const provider = providerFor(opts.model);
   const key = Deno.env.get(envKeyFor(provider));
@@ -838,6 +872,7 @@ export async function callLLM(opts: {
           forceTool: provider === "deepseek" ? undefined : opts.forceTool,
           // Anthropic-only `effort` is intentionally NOT forwarded here.
           reasoning_effort: provider === "mistral" ? opts.mistral_effort : undefined,
+          prompt_cache_key: provider === "mistral" ? opts.cache?.key : undefined,
         });
   // Mistral quirk: `temperature === 0` triggers greedy sampling, and the
   // API then rejects the request unless `top_p` is exactly 1.0
@@ -868,6 +903,7 @@ export async function callLLM(opts: {
     if (b.output_config !== undefined) logLine.output_config = b.output_config;
     if (b.reasoning_effort !== undefined) logLine.reasoning_effort = b.reasoning_effort;
     if (b.top_p !== undefined) logLine.top_p = b.top_p;
+    if (opts.cache) logLine.cache = opts.cache.scope;
     // Echoed Anthropic assistant turns (a tool loop in progress), counts only.
     const echoed = opts.messages.filter((m) => Array.isArray(m.raw_content) && m.raw_content.length > 0);
     if (echoed.length > 0) {

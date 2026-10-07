@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import {
   callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, fallbackReplyText,
-  isProviderTimeout, PROVIDER_TIMEOUT_MESSAGE, type LLMMessage, type LLMTool,
+  isProviderTimeout, PROVIDER_TIMEOUT_MESSAGE, type CacheHint, type LLMMessage, type LLMTool,
 } from "../_shared/_llm.ts";
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
@@ -251,6 +251,10 @@ Deno.serve(async (req) => {
     if (hasDocuments) tools.push(buildDocumentTool());
     if (webSearchActive) tools.push(buildWebSearchTool());
 
+    // Prompt caching: every call of this request and the next turn of a
+    // lively exchange re-send this prefix (docs/model-configuration.md).
+    const cache: CacheHint = { key: threadId, scope: "conversation" };
+
     // Per-request context for the unified persistence sequence
     // (persist.ts) — shared by all four completion tails. The prompt
     // count inside it is awaited on every path (checkpoint D3a; the
@@ -331,6 +335,7 @@ Deno.serve(async (req) => {
         thinking,
         effort,
         mistral_effort: mistralEffort,
+        cache,
       };
 
 
@@ -453,6 +458,7 @@ Deno.serve(async (req) => {
               thinking,
               effort,
               mistralEffort,
+              cache,
               logTag: "[stream]",
             });
             totalInputChars += inputCharsAdded;
@@ -470,6 +476,7 @@ Deno.serve(async (req) => {
                 thinking,
                 effort,
                 mistral_effort: mistralEffort,
+                cache: { ...cache, scope: "prefix" },
               });
 
             if (!call2Res.ok) {
@@ -554,6 +561,7 @@ Deno.serve(async (req) => {
         thinking,
         effort,
         mistral_effort: mistralEffort,
+        cache,
       });
     } catch (err) {
       // A streamed call times out only before its first byte.

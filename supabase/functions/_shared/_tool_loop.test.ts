@@ -129,6 +129,17 @@ Deno.test("tool loop: counts the whole re-sent prompt of every check call", asyn
   assertEquals(inputCharsAdded, promptsSeen[0] + promptsSeen[1]);
 });
 
+Deno.test("tool loop: the cache hint reaches every check call", async () => {
+  const seen: unknown[] = [];
+  const deps = makeDeps((opts) => {
+    seen.push(opts.cache);
+    return Promise.resolve(completion(seen.length === 1 ? ["call-a"] : []));
+  }, []);
+  deps.cache = { key: "thread-1", scope: "conversation" };
+  await runToolLoop(deps);
+  assertEquals(seen, [deps.cache, deps.cache]);
+});
+
 Deno.test("finalCall: Anthropic keeps the tool list with tool_choice none and appends the note after the tool results; the other providers get the loop's messages and no tools", () => {
   const tools = [buildWebSearchTool()];
   const toolMessages: LLMMessage[] = [

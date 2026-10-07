@@ -19,6 +19,7 @@ import {
   sanitizeAnthropicSchema,
   toAnthropicBody,
   toOpenAIBody,
+  type LLMMessage,
 } from "./_llm.ts";
 
 Deno.test("no-op: allowlisted-only schema round-trips structurally identical", () => {
@@ -528,6 +529,46 @@ Deno.test("toAnthropicBody: thinking on is adaptive; off is between_tools on Son
   assertEquals(clamped.output_config, { effort: "high" });
   const adaptiveMax = toAnthropicBody({ model: "claude-sonnet-5-5", messages: [], max_tokens: 10, thinking: true, effort: "max" });
   assertEquals(adaptiveMax.output_config, { effort: "max" });
+});
+
+Deno.test("toAnthropicBody: the cache hint marks the system block, and the last message block for the conversation scope only", () => {
+  const base = { model: "claude-sonnet-5-5", max_tokens: 100 };
+  const messages: LLMMessage[] = [{ role: "system", content: "SYS" }, { role: "user", content: "hi" }];
+  const markedSystem = [{ type: "text", text: "SYS", cache_control: { type: "ephemeral" } }];
+  const conversation = toAnthropicBody({ ...base, messages, cache: { key: "t1", scope: "conversation" } });
+  assertEquals(conversation.system, markedSystem);
+  assertEquals((conversation.messages as unknown[])[0], {
+    role: "user",
+    content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }],
+  });
+  const prefix = toAnthropicBody({ ...base, messages, cache: { key: "t1", scope: "prefix" } });
+  assertEquals(prefix.system, markedSystem);
+  assertEquals((prefix.messages as unknown[])[0], { role: "user", content: "hi" });
+  const off = toAnthropicBody({ ...base, messages });
+  assertEquals(off.system, "SYS");
+  assertEquals((off.messages as unknown[])[0], { role: "user", content: "hi" });
+});
+
+Deno.test("toAnthropicBody: in a tool loop the mark lands on the last tool_result block; the echoed turn stays untouched", () => {
+  const messages: LLMMessage[] = [
+    { role: "user", content: "search x" },
+    { role: "assistant", content: "Let me check.", tool_calls: [ECHOED_TOOL_CALL], raw_content: ANTHROPIC_TURN },
+    { role: "tool", tool_call_id: "toolu_1", content: "results" },
+  ];
+  const body = toAnthropicBody({ model: "claude-opus-5-5", max_tokens: 100, messages, cache: { key: "t1", scope: "conversation" } });
+  const msgs = body.messages as Array<Record<string, unknown>>;
+  assertEquals(msgs[1], { role: "assistant", content: ANTHROPIC_TURN });
+  assertEquals(msgs[2], {
+    role: "user",
+    content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "results", cache_control: { type: "ephemeral" } }],
+  });
+  assertEquals(body.system, undefined);
+});
+
+Deno.test("toOpenAIBody: prompt_cache_key is sent when given and absent otherwise", () => {
+  const messages: LLMMessage[] = [{ role: "user", content: "hi" }];
+  assertEquals(toOpenAIBody({ model: "zai-glm-5-3", max_tokens: 10, messages, prompt_cache_key: "t1" }).prompt_cache_key, "t1");
+  assert(!("prompt_cache_key" in toOpenAIBody({ model: "zai-glm-5-3", max_tokens: 10, messages })));
 });
 
 Deno.test("normaliseUsage: one shape for Anthropic, Mistral and DeepSeek usage; cache fields only when reported", () => {
