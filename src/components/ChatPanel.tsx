@@ -608,7 +608,8 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
           <Info className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary/60" />
           <span className="flex-1">
             <span className="font-medium text-foreground">Tip:</span> Select text in
-            your editor and use Ask or Propose for context-aware AI feedback.
+            your editor and use Ask or Propose for context-aware AI feedback (looks up
+            the whole writing and creative tools contents prior to replying).
           </span>
           <button onClick={dismissTip} className="text-muted-foreground/60 hover:text-foreground">
             <X className="h-3.5 w-3.5" />
