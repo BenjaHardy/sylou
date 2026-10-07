@@ -17,7 +17,10 @@
 // (relayProviderStream, keepAlive); editor-action keeps its
 // clientDisconnected latch and calls readProviderStream itself.
 
-import { extractDeltaText, extractStopDetails, extractStopReason, isThinkingDelta, type ProviderId } from "./_llm.ts";
+import {
+  extractDeltaText, extractStopDetails, extractStopReason, extractStreamUsage, isThinkingDelta, logUsage,
+  type ProviderId, type TokenUsage,
+} from "./_llm.ts";
 
 /** Per-request factory for the SSE envelope helpers. corsHeaders is the
  *  only request-scoped dependency; the two helpers were byte-identical
@@ -98,6 +101,8 @@ export interface StreamStats {
   providerError: unknown;
   /** Read duration. */
   ms: number;
+  /** Provider-reported usage, merged from the chunks that carry it. */
+  usage?: TokenUsage;
 }
 
 function summariseError(err: unknown): unknown {
@@ -230,11 +235,14 @@ export async function readProviderStreamWithStats(
         }
         const details = extractStopDetails(parsed);
         if (details !== null) stats.stopDetails = details;
+        const usage = extractStreamUsage(parsed);
+        if (usage) stats.usage = { ...stats.usage, ...usage };
       } catch { /* skip malformed chunk */ }
     }
   }
 
   stats.ms = Date.now() - startedAt;
+  logUsage(provider, stats.usage, true);
   return { text: fullResponse, stats };
 }
 

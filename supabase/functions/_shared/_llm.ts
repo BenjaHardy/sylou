@@ -375,7 +375,7 @@ export interface NormalisedResponse {
   toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
   // Raw assistant message in OpenAI-shape (for appending to history).
   assistantMessage: LLMMessage;
-  usage?: { input_tokens?: number; output_tokens?: number };
+  usage?: TokenUsage;
   /** Provider stop/finish reason as sent on the wire (Anthropic
    *  `stop_reason`, OpenAI-shape `finish_reason`); null when absent. Feed
    *  it to isTruncatedStop() to detect a reply cut off at max_tokens. */
@@ -429,6 +429,14 @@ interface RawUsage {
   output_tokens?: number;
   prompt_tokens?: number;
   completion_tokens?: number;
+  // Anthropic
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  // Mistral
+  prompt_tokens_details?: { cached_tokens?: number };
+  // DeepSeek
+  prompt_cache_hit_tokens?: number;
+  prompt_cache_miss_tokens?: number;
 }
 interface RawResponse {
   content?: RawContentBlock[];
@@ -443,6 +451,48 @@ interface RawStreamChunk {
   delta?: { type?: string; text?: string; stop_reason?: string; stop_details?: unknown };
   stop_details?: unknown;
   content_block?: { type?: string };
+  message?: { usage?: RawUsage };
+  usage?: RawUsage;
+}
+
+/** Provider-reported token usage in one shape. The cache fields are the
+ *  only proof that prompt caching is working (docs/model-configuration.md). */
+export interface TokenUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  /** Prompt tokens served from the provider's cache. */
+  cache_read_tokens?: number;
+  /** Prompt tokens written to the cache by this call (Anthropic only). */
+  cache_write_tokens?: number;
+}
+
+/** Anthropic, Mistral and DeepSeek field names folded into TokenUsage;
+ *  only the fields the provider reported are present. */
+export function normaliseUsage(raw: RawUsage | undefined): TokenUsage | undefined {
+  if (!raw) return undefined;
+  const usage: TokenUsage = {};
+  const input = raw.input_tokens ?? raw.prompt_tokens;
+  const output = raw.output_tokens ?? raw.completion_tokens;
+  const read = raw.cache_read_input_tokens ?? raw.prompt_tokens_details?.cached_tokens ?? raw.prompt_cache_hit_tokens;
+  if (input !== undefined) usage.input_tokens = input;
+  if (output !== undefined) usage.output_tokens = output;
+  if (read !== undefined) usage.cache_read_tokens = read;
+  if (raw.cache_creation_input_tokens !== undefined) usage.cache_write_tokens = raw.cache_creation_input_tokens;
+  return usage;
+}
+
+/** Usage carried by a streaming chunk: Anthropic's message_start (the
+ *  prompt side, cache fields included) and message_delta (the output), the
+ *  OpenAI shape's final chunk. */
+export function extractStreamUsage(parsed: unknown): TokenUsage | undefined {
+  if (!parsed || typeof parsed !== "object") return undefined;
+  const p = parsed as RawStreamChunk;
+  return normaliseUsage(p.message?.usage ?? p.usage);
+}
+
+/** One line per completed call with the provider's token split. */
+export function logUsage(provider: ProviderId, usage: TokenUsage | undefined, stream = false): void {
+  if (usage) console.log("[usage]", JSON.stringify({ provider, ...(stream ? { stream } : {}), ...usage }));
 }
 
 export function normaliseResponse(
@@ -451,6 +501,8 @@ export function normaliseResponse(
   opts?: { structuredOutputName?: string },
 ): NormalisedResponse {
   const r = raw as RawResponse;
+  const usage = normaliseUsage(r.usage);
+  logUsage(provider, usage);
   if (provider === "anthropic") {
     const blocks: RawContentBlock[] = r.content ?? [];
     let text = "";
@@ -525,9 +577,7 @@ export function normaliseResponse(
         ...(oaToolCalls.length ? { tool_calls: oaToolCalls } : {}),
         ...(blocks.length ? { raw_content: blocks } : {}),
       },
-      usage: r.usage
-        ? { input_tokens: r.usage.input_tokens, output_tokens: r.usage.output_tokens }
-        : undefined,
+      usage,
       stopReason: r.stop_reason ?? null,
       stopDetails: r.stop_details ?? null,
     };
@@ -576,12 +626,7 @@ export function normaliseResponse(
       content: msg.content ?? "",
       ...(echoToolCalls.length ? { tool_calls: echoToolCalls } : {}),
     },
-    usage: r.usage
-      ? {
-          input_tokens: r.usage.prompt_tokens ?? r.usage.input_tokens,
-          output_tokens: r.usage.completion_tokens ?? r.usage.output_tokens,
-        }
-      : undefined,
+    usage,
     stopReason: r.choices?.[0]?.finish_reason ?? null,
     stopDetails: null,
   };
