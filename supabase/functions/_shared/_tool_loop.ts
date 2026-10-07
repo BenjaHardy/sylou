@@ -2,7 +2,7 @@
 // context-prompt (moved from chat/tool-loop.ts). After each round of tool
 // calls it asks the model again, tools still offered, until the model
 // stops calling them or MAX_ITERATIONS rounds have run; the caller then
-// makes its final streaming call, whose tool fields finalCallTools decides.
+// makes its final streaming call, shaped by finalCall.
 //
 // Contract notes (P3-7e): every echoed tool_call MUST be answered —
 // calls past the per-turn limit and unknown tool names get stub results,
@@ -42,35 +42,27 @@ import { contentLogsEnabled } from "./_debug.ts";
 export const ROUND_LIMIT_NOTE =
   "Tool-use limit reached for this request: write your answer now from the information above.";
 
-/** Tool fields for the caller's final, streaming call after the loop. On
- *  every Claude model the tool list stays on the wire with
- *  `tool_choice: "none"`, so the final call's prefix (system prompt, tools,
- *  earlier messages) is the loop's: the preserved-thinking models (Sonnet
- *  5.5, Opus 5.5, Fable 5.1) bind the echoed thinking blocks to it and 400
- *  on an edit for accounts enforced by default, and an identical prefix is
- *  what prompt caching reuses on the others. Mistral and DeepSeek keep the
- *  tool-less final call. */
-export function finalCallTools(
-  model: string,
-  tools: LLMTool[],
-): { tools?: LLMTool[]; tool_choice?: "none" } {
-  return providerFor(model) === "anthropic" ? { tools, tool_choice: "none" } : {};
-}
-
 /** Appended to the final call on Anthropic: with the tool list still on the
  *  wire and calls forbidden, a model could otherwise spend the reply planning
  *  a round it cannot run (seen on Fable 5.1). */
 export const FINAL_CALL_NOTE =
   "No further tool calls are possible in this reply: write your answer now from the information above.";
 
-/** The final call's messages: on Anthropic the loop's messages plus
- *  FINAL_CALL_NOTE as a trailing user message (appended after the tool
- *  results, so the echoed thinking blocks' prefix is untouched); the loop's
- *  messages unchanged elsewhere. */
-export function finalCallMessages(model: string, toolMessages: LLMMessage[]): LLMMessage[] {
+/** The caller's final, streaming call after the loop. On every Claude model
+ *  the tool list stays on the wire with `tool_choice: "none"` and
+ *  FINAL_CALL_NOTE closes the messages: the preserved-thinking models
+ *  (Sonnet 5.5, Opus 5.5, Fable 5.1) bind the echoed thinking blocks to the
+ *  exact prefix that produced them and 400 on an edit for accounts enforced
+ *  by default; the note is appended after that prefix. Mistral and DeepSeek
+ *  get the loop's messages and no tools. */
+export function finalCall(
+  model: string,
+  tools: LLMTool[],
+  toolMessages: LLMMessage[],
+): { messages: LLMMessage[]; tools?: LLMTool[]; tool_choice?: "none" } {
   return providerFor(model) === "anthropic"
-    ? [...toolMessages, { role: "user", content: FINAL_CALL_NOTE }]
-    : toolMessages;
+    ? { messages: [...toolMessages, { role: "user", content: FINAL_CALL_NOTE }], tools, tool_choice: "none" }
+    : { messages: toolMessages };
 }
 
 /** Prompt size in characters for the usage estimate: every message's

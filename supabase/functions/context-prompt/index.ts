@@ -5,7 +5,7 @@ import {
 } from "../_shared/_llm.ts";
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
-import { finalCallMessages, finalCallTools, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
+import { finalCall, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
@@ -511,15 +511,13 @@ Deno.serve(async (req) => {
               totalOutputChars += outputCharsAdded;
 
               // Call #2b: streaming with tool results; no tool calls allowed
-              // (finalCallTools: the list itself stays on the wire for Anthropic)
               console.log("[stream:context-prompt] starting Call #2b streaming");
-              const finalMessages = finalCallMessages(chatModel, toolMessages);
+              const final = finalCall(chatModel, tools, toolMessages);
               const call2bRes = await callLLM({
                 model: chatModel,
-                messages: finalMessages,
+                ...final,
                 max_tokens: contextMaxTokens,
                 stream: true,
-                ...finalCallTools(chatModel, tools),
                 temperature,
                 thinking,
                 effort,
@@ -532,7 +530,7 @@ Deno.serve(async (req) => {
                 controller.enqueue(sseEvent({ done: true, error: extractProviderError(providerFor(chatModel), call2bRes.status, errText) }));
                 return;
               }
-              totalInputChars += promptChars(finalMessages);
+              totalInputChars += promptChars(final.messages);
 
               // Read Call #2b stream and forward tokens
               const call2b = await relayProviderStream(call2bRes, providerFor(chatModel), controller, sseEvent);

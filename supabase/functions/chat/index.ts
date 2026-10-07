@@ -27,7 +27,7 @@ import {
   WEB_SEARCH_PROMPT,
 } from "../_shared/_prompts.ts";
 import { buildDocIndex, buildFavBlock } from "./context.ts";
-import { finalCallMessages, finalCallTools, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
+import { finalCall, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { persistChatExchange } from "./persist.ts";
 
 
@@ -459,15 +459,13 @@ Deno.serve(async (req) => {
             totalOutputChars += outputCharsAdded;
 
             // LLM Call #2: streaming with tool results; no tool calls allowed
-            // (finalCallTools: the list itself stays on the wire for Anthropic)
             console.log("[stream] starting Call #2 streaming");
-            const finalMessages = finalCallMessages(chatModel, toolMessages);
+            const final = finalCall(chatModel, tools, toolMessages);
             const call2Res = await callLLM({
                 model: chatModel,
-                messages: finalMessages,
+                ...final,
                 max_tokens: chatMaxTokens,
                 stream: true,
-                ...finalCallTools(chatModel, tools),
                 temperature,
                 thinking,
                 effort,
@@ -481,7 +479,7 @@ Deno.serve(async (req) => {
               try { controller.enqueue(sseEvent({ done: true, error: msg })); } catch { /* */ }
               return;
             }
-            totalInputChars += promptChars(finalMessages);
+            totalInputChars += promptChars(final.messages);
 
             // Read Call #2 stream and forward tokens
             const call2 = await relayProviderStream(call2Res, providerFor(chatModel), controller, sseEvent);
