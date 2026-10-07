@@ -24,8 +24,9 @@ import {
   CONCISE_MODE_MODIFIER,
   TEMPLATE_PROMPTS,
   TUTOR_MODE_SYSTEM_PROMPT,
+  WEB_SEARCH_PROMPT,
 } from "../_shared/_prompts.ts";
-import { buildDocIndex, buildFavBlock, WEB_SEARCH_PROMPT } from "./context.ts";
+import { buildDocIndex, buildFavBlock } from "./context.ts";
 import { finalCallMessages, finalCallTools, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { persistChatExchange } from "./persist.ts";
 

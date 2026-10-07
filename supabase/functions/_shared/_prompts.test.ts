@@ -14,6 +14,7 @@ import {
   CONCISE_MODE_MODIFIER,
   TEMPLATE_PROMPTS,
   TUTOR_MODE_SYSTEM_PROMPT,
+  WEB_SEARCH_PROMPT,
 } from "./_prompts.ts";
 
 const sha256 = async (s: string) =>
@@ -51,8 +52,22 @@ Deno.test("template prompts: exact keys and pinned content", async () => {
   );
 });
 
+Deno.test("web-search block: leading separator, rules, the loop limits, and the deliberate ASCII hyphen", () => {
+  assert(WEB_SEARCH_PROMPT.startsWith("\n\n# WEB SEARCH"));
+  assert(WEB_SEARCH_PROMPT.includes("Always search when the user asks about"));
+  assert(WEB_SEARCH_PROMPT.includes("Never search for"));
+  // ASCII hyphen here is deliberate typography, not a typo — do not "fix".
+  assert(WEB_SEARCH_PROMPT.includes(
+    "prefer searching - an unnecessary search is better than an outdated answer",
+  ));
+  assert(WEB_SEARCH_PROMPT.includes("always include the source URL inline"));
+  // The model is told the loop's limits up front (5 rounds, 5 calls per round).
+  assert(WEB_SEARCH_PROMPT.includes("up to 5 rounds per reply, and at most 5 tool calls run per round"));
+  assertEquals(WEB_SEARCH_PROMPT.length, 1294);
+});
+
 Deno.test("prompts are frozen strings — no interpolation syntax survives to runtime", () => {
-  for (const t of [CLASSIC_MODE_SYSTEM_PROMPT, TUTOR_MODE_SYSTEM_PROMPT, CONCISE_MODE_MODIFIER]) {
+  for (const t of [CLASSIC_MODE_SYSTEM_PROMPT, TUTOR_MODE_SYSTEM_PROMPT, CONCISE_MODE_MODIFIER, WEB_SEARCH_PROMPT]) {
     assert(!t.includes("${"));
   }
 });
