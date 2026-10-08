@@ -1,12 +1,13 @@
 // conversation-memory: rolling per-thread chat summary.
 //
-// Long threads outgrow the newest-50 verbatim window that chat and
-// context-prompt inject. This module maintains one AI-written summary per
-// thread (chat_thread_summaries): every ~50 messages past the watermark,
-// the previous summary + the new slab are consolidated into a fresh
-// summary covering THROUGH the refresh point. The prompt then always
-// carries "summary + newest-50 verbatim" — the summary may overlap the
-// window (expected; disclosed in both prompts, recent messages win).
+// Long threads outgrow the verbatim window that chat and context-prompt
+// inject. This module maintains one AI-written summary per thread
+// (chat_thread_summaries): every ~50 messages past the watermark, the
+// previous summary + the new slab are consolidated into a fresh summary
+// covering THROUGH the refresh point. The prompt then carries the summary,
+// the last VERBATIM_TAIL covered messages verbatim (the overlap is
+// disclosed in both prompts; the verbatim messages win) and everything
+// after the watermark — fetchVerbatimWindow.
 //
 // Invariants (see TRANSPARENCY.md §5.5 and the migration comment):
 // - FLOW never reads this: continuity aid, never assessment evidence
@@ -39,6 +40,8 @@ export const MEMORY_MSG_CHAR_CAP = 4_000; // per-message cap inside the slab
 // summarizer output budget: OUTPUT_BUDGETS.MEMORY (_models.ts), plain / reasoning
 export const MEMORY_STORED_CHAR_CAP = 12_000; // stored summary hard cap (~3k tokens)
 export const MEMORY_TIMEOUT_MS = 60_000; // stream-tail call must stay far under the isolate ceiling
+export const VERBATIM_TAIL = 20; // covered messages kept verbatim ahead of the watermark
+export const VERBATIM_CAP = 100; // uncovered messages at most (a thread whose refreshes keep failing)
 
 export interface ConversationMemoryRow {
   summary_text: string;
@@ -81,6 +84,41 @@ export async function fetchConversationMemory(
     console.error("[conversation-memory] fetch threw:", err);
     return null;
   }
+}
+
+export interface VerbatimMessage {
+  role: string;
+  content: string;
+}
+
+/** The verbatim window injected after the memory: the last VERBATIM_TAIL
+ *  messages the summary covers, then everything after its watermark (the
+ *  newest VERBATIM_CAP of them). Between refreshes the window only grows at
+ *  its end, so the prompt prefix stays byte-identical turn after turn and
+ *  the provider's prompt cache keeps hitting; a refresh moves the start
+ *  once. Without a memory: the newest VERBATIM_TAIL + MEMORY_REFRESH_THRESHOLD
+ *  messages. Chronological order; a failed read logs and yields what was
+ *  read. */
+export async function fetchVerbatimWindow(
+  client: SupabaseLike,
+  threadId: string,
+  memory: ConversationMemoryRow | null,
+): Promise<VerbatimMessage[]> {
+  const newest = (limit: number, bound?: "lte" | "gt") => {
+    let query = client.from("chat_messages").select("role, content").eq("thread_id", threadId);
+    if (bound === "lte") query = query.lte("created_at", memory!.covers_through);
+    if (bound === "gt") query = query.gt("created_at", memory!.covers_through);
+    return query.order("created_at", { ascending: false }).limit(limit);
+  };
+  const parts = memory
+    ? await Promise.all([newest(VERBATIM_TAIL, "lte"), newest(VERBATIM_CAP, "gt")])
+    : [await newest(VERBATIM_TAIL + MEMORY_REFRESH_THRESHOLD)];
+  const window: VerbatimMessage[] = [];
+  for (const { data, error } of parts) {
+    if (error) console.error("[conversation-memory] verbatim window read failed:", JSON.stringify(error));
+    window.push(...((data ?? []) as VerbatimMessage[]).reverse());
+  }
+  return window;
 }
 
 /** Pack the oldest uncovered messages into a bounded slab.

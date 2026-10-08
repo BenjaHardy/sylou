@@ -5,7 +5,7 @@ import {
 } from "../_shared/_llm.ts";
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
-import { finalCallMessages, finalCallTools, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
+import { finalCall, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
@@ -15,8 +15,10 @@ import {
 } from "../_shared/_thinking.ts";
 import {
   fetchConversationMemory,
+  fetchVerbatimWindow,
   maybeRefreshConversationMemory,
 } from "../_shared/_conversation_memory.ts";
+import { WEB_SEARCH_PROMPT } from "../_shared/_prompts.ts";
 
 import { isOverBudget, getBudgetedProfile } from "../_shared/_billing.ts";
 import { persistContextExchange, type PersistCtx } from "./persist.ts";
@@ -234,24 +236,13 @@ Deno.serve(async (req) => {
 
     const existingSummary = summaryRow?.summary_text ?? null;
 
-    // --- 3. Fetch recent chat messages (last 20, cross-thread) ---
-    const { data: projectThreads } = await supabase
-      .from("chat_threads")
-      .select("id")
-      .eq("project_id", project_id);
-
-    const threadIds = (projectThreads ?? []).map((t: { id: string }) => t.id);
-
-    const { data: recentMessages } = threadIds.length > 0
-      ? await supabase
-          .from("chat_messages")
-          .select("role, content")
-          .in("thread_id", threadIds)
-          .order("created_at", { ascending: false })
-          .limit(50)
-      : { data: [] };
-
-    const recentChat = (recentMessages ?? []).reverse();
+    // --- 3. Conversation memory + the verbatim window of the active thread ---
+    // Read via the user-context client so RLS scopes both to the caller's
+    // own threads. The memory renders next to RECENT CHAT HISTORY inside the
+    // same context container that carries the raw messages — identical
+    // relative privilege.
+    const conversationMemory = await fetchConversationMemory(supabase, thread_id);
+    const recentChat = await fetchVerbatimWindow(supabase, thread_id, conversationMemory);
 
     // --- 4. LLM Call #1: Writing Summary (non-streamed) ---
     const summaryMessages = buildSummaryPrompt(
@@ -331,27 +322,8 @@ Deno.serve(async (req) => {
 
     // Append web search instructions to system prompt
     if (webSearchActive) {
-      systemPrompt += `\n\n# WEB SEARCH
-
-You have access to a web_search tool. Use it according to these rules:
-
-Always search when the user asks about: current events, recent news and developments, anything time-sensitive (prices, scores, weather, standings, elections), specific claims or facts you're not fully confident about, people's current roles or status, or any question where being up-to-date matters.
-
-Never search for: simple conversational messages (greetings, thanks, acknowledgments), questions about well-established facts, concepts, or definitions, requests for creative writing or brainstorming, follow-up questions where the answer is already in the conversation history, or opinions and advice based on general knowledge.
-
-When in doubt, prefer searching - an unnecessary search is better than an outdated answer.
-
-Limits: you can call tools in up to 5 rounds per reply, and at most 5 tool calls run per round (further calls in the same round are skipped with a notice). Prefer a few precise searches over many broad ones, and spread a longer investigation over several rounds.
-
-When citing information from web search results, always include the source URL inline in your response text (e.g. "According to [Source Title](URL), ..."). This ensures the user can verify and revisit the sources later.`;
+      systemPrompt += WEB_SEARCH_PROMPT;
     }
-
-    // conversation-memory: the ACTIVE thread's rolling summary (the recent
-    // window above is project-wide; the memory is per-thread). Read via the
-    // user-context client so RLS scopes it to the caller's own threads. It
-    // renders next to RECENT CHAT HISTORY inside the same context container
-    // that already carries the raw messages — identical relative privilege.
-    const conversationMemory = await fetchConversationMemory(supabase, thread_id);
 
     const responseMessages = buildResponsePrompt(
       systemPrompt,
@@ -419,6 +391,27 @@ When citing information from web search results, always include the source URL i
 
     const { sseEvent, createSSEResponse, keepAlive } = makeSSEHelpers(corsHeaders);
 
+    // The `done` event of a persisted exchange: the reply with its stop
+    // flags, the rows and the remaining budget, or the persistence warning.
+    type PersistResult = Awaited<ReturnType<typeof persistContextExchange>>;
+    const doneEvent = (aiResponse: string, stopReason: string | null, r: PersistResult) =>
+      sseEvent(
+        r.persistenceFailed
+          ? { done: true, error: "Messages may not have been saved." }
+          : {
+            done: true,
+            ai_response: aiResponse,
+            truncated: isTruncatedStop(stopReason),
+            refused: isRefusalStop(stopReason),
+            summary_update: summaryUpdate,
+            action_id: r.actionRow?.id ?? null,
+            budget_remaining: r.budgetRemaining,
+            inserted_messages: r.insertedMessages,
+            ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
+            ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
+          },
+      );
+
     // ── TWO-PASS FLOW when tools exist ──
     // Move entire Call #2a inside ReadableStream so phase events stream immediately
     if (hasTools) {
@@ -467,24 +460,8 @@ When citing information from web search results, always include the source URL i
 
               await replayTokenBurst(responseText, (chunk) => controller.enqueue(sseEvent({ token: chunk })));
 
-              const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, responseText, totalInputChars, totalOutputChars);
-
-              if (persistenceFailed) {
-                controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
-              } else {
-                controller.enqueue(sseEvent({
-                  done: true,
-                  ai_response: responseText,
-                  truncated: isTruncatedStop(norm2a.stopReason),
-                  refused: isRefusalStop(norm2a.stopReason),
-                  summary_update: summaryUpdate,
-                  action_id: actionRow?.id ?? null,
-                  budget_remaining: budgetRemaining,
-                  inserted_messages: insertedMessages,
-                  ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
-                  ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
-                }));
-              }
+              const persisted = await persistContextExchange(persistCtx, responseText, totalInputChars, totalOutputChars);
+              controller.enqueue(doneEvent(responseText, norm2a.stopReason, persisted));
             } else {
               // ── Tool use detected ──
               console.log("[stream:context-prompt] tool use detected:", toolCalls.length, "calls");
@@ -522,15 +499,13 @@ When citing information from web search results, always include the source URL i
               totalOutputChars += outputCharsAdded;
 
               // Call #2b: streaming with tool results; no tool calls allowed
-              // (finalCallTools: the list itself stays on the wire for Anthropic)
               console.log("[stream:context-prompt] starting Call #2b streaming");
-              const finalMessages = finalCallMessages(chatModel, toolMessages);
+              const final = finalCall(chatModel, tools, toolMessages);
               const call2bRes = await callLLM({
                 model: chatModel,
-                messages: finalMessages,
+                ...final,
                 max_tokens: contextMaxTokens,
                 stream: true,
-                ...finalCallTools(chatModel, tools),
                 temperature,
                 thinking,
                 effort,
@@ -543,7 +518,7 @@ When citing information from web search results, always include the source URL i
                 controller.enqueue(sseEvent({ done: true, error: extractProviderError(providerFor(chatModel), call2bRes.status, errText) }));
                 return;
               }
-              totalInputChars += promptChars(finalMessages);
+              totalInputChars += promptChars(final.messages);
 
               // Read Call #2b stream and forward tokens
               const call2b = await relayProviderStream(call2bRes, providerFor(chatModel), controller, sseEvent);
@@ -554,25 +529,9 @@ When citing information from web search results, always include the source URL i
                 console.warn("[stream:context-prompt] Call #2b returned no text", { stop_reason: call2b.stopReason, ...call2b.stats });
               }
               const aiResponse = fullResponse.trim() || fallbackReplyText(call2b.stopReason);
-              const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars, totalOutputChars + aiResponse.length);
-
+              const persisted = await persistContextExchange(persistCtx, aiResponse, totalInputChars, totalOutputChars + aiResponse.length);
               try {
-                if (persistenceFailed) {
-                  controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
-                } else {
-                  controller.enqueue(sseEvent({
-                    done: true,
-                    ai_response: aiResponse,
-                    truncated: isTruncatedStop(call2b.stopReason),
-                    refused: isRefusalStop(call2b.stopReason),
-                    summary_update: summaryUpdate,
-                    action_id: actionRow?.id ?? null,
-                    budget_remaining: budgetRemaining,
-                    inserted_messages: insertedMessages,
-                    ...(documentsReferenced.length > 0 ? { documents_referenced: documentsReferenced } : {}),
-                    ...(webSearchesPerformed.length > 0 ? { web_searches_performed: webSearchesPerformed } : {}),
-                  }));
-                }
+                controller.enqueue(doneEvent(aiResponse, call2b.stopReason, persisted));
               } catch { /* client gone */ }
             }
           } catch (err) {
@@ -642,23 +601,9 @@ When citing information from web search results, always include the source URL i
           }
           const aiResponse = fullResponse.trim() || fallbackReplyText(relay.stopReason);
           const extraInputChars = responseMessages.reduce((s, m) => s + m.content.length, 0);
-          const { actionRow, budgetRemaining, insertedMessages, persistenceFailed } = await persistContextExchange(persistCtx, aiResponse, totalInputChars + extraInputChars, totalOutputChars + aiResponse.length);
-
+          const persisted = await persistContextExchange(persistCtx, aiResponse, totalInputChars + extraInputChars, totalOutputChars + aiResponse.length);
           try {
-            if (persistenceFailed) {
-              controller.enqueue(sseEvent({ done: true, error: "Messages may not have been saved." }));
-            } else {
-              controller.enqueue(sseEvent({
-                done: true,
-                ai_response: aiResponse,
-                truncated: isTruncatedStop(relay.stopReason),
-                refused: isRefusalStop(relay.stopReason),
-                summary_update: summaryUpdate,
-                action_id: actionRow?.id ?? null,
-                budget_remaining: budgetRemaining,
-                inserted_messages: insertedMessages,
-              }));
-            }
+            controller.enqueue(doneEvent(aiResponse, relay.stopReason, persisted));
           } catch { /* client gone */ }
 
           console.log("[stream:context-prompt] persistence complete");

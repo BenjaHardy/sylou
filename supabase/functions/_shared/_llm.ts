@@ -79,6 +79,33 @@ export function authHeadersFor(provider: ProviderId, key: string): Record<string
   };
 }
 
+/** Prompt caching for a call whose prefix is re-sent within minutes: the
+ *  tool loop's next call, or the next turn of a lively chat. "prefix" marks
+ *  the system prefix only (the final call after a loop, whose changed
+ *  tool_choice drops the conversation entry anyway); "conversation" also
+ *  marks the last message, so the growing tail is cached too. Anthropic:
+ *  cache_control marks; Mistral: prompt_cache_key = key; DeepSeek: automatic.
+ *  docs/model-configuration.md § Prompt caching. */
+export interface CacheHint {
+  key: string;
+  scope: "prefix" | "conversation";
+}
+
+const EPHEMERAL = { type: "ephemeral" } as const;
+
+/** Marks the last content block of the last message, copying what it touches. */
+function markLastBlock(msgs: Array<Record<string, unknown>>): void {
+  const last = msgs[msgs.length - 1];
+  if (!last) return;
+  if (typeof last.content === "string") {
+    last.content = [{ type: "text", text: last.content, cache_control: EPHEMERAL }];
+  } else if (Array.isArray(last.content) && last.content.length > 0) {
+    const blocks = [...(last.content as Record<string, unknown>[])];
+    blocks[blocks.length - 1] = { ...blocks[blocks.length - 1], cache_control: EPHEMERAL };
+    last.content = blocks;
+  }
+}
+
 // Translate OpenAI-style messages + tools into Anthropic Messages format.
 export function toAnthropicBody(opts: {
   model: string;
@@ -93,6 +120,7 @@ export function toAnthropicBody(opts: {
   json_schema?: { name: string; schema: Record<string, unknown> };
   thinking?: boolean;
   effort?: ClaudeEffort;
+  cache?: CacheHint;
 }): Record<string, unknown> {
   let system = "";
   const msgs: Array<Record<string, unknown>> = [];
@@ -143,10 +171,11 @@ export function toAnthropicBody(opts: {
     });
   }
 
+  if (opts.cache?.scope === "conversation") markLastBlock(msgs);
   const body: Record<string, unknown> = {
     model: opts.model,
     max_tokens: opts.max_tokens,
-    system: system || undefined,
+    system: !system ? undefined : opts.cache ? [{ type: "text", text: system, cache_control: EPHEMERAL }] : system,
     messages: msgs,
   };
   if (opts.stream) body.stream = true;
@@ -341,6 +370,8 @@ export function toOpenAIBody(opts: {
   forceTool?: string;
   temperature?: number;
   reasoning_effort?: MistralEffort;
+  /** Mistral's cache routing hint (CacheHint.key); never sent to DeepSeek. */
+  prompt_cache_key?: string;
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: opts.model,
@@ -349,6 +380,7 @@ export function toOpenAIBody(opts: {
     max_tokens: opts.max_tokens,
   };
   if (opts.stream) body.stream = true;
+  if (opts.prompt_cache_key) body.prompt_cache_key = opts.prompt_cache_key;
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     // Named forcing (OpenAI form, supported by both Mistral and DeepSeek)
@@ -375,7 +407,7 @@ export interface NormalisedResponse {
   toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
   // Raw assistant message in OpenAI-shape (for appending to history).
   assistantMessage: LLMMessage;
-  usage?: { input_tokens?: number; output_tokens?: number };
+  usage?: TokenUsage;
   /** Provider stop/finish reason as sent on the wire (Anthropic
    *  `stop_reason`, OpenAI-shape `finish_reason`); null when absent. Feed
    *  it to isTruncatedStop() to detect a reply cut off at max_tokens. */
@@ -429,6 +461,14 @@ interface RawUsage {
   output_tokens?: number;
   prompt_tokens?: number;
   completion_tokens?: number;
+  // Anthropic
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  // Mistral
+  prompt_tokens_details?: { cached_tokens?: number };
+  // DeepSeek
+  prompt_cache_hit_tokens?: number;
+  prompt_cache_miss_tokens?: number;
 }
 interface RawResponse {
   content?: RawContentBlock[];
@@ -443,6 +483,48 @@ interface RawStreamChunk {
   delta?: { type?: string; text?: string; stop_reason?: string; stop_details?: unknown };
   stop_details?: unknown;
   content_block?: { type?: string };
+  message?: { usage?: RawUsage };
+  usage?: RawUsage;
+}
+
+/** Provider-reported token usage in one shape. The cache fields are the
+ *  only proof that prompt caching is working (docs/model-configuration.md). */
+export interface TokenUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  /** Prompt tokens served from the provider's cache. */
+  cache_read_tokens?: number;
+  /** Prompt tokens written to the cache by this call (Anthropic only). */
+  cache_write_tokens?: number;
+}
+
+/** Anthropic, Mistral and DeepSeek field names folded into TokenUsage;
+ *  only the fields the provider reported are present. */
+export function normaliseUsage(raw: RawUsage | undefined): TokenUsage | undefined {
+  if (!raw) return undefined;
+  const usage: TokenUsage = {};
+  const input = raw.input_tokens ?? raw.prompt_tokens;
+  const output = raw.output_tokens ?? raw.completion_tokens;
+  const read = raw.cache_read_input_tokens ?? raw.prompt_tokens_details?.cached_tokens ?? raw.prompt_cache_hit_tokens;
+  if (input !== undefined) usage.input_tokens = input;
+  if (output !== undefined) usage.output_tokens = output;
+  if (read !== undefined) usage.cache_read_tokens = read;
+  if (raw.cache_creation_input_tokens !== undefined) usage.cache_write_tokens = raw.cache_creation_input_tokens;
+  return usage;
+}
+
+/** Usage carried by a streaming chunk: Anthropic's message_start (the
+ *  prompt side, cache fields included) and message_delta (the output), the
+ *  OpenAI shape's final chunk. */
+export function extractStreamUsage(parsed: unknown): TokenUsage | undefined {
+  if (!parsed || typeof parsed !== "object") return undefined;
+  const p = parsed as RawStreamChunk;
+  return normaliseUsage(p.message?.usage ?? p.usage);
+}
+
+/** One line per completed call with the provider's token split. */
+export function logUsage(provider: ProviderId, usage: TokenUsage | undefined, stream = false): void {
+  if (usage) console.log("[usage]", JSON.stringify({ provider, ...(stream ? { stream } : {}), ...usage }));
 }
 
 export function normaliseResponse(
@@ -451,6 +533,8 @@ export function normaliseResponse(
   opts?: { structuredOutputName?: string },
 ): NormalisedResponse {
   const r = raw as RawResponse;
+  const usage = normaliseUsage(r.usage);
+  logUsage(provider, usage);
   if (provider === "anthropic") {
     const blocks: RawContentBlock[] = r.content ?? [];
     let text = "";
@@ -525,9 +609,7 @@ export function normaliseResponse(
         ...(oaToolCalls.length ? { tool_calls: oaToolCalls } : {}),
         ...(blocks.length ? { raw_content: blocks } : {}),
       },
-      usage: r.usage
-        ? { input_tokens: r.usage.input_tokens, output_tokens: r.usage.output_tokens }
-        : undefined,
+      usage,
       stopReason: r.stop_reason ?? null,
       stopDetails: r.stop_details ?? null,
     };
@@ -576,12 +658,7 @@ export function normaliseResponse(
       content: msg.content ?? "",
       ...(echoToolCalls.length ? { tool_calls: echoToolCalls } : {}),
     },
-    usage: r.usage
-      ? {
-          input_tokens: r.usage.prompt_tokens ?? r.usage.input_tokens,
-          output_tokens: r.usage.completion_tokens ?? r.usage.output_tokens,
-        }
-      : undefined,
+    usage,
     stopReason: r.choices?.[0]?.finish_reason ?? null,
     stopDetails: null,
   };
@@ -704,9 +781,16 @@ export function fallbackReplyText(stopReason: string | null | undefined): string
 export const PROVIDER_TIMEOUT_MESSAGE =
   "The model did not answer within the time limit. Try a lower reasoning level in Settings, or a more focused question.";
 
-/** True for the error fetchWithTimeout throws on abort. */
+/** fetchWithTimeout's abort: the provider's response had not started within the limit. */
+export class ProviderTimeoutError extends Error {
+  constructor(timeoutMs: number, cause: unknown) {
+    super(`Provider request timed out after ${Math.round(timeoutMs / 1000)}s`, { cause });
+    this.name = "ProviderTimeoutError";
+  }
+}
+
 export function isProviderTimeout(err: unknown): boolean {
-  return err instanceof Error && err.message.startsWith("Provider request timed out");
+  return err instanceof ProviderTimeoutError;
 }
 
 /**
@@ -767,6 +851,8 @@ export async function callLLM(opts: {
    *  150s, and an in-contract timeout (billing + honest error) must beat
    *  the platform's opaque 504. */
   timeoutMs?: number;
+  /** See CacheHint. */
+  cache?: CacheHint;
 }): Promise<Response> {
   const provider = providerFor(opts.model);
   const key = Deno.env.get(envKeyFor(provider));
@@ -786,6 +872,7 @@ export async function callLLM(opts: {
           forceTool: provider === "deepseek" ? undefined : opts.forceTool,
           // Anthropic-only `effort` is intentionally NOT forwarded here.
           reasoning_effort: provider === "mistral" ? opts.mistral_effort : undefined,
+          prompt_cache_key: provider === "mistral" ? opts.cache?.key : undefined,
         });
   // Mistral quirk: `temperature === 0` triggers greedy sampling, and the
   // API then rejects the request unless `top_p` is exactly 1.0
@@ -816,6 +903,7 @@ export async function callLLM(opts: {
     if (b.output_config !== undefined) logLine.output_config = b.output_config;
     if (b.reasoning_effort !== undefined) logLine.reasoning_effort = b.reasoning_effort;
     if (b.top_p !== undefined) logLine.top_p = b.top_p;
+    if (opts.cache) logLine.cache = opts.cache.scope;
     // Echoed Anthropic assistant turns (a tool loop in progress), counts only.
     const echoed = opts.messages.filter((m) => Array.isArray(m.raw_content) && m.raw_content.length > 0);
     if (echoed.length > 0) {
@@ -846,8 +934,8 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
  * arrived), so a streaming body is never cut mid-stream — the timeout only
  * bounds the wait for the stream to begin. Non-streaming provider APIs send
  * headers together with the finished body, so there it bounds the whole
- * generation. Abort surfaces as a plain Error (not a DOMException) so the
- * callers' existing catch paths render a clean message.
+ * generation. Abort surfaces as a ProviderTimeoutError (isProviderTimeout),
+ * never as the raw DOMException.
  * `fetchImpl` is injectable for tests; production always uses global fetch.
  */
 export async function fetchWithTimeout(
@@ -861,12 +949,7 @@ export async function fetchWithTimeout(
   try {
     return await fetchImpl(url, { ...init, signal: controller.signal });
   } catch (err) {
-    if (controller.signal.aborted) {
-      throw new Error(
-        `Provider request timed out after ${Math.round(timeoutMs / 1000)}s`,
-        { cause: err },
-      );
-    }
+    if (controller.signal.aborted) throw new ProviderTimeoutError(timeoutMs, err);
     throw err;
   } finally {
     clearTimeout(timer);

@@ -4,8 +4,13 @@ import { assert, assertEquals, assertStringIncludes } from "https://deno.land/st
 import {
   buildMemoryInjection,
   buildSummaryMessages,
+  fetchVerbatimWindow,
   MEMORY_MSG_CHAR_CAP,
+  MEMORY_REFRESH_THRESHOLD,
   packSlab,
+  VERBATIM_CAP,
+  VERBATIM_TAIL,
+  type ConversationMemoryRow,
   type SlabMessage,
 } from "./_conversation_memory.ts";
 
@@ -73,6 +78,71 @@ Deno.test("packSlab equal-timestamp extension also overrides the char budget", (
   ];
   const slab = packSlab(candidates, 100, 500); // second message busts the budget
   assertEquals(slab.length, 2); // included anyway — shares created_at
+});
+
+// ---------- fetchVerbatimWindow ----------
+
+// A chat_messages table of n messages, created_at "0001".."n" (string order
+// is chronological), behind the query-builder surface the window reads.
+function fakeThread(n: number) {
+  const rows = Array.from({ length: n }, (_, i) => ({
+    role: i % 2 ? "assistant" : "user",
+    content: `m${i + 1}`,
+    created_at: String(i + 1).padStart(4, "0"),
+  }));
+  const reads: Array<{ bound: string | null; limit: number }> = [];
+  const builder = (bound: ["lte" | "gt", string] | null) => ({
+    select: () => builder(bound),
+    eq: () => builder(bound),
+    lte: (_col: string, v: string) => builder(["lte", v]),
+    gt: (_col: string, v: string) => builder(["gt", v]),
+    order: () => builder(bound),
+    limit: (limit: number) => {
+      reads.push({ bound: bound?.[0] ?? null, limit });
+      const kept = rows.filter((r) =>
+        !bound || (bound[0] === "lte" ? r.created_at <= bound[1] : r.created_at > bound[1]));
+      const newestFirst = [...kept].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit);
+      return Promise.resolve({ data: newestFirst.map(({ role, content }) => ({ role, content })), error: null });
+    },
+  });
+  return { client: { from: () => builder(null) }, reads };
+}
+
+const memoryThrough = (created_at: string): ConversationMemoryRow => ({
+  summary_text: "S", covers_through: created_at, covered_message_count: 0, updated_at: "",
+});
+
+Deno.test("fetchVerbatimWindow: the tail of covered messages, then everything after the watermark, in order", async () => {
+  const { client, reads } = fakeThread(80);
+  const window = await fetchVerbatimWindow(client, "t1", memoryThrough("0050"));
+  assertEquals(window.length, VERBATIM_TAIL + 30);
+  assertEquals(window[0].content, "m31");
+  assertEquals(window[VERBATIM_TAIL - 1].content, "m50");
+  assertEquals(window[VERBATIM_TAIL].content, "m51");
+  assertEquals(window.at(-1)!.content, "m80");
+  assertEquals(reads, [{ bound: "lte", limit: VERBATIM_TAIL }, { bound: "gt", limit: VERBATIM_CAP }]);
+});
+
+Deno.test("fetchVerbatimWindow: between refreshes the window only grows at its end", async () => {
+  const before = await fetchVerbatimWindow(fakeThread(60).client, "t1", memoryThrough("0050"));
+  const after = await fetchVerbatimWindow(fakeThread(62).client, "t1", memoryThrough("0050"));
+  assertEquals(after.slice(0, before.length), before);
+  assertEquals(after.slice(before.length).map((m) => m.content), ["m61", "m62"]);
+});
+
+Deno.test("fetchVerbatimWindow: without a memory, the newest tail + threshold messages", async () => {
+  const { client, reads } = fakeThread(80);
+  const window = await fetchVerbatimWindow(client, "t1", null);
+  assertEquals(window.length, VERBATIM_TAIL + MEMORY_REFRESH_THRESHOLD);
+  assertEquals(window[0].content, "m11");
+  assertEquals(window.at(-1)!.content, "m80");
+  assertEquals(reads, [{ bound: null, limit: VERBATIM_TAIL + MEMORY_REFRESH_THRESHOLD }]);
+});
+
+Deno.test("fetchVerbatimWindow: a backlog of uncovered messages is capped at the newest VERBATIM_CAP", async () => {
+  const window = await fetchVerbatimWindow(fakeThread(200).client, "t1", memoryThrough("0050"));
+  assertEquals(window.length, VERBATIM_TAIL + VERBATIM_CAP);
+  assertEquals(window[VERBATIM_TAIL].content, `m${200 - VERBATIM_CAP + 1}`);
 });
 
 // ---------- buildMemoryInjection ----------

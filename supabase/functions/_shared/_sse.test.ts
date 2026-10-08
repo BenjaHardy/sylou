@@ -305,6 +305,34 @@ Deno.test("readProviderStream: onEnd keeps a provider error object (its wording 
   assertEquals(s.providerError, { type: "server_error", message: "upstream reset" });
 });
 
+Deno.test("readProviderStream: Anthropic usage is merged from message_start (prompt side, cache fields) and message_delta (output)", async () => {
+  const start = `data: ${JSON.stringify({
+    type: "message_start",
+    message: { usage: { input_tokens: 100, cache_creation_input_tokens: 20, cache_read_input_tokens: 80, output_tokens: 1 } },
+  })}\n`;
+  const text = `data: ${JSON.stringify({ type: "content_block_delta", delta: { type: "text_delta", text: "hi" } })}\n`;
+  const end = `data: ${JSON.stringify({ type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 7 } })}\n`;
+  let stats: StreamStats | null = null;
+  await readProviderStream(sseResponse([start, text, end]), "anthropic", {
+    onToken: () => {},
+    onEnd: (s) => { stats = s; },
+  });
+  assertEquals(stats!.usage, { input_tokens: 100, output_tokens: 7, cache_read_tokens: 80, cache_write_tokens: 20 });
+});
+
+Deno.test("readProviderStream: OpenAI-shape usage comes from the final chunk, cached tokens included", async () => {
+  const last = `data: ${JSON.stringify({
+    choices: [{ delta: { content: "" }, finish_reason: "stop" }],
+    usage: { prompt_tokens: 300, completion_tokens: 12, prompt_tokens_details: { cached_tokens: 256 } },
+  })}\n`;
+  let stats: StreamStats | null = null;
+  await readProviderStream(sseResponse([openaiDelta("ok"), last, "data: [DONE]\n"]), "mistral", {
+    onToken: () => {},
+    onEnd: (s) => { stats = s; },
+  });
+  assertEquals(stats!.usage, { input_tokens: 300, output_tokens: 12, cache_read_tokens: 256 });
+});
+
 Deno.test("startKeepalive: ticks on the interval and stops when told", async () => {
   let ticks = 0;
   const stop = startKeepalive(() => { ticks++; }, 5);

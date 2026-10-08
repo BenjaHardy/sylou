@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import {
   callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, fallbackReplyText,
-  isProviderTimeout, PROVIDER_TIMEOUT_MESSAGE, type LLMMessage, type LLMTool,
+  isProviderTimeout, PROVIDER_TIMEOUT_MESSAGE, type CacheHint, type LLMMessage, type LLMTool,
 } from "../_shared/_llm.ts";
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
@@ -15,6 +15,7 @@ import {
 import {
   buildMemoryInjection,
   fetchConversationMemory,
+  fetchVerbatimWindow,
   maybeRefreshConversationMemory,
 } from "../_shared/_conversation_memory.ts";
 
@@ -24,9 +25,10 @@ import {
   CONCISE_MODE_MODIFIER,
   TEMPLATE_PROMPTS,
   TUTOR_MODE_SYSTEM_PROMPT,
+  WEB_SEARCH_PROMPT,
 } from "../_shared/_prompts.ts";
-import { buildDocIndex, buildFavBlock, WEB_SEARCH_PROMPT } from "./context.ts";
-import { finalCallMessages, finalCallTools, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
+import { buildDocIndex, buildFavBlock } from "./context.ts";
+import { finalCall, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { persistChatExchange } from "./persist.ts";
 
 
@@ -195,25 +197,14 @@ Deno.serve(async (req) => {
       systemPrompt += WEB_SEARCH_PROMPT;
     }
 
-    // --- Fetch the 50 most recent messages ---
-    // Order descending + limit to get the *newest* 50 (the tail of a long
-    // thread), then reverse back to chronological order for the model.
-    // Ascending + limit would send the oldest 50 and hide recent context
-    // once a thread passes 50 messages. (context-prompt does the same.)
-    const { data: recentHistory } = await supabase
-      .from("chat_messages")
-      .select("role, content")
-      .eq("thread_id", threadId)
-      .order("created_at", { ascending: false })
-      .limit(50);
-    const history = (recentHistory ?? []).reverse();
-
-    // conversation-memory: inject the rolling thread summary (if one
-    // exists) ahead of the verbatim window. User zone, deliberately never
-    // the system prompt — it is condensed USER conversation and must stay
-    // exactly as privileged as the raw messages it summarizes. Read via the
-    // user-context client so RLS scopes it to the caller's own threads.
+    // conversation-memory: the rolling thread summary (if one exists) ahead
+    // of the verbatim window that follows it (fetchVerbatimWindow). User
+    // zone, deliberately never the system prompt — it is condensed USER
+    // conversation and must stay exactly as privileged as the raw messages
+    // it summarizes. Read via the user-context client so RLS scopes both to
+    // the caller's own threads.
     const conversationMemory = await fetchConversationMemory(supabase, threadId);
+    const history = await fetchVerbatimWindow(supabase, threadId, conversationMemory);
 
     // --- Build messages array ---
     const llmMessages: LLMMessage[] = [
@@ -224,7 +215,7 @@ Deno.serve(async (req) => {
             content: buildMemoryInjection(conversationMemory.summary_text),
           }]
         : []),
-      ...(history ?? []).map((m: { role: string; content: string }): LLMMessage => ({
+      ...history.map((m): LLMMessage => ({
         role: m.role as LLMMessage["role"],
         content: m.content,
       })),
@@ -249,6 +240,10 @@ Deno.serve(async (req) => {
     const tools: LLMTool[] = [];
     if (hasDocuments) tools.push(buildDocumentTool());
     if (webSearchActive) tools.push(buildWebSearchTool());
+
+    // Prompt caching: every call of this request and the next turn of a
+    // lively exchange re-send this prefix (docs/model-configuration.md).
+    const cache: CacheHint = { key: threadId, scope: "conversation" };
 
     // Per-request context for the unified persistence sequence
     // (persist.ts) — shared by all four completion tails. The prompt
@@ -330,6 +325,7 @@ Deno.serve(async (req) => {
         thinking,
         effort,
         mistral_effort: mistralEffort,
+        cache,
       };
 
 
@@ -452,25 +448,25 @@ Deno.serve(async (req) => {
               thinking,
               effort,
               mistralEffort,
+              cache,
               logTag: "[stream]",
             });
             totalInputChars += inputCharsAdded;
             totalOutputChars += outputCharsAdded;
 
             // LLM Call #2: streaming with tool results; no tool calls allowed
-            // (finalCallTools: the list itself stays on the wire for Anthropic)
             console.log("[stream] starting Call #2 streaming");
-            const finalMessages = finalCallMessages(chatModel, toolMessages);
+            const final = finalCall(chatModel, tools, toolMessages);
             const call2Res = await callLLM({
                 model: chatModel,
-                messages: finalMessages,
+                ...final,
                 max_tokens: chatMaxTokens,
                 stream: true,
-                ...finalCallTools(chatModel, tools),
                 temperature,
                 thinking,
                 effort,
                 mistral_effort: mistralEffort,
+                cache: { ...cache, scope: "prefix" },
               });
 
             if (!call2Res.ok) {
@@ -480,7 +476,7 @@ Deno.serve(async (req) => {
               try { controller.enqueue(sseEvent({ done: true, error: msg })); } catch { /* */ }
               return;
             }
-            totalInputChars += promptChars(finalMessages);
+            totalInputChars += promptChars(final.messages);
 
             // Read Call #2 stream and forward tokens
             const call2 = await relayProviderStream(call2Res, providerFor(chatModel), controller, sseEvent);
@@ -555,6 +551,7 @@ Deno.serve(async (req) => {
         thinking,
         effort,
         mistral_effort: mistralEffort,
+        cache,
       });
     } catch (err) {
       // A streamed call times out only before its first byte.

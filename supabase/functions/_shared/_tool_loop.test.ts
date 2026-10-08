@@ -2,7 +2,7 @@
 // Run with: deno test --allow-read supabase/functions/_shared/_tool_loop.test.ts
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
-  FINAL_CALL_NOTE, finalCallMessages, finalCallTools, promptChars, ROUND_LIMIT_NOTE, runToolLoop,
+  FINAL_CALL_NOTE, finalCall, promptChars, ROUND_LIMIT_NOTE, runToolLoop,
   type ToolLoopDeps,
 } from "./_tool_loop.ts";
 import { buildWebSearchTool } from "./_tools.ts";
@@ -129,27 +129,36 @@ Deno.test("tool loop: counts the whole re-sent prompt of every check call", asyn
   assertEquals(inputCharsAdded, promptsSeen[0] + promptsSeen[1]);
 });
 
-Deno.test("finalCallTools: Anthropic keeps the tool list with tool_choice none; the other providers send nothing", () => {
-  const tools = [buildWebSearchTool()];
-  assertEquals(finalCallTools("claude-opus-4-8", tools), { tools, tool_choice: "none" });
-  assertEquals(finalCallTools("claude-sonnet-5-5", tools), { tools, tool_choice: "none" });
-  for (const model of ["zai-glm-5-3", "mistral-medium-3-5", "deepseek-v4-flash"]) {
-    assertEquals(finalCallTools(model, tools), {}, model);
-  }
+Deno.test("tool loop: the cache hint reaches every check call", async () => {
+  const seen: unknown[] = [];
+  const deps = makeDeps((opts) => {
+    seen.push(opts.cache);
+    return Promise.resolve(completion(seen.length === 1 ? ["call-a"] : []));
+  }, []);
+  deps.cache = { key: "thread-1", scope: "conversation" };
+  await runToolLoop(deps);
+  assertEquals(seen, [deps.cache, deps.cache]);
 });
 
-Deno.test("finalCallMessages: Anthropic gets the note appended after the tool results; the other providers get the same array", () => {
+Deno.test("finalCall: Anthropic keeps the tool list with tool_choice none and appends the note after the tool results; the other providers get the loop's messages and no tools", () => {
+  const tools = [buildWebSearchTool()];
   const toolMessages: LLMMessage[] = [
     { role: "system", content: "S" },
     { role: "assistant", content: "", tool_calls: [{ id: "c1", type: "function", function: { name: "web_search", arguments: "{}" } }] },
     { role: "tool", tool_call_id: "c1", content: "results" },
   ];
-  const anthropic = finalCallMessages("claude-fable-5-1", toolMessages);
-  assertEquals(anthropic.length, 4);
-  assertEquals(anthropic.slice(0, 3), toolMessages);
-  assertEquals(anthropic.at(-1), { role: "user", content: FINAL_CALL_NOTE });
+  for (const model of ["claude-opus-4-8", "claude-fable-5-1"]) {
+    const final = finalCall(model, tools, toolMessages);
+    assertEquals(final.tools, tools, model);
+    assertEquals(final.tool_choice, "none", model);
+    assertEquals(final.messages.length, 4, model);
+    assertEquals(final.messages.slice(0, 3), toolMessages, model);
+    assertEquals(final.messages.at(-1), { role: "user", content: FINAL_CALL_NOTE }, model);
+  }
   assertEquals(toolMessages.length, 3, "the loop's array is not mutated");
   for (const model of ["zai-glm-5-3", "mistral-small-2603", "deepseek-v4-flash"]) {
-    assert(finalCallMessages(model, toolMessages) === toolMessages, model);
+    const final = finalCall(model, tools, toolMessages);
+    assert(final.messages === toolMessages, model);
+    assert(!("tools" in final) && !("tool_choice" in final), model);
   }
 });

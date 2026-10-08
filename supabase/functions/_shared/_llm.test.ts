@@ -6,16 +6,20 @@ import {
   extractDeltaText,
   extractStopDetails,
   extractStopReason,
+  extractStreamUsage,
   fallbackReplyText,
+  normaliseUsage,
   isProviderTimeout,
   isRefusalStop,
   isThinkingDelta,
   isTruncatedStop,
   fetchWithTimeout,
   normaliseResponse,
+  ProviderTimeoutError,
   sanitizeAnthropicSchema,
   toAnthropicBody,
   toOpenAIBody,
+  type LLMMessage,
 } from "./_llm.ts";
 
 Deno.test("no-op: allowlisted-only schema round-trips structurally identical", () => {
@@ -362,13 +366,14 @@ Deno.test("fetchWithTimeout: aborts a fetch that never settles", async () => {
       init?.signal?.addEventListener("abort", () =>
         reject(new DOMException("The signal has been aborted", "AbortError")));
     });
-  let message = "";
+  let caught: unknown = null;
   try {
     await fetchWithTimeout("https://example.invalid/", {}, 50, hangingFetch);
   } catch (err) {
-    message = (err as Error).message;
+    caught = err;
   }
-  assert(message.includes("timed out after"), `unexpected: "${message}"`);
+  assert(caught instanceof ProviderTimeoutError, `unexpected: ${String(caught)}`);
+  assert((caught as Error).message.includes("timed out after"));
 });
 
 Deno.test("fetchWithTimeout: passes a settled response through and clears the timer", async () => {
@@ -526,6 +531,92 @@ Deno.test("toAnthropicBody: thinking on is adaptive; off is between_tools on Son
   assertEquals(adaptiveMax.output_config, { effort: "max" });
 });
 
+Deno.test("toAnthropicBody: the cache hint marks the system block, and the last message block for the conversation scope only", () => {
+  const base = { model: "claude-sonnet-5-5", max_tokens: 100 };
+  const messages: LLMMessage[] = [{ role: "system", content: "SYS" }, { role: "user", content: "hi" }];
+  const markedSystem = [{ type: "text", text: "SYS", cache_control: { type: "ephemeral" } }];
+  const conversation = toAnthropicBody({ ...base, messages, cache: { key: "t1", scope: "conversation" } });
+  assertEquals(conversation.system, markedSystem);
+  assertEquals((conversation.messages as unknown[])[0], {
+    role: "user",
+    content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }],
+  });
+  const prefix = toAnthropicBody({ ...base, messages, cache: { key: "t1", scope: "prefix" } });
+  assertEquals(prefix.system, markedSystem);
+  assertEquals((prefix.messages as unknown[])[0], { role: "user", content: "hi" });
+  const off = toAnthropicBody({ ...base, messages });
+  assertEquals(off.system, "SYS");
+  assertEquals((off.messages as unknown[])[0], { role: "user", content: "hi" });
+});
+
+Deno.test("toAnthropicBody: in a tool loop the mark lands on the last tool_result block; the echoed turn stays untouched", () => {
+  const messages: LLMMessage[] = [
+    { role: "user", content: "search x" },
+    { role: "assistant", content: "Let me check.", tool_calls: [ECHOED_TOOL_CALL], raw_content: ANTHROPIC_TURN },
+    { role: "tool", tool_call_id: "toolu_1", content: "results" },
+  ];
+  const body = toAnthropicBody({ model: "claude-opus-5-5", max_tokens: 100, messages, cache: { key: "t1", scope: "conversation" } });
+  const msgs = body.messages as Array<Record<string, unknown>>;
+  assertEquals(msgs[1], { role: "assistant", content: ANTHROPIC_TURN });
+  assertEquals(msgs[2], {
+    role: "user",
+    content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "results", cache_control: { type: "ephemeral" } }],
+  });
+  assertEquals(body.system, undefined);
+});
+
+Deno.test("toOpenAIBody: prompt_cache_key is sent when given and absent otherwise", () => {
+  const messages: LLMMessage[] = [{ role: "user", content: "hi" }];
+  assertEquals(toOpenAIBody({ model: "zai-glm-5-3", max_tokens: 10, messages, prompt_cache_key: "t1" }).prompt_cache_key, "t1");
+  assert(!("prompt_cache_key" in toOpenAIBody({ model: "zai-glm-5-3", max_tokens: 10, messages })));
+});
+
+Deno.test("normaliseUsage: one shape for Anthropic, Mistral and DeepSeek usage; cache fields only when reported", () => {
+  assertEquals(normaliseUsage({ input_tokens: 10, output_tokens: 5 }), { input_tokens: 10, output_tokens: 5 });
+  assertEquals(
+    normaliseUsage({ input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 800, cache_creation_input_tokens: 200 }),
+    { input_tokens: 10, output_tokens: 5, cache_read_tokens: 800, cache_write_tokens: 200 },
+  );
+  assertEquals(
+    normaliseUsage({ prompt_tokens: 300, completion_tokens: 12, prompt_tokens_details: { cached_tokens: 256 } }),
+    { input_tokens: 300, output_tokens: 12, cache_read_tokens: 256 },
+  );
+  assertEquals(
+    normaliseUsage({ prompt_tokens: 300, completion_tokens: 12, prompt_cache_hit_tokens: 128, prompt_cache_miss_tokens: 172 }),
+    { input_tokens: 300, output_tokens: 12, cache_read_tokens: 128 },
+  );
+  assertEquals(normaliseUsage({ output_tokens: 7 }), { output_tokens: 7 });
+  assertEquals(normaliseUsage(undefined), undefined);
+});
+
+Deno.test("normaliseResponse: the usage carries the cache fields of both wire shapes", () => {
+  const anthropic = normaliseResponse("anthropic", {
+    content: [{ type: "text", text: "hi" }],
+    stop_reason: "end_turn",
+    usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 800, cache_creation_input_tokens: 0 },
+  });
+  assertEquals(anthropic.usage, { input_tokens: 10, output_tokens: 5, cache_read_tokens: 800, cache_write_tokens: 0 });
+  const mistral = normaliseResponse("mistral", {
+    choices: [{ message: { content: "hi" } }],
+    usage: { prompt_tokens: 300, completion_tokens: 12, prompt_tokens_details: { cached_tokens: 256 } },
+  });
+  assertEquals(mistral.usage, { input_tokens: 300, output_tokens: 12, cache_read_tokens: 256 });
+});
+
+Deno.test("extractStreamUsage: message_start, message_delta and the OpenAI final chunk; nothing elsewhere", () => {
+  assertEquals(
+    extractStreamUsage({ type: "message_start", message: { usage: { input_tokens: 100, cache_read_input_tokens: 80, output_tokens: 1 } } }),
+    { input_tokens: 100, output_tokens: 1, cache_read_tokens: 80 },
+  );
+  assertEquals(extractStreamUsage({ type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 7 } }), { output_tokens: 7 });
+  assertEquals(
+    extractStreamUsage({ choices: [{ delta: { content: "" } }], usage: { prompt_tokens: 3, completion_tokens: 4 } }),
+    { input_tokens: 3, output_tokens: 4 },
+  );
+  assertEquals(extractStreamUsage({ choices: [{ delta: { content: "x" } }] }), undefined);
+  assertEquals(extractStreamUsage("nope"), undefined);
+});
+
 Deno.test("fallbackReplyText: explicit messages on a refusal and on a ceiling spent thinking, the placeholder otherwise", () => {
   assert(fallbackReplyText("refusal").includes("declined"));
   assert(fallbackReplyText("max_tokens").includes("output limit"));
@@ -535,9 +626,10 @@ Deno.test("fallbackReplyText: explicit messages on a refusal and on a ceiling sp
   assertEquals(fallbackReplyText(undefined), "No response generated.");
   assertEquals(isRefusalStop("refusal"), true);
   assertEquals(isRefusalStop("max_tokens"), false);
-  assertEquals(isProviderTimeout(new Error("Provider request timed out after 120s")), true);
+  assertEquals(isProviderTimeout(new ProviderTimeoutError(120_000, null)), true);
   assertEquals(isProviderTimeout(new Error("boom")), false);
-  assertEquals(isProviderTimeout("Provider request timed out after 120s"), false);
+  // The class is the signal, never the wording.
+  assertEquals(isProviderTimeout(new Error("Provider request timed out after 120s")), false);
 });
 
 Deno.test("stop_details: carried from a non-streamed Anthropic refusal and from a streaming message_delta, null elsewhere", () => {
