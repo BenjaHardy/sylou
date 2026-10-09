@@ -90,7 +90,7 @@ export default function SetPassword() {
   };
 
   const inputClass =
-    "w-full h-10 pl-10 pr-3 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors";
+    "w-full h-10 pl-10 pr-3 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:border-primary focus:ring-1 focus:ring-primary transition-colors";
 
   return (
     <div className="min-h-screen flex flex-col bg-[hsl(var(--ethos-surface))]">

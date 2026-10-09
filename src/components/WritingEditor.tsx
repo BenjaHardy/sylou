@@ -138,7 +138,7 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
     editorProps: {
       attributes: {
         class:
-          "max-w-none focus:outline-none min-h-full px-8 py-6",
+          "max-w-none focus:outline-hidden min-h-full px-8 py-6",
         style: "font-size:16px;line-height:1.6;",
       },
       // NOTE: keys in `handleDOMEvents` must be raw DOM event names

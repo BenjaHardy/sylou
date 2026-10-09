@@ -295,7 +295,7 @@ export function FlowHighlightedText({ segments, writingContent, onClose }: Props
 
       {/* Annotated text */}
       <div className="flex-1 overflow-auto px-6 py-4">
-        <div className="text-sm leading-relaxed break-words font-mono text-foreground">
+        <div className="text-sm leading-relaxed wrap-break-word font-mono text-foreground">
           {rendered}
         </div>
       </div>

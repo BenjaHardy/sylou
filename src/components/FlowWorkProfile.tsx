@@ -30,7 +30,7 @@ const PILLARS = [
 
 export default function FlowWorkProfile({ profile, scores }: FlowWorkProfileProps) {
   return (
-    <Card className="border shadow-sm">
+    <Card className="border shadow-xs">
       <CardContent className="p-6 space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">

@@ -246,7 +246,7 @@ export function FlowReplayOverlay({ events, onClose, sanitize = false }: FlowRep
                       )}
                     </div>
                     <div className="bg-muted/50 rounded-lg p-3">
-                      <p className="text-sm text-foreground whitespace-pre-wrap break-words">
+                      <p className="text-sm text-foreground whitespace-pre-wrap wrap-break-word">
                         {currentEvent.content.content}
                       </p>
                     </div>

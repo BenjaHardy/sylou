@@ -8,7 +8,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { setPasswordRedirectUrl } from "@/lib/auth-links";
 
 const inputClass =
-  "w-full h-10 pl-10 pr-3 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors";
+  "w-full h-10 pl-10 pr-3 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:border-primary focus:ring-1 focus:ring-primary transition-colors";
 const buttonClass =
   "w-full h-10 bg-primary hover:bg-ethos-hover text-primary-foreground rounded-md text-sm font-medium transition-all duration-150 ease-ethos-ease active:scale-[0.98] disabled:opacity-50";
 const linkButtonClass = "w-full text-xs text-muted-foreground hover:text-foreground hover:underline";

@@ -21,7 +21,7 @@ export function MiniTipTapEditor({ value, onChange, placeholder, className }: Pr
     editorProps: {
       attributes: {
         class: cn(
-          "max-w-none focus:outline-none px-3 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+          "max-w-none focus:outline-hidden px-3 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
           className
         ),
         ...(placeholder ? { "data-placeholder": placeholder } : {}),

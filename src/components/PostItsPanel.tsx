@@ -96,7 +96,7 @@ function PostItNote({ postIt, onUpdate, onUpdatePosition, onDelete, canvasBounds
 
       {/* Content */}
       <textarea
-        className="flex-1 bg-transparent resize-none border-none outline-none p-2 text-sm text-foreground placeholder:text-muted-foreground/60 cursor-text min-h-[120px]"
+        className="flex-1 bg-transparent resize-none border-none outline-hidden p-2 text-sm text-foreground placeholder:text-muted-foreground/60 cursor-text min-h-[120px]"
         value={postIt.content}
         onChange={(e) => onUpdate(postIt.id, { content: e.target.value })}
         placeholder="Write a note…"

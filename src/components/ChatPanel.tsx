@@ -103,7 +103,7 @@ const markdownComponents: ComponentProps<typeof ReactMarkdown>["components"] = {
 
 function AssistantMarkdown({ content }: { content: string }) {
   return (
-    <div className="break-words">
+    <div className="wrap-break-word">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
         {content}
       </ReactMarkdown>
@@ -142,7 +142,7 @@ function WritingSummaryBubble({ message }: { message: ChatMessage }) {
           {collapsed ? <ChevronDown className="h-3 w-3 ml-auto" /> : <ChevronUp className="h-3 w-3 ml-auto" />}
         </button>
         {!collapsed && (
-          <p className="whitespace-pre-wrap break-words mt-2 text-xs text-muted-foreground">
+          <p className="whitespace-pre-wrap wrap-break-word mt-2 text-xs text-muted-foreground">
             {message.content}
           </p>
         )}
@@ -239,7 +239,7 @@ function ChatBubble({ message, bookmark, onCreateBookmark, onUpdateBookmark, onD
             </span>
           )}
           {isUser ? (
-            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+            <p className="whitespace-pre-wrap wrap-break-word">{message.content}</p>
           ) : message.id === "streaming-assistant" || message.id === "streaming-ask" ? (
             <StreamingAssistantMarkdown content={message.content} />
           ) : (
@@ -714,7 +714,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
             onKeyDown={handleKeyDown}
             placeholder="Type a message…"
             rows={1}
-            className="flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+            className="flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-primary/30"
           />
           <Button
             size="icon"
