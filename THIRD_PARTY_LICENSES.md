@@ -37,11 +37,9 @@ Packages bundled into (or supporting) the shipped application.
 
 - tslib@2.8.1
 
-### Apache-2.0 (3)
+### Apache-2.0 (1)
 
 - class-variance-authority@0.7.1
-- didyoumean@1.2.2
-- ts-interface-checker@0.1.13
 
 ### BlueOak-1.0.0 (1)
 
@@ -51,26 +49,16 @@ Packages bundled into (or supporting) the shipped application.
 
 - entities@4.5.0
 
-### BSD-3-Clause (1)
-
-- source-map-js@1.2.2
-
-### ISC (10)
+### ISC (5)
 
 - @ungap/structured-clone@1.4.0
-- anymatch@3.1.3
-- fastq@1.20.3
-- glob-parent@5.1.2
-- glob-parent@6.0.2
 - inherits@2.0.4
 - lucide-react@0.577.0
 - minimalistic-assert@1.0.1
-- picocolors@1.1.1
 - qrcode.react@4.2.0
 
-### MIT (329)
+### MIT (266)
 
-- @alloc/quick-lru@5.3.0
 - @dnd-kit/accessibility@3.1.1
 - @dnd-kit/core@6.3.1
 - @dnd-kit/sortable@10.0.0
@@ -79,13 +67,6 @@ Packages bundled into (or supporting) the shipped application.
 - @floating-ui/dom@1.8.0
 - @floating-ui/react-dom@2.1.9
 - @floating-ui/utils@0.2.12
-- @jridgewell/gen-mapping@0.3.13
-- @jridgewell/resolve-uri@3.1.2
-- @jridgewell/sourcemap-codec@1.6.0
-- @jridgewell/trace-mapping@0.3.31
-- @nodelib/fs.scandir@2.1.5
-- @nodelib/fs.stat@2.0.5
-- @nodelib/fs.walk@1.2.8
 - @radix-ui/number@1.1.2
 - @radix-ui/primitive@1.1.4
 - @radix-ui/react-alert-dialog@1.1.18
@@ -185,25 +166,17 @@ Packages bundled into (or supporting) the shipped application.
 - @types/unist@2.0.11
 - @types/unist@3.0.3
 - @types/use-sync-external-store@0.0.6
-- any-promise@1.3.0
-- arg@5.0.2
 - aria-hidden@1.2.6
 - bail@2.0.2
-- binary-extensions@2.3.0
-- braces@3.0.3
-- camelcase-css@2.0.1
 - ccount@2.0.1
 - character-entities-html4@2.1.0
 - character-entities-legacy@3.0.0
 - character-entities@2.0.2
 - character-reference-invalid@2.0.1
-- chokidar@3.6.0
 - clsx@2.1.1
 - comma-separated-tokens@2.0.3
-- commander@4.1.1
 - cookie@1.1.1
 - core-util-is@1.0.3
-- cssesc@3.0.0
 - csstype@3.2.3
 - date-fns@3.6.0
 - debug@4.4.3
@@ -211,22 +184,14 @@ Packages bundled into (or supporting) the shipped application.
 - dequal@2.0.3
 - detect-node-es@1.1.0
 - devlop@1.1.0
-- dlv@1.1.3
 - docx@9.7.1
-- es-errors@1.3.0
 - escape-string-regexp@5.0.0
 - estree-util-is-identifier-name@3.0.0
 - extend@3.0.2
 - fast-equals@5.4.2
-- fast-glob@3.3.3
-- fdir@6.5.0
 - file-saver@2.0.5
-- fill-range@7.1.1
-- fsevents@2.3.3
-- function-bind@1.1.2
 - get-nonce@1.0.1
 - hash.js@1.1.7
-- hasown@2.0.4
 - hast-util-to-jsx-runtime@2.3.6
 - hast-util-whitespace@3.0.0
 - html-url-attributes@3.0.1
@@ -235,20 +200,12 @@ Packages bundled into (or supporting) the shipped application.
 - inline-style-parser@0.2.7
 - is-alphabetical@2.0.1
 - is-alphanumerical@2.0.1
-- is-binary-path@2.1.0
-- is-core-module@2.16.2
 - is-decimal@2.0.1
-- is-extglob@2.1.1
-- is-glob@4.0.3
 - is-hexadecimal@2.0.1
-- is-number@7.0.0
 - is-plain-obj@4.1.0
 - isarray@1.0.0
-- jiti@1.21.7
 - js-tokens@4.0.0
 - lie@3.3.0
-- lilconfig@3.1.3
-- lines-and-columns@1.2.4
 - linkify-it@5.0.2
 - linkifyjs@4.3.3
 - longest-streak@3.1.0
@@ -271,7 +228,6 @@ Packages bundled into (or supporting) the shipped application.
 - mdast-util-to-markdown@2.1.2
 - mdast-util-to-string@4.0.0
 - mdurl@2.1.0
-- merge2@1.4.1
 - micromark-core-commonmark@2.0.3
 - micromark-extension-gfm-autolink-literal@2.1.0
 - micromark-extension-gfm-footnote@2.1.0
@@ -300,28 +256,11 @@ Packages bundled into (or supporting) the shipped application.
 - micromark-util-symbol@2.0.1
 - micromark-util-types@2.0.2
 - micromark@4.0.2
-- micromatch@4.0.8
 - ms@2.1.3
-- mz@2.7.0
-- nanoid@3.3.18
 - nanoid@5.1.16
 - next-themes@0.3.0
-- normalize-path@3.0.0
-- object-assign@4.1.1
-- object-hash@3.0.0
 - orderedmap@2.1.1
 - parse-entities@4.0.2
-- path-parse@1.0.7
-- picomatch@2.3.2
-- picomatch@4.0.7
-- pirates@4.0.7
-- postcss-import@15.1.0
-- postcss-js@4.1.0
-- postcss-load-config@6.0.1
-- postcss-nested@6.2.0
-- postcss-selector-parser@6.1.4
-- postcss-value-parser@4.2.0
-- postcss@8.5.23
 - process-nextick-args@2.0.1
 - property-information@7.2.0
 - prosemirror-changeset@2.4.1
@@ -339,7 +278,6 @@ Packages bundled into (or supporting) the shipped application.
 - prosemirror-transform@1.12.0
 - prosemirror-view@1.42.3
 - punycode.js@2.3.1
-- queue-microtask@1.2.3
 - react-dom@18.3.1
 - react-markdown@10.1.0
 - react-remove-scroll-bar@2.3.8
@@ -349,17 +287,12 @@ Packages bundled into (or supporting) the shipped application.
 - react-router@7.18.2
 - react-style-singleton@2.2.3
 - react@18.3.1
-- read-cache@1.0.2
 - readable-stream@2.3.8
-- readdirp@3.6.0
 - remark-gfm@4.0.1
 - remark-parse@11.0.0
 - remark-rehype@11.1.2
 - remark-stringify@11.0.0
-- resolve@1.22.12
-- reusify@1.1.0
 - rope-sequence@1.3.4
-- run-parallel@1.2.0
 - safe-buffer@5.1.2
 - scheduler@0.23.2
 - set-cookie-parser@2.7.2
@@ -370,17 +303,10 @@ Packages bundled into (or supporting) the shipped application.
 - stringify-entities@4.0.4
 - style-to-js@1.1.21
 - style-to-object@1.0.14
-- sucrase@3.35.1
-- supports-preserve-symlinks-flag@1.0.0
-- tailwind-merge@2.6.1
-- tailwindcss-animate@1.0.7
-- tailwindcss@3.4.19
-- thenify-all@1.6.0
-- thenify@3.3.1
-- tinyglobby@0.2.17
-- to-regex-range@5.0.1
+- tailwind-merge@3.7.0
 - trim-lines@3.0.1
 - trough@2.2.0
+- tw-animate-css@1.4.0
 - uc.micro@2.1.0
 - undici-types@7.24.6
 - unified@11.0.5
@@ -464,9 +390,10 @@ part of the shipped application.
 - uri-js@4.4.1
 - webidl-conversions@8.0.1
 
-### BSD-3-Clause (2)
+### BSD-3-Clause (3)
 
 - esquery@1.7.0
+- source-map-js@1.2.2
 - tough-cookie@6.0.2
 
 ### CC-BY-4.0 (1)
@@ -477,12 +404,15 @@ part of the shipped application.
 
 - mdn-data@2.27.1
 
-### ISC (10)
+### ISC (13)
 
 - electron-to-chromium@1.5.422
 - flatted@3.4.4
+- glob-parent@6.0.2
+- graceful-fs@4.2.11
 - isexe@2.0.0
 - lru-cache@5.1.1
+- picocolors@1.1.1
 - saxes@6.0.0
 - semver@6.3.1
 - semver@7.8.5
@@ -490,7 +420,7 @@ part of the shipped application.
 - which@2.0.2
 - yallist@3.1.1
 
-### MIT (197)
+### MIT (226)
 
 - @adobe/css-tools@4.5.0
 - @asamuzakjp/css-color@5.1.11
@@ -531,7 +461,11 @@ part of the shipped application.
 - @eslint-community/regexpp@4.12.2
 - @eslint/js@10.0.1
 - @exodus/bytes@1.15.2
+- @jridgewell/gen-mapping@0.3.13
 - @jridgewell/remapping@2.3.5
+- @jridgewell/resolve-uri@3.1.2
+- @jridgewell/sourcemap-codec@1.6.0
+- @jridgewell/trace-mapping@0.3.31
 - @keyv/bigmap@1.3.1
 - @keyv/serialize@1.1.1
 - @napi-rs/wasm-runtime@1.2.3
@@ -553,6 +487,21 @@ part of the shipped application.
 - @rolldown/binding-win32-x64-msvc@1.1.5
 - @rolldown/pluginutils@1.0.1
 - @standard-schema/spec@1.1.0
+- @tailwindcss/node@4.3.3
+- @tailwindcss/oxide-android-arm64@4.3.3
+- @tailwindcss/oxide-darwin-arm64@4.3.3
+- @tailwindcss/oxide-darwin-x64@4.3.3
+- @tailwindcss/oxide-freebsd-x64@4.3.3
+- @tailwindcss/oxide-linux-arm-gnueabihf@4.3.3
+- @tailwindcss/oxide-linux-arm64-gnu@4.3.3
+- @tailwindcss/oxide-linux-arm64-musl@4.3.3
+- @tailwindcss/oxide-linux-x64-gnu@4.3.3
+- @tailwindcss/oxide-linux-x64-musl@4.3.3
+- @tailwindcss/oxide-wasm32-wasi@4.3.3
+- @tailwindcss/oxide-win32-arm64-msvc@4.3.3
+- @tailwindcss/oxide-win32-x64-msvc@4.3.3
+- @tailwindcss/oxide@4.3.3
+- @tailwindcss/vite@4.3.3
 - @testing-library/dom@10.4.1
 - @testing-library/jest-dom@6.9.1
 - @testing-library/react@16.3.2
@@ -588,7 +537,6 @@ part of the shipped application.
 - ansi-regex@5.0.1
 - ansi-styles@5.2.0
 - assertion-error@2.0.1
-- autoprefixer@10.5.2
 - balanced-match@4.0.4
 - bidi-js@1.1.0
 - brace-expansion@5.0.12
@@ -604,6 +552,7 @@ part of the shipped application.
 - deep-is@0.1.4
 - dom-accessibility-api@0.5.16
 - dom-accessibility-api@0.6.3
+- enhanced-resolve@5.26.0
 - es-module-lexer@2.3.2
 - escalade@3.2.0
 - escape-string-regexp@4.0.0
@@ -614,10 +563,11 @@ part of the shipped application.
 - fast-deep-equal@3.1.3
 - fast-json-stable-stringify@2.1.0
 - fast-levenshtein@2.0.6
+- fdir@6.5.0
 - file-entry-cache@11.1.5
 - find-up@5.0.0
 - flat-cache@6.1.23
-- fraction.js@5.3.4
+- fsevents@2.3.3
 - gensync@1.0.0-beta.2
 - globals@17.12.0
 - hashery@1.5.1
@@ -630,7 +580,10 @@ part of the shipped application.
 - ignore@7.0.9
 - imurmurhash@0.1.4
 - indent-string@4.0.0
+- is-extglob@2.1.1
+- is-glob@4.0.3
 - is-potential-custom-element-name@1.0.1
+- jiti@2.7.0
 - jsdom@29.1.1
 - jsesc@3.1.0
 - json-schema-traverse@0.4.1
@@ -642,6 +595,7 @@ part of the shipped application.
 - lz-string@1.5.0
 - magic-string@0.30.21
 - min-indent@1.0.1
+- nanoid@3.3.18
 - natural-compare@1.4.0
 - node-releases@2.0.54
 - obug@2.1.4
@@ -652,6 +606,8 @@ part of the shipped application.
 - path-exists@4.0.0
 - path-key@3.1.1
 - pathe@2.0.3
+- picomatch@4.0.7
+- postcss@8.5.23
 - prelude-ls@1.2.1
 - pretty-format@27.5.1
 - punycode@2.3.1
@@ -666,8 +622,11 @@ part of the shipped application.
 - std-env@4.2.0
 - strip-indent@3.0.0
 - symbol-tree@3.2.4
+- tailwindcss@4.3.3
+- tapable@2.3.3
 - tinybench@2.9.0
 - tinyexec@1.3.1
+- tinyglobby@0.2.17
 - tinyrainbow@3.1.1
 - tldts-core@7.4.13
 - tldts@7.4.13
@@ -695,17 +654,29 @@ part of the shipped application.
 - @csstools/color-helpers@6.1.1
 - @csstools/css-syntax-patches-for-csstree@1.1.14
 
-### MPL-2.0 (12)
+### MPL-2.0 (24)
 
+- lightningcss-android-arm64@1.32.0
 - lightningcss-android-arm64@1.33.0
+- lightningcss-darwin-arm64@1.32.0
 - lightningcss-darwin-arm64@1.33.0
+- lightningcss-darwin-x64@1.32.0
 - lightningcss-darwin-x64@1.33.0
+- lightningcss-freebsd-x64@1.32.0
 - lightningcss-freebsd-x64@1.33.0
+- lightningcss-linux-arm-gnueabihf@1.32.0
 - lightningcss-linux-arm-gnueabihf@1.33.0
+- lightningcss-linux-arm64-gnu@1.32.0
 - lightningcss-linux-arm64-gnu@1.33.0
+- lightningcss-linux-arm64-musl@1.32.0
 - lightningcss-linux-arm64-musl@1.33.0
+- lightningcss-linux-x64-gnu@1.32.0
 - lightningcss-linux-x64-gnu@1.33.0
+- lightningcss-linux-x64-musl@1.32.0
 - lightningcss-linux-x64-musl@1.33.0
+- lightningcss-win32-arm64-msvc@1.32.0
 - lightningcss-win32-arm64-msvc@1.33.0
+- lightningcss-win32-x64-msvc@1.32.0
 - lightningcss-win32-x64-msvc@1.33.0
+- lightningcss@1.32.0
 - lightningcss@1.33.0
