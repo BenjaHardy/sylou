@@ -4,6 +4,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* Tailwind 4.3 moved its default sans stack to an explicit system list; this keeps v3's. */
+  --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
@@ -192,15 +195,17 @@
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
+  /* Plain values rather than @apply: v4's leading-* utilities also set --tw-leading,
+     which the text-* utilities on these elements would then pick up. */
   h1, h2, h3, h4, h5, h6 {
     text-wrap: balance;
     letter-spacing: -0.02em;
-    @apply font-semibold;
+    font-weight: 600;
   }
 
   p {
     text-wrap: pretty;
-    @apply leading-relaxed;
+    line-height: 1.625;
   }
 }
 
