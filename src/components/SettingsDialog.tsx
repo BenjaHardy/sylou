@@ -35,6 +35,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import {
   CHAT_REASONING_OPTIONS,
+  FLOW_ALTERNATIVE_GROUP_ID,
   FLOW_OTHER_GROUP_ID,
   FLOW_RECOMMENDED_GROUP_ID,
   MODEL_CONFIG_DOC_URL,
@@ -159,6 +160,12 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                 defaultOpenGroupIds={[FLOW_RECOMMENDED_GROUP_ID]}
                 showProviderTag
                 groupNotices={{
+                  [FLOW_ALTERNATIVE_GROUP_ID]: (
+                    <>
+                      These models also produce good FLOW results, but the recommended models
+                      offer a better mix of reliability, speed and cost. See the {modelConfigLink} for details.
+                    </>
+                  ),
                   [FLOW_OTHER_GROUP_ID]: (
                     <>
                       These models are currently not recommended for FLOW analysis, because of
