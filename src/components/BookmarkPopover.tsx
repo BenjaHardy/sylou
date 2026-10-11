@@ -47,7 +47,7 @@ export function BookmarkPopover({ bookmark, onUpdate, onDelete, children }: Prop
           onBlur={() => onUpdate(bookmark.id, { annotation })}
           placeholder="Add a note…"
           rows={2}
-          className="w-full resize-none rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+          className="w-full resize-none rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-primary/30"
         />
 
         {/* Delete */}

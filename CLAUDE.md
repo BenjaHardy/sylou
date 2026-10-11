@@ -22,7 +22,8 @@ Don't introduce proprietary dependencies or closed-source patterns.
 Apply strict coding standards to avoid future code liabilities for the open-source project.
 
 ## 2. Stack
-- React 18, Vite 8 (Rolldown), TypeScript 5, Tailwind v3, shadcn/ui
+- React 18, Vite 8 (Rolldown), TypeScript 5, Tailwind v4 (CSS-first: the
+  theme lives in `src/index.css`, there is no `tailwind.config`), shadcn/ui
 - React Router, TipTap v3 (custom font-size + pagination extensions).
   The v2→v3 migration (2026-09) was behavior-preserving: every editor takes
   its StarterKit from `src/lib/editor-extensions/sylou-starter.ts`, which

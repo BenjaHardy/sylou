@@ -112,7 +112,7 @@ function DraggableCard({
           onClick();
         }
       }}
-    className={`rounded-lg border-2 bg-card p-3 shadow-sm select-none transition-shadow hover:shadow-md ${
+    className={`rounded-lg border-2 bg-card p-3 shadow-xs select-none transition-shadow hover:shadow-md ${
         selected ? "ring-2 ring-primary ring-offset-2" : ""
       }`}
     >

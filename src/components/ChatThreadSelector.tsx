@@ -86,7 +86,7 @@ export function ChatThreadSelector({ threads, activeThreadId, onSelect, onCreate
                     onChange={(e) => setEditName(e.target.value)}
                     onKeyDown={handleRenameKeyDown}
                     onBlur={handleRenameSubmit}
-                    className="flex-1 text-sm bg-transparent border border-primary/30 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-primary/40"
+                    className="flex-1 text-sm bg-transparent border border-primary/30 rounded px-1.5 py-0.5 outline-hidden focus:ring-1 focus:ring-primary/40"
                   />
                   <button onClick={handleRenameSubmit} className="text-primary hover:text-primary/80">
                     <Check className="h-3.5 w-3.5" />
@@ -142,7 +142,7 @@ export function ChatThreadSelector({ threads, activeThreadId, onSelect, onCreate
                 onKeyDown={handleCreateKeyDown}
                 onBlur={() => { if (!newName.trim()) setCreating(false); }}
                 placeholder="Thread name…"
-                className="flex-1 text-sm bg-transparent border border-primary/30 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-primary/40 placeholder:text-muted-foreground"
+                className="flex-1 text-sm bg-transparent border border-primary/30 rounded px-1.5 py-0.5 outline-hidden focus:ring-1 focus:ring-primary/40 placeholder:text-muted-foreground"
               />
               <button onClick={handleCreate} className="text-primary hover:text-primary/80">
                 <Check className="h-3.5 w-3.5" />

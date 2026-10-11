@@ -196,7 +196,7 @@ export function FlowRadarChart({ report, userFeedback, userLabel, userColor }: F
       </svg>
 
       {/* Tooltip readout */}
-      <div className="mt-2 min-h-[1.25rem] text-xs text-center">
+      <div className="mt-2 min-h-5 text-xs text-center">
         {hovered ? (
           (() => {
             const pillar = PILLARS.find((p) => p.key === hovered.key)!;

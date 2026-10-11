@@ -98,7 +98,7 @@ function SortableEventCard({
 
       {/* Card */}
       <div
-        className="flex-1 border rounded-lg px-3 py-1.5 mb-1.5 bg-card cursor-pointer hover:shadow-sm transition-shadow"
+        className="flex-1 border rounded-lg px-3 py-1.5 mb-1.5 bg-card cursor-pointer hover:shadow-xs transition-shadow"
         style={{ borderLeftColor: borderColor, borderLeftWidth: 3 }}
         onClick={onClick}
       >
