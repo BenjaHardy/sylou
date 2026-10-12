@@ -43,9 +43,9 @@ W — Write: writing and authorship (write it)
 The transparency architecture, covering all the means, whats, whys, hows to achieve this goal, is detailed in a separate and dedicated document, in case you're interested or plan to contribute: [TRANSPARENCY.md](TRANSPARENCY.md).
 
 <p align="center">
-  <a href="https://sylou.eu/report/33fbcecf-3efb-4ed2-a59c-58bd19b4971b"><img src="https://meetsylou.eu/assets/badge-runga-ahi-radar.png" width="280" alt="FLOW Pledge Badge for Runga Ahi: radar chart of the four pillar scores"></a>
-  <a href="https://sylou.eu/report/65f1ed5f-6173-4fcd-aa6a-3ad9842fd61e"><img src="https://meetsylou.eu/assets/badge-detection-to-transparency-radar.png" width="280" alt="FLOW Pledge Badge for From Detection to Transparency: radar chart of the four pillar scores"></a>
-  <a href="https://sylou.eu/report/47860893-6177-458f-bb2e-6abc25fcbd52"><img src="https://meetsylou.eu/assets/badge-antlerbranches-radar.png" width="280" alt="FLOW Pledge Badge for The Antlerbranches: radar chart of the four pillar scores"></a>
+  <a href="https://sylou.eu/report/33fbcecf-3efb-4ed2-a59c-58bd19b4971b"><img src="https://meetsylou.eu/assets/badge-runga-ahi-radar.png" width="31%" alt="FLOW Pledge Badge for Runga Ahi: radar chart of the four pillar scores"></a>
+  <a href="https://sylou.eu/report/65f1ed5f-6173-4fcd-aa6a-3ad9842fd61e"><img src="https://meetsylou.eu/assets/badge-detection-to-transparency-radar.png" width="31%" alt="FLOW Pledge Badge for From Detection to Transparency: radar chart of the four pillar scores"></a>
+  <a href="https://sylou.eu/report/47860893-6177-458f-bb2e-6abc25fcbd52"><img src="https://meetsylou.eu/assets/badge-antlerbranches-radar.png" width="31%" alt="FLOW Pledge Badge for The Antlerbranches: radar chart of the four pillar scores"></a>
 </p>
 <p align="center"><em>FLOW Pledge Badges from three of the maintainer's own projects: click one to open its shared report. More on <a href="https://meetsylou.eu/#examples">meetsylou.eu</a>.</em></p>
 
