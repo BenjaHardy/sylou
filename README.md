@@ -54,7 +54,7 @@ The transparency architecture, covering all the means, whats, whys, hows to achi
 ## What's in the box
 
 - **Writing editor** with AI assistance that is context-aware of the work (Ask, Propose, Expand, Simplify, Rephrase, Translate, Fix grammar) and with per-paragraph provenance tracking.
-- **AI chat assistant** that has awareness of the work being written, and with multiple threads per project, document upload capabilities, and integrated web search.
+- **AI chat assistant** that has awareness of the work being written, and with multiple threads per project, document upload capabilities, integrated web search, and prompt caching for token cost efficiency.
 - **Creative writing tools** aimed for fiction writers: world-building tool, character diagram and timeline.
 - **Other convenience functionalities** such as virtual post-its and chat messages bookmarks.
 - **FLOW analysis** that produces a structured report analysing the four pillars of the FLOW methodology.
@@ -77,7 +77,7 @@ It is open-source software designed for self-managed deployment on Supabase plus
 Setup is documented in [**docs/setup.md**](docs/setup.md). At a high level, you'll need:
 
 - A Supabase project (free tier works for personal use)
-- API keys for at least one LLM provider (with Anthropic models being required for the FLOW analysis). For the FLOW analysis, Claude Sonnet 4.6 and up from Anthropic API are recommended options
+- API keys for at least one LLM provider (with either Mistral or Anthropic models being required for the FLOW analysis). For the FLOW analysis, GLM 5.3 (through Mistral API) or Claude Sonnet 5.5 from Anthropic API are recommended options
 - A few environment variables
 - About 30-60 minutes for first-time setup
 
@@ -134,12 +134,12 @@ It's provided as-is, without warranty of any kind. That said, it's used daily by
 
 ## Roadmap
 
-Do take a look at our Tally questionnaire, linked at the top of this file, which includes a dedicated question for feedback on possible future functionalities.
+Do take a look at our Tally questionnaire, linked at the top of this file, which includes a dedicated question for feedback on possible future functionalities. The maintainer's personal priorities include the addition of new set-ups for more flexibility (including the possibility to run Sylou locally or with self-hosted open LLMs), as well as means to further enrich the FLOW reports.
 Besides what's listed there, we're of course open to suggestions and feedback. See also [**CONTRIBUTING.md**](CONTRIBUTING.md).
 
 ---
 
-## A note on how it was built
+## Note on how it was built
 
 Sylou's transparency mechanisms and FLOW methodology were designed by the maintainer, with the code largely written with AI tools under the maintainer's direction and review: initially Cursor (late 2025-early 2026) for a first, fully offline experimental prototype (separate repository); then Lovable (March-June 2026) for a scaffold of this codebase; since then Claude Code, every change reviewed by the maintainer and backed by tests, CI and DCO sign-offs. 
 
