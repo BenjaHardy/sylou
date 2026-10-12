@@ -27,9 +27,6 @@ export function computeProvenanceStats(
   segmentMap: Array<{ start: number; end: number; source?: string; type?: string }>
 ): Record<string, number> {
   if (!segmentMap || segmentMap.length === 0) {
-    // Fallback: strip HTML tags for plain text length
-    const plainLen = content.replace(/<[^>]*>/g, "").length;
-    if (plainLen === 0) return { typed: 100, copy_chat: 0, copy_external: 0, ai: 0 };
     return { typed: 100, copy_chat: 0, copy_external: 0, ai: 0 };
   }
 

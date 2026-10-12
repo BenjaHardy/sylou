@@ -5,10 +5,13 @@ import { makeCorsHeadersFor } from "../_shared/_cors.ts";
 const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
 
 function generateCertificateId(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  // 32 characters (no I, O, 0, 1): a power of two, so a 5-bit mask picks each
+  // one with exactly equal probability.
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const random = crypto.getRandomValues(new Uint8Array(8));
   let result = "FLOW-";
-  for (let i = 0; i < 8; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)];
+  for (const value of random) {
+    result += chars[value & 31];
   }
   return result;
 }
