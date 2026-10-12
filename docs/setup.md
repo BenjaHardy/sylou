@@ -11,7 +11,7 @@ If you get stuck at any step, please [open an issue](https://github.com/BenjaHar
 
 **Accounts:**
 - A [Supabase](https://supabase.com) account (free tier works for personal and small-team use)
-- An API key from at least one LLM provider (among the usable APIs, with Anthropic models being required for the FLOW analysis):
+- An API key from at least one LLM provider (among the usable APIs, with either Mistral or Anthropic models being required for the FLOW analysis):
   - [Anthropic](https://console.anthropic.com) for Claude models
   - [Mistral](https://console.mistral.ai) for Mistral models
   - Make sure to check and review the confidentiality settings of the API and adjust as desired 
@@ -115,8 +115,8 @@ Sylou's edge functions read several configuration values as Supabase secrets. Yo
 
 Before setting secrets, decide:
 
-- **Which LLM providers** you want available; Sylou currently works with Anthropic/Claude, Mistral, and DeepSeek. 
-Set the API key for each you wish to use; and you should have at least Anthropic/Claude (recommended models for FLOW analysis). The provider whose key isn't set will appear in Sylou's model picker but fail at runtime if a user selects it; set keys for the providers you want users to actually have access to.
+- **Which LLM providers** you want available; Sylou currently works with Anthropic/Claude, Mistral (incl. GLM), and DeepSeek. 
+Set the API key for each you wish to use; and you should have at least either Mistral or Anthropic/Claude (recommended models for FLOW analysis). The provider whose key isn't set will appear in Sylou's model picker but fail at runtime if a user selects it; set keys for the providers you want users to actually have access to.
 
 - **Whether you want web search.** Web search uses [Brave Search](https://api.search.brave.com); it's optional. If you don't set the Brave key, the web search toggle in Sylou's UI is greyed out with an explanatory tooltip.
 
@@ -175,7 +175,7 @@ npx supabase functions deploy
 
 This deploys every function defined in the `supabase/functions/` directory. Each function takes 5–15 seconds. Once complete, you should see all eight listed as deployed in **Edge Functions** in your Supabase dashboard.
 
-If you can't use the Supabase CLI for any reason, the same functions can be deployed manually via the Supabase dashboard's **Edge Functions** section. Note that dashboard deployment is significantly more fiddly (each function has multiple files, and the JWT verification toggle must be set manually for each; see `supabase/config.toml` for the correct settings). The CLI is strongly recommended.
+If you can't use the Supabase CLI for any reason, the same functions can be deployed manually via the Supabase dashboard's **Edge Functions** section. Note that dashboard deployment is significantly more fiddly (each function has multiple files, and the JWT verification toggle must be set manually for each; see `supabase/config.toml` for the correct settings). The CLI is strongly mended.
 
 ---
 
@@ -288,7 +288,7 @@ Create a second project, this time choosing the **Creative** template. Use one o
 
 **9. Run a FLOW analysis**
 
-If not done already, choose a model in the settings among the recommended FLOW analysis models: click on your account at the bottom left → Settings → Models tab → "FLOW analysis model" at the bottom. Claude Sonnet 4.6 is the default model, so this is especially important if the Anthropic API key is not set.
+If not done already, choose a model in the settings among the recommended FLOW analysis models: click on your account at the bottom left → Settings → Models tab → "FLOW analysis model" at the bottom. GLM 5.3 is the default model, so this is especially important if the Mistral API key is not set.
 Go back to your first project. Click **Analyze with FLOW** at the bottom of the editor. The analysis runs (takes cca. 60 seconds, more or less depending on the size of the project). When complete, a FLOW report appears.
 
 *Verifies: the `analysis` edge function is deployed correctly. This is the most complex backend operation and exercises the LLM, the database, and the streaming response together.*
@@ -317,7 +317,7 @@ A few things worth knowing once your Sylou instance is running.
 
 Sylou's sign-in page has no self-registration: accounts exist only when the operator creates them, and users then sign in with email + password, set or reset through an email link. 
 
-- **Close sign-ups** under **Authentication → Sign In/Providers**: "Allow new users to sign up" → off. Recommended for any deployment serving identified users; with it off, nothing outside your dashboard can create an account.
+- **Close sign-ups** under **Authentication → Sign In/Providers**: "Allow new users to sign up" → off. mended for any deployment serving identified users; with it off, nothing outside your dashboard can create an account.
 - **Set the auth URLs** under **Authentication → URL Configuration**: *Site URL* = your frontend origin (e.g. `https://sylou.example`), and add `https://sylou.example/**` to *Redirect URLs*. Without this, every email link redirects to Supabase's default `http://localhost:3000`.
 
 **Creating accounts.** Under **Authentication → Users → Add user**:
