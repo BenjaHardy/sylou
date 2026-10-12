@@ -1,6 +1,6 @@
 # Model Configuration Reference
 
-This document tracks how Sylou configures each LLM model across the four main edge functions (FLOW analysis, Chat, Editor actions, Context-prompt) and the two summary calls (document import, conversation memory). It serves as a single source of truth for what's set where, why, and how the models behave in practice.
+This document tracks how Sylou configures each LLM model across the four main edge functions (FLOW analysis, Chat, Editor actions, Context-prompt) and the two summary calls (document import, conversation memory).
 
 **When to update this document:**
 
@@ -29,18 +29,16 @@ This document tracks how Sylou configures each LLM model across the four main ed
 
 *Pricing as of October 2026 (Anthropic pricing page, Mistral model cards, DeepSeek pricing page); verify against provider pricing pages before publishing. Cache reads: $0.30 Sonnet 4.6, $0.50 Opus 4.8, $0.20 Sonnet 5.5 and Opus 5.5, $0.25 Fable 5.1, $0.14 GLM 5.3 (cached input), $0.006 DeepSeek (cache hit).*
 
+\* Z.ai GLM 5.3 is a **third-party open model** (Z.ai) hosted unmodified on
+the Mistral API on EU infrastructure. It routes through Sylou's Mistral path
+and uses the operator's `MISTRAL_API_KEY`. GLM 5.3 is reasoning-only: `reasoning_effort` accepts "low" | "high" | "max", 
+where "low" and "max" are **GLM-only** levels (Mistral's own reasoning models
+accept "high" | "none" and must never be configured with either).
+
 \*\* `deepseek-v4-flash` is a legacy id: DeepSeek retired V4 Flash and serves
 it with DeepSeek-V4.1-Flash at the Flash price (half price off-peak, outside
 01:00–04:00 and 06:00–10:00 UTC on weekdays). The model runs in thinking
-mode by default; Sylou does not configure its thinking fields yet.
-
-\* Z.ai GLM 5.3 is a **third-party open model** (Z.ai) hosted unmodified on
-the Mistral API on EU infrastructure. It routes through Sylou's Mistral path
-and uses the operator's `MISTRAL_API_KEY`. GLM 5.3 is a **reasoning-only**
-model: `reasoning_effort` accepts "low" | "high" | "max", the model's own
-default is "max" when the field is omitted, and reasoning cannot be disabled.
-Note: "low" and "max" are **GLM-only** levels (Mistral's own reasoning models
-accept "high" | "none" and must never be configured with either).
+mode by default; Sylou flags the model as "experimental" and currently does not configure its thinking fields.
 
 ---
 
@@ -48,33 +46,31 @@ accept "high" | "none" and must never be configured with either).
 
 ### FLOW (analysis)
 
-The most analytically demanding function. All models targeted for determinism (temperature 0) when possible, with reasoning enabled where supported.
+The most analytically demanding function. All models targeted for determinism (temperature 0) when possible, with reasoning enabled where supported. Not all models are appropriate: the right ones need to show strong accuracy (being in line with the tester's own critical self-evaluation, and with no bias toward the user), repeatability (consistent outcomes from one run to another), and speed.
 
 | Model              | Temperature                  | Thinking / Effort                                      | max_tokens (output) | Notes                                                                                           |
 | ------------------ | ---------------------------- | ------------------------------------------------------ | ------------------- | ----------------------------------------------------------------------------------------------- |
-| Claude Sonnet 4.6  | 0.0                          | thinking: off, effort: high (matches provider default) | 8192                | *Recommended* for FLOW; quality and repeatability. |
-| Claude Sonnet 5.5  | undefined (rejects any value) | thinking: adaptive, effort: xhigh                     | 24000               | *Recommended* for FLOW (field test, October 2026). |
-| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high                       | 24000               | Adaptive thinking; consumes more tokens than Sonnet, not recommended by default except for specific scenarios.         |
-| Claude Opus 5.5    | undefined (rejects any value) | thinking: always on, effort: xhigh                    | 24000               | *Recommended* for FLOW (field test, October 2026). |
-| Claude Fable 5.1   | undefined (rejects any value) | thinking: always on, effort: medium                   | 24000               | *Not* recommended: the field test (October 2026) showed no gain over Opus 5.5 at 2.5× the price. Slower turns, hence medium; needs an Anthropic account with 30-day data retention. |
+| Claude Sonnet 4.6  | 0.0                          | thinking: off, effort: high (matches provider default) | 8192                | *Alternative* for FLOW; accuracy and repeatability. Actual use cost equivalent to Sonnet 5.5, with slightly poorer results (occasional confusion between pillars). |
+| Claude Sonnet 5.5  | undefined (rejects any value) | thinking: adaptive, effort: xhigh                     | 24000               | *Recommended* for FLOW (default Anthropic option); accuracy and repeatability |
+| Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high                       | 24000               | Adaptive thinking; supplemented by Opus 5.5.         |
+| Claude Opus 5.5    | undefined (rejects any value) | thinking: always on, effort: xhigh                    | 24000               | *Alternative* for FLOW; accuracy and repeatability. More expensive than Sonnet for seemingly equivalent outputs among our tests and edge cases, not recommended by default except for specific scenarios. |
+| Claude Fable 5.1   | undefined (rejects any value) | thinking: always on, effort: medium                   | 24000               | *Not* recommended due to cost and speed; needs an Anthropic account with 30-day data retention. |
 | Mistral Large 3    | 0.0                          | n/a (no reasoning support)                             | 8192                | *Not* recommended, strong inherent bias towards the user.                                       |
 | Mistral Medium 3.5 | 0.0                          | reasoning_effort: off                                  | 8192                | *Not* recommended. Good repeatability, but strong Write pillar and provenance data lead to user-bias on other pillars. |
 | Mistral Small 4    | 0.0                          | reasoning_effort: high                                 | 24000               | *Not* recommended, bias towards the user, poor repeatability.  |
 | DeepSeek V4 Flash  | 0.0 (no effect in thinking mode) | provider default thinking mode (not configured)    | 8192                | *Not* recommended, bias towards the user, poor repeatability.  |
-| Z.ai GLM 5.3       | 0.0                          | reasoning_effort: high                                 | 24000               | *Not* recommended, bias toward the user (unlike GLM 5.2, which is however retiring from Mistral API). |
+| Z.ai GLM 5.3       | 0.0                          | reasoning_effort: high                                 | 24000               | *Recommended* for FLOW (default Mistral option); accuracy and repeatability. |
 
 **Rationale for FLOW settings:**
 
-- max_tokens 24000 for reasoning models (in step with chat and context-prompt): thinking chunks consume output budget; insufficient headroom causes truncation and validation failures. FLOW is a single non-streamed call aborted at 145 s; an attempt the provider cut at the ceiling is not retried (the retry exists for format slips, and a budget overrun at temperature 0 would only repeat).
-- GLM 5.3 (October 2026 field test): at "low", "high" and "max" alike the scores lean toward the user and lack the independence GLM 5.2 (retiring from Mistral API) showed at "max". Hence not recommended, left at "high" for anyone who selects it. Claude Sonnet 4.6 is the default FLOW model for new profiles since 2026-10-02.
-- Opus 4.7 and later, Sonnet 5.5 and Fable 5.1 are excluded from the temperature setting (any non-default sampling parameter returns 400), so FLOW repeatability on them rests on the model and the prompt.
-- Sonnet 5.5 and Opus 5.5 run at xhigh ("extra"), the level below max, which passed the October 2026 field test; one table entry away from high if runs approach the 145 s limit or truncate. Fable 5.1 runs at medium because its turns are the slowest.
+- max_tokens 24000 for reasoning models (in step with chat and context-prompt): thinking chunks consume output budget; insufficient headroom causes truncation and validation failures. FLOW is a single non-streamed call aborted at 145 s; an attempt the provider cut at the ceiling is not retried (the retry exists for format slips).
+- Opus 4.7 and later, Sonnet 5.5 and Fable 5.1 are excluded from the temperature setting (any non-default sampling parameter returns 400).
 
 ---
 
 ### Chat
 
-Conversational responses. Quality matters; reasoning effort calibrated per model tier.
+Conversational responses. The below thinking / effort is the default, and can be modified by the user in Sylou's settings.
 
 | Model              | Temperature                  | Thinking / Effort                | max_tokens (output) | Notes                                                                 |
 | ------------------ | ---------------------------- | -------------------------------- | ------------------- | --------------------------------------------------------------------- |
@@ -83,18 +79,18 @@ Conversational responses. Quality matters; reasoning effort calibrated per model
 | Claude Opus 4.8    | undefined (model-controlled) | thinking: adaptive, effort: high | 24000               | Adaptive thinking; raises max_tokens.                                 |
 | Claude Opus 5.5    | undefined (rejects any value) | thinking: always on, effort: medium | 24000            | Thinking cannot be turned off; effort is the only control.            |
 | Claude Fable 5.1   | undefined (rejects any value) | thinking: always on, effort: medium | 24000            | Same; the slowest and most expensive model.                           |
-| Mistral Large 3    | 0.7                          | n/a                              | 4000                | Standard chat.                                                        |
-| Mistral Medium 3.5 | 0.7                          | reasoning_effort: high           | 24000               | Mistral "Quality tier" — reasoning enabled.                           |
-| Mistral Small 4    | 0.7                          | reasoning_effort: none           | 4000                | Mistral "Speed tier" — no thinking chunk; ideal for cheap, fast chat. |
+| Mistral Large 3    | 0.7                          | n/a                              | 4000                | Standard chat (to be replaced by Mistral Large 4).                     |
+| Mistral Medium 3.5 | 0.7                          | reasoning_effort: high           | 24000               | Standard chat with reasoning enabled.                           |
+| Mistral Small 4    | 0.7                          | reasoning_effort: none           | 4000                | Mistral "Speed tier" with no thinking chunk; for cheap, fast chat. |
 | DeepSeek V4 Flash  | 1.0 (no effect in thinking mode) | provider default thinking mode (not configured) | 4000 | Cheap chat; the default thinking shares the plain ceiling. |
-| Z.ai GLM 5.3       | 0.7                          | reasoning_effort: high           | 24000               | Third-party (Z.ai) via Mistral API; 1M context. "max" is its deep-reasoning level: occasionally significant thinking before the first answer token. |
+| Z.ai GLM 5.3       | 0.7                          | reasoning_effort: high           | 24000               | Third-party (Z.ai) via Mistral API; 1M context. "max" is its deep-reasoning level. |
 
 **Rationale for Chat settings:**
 
 - Temperature at provider default: 1.0 for Claude Sonnet and DeepSeek, 0.7 for Mistral; allows natural variation for conversational warmth.
-- Reasoning effort tier-matched: e.g. GLM 5.3 and Medium 3.5 get reasoning; Small ("speed tier") doesn't.
-- max_tokens 4000, 24000 for reasoning models: same logic as FLOW. Raised from 8000 in October 2026 after GLM 5.3 at "max" spent whole budgets thinking. 
-- Streams send an SSE keep-alive comment every 15 s for their whole life: a response with no bytes for ~50 s during a long think was observed being closed in front of the function (the provider read then ends with no finish reason and no text).
+- max_tokens 4000, 24000 for reasoning models: same logic as FLOW.
+- Streams send an SSE keep-alive comment every 15 s for their whole life.
+- NB: Chat uses 5-minutes prompt caching for token cost efficiency (more details below). 
 
 ---
 
@@ -110,71 +106,71 @@ Inline rewrites and proposals from within the editor. Latency-sensitive.
 | Claude Opus 5.5    | undefined (rejects any value) | thinking: always on, effort: low | 6000               | Cannot turn thinking off; low is the lightest. |
 | Claude Fable 5.1   | undefined (rejects any value) | thinking: always on, effort: low | 6000               | Same.                                           |
 | Mistral Large 3    | 0.7                          | n/a                              | 4000                | Standard.                                       |
-| Mistral Medium 3.5 | 0.7                          | reasoning_effort: none           | 4000                | No reasoning — editor actions should be snappy. |
+| Mistral Medium 3.5 | 0.7                          | reasoning_effort: none           | 4000                | No reasoning, editor actions should be snappy. |
 | Mistral Small 4    | 0.7                          | reasoning_effort: none           | 4000                | Same as Medium for editor.                      |
 | DeepSeek V4 Flash  | 1.0 (no effect in thinking mode) | provider default thinking mode (not configured) | 4000 | Standard.                            |
-| Z.ai GLM 5.3       | 0.7                          | reasoning_effort: low            | 6000                | Third-party via Mistral API; reasoning cannot be disabled, so the lightest level keeps editor actions snappy (reasoning ceiling). |
+| Z.ai GLM 5.3       | 0.7                          | reasoning_effort: low            | 6000                | Cannot turn reasoning off; low is the lightest. |
 
 **Rationale for Editor settings:**
 
-- Reasoning disabled by default (or at the lightest level where the model cannot disable it, GLM 5.3): editor actions are short, standard, latency-sensitive; thinking-chunk overhead isn't justified.
+- Reasoning disabled by default (or at the lightest level where the model cannot disable it): editor actions are short, standard, latency-sensitive; thinking-chunk overhead isn't justified.
 - max_tokens 4000, 6000 with reasoning. NB: The selection window shows a notice (acknowledge to proceed) for selections beyond ~13,600 characters, and a reply the provider cut off at max_tokens arrives flagged `truncated` (through `src/lib/editor-limits.ts`).
 
 ---
 
 ### Context-prompt (work summarization, Ask/Propose actions)
 
-Provides AI features with context grounded in the written work. Used by Ask/Propose and underlying work summaries.
+Provides AI features with context grounded in the written work, used by Ask/Propose and underlying work summaries. This is in effect a 2-steps edge function: first, *summary* of the work; second, *response* to the user's prompt.
 
 | Model | Temperature | Thinking / Effort(*) | max_tokens (summary) (output) | max_tokens (response) (output) | Notes |
 |---|---|---|---|---|---|
-| Claude Sonnet 4.6 | 1.0 | thinking: off, effort: high | 2000 | 4000 | Standard. |
+| Claude Sonnet 4.6 | 1.0 | thinking: off, effort: high | 2000 | 4000 | |
 | Claude Sonnet 5.5 | undefined (rejects any value) | thinking: adaptive, effort: medium (summary: low) | 4000 | 24000 | |
-| Claude Opus 4.8 | undefined (model-controlled) | thinking: adaptive, effort: high (summary: off) | 2000 | 24000 | Adaptive thinking on the reply; the writing summary no longer thinks (October 2026). |
+| Claude Opus 4.8 | undefined (model-controlled) | thinking: adaptive, effort: high (summary: off) | 2000 | 24000 | |
 | Claude Opus 5.5 | undefined (rejects any value) | thinking: always on, effort: medium (summary: low) | 4000 | 24000 | |
 | Claude Fable 5.1 | undefined (rejects any value) | thinking: always on, effort: medium (summary: low) | 4000 | 24000 | |
-| Mistral Large 3 | 0.7 | n/a | 2000 | 4000 | Standard. |
-| Mistral Medium 3.5 | 0.7 | reasoning_effort: high | 4000 | 24000 | Mistral quality tier — reasoning helps with nuanced AI features. |
-| Mistral Small 4 | 0.7 | reasoning_effort: none | 2000 | 4000 | Mistral speed tier. |
-| DeepSeek V4 Flash | 1.0 (no effect in thinking mode) | provider default thinking mode (not configured) | 2000 | 4000 | Standard. |
-| Z.ai GLM 5.3 | 0.7 | reasoning_effort: high (summary: low) | 4000 | 24000 | Third-party via Mistral API. |
+| Mistral Large 3 | 0.7 | n/a | 2000 | 4000 | |
+| Mistral Medium 3.5 | 0.7 | reasoning_effort: high | 4000 | 24000 | |
+| Mistral Small 4 | 0.7 | reasoning_effort: none | 2000 | 4000 | |
+| DeepSeek V4 Flash | 1.0 (no effect in thinking mode) | provider default thinking mode (not configured) | 2000 | 4000 | |
+| Z.ai GLM 5.3 | 0.7 | reasoning_effort: high (summary: low) | 4000 | 24000 | |
 
 **Rationale for Context-prompt settings:**
 
-- Matches Chat defaults: context-prompt powers Ask/Propose user-facing features, so quality posture should align with chat.
-- max_tokens 4000/24000 for the response and 2000/4000 for the summary (plain / reasoning; `OUTPUT_BUDGETS.CONTEXT_RESPONSE` and `.CONTEXT_SUMMARY`).
-- (*)The writing-summary call (Call #1) keeps fixed settings whatever reasoning level the user picked: the Summaries table below for every provider (Claude 4.x without thinking, the 5.5 models and Fable 5.1 at low, GLM at "low"). It runs before the stream starts and is a delta summary, not a reply.
+- The response matches Chat defaults: context-prompt powers Ask/Propose user-facing features, so quality posture should align with chat. Just like Chat, the thinking / effort displayed above is the default, and it is affected by the user in Sylou's settings.
+- (*)The summary keeps fixed settings (Claude 4.x without thinking, the 5.5 models and Fable 5.1 at low, GLM at low) whatever reasoning level the user picked in the settings. It runs before the stream starts and is a delta summary, not a reply, that should not require extensive thinking.
+- max_tokens 4000/24000 for the response and 2000/4000 for the summary (plain / reasoning).
 
 ---
 
 ### Summaries (document import, conversation memory)
 
-Two small summary calls outside the four functions above, both on the user's chat model: `extract-text` writes the 3–5 sentence summary of an imported document (the index the assistant reads before deciding whether to open the full text), and `_shared/_conversation_memory.ts` maintains the rolling per-thread chat summary (TRANSPARENCY.md §5.5).
+Two small summary calls outside the four functions above, both on the user's Chat model: `extract-text` writes the 3–5 sentence summary of an imported document (the index the assistant reads before deciding whether to open the full text prior to replying to the user), and `_shared/_conversation_memory.ts` maintains the rolling per-thread chat summary (TRANSPARENCY.md §5.5).
 
 | Model | Temperature (document / memory) | Thinking / Effort | max_tokens (document summary) | max_tokens (conversation memory) | Notes |
 |---|---|---|---|---|---|
 | Claude Sonnet 4.6 | 1.0 / 0.3 | thinking: off, effort: high | 500 | 3000 | Standard. |
 | Claude Sonnet 5.5 | undefined (rejects any value) | thinking: adaptive, effort: low | 2000 | 6000 | Low with the reasoning ceilings. |
 | Claude Opus 4.8 | undefined (model-controlled) | thinking: off, effort: high | 500 | 3000 | No thinking on these calls. |
-| Claude Opus 5.5 | undefined (rejects any value) | thinking: always on, effort: low | 2000 | 6000 | Cannot turn thinking off; low with the reasoning ceilings. |
+| Claude Opus 5.5 | undefined (rejects any value) | thinking: always on, effort: low | 2000 | 6000 | Low with the reasoning ceilings. |
 | Claude Fable 5.1 | undefined (rejects any value) | thinking: always on, effort: low | 2000 | 6000 | Same. |
 | Mistral Large 3 | 0.7 / 0.3 | n/a | 500 | 3000 | Standard. |
 | Mistral Medium 3.5 | 0.7 / 0.3 | reasoning_effort: none | 500 | 3000 | Short summaries don't need reasoning. |
 | Mistral Small 4 | 0.7 / 0.3 | reasoning_effort: none | 500 | 3000 | Same. |
 | DeepSeek V4 Flash | 1.0 / 0.3 (no effect in thinking mode) | provider default thinking mode (not configured) | 500 | 3000 | Standard. |
-| Z.ai GLM 5.3 | 0.7 / 0.3 | reasoning_effort: low | 2000 | 6000 | Reasoning cannot be disabled; lightest level with the reasoning ceilings. |
+| Z.ai GLM 5.3 | 0.7 / 0.3 | reasoning_effort: low | 2000 | 6000 | Low with the reasoning ceilings. |
 
 **Rationale for Summary settings:**
 
 - Document summaries reuse the chat temperature table; conversation memory uses `SUMMARY_TEMPERATURE` (0.3 — faithful carry-over over prose variety).
-- max_tokens 500 / 2000 (document) and 3000 / 6000 (memory), plain / reasoning (`OUTPUT_BUDGETS.DOC_SUMMARY` and `.MEMORY`).
-- The Claude settings live in `SUMMARY_THINKING` / `SUMMARY_EFFORT` (October 2026), which the context-prompt writing summary uses too: a model that cannot turn thinking off would otherwise think at its own default inside the small plain ceilings and return nothing (the GLM 5.3 lesson).
+- max_tokens 500 / 2000 (document) and 3000 / 6000 (memory), plain / reasoning.
+- The Claude settings live in `SUMMARY_THINKING` / `SUMMARY_EFFORT`, which the context-prompt writing summary uses too.
 
 ---
 
 ### User-selectable reasoning (chat and Ask/Propose)
 
-Settings → Models lets each user pick a reasoning level for the selected chat model. It applies to chat replies and to the Ask/Propose reply call, replacing the default from the Chat and Context-prompt tables above; FLOW, editor actions, the Ask/Propose writing-summary call and the summary calls keep their fixed settings. The level in force is shown next to the model name above the chat. The stored choice (`profiles.preferred_chat_reasoning`, a per-model map) is validated server-side against `CHAT_REASONING_OPTIONS` in `_shared/_thinking.ts`; an unknown or missing entry means the default. The picker labels come from the mirror in `src/lib/models.ts`.
+Settings → Models lets each user pick a reasoning level for the selected chat model. It applies to chat replies and to the Ask/Propose response, replacing the default from the Chat and Context-prompt tables above; FLOW, editor actions, the Ask/Propose writing-summary call and the summary calls keep their fixed settings. The level in force is shown next to the model name above the chat. 
 
 | Model | Options (default in bold) | Wire mapping |
 |---|---|---|
@@ -194,7 +190,7 @@ The max_tokens ceiling follows the choice: the reasoning ceiling applies wheneve
 
 ### Prompt caching
 
-Chat calls ask the provider to cache the prompt prefix, so that the next call that re-sends it — the tool loop's check calls within the same request, and the next turn of a lively exchange — reads it at the cache price instead of the full input price. Outputs are unaffected: the cache is the provider's own intermediate computation for the same bytes, and a changed byte simply misses.
+Chat calls ask the provider to cache the prompt prefix, so that the next call that re-sends it (the tool loop's check calls within the same request, and the next turn of a lively exchange) reads it at the cache price instead of the full input price. Outputs are unaffected: the cache is the provider's own intermediate computation for the same bytes, and a changed byte simply misses.
 
 | Provider | Mechanism | What Sylou sends (`CacheHint` on `callLLM`) |
 |---|---|---|
@@ -202,11 +198,13 @@ Chat calls ask the provider to cache the prompt prefix, so that the next call th
 | Mistral API (GLM 5.3 included) | `prompt_cache_key`, a routing hint without guarantee; 64-token blocks; cached tokens at 10 % of the input price | The thread id as the key |
 | DeepSeek | Automatic | Nothing |
 
-Anthropic prices: a cache write costs 1.25× the input price, a read 0.1× (0.05× on Opus 5.5, 0.025× on Fable 5.1). A written prefix that nothing reads within 5 minutes therefore costs 25 % more than an uncached one. A tool loop always reads what it wrote; a follow-up turn reads it when it starts within 5 minutes of the previous request's start, so a long think eats into that window. Ask/Propose, FLOW, editor actions and the summary calls send no hint: their prompts are per-request or single-shot, and a write there would never be read.
+Anthropic prices: a cache write costs 1.25× the input price, a read 0.1× (0.05× on Opus 5.5, 0.025× on Fable 5.1). A written prefix that nothing reads within 5 minutes therefore costs 25 % more than an uncached one. 
 
-Verification: every call logs `[usage] {provider, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens}` (streams add `stream: true`). On the second call of a loop, or the second turn within 5 minutes, `cache_read_tokens` covers the previous prefix and `cache_write_tokens` only the delta. Zero reads on an unchanged conversation mean an invalidator: web search or concise mode toggled, a document imported, removed or favourited, a changed reasoning level, a memory refresh — each an expected one-time miss.
+Ask/Propose, FLOW, editor actions and the summary calls send no hint, on the basis that they are used on a more ad-hoc basis than Chat and are thus less likely to use the cache.
 
-The verbatim history window is anchored to the conversation memory so that it only grows between refreshes (`fetchVerbatimWindow` in `_shared/_conversation_memory.ts`: the 20 newest messages the memory already covers, then everything after its watermark; the newest 70 messages before the first memory exists). A window sliding by one message per turn would have missed on every turn past its size.
+Verification: every call logs `[usage] {provider, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens}` (streams add `stream: true`). On the second call of a loop, or the second turn within 5 minutes, `cache_read_tokens` covers the previous prefix and `cache_write_tokens` only the delta. Zero reads on an unchanged conversation mean an invalidator: e.g. a changed byte resulting from web search or concise mode toggled, a document imported, removed or favourited, a changed reasoning level, a memory refresh (each an expected one-time miss).
+
+The verbatim history window is anchored to the conversation memory (TRANSPARENCY.md §5.5) so that it only grows between refreshes (`fetchVerbatimWindow` in `_shared/_conversation_memory.ts`: the 20 newest messages the memory already covers, then everything after its watermark; the newest 70 messages before the first memory exists). A window sliding by one message per turn would miss on every turn past its size (byte changed early in the prompt with every single turn).
 
 Turning it off: drop the `cache` option from the chat call sites in `chat/index.ts` (the loop forwards it); the router then sends exactly the previous bytes.
 
@@ -216,7 +214,7 @@ Turning it off: drop the `cache` option from the chat call sites in `chat/index.
 
 | Setting                                       | File                                          | Notes                                                                                             |
 | --------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Model registry (which models exist)           | `src/lib/models.ts`                           | Pricing, labels, default chat model, the `flowRecommended` flag and the groupings behind the Settings pickers (by API for chat, by FLOW recommendation for FLOW). |
+| Model registry (which models exist)           | `src/lib/models.ts`                           | Pricing, labels, default chat model, the `flowTier` flag and the groupings behind the Settings pickers (by API for chat, by FLOW recommendation for FLOW). |
 | Temperature per function × model              | `supabase/functions/_shared/_temperatures.ts` | Five tables: `FLOW_TEMPERATURE`, `CHAT_TEMPERATURE`, `EDITOR_TEMPERATURE`, `CONTEXT_TEMPERATURE`, `SUMMARY_TEMPERATURE` (conversation-memory consolidation, 0.3 — faithful carry-over over prose variety). |
 | Claude thinking + effort per function × model | `supabase/functions/_shared/_thinking.ts`     | Tables: `*_THINKING`, `*_EFFORT`.                                                                 |
 | Mistral reasoning_effort per function × model | `supabase/functions/_shared/_thinking.ts`     | Tables: `*_MISTRAL_EFFORT` (FLOW, CHAT, EDITOR, CONTEXT, SUMMARY).                                                                       |
