@@ -99,7 +99,9 @@ ${section(dev)}`;
 if (process.argv.includes("--check")) {
   let existing = "";
   try {
-    existing = readFileSync(OUT_PATH, "utf8");
+    // Git on Windows checks the file out with CRLF line endings (core.autocrlf);
+    // the comparison is about content, not line endings.
+    existing = readFileSync(OUT_PATH, "utf8").replace(/\r\n/g, "\n");
   } catch {
     console.error("THIRD_PARTY_LICENSES.md is missing. Run: node scripts/generate-third-party-licenses.mjs");
     process.exit(1);
