@@ -5,6 +5,7 @@ import {
   CHAT_REASONING_OPTIONS,
   DEFAULT_CHAT_MODEL,
   DEFAULT_FLOW_MODEL,
+  FLOW_ALTERNATIVE_GROUP_ID,
   FLOW_OTHER_GROUP_ID,
   FLOW_RECOMMENDED_GROUP_ID,
   MODELS,
@@ -44,14 +45,16 @@ describe("MODELS registry", () => {
     for (const m of MODELS) expect(m.isRollingLatest, m.id).toBeFalsy();
   });
 
-  it("the FLOW recommendations are Claude Sonnet 4.6, Sonnet 5.5 and Opus 5.5 (field tests 2026-10-02 / 2026-10-05); Fable 5.1 and GLM 5.3 are not", () => {
-    const recommended = MODELS.filter((m) => m.flowRecommended);
-    expect(recommended.map((m) => m.id)).toEqual(["claude-sonnet-4-6", "claude-sonnet-5-5", "claude-opus-5-5"]);
+  it("the FLOW tiers (field tests, October 2026): Sonnet 5.5 and GLM 5.3 recommended, Sonnet 4.6 and Opus 5.5 alternatives, the rest unranked", () => {
+    const ofTier = (t: ModelInfo["flowTier"]) => MODELS.filter((m) => m.flowTier === t).map((m) => m.id);
+    expect(ofTier("recommended")).toEqual(["zai-glm-5-3", "claude-sonnet-5-5"]);
+    expect(ofTier("alternative")).toEqual(["claude-sonnet-4-6", "claude-opus-5-5"]);
+    expect(ofTier(undefined)).toHaveLength(MODELS.length - 4);
   });
 
-  it("no recommended model carries the experimental badge", () => {
+  it("no recommended or alternative model carries the experimental badge", () => {
     for (const m of MODELS) {
-      if (m.flowRecommended) expect(m.isExperimental, m.id).toBeFalsy();
+      if (m.flowTier) expect(m.isExperimental, m.id).toBeFalsy();
     }
   });
 
@@ -59,11 +62,11 @@ describe("MODELS registry", () => {
     for (const m of MODELS) expect(m.note ?? "", m.id).not.toMatch(/recommended/i);
   });
 
-  it("the defaults for new profiles are GLM 5.3 for chat and Claude Sonnet 4.6 for FLOW (maintainer decisions 2026-09-30 / 2026-10-02), and the FLOW default is a recommended model", () => {
+  it("the defaults for new profiles are GLM 5.3 for chat and for FLOW (maintainer decisions 2026-09-30 / 2026-10-11), and the FLOW default is a recommended model", () => {
     expect(DEFAULT_CHAT_MODEL).toBe("zai-glm-5-3");
-    expect(DEFAULT_FLOW_MODEL).toBe("claude-sonnet-4-6");
+    expect(DEFAULT_FLOW_MODEL).toBe("zai-glm-5-3");
     expect(MODELS.map((m) => m.id)).toContain(DEFAULT_CHAT_MODEL);
-    expect(MODELS.find((m) => m.id === DEFAULT_FLOW_MODEL)?.flowRecommended).toBe(true);
+    expect(MODELS.find((m) => m.id === DEFAULT_FLOW_MODEL)?.flowTier).toBe("recommended");
   });
 
   it("a retired id keeps a label so historical reports still render one (GLM 5.2, retired by Mistral 2026-10-31)", () => {
@@ -98,11 +101,23 @@ describe("Settings picker groupings", () => {
     expect(ids(groups[2].models)).toEqual(["deepseek-v4-flash"]);
   });
 
-  it("FLOW: recommended first, everything else in the second group", () => {
+  it("FLOW: recommended, then alternatives, then everything else; Anthropic first inside each group, then the Mistral API, then the rest", () => {
     const groups = groupModelsForFlow();
-    expect(groups.map((g) => g.id)).toEqual([FLOW_RECOMMENDED_GROUP_ID, FLOW_OTHER_GROUP_ID]);
-    expect(ids(groups[0].models)).toEqual(["claude-sonnet-4-6", "claude-sonnet-5-5", "claude-opus-5-5"]);
-    expect(groups[1].models.every((m) => !m.flowRecommended)).toBe(true);
+    expect(groups.map((g) => [g.id, g.label])).toEqual([
+      [FLOW_RECOMMENDED_GROUP_ID, "Recommended for FLOW"],
+      [FLOW_ALTERNATIVE_GROUP_ID, "Alternatives for FLOW"],
+      [FLOW_OTHER_GROUP_ID, "Not currently recommended"],
+    ]);
+    expect(ids(groups[0].models)).toEqual(["claude-sonnet-5-5", "zai-glm-5-3"]);
+    expect(ids(groups[1].models)).toEqual(["claude-sonnet-4-6", "claude-opus-5-5"]);
+    expect(ids(groups[2].models)).toEqual([
+      "claude-opus-4-8",
+      "claude-fable-5-1",
+      "mistral-small-2603",
+      "mistral-medium-3-5",
+      "mistral-large-2512",
+      "deepseek-v4-flash",
+    ]);
   });
 
   it("every model appears exactly once in each grouping", () => {
@@ -115,7 +130,7 @@ describe("Settings picker groupings", () => {
   it("empty groups are omitted, and an unknown provider lands in 'Other providers'", () => {
     const onlyClaude = MODELS.filter((m) => m.provider === "anthropic");
     expect(groupModelsByProvider(onlyClaude).map((g) => g.id)).toEqual(["anthropic"]);
-    expect(groupModelsForFlow(onlyClaude.filter((m) => m.flowRecommended)).map((g) => g.id)).toEqual([
+    expect(groupModelsForFlow(onlyClaude.filter((m) => m.flowTier === "recommended")).map((g) => g.id)).toEqual([
       FLOW_RECOMMENDED_GROUP_ID,
     ]);
 

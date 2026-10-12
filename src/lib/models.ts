@@ -6,6 +6,12 @@
 
 export type ModelProvider = "mistral" | "anthropic" | "deepseek";
 
+/** Where the maintainer's field tests place a model for FLOW analysis:
+ *  "recommended" = the defaults (reliability, speed and cost), "alternative"
+ *  = good FLOW results without that mix. Models with no tier are not
+ *  recommended. */
+export type FlowTier = "recommended" | "alternative";
+
 export interface ModelInfo {
   id: string;
   label: string;
@@ -25,11 +31,11 @@ export interface ModelInfo {
   isRollingLatest?: boolean;
   /** Optional one-line note shown beneath the row. */
   note?: string;
-  /** True when the maintainer's field tests recommend the model for FLOW
-   *  analysis. Drives the grouping of the FLOW picker in Settings (see
-   *  groupModelsForFlow); docs/model-configuration.md holds the rationale
-   *  per model. Until 2026-09 this lived only in the wording of `note`. */
-  flowRecommended?: boolean;
+  /** The model's FLOW tier (see FlowTier). Drives the grouping of the FLOW
+   *  picker in Settings (see groupModelsForFlow); docs/model-configuration.md
+   *  holds the rationale per model. Until 2026-09 this lived only in the
+   *  wording of `note`. */
+  flowTier?: FlowTier;
 }
 
 export const MODELS: ModelInfo[] = [
@@ -66,10 +72,11 @@ export const MODELS: ModelInfo[] = [
     contextLimit: 1_000_000,
     // Third-party open model (Z.ai) hosted unmodified on the Mistral API
     // (EU); routed through the Mistral path (id has no claude-/deepseek-
-    // prefix). The default chat model; not recommended for FLOW (2026-10
-    // field test: scores lean towards the user at every reasoning level,
-    // unlike GLM 5.2 at "max", which Mistral retired).
+    // prefix). The default chat and FLOW model. Recommended for FLOW again
+    // since FLOW prompt v1.5 (2026-10-06) removed the user-leaning scores
+    // the 2026-10-02 field test had found at every reasoning level.
     note: "Third-party model hosted on the Mistral API",
+    flowTier: "recommended",
   },
   {
     id: "claude-sonnet-4-6",
@@ -77,7 +84,7 @@ export const MODELS: ModelInfo[] = [
     provider: "anthropic",
     pricing: { input: 3.0, output: 15.0 },
     contextLimit: 1_000_000,
-    flowRecommended: true,
+    flowTier: "alternative",
   },
   {
     id: "claude-sonnet-5-5",
@@ -85,7 +92,7 @@ export const MODELS: ModelInfo[] = [
     provider: "anthropic",
     pricing: { input: 2.0, output: 10.0 },
     contextLimit: 1_000_000,
-    flowRecommended: true,
+    flowTier: "recommended",
   },
   {
     id: "claude-opus-4-8",
@@ -100,7 +107,7 @@ export const MODELS: ModelInfo[] = [
     provider: "anthropic",
     pricing: { input: 4.0, output: 20.0 },
     contextLimit: 1_000_000,
-    flowRecommended: true,
+    flowTier: "alternative",
   },
   {
     id: "claude-fable-5-1",
@@ -184,25 +191,38 @@ export function groupModelsByProvider(models: ModelInfo[] = MODELS): ModelGroup[
 }
 
 export const FLOW_RECOMMENDED_GROUP_ID = "flow-recommended";
+export const FLOW_ALTERNATIVE_GROUP_ID = "flow-alternative";
 export const FLOW_OTHER_GROUP_ID = "flow-not-recommended";
 
-/** FLOW picker: the recommended models first, every other model behind a
- *  second group (the UI tops it with a "not currently recommended" notice).
- *  Empty groups are omitted. */
+/** Inside each FLOW group: Anthropic first, then the Mistral API, then any
+ *  other provider — the chat picker's group order. Registry order is kept
+ *  within a provider (Array.prototype.sort is stable). */
+const FLOW_PROVIDER_ORDER: ModelProvider[] = ["anthropic", "mistral"];
+function flowProviderRank(m: ModelInfo): number {
+  const i = FLOW_PROVIDER_ORDER.indexOf(m.provider);
+  return i === -1 ? FLOW_PROVIDER_ORDER.length : i;
+}
+
+/** FLOW picker: the recommended models first, the alternatives behind a
+ *  second group, every other model behind a third (the UI tops the last two
+ *  with a notice each). Empty groups are omitted. */
 export function groupModelsForFlow(models: ModelInfo[] = MODELS): ModelGroup[] {
+  const tier = (t: FlowTier | undefined): ModelInfo[] =>
+    models.filter((m) => m.flowTier === t).sort((a, b) => flowProviderRank(a) - flowProviderRank(b));
   const groups: ModelGroup[] = [
-    { id: FLOW_RECOMMENDED_GROUP_ID, label: "Recommended for FLOW", models: models.filter((m) => m.flowRecommended) },
-    { id: FLOW_OTHER_GROUP_ID, label: "Not currently recommended", models: models.filter((m) => !m.flowRecommended) },
+    { id: FLOW_RECOMMENDED_GROUP_ID, label: "Recommended for FLOW", models: tier("recommended") },
+    { id: FLOW_ALTERNATIVE_GROUP_ID, label: "Alternatives for FLOW", models: tier("alternative") },
+    { id: FLOW_OTHER_GROUP_ID, label: "Not currently recommended", models: tier(undefined) },
   ];
   return groups.filter((g) => g.models.length > 0);
 }
 
 // Defaults for new profiles, mirrored by the profiles column defaults
-// (migrations 20261001120000 / 20261002120000) and by the edge functions'
+// (migrations 20261001120000 / 20261011120000) and by the edge functions'
 // NULL-preference fallback. The FLOW default must be a recommended model
 // (pinned by models.test.ts).
 export const DEFAULT_CHAT_MODEL = "zai-glm-5-3";
-export const DEFAULT_FLOW_MODEL = "claude-sonnet-4-6";
+export const DEFAULT_FLOW_MODEL = "zai-glm-5-3";
 
 /** A reasoning level a user can pick for a chat model. */
 export interface ReasoningChoice {

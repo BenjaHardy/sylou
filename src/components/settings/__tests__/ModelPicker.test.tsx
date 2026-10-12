@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ModelPicker } from "@/components/settings/ModelPicker";
 import {
   CHAT_REASONING_OPTIONS,
+  FLOW_ALTERNATIVE_GROUP_ID,
   FLOW_OTHER_GROUP_ID,
   FLOW_RECOMMENDED_GROUP_ID,
   groupModelsByProvider,
@@ -42,32 +43,53 @@ describe("ModelPicker", () => {
     expect(screen.getByText("Selected: Mistral Medium 3.5")).toBeInTheDocument();
   });
 
-  it("FLOW: recommended open by default, the other group closed, its notice shown on opening", () => {
+  it("FLOW: recommended open by default, the other two groups closed, each notice shown on opening", () => {
     render(
+      <ModelPicker
+        groups={groupModelsForFlow()}
+        selectedId="claude-sonnet-5-5"
+        onSelect={() => {}}
+        defaultOpenGroupIds={[FLOW_RECOMMENDED_GROUP_ID]}
+        showProviderTag
+        groupNotices={{
+          [FLOW_ALTERNATIVE_GROUP_ID]: "Alternatives notice",
+          [FLOW_OTHER_GROUP_ID]: "Not currently recommended notice",
+        }}
+      />,
+    );
+
+    expect(header("Recommended for FLOW", 2)).toHaveAttribute("aria-expanded", "true");
+    expect(header("Alternatives for FLOW", 2)).toHaveAttribute("aria-expanded", "false");
+    expect(header("Not currently recommended", 6)).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Alternatives notice")).not.toBeInTheDocument();
+    expect(screen.queryByText("Not currently recommended notice")).not.toBeInTheDocument();
+    // Provider tags on the open group's two cards: Sonnet 5.5, then GLM.
+    expect(screen.getByText("· Anthropic")).toBeInTheDocument();
+    expect(screen.getByText("· Mistral API")).toBeInTheDocument();
+
+    fireEvent.click(header("Alternatives for FLOW"));
+    expect(screen.getByText("Alternatives notice")).toBeInTheDocument();
+    expect(screen.getByText("Claude Sonnet 4.6")).toBeInTheDocument();
+
+    fireEvent.click(header("Not currently recommended"));
+    expect(screen.getByText("Not currently recommended notice")).toBeInTheDocument();
+    expect(screen.getByText("Mistral Large 3")).toBeInTheDocument();
+  });
+
+  it("FLOW: a selection inside the alternatives or the not-recommended group opens that group too", () => {
+    const { rerender } = render(
       <ModelPicker
         groups={groupModelsForFlow()}
         selectedId="claude-sonnet-4-6"
         onSelect={() => {}}
         defaultOpenGroupIds={[FLOW_RECOMMENDED_GROUP_ID]}
-        showProviderTag
-        groupNotices={{ [FLOW_OTHER_GROUP_ID]: "Not currently recommended notice" }}
       />,
     );
+    expect(header("Recommended for FLOW")).toHaveAttribute("aria-expanded", "true");
+    expect(header("Alternatives for FLOW")).toHaveAttribute("aria-expanded", "true");
+    expect(header("Not currently recommended")).toHaveAttribute("aria-expanded", "false");
 
-    expect(header("Recommended for FLOW", 3)).toHaveAttribute("aria-expanded", "true");
-    expect(header("Not currently recommended", 7)).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("Not currently recommended notice")).not.toBeInTheDocument();
-    // Provider tag on the FLOW cards (one per recommended model).
-    expect(screen.getAllByText("· Anthropic")).toHaveLength(3);
-
-    fireEvent.click(header("Not currently recommended"));
-    expect(screen.getByText("Not currently recommended notice")).toBeInTheDocument();
-    expect(screen.getByText("Mistral Large 3")).toBeInTheDocument();
-    expect(screen.getAllByText("· Mistral API").length).toBeGreaterThan(0);
-  });
-
-  it("FLOW: a selection inside the not-recommended group opens it too", () => {
-    render(
+    rerender(
       <ModelPicker
         groups={groupModelsForFlow()}
         selectedId="claude-opus-4-8"
@@ -75,7 +97,7 @@ describe("ModelPicker", () => {
         defaultOpenGroupIds={[FLOW_RECOMMENDED_GROUP_ID]}
       />,
     );
-    expect(header("Recommended for FLOW")).toHaveAttribute("aria-expanded", "true");
+    expect(header("Alternatives for FLOW")).toHaveAttribute("aria-expanded", "false");
     expect(header("Not currently recommended")).toHaveAttribute("aria-expanded", "true");
   });
 
