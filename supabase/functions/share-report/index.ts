@@ -6,9 +6,10 @@ const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
 
 function generateCertificateId(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const random = crypto.getRandomValues(new Uint32Array(8));
   let result = "FLOW-";
-  for (let i = 0; i < 8; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)];
+  for (const value of random) {
+    result += chars[value % chars.length];
   }
   return result;
 }
