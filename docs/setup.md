@@ -383,7 +383,7 @@ Then when using the prompt console in your local Sylou directory:
 3. Redeploy the edge functions: `npx supabase functions deploy`.
 4. Update the version secrets:
    ```bash
-   npx supabase secrets set SYLOU_VERSION=v0.6.0  # or whatever the new release is
+   npx supabase secrets set SYLOU_VERSION=v0.7.0  # or whatever the new release is
    git rev-parse --short HEAD
    npx supabase secrets set SYLOU_COMMIT_HASH=RETURNED_COMMIT_HASH
    ```

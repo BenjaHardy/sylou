@@ -2,7 +2,7 @@
   "name": "sylou",
   "description": "Process-based AI-use transparency — an open-source writing environment that makes human-AI collaboration visible.",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "license": "AGPL-3.0-only",
   "repository": "github:BenjaHardy/sylou",
   "type": "module",
