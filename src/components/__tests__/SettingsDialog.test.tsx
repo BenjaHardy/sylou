@@ -27,7 +27,9 @@ vi.mock("@/hooks/use-toast", () => ({ toast: vi.fn() }));
 
 import { SettingsDialog } from "@/components/SettingsDialog";
 
-const header = (label: string) => screen.getByRole("button", { name: new RegExp(`^${label.replace(/[()]/g, "\\$&")} \\(\\d+\\)`) });
+// A group header's accessible name is "<label> (<count>)".
+const header = (label: string) =>
+  screen.getByRole("button", { name: (name) => name.startsWith(`${label} (`) });
 const openTab = (name: string) => fireEvent.mouseDown(screen.getByRole("tab", { name }));
 
 function renderDialog() {
