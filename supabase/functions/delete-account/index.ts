@@ -26,6 +26,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 // every subsequent call fails auth.
 
 import { makeCorsHeadersFor } from "../_shared/_cors.ts";
+import type { ClientDeps } from "../_shared/_handler.ts";
 
 const corsHeadersFor = makeCorsHeadersFor("POST, OPTIONS");
 
@@ -35,7 +36,9 @@ const REMOVE_CHUNK_SIZE = 100; // stay well under the bulk-delete cap
 
 type StorageEntry = { name: string; id: string | null };
 
-Deno.serve(async (req) => {
+const defaultDeps: ClientDeps = { env: Deno.env, createClient };
+
+export const handler = async (req: Request, deps = defaultDeps): Promise<Response> => {
   const corsHeaders = corsHeadersFor(req);
   const jsonResponse = (body: Record<string, unknown>, status = 200) =>
     new Response(JSON.stringify(body), {
@@ -57,14 +60,14 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = deps.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = deps.env.get("SUPABASE_ANON_KEY")!;
+    const serviceRoleKey = deps.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     // User-scoped client (caller's JWT) for identity only. getUser() is a
     // server-side validation round-trip — a revoked or expired session
     // cannot delete anything.
-    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+    const supabaseUser = deps.createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
     const { data: userData, error: userErr } = await supabaseUser.auth.getUser();
@@ -74,7 +77,7 @@ Deno.serve(async (req) => {
     }
 
     // Service-role client for the storage purge + admin delete.
-    const admin = createClient(supabaseUrl, serviceRoleKey);
+    const admin = deps.createClient(supabaseUrl, serviceRoleKey);
 
     // List every entry at one level of the bucket, fully paginated. Storage
     // list() is per-level, not recursive: folder prefixes come back with a
@@ -166,4 +169,6 @@ Deno.serve(async (req) => {
     console.error("[delete-account] unexpected error:", err);
     return jsonResponse({ error: "Internal error" }, 500);
   }
-});
+};
+
+Deno.serve((req) => handler(req));

@@ -6,8 +6,7 @@
 // variants — which is why it lives alone rather than under prompts.
 // callLLM handles provider routing; this wrapper adds error extraction,
 // per-provider text assembly, cleanLLMContent, and char accounting.
-// No injection seam (static callLLM import) — covered by deno check and
-// the live smoke, not unit tests.
+// `llm` is the handler's deps.callLLM (_shared/_handler.ts).
 
 import { callLLM, providerFor, extractProviderError, cleanLLMContent } from "../_shared/_llm.ts";
 import type { ClaudeEffort, MistralEffort } from "../_shared/_thinking.ts";
@@ -20,8 +19,9 @@ export async function callChatModel(
   thinking?: boolean,
   effort?: ClaudeEffort,
   mistralEffort?: MistralEffort,
+  llm: typeof callLLM = callLLM,
 ): Promise<{ text: string; inputChars: number; outputChars: number }> {
-  const res = await callLLM({
+  const res = await llm({
     model,
     messages: messages as any,
     max_tokens: maxTokens,

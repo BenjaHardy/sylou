@@ -7,10 +7,13 @@ import { sliceSafe } from "../_shared/_text.ts";
 
 // --- CORS allow-list (parsed once at module load) ---
 import { makeCorsHeadersFor } from "../_shared/_cors.ts";
+import type { HandlerDeps } from "../_shared/_handler.ts";
 
 const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
 
-Deno.serve(async (req) => {
+const defaultDeps: HandlerDeps = { env: Deno.env, createClient, callLLM };
+
+export const handler = async (req: Request, deps = defaultDeps): Promise<Response> => {
   const corsHeaders = corsHeadersFor(req);
   const jsonResponse = (body: Record<string, unknown>, status = 200) =>
     new Response(JSON.stringify(body), {
@@ -29,11 +32,11 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Missing authorization" }, 401);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = deps.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = deps.env.get("SUPABASE_ANON_KEY")!;
+    const serviceRoleKey = deps.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    const supabase = deps.createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
@@ -79,7 +82,7 @@ Deno.serve(async (req) => {
     }
 
     // --- Download file from storage using service role ---
-    const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
+    const adminSupabase = deps.createClient(supabaseUrl, serviceRoleKey);
 
     const { data: fileData, error: downloadErr } = await adminSupabase.storage
       .from("imports")
@@ -142,7 +145,7 @@ Deno.serve(async (req) => {
       const summaryModel = profile?.preferred_chat_model || "zai-glm-5-3";
       const provider = providerFor(summaryModel);
 
-      if (!Deno.env.get(envKeyFor(provider))) {
+      if (!deps.env.get(envKeyFor(provider))) {
         // Chosen provider's key isn't configured — degrade gracefully.
         summary = sliceSafe(extractedText, SHORT_TEXT_THRESHOLD) + "...";
       } else {
@@ -151,7 +154,7 @@ Deno.serve(async (req) => {
 
         try {
           const { thinking, effort, mistralEffort } = resolveReasoning(summaryModel, undefined, SUMMARY_TABLES);
-          const llmRes = await callLLM({
+          const llmRes = await deps.callLLM({
             model: summaryModel,
             messages: [{ role: "user" as const, content: summaryPrompt }],
             max_tokens: resolveMaxTokens(OUTPUT_BUDGETS.DOC_SUMMARY, summaryModel, thinking, mistralEffort !== undefined),
@@ -218,4 +221,6 @@ Deno.serve(async (req) => {
     console.error("extract-text error:", err);
     return jsonResponse({ error: "Internal server error" }, 500);
   }
-});
+};
+
+Deno.serve((req) => handler(req));
