@@ -89,7 +89,8 @@ the code is authoritative — flag the drift rather than guessing.
 - CORS: allowlist from `ALLOWED_ORIGIN` (comma-separated), echo the Origin only
   if allowlisted, never `*`. Unset → emit no `Access-Control-Allow-Origin`.
   Error responses carry the same CORS headers as success responses.
-- Secrets only via `Deno.env.get("NAME")`, documented in
+- Secrets only via `Deno.env.get("NAME")` (inside a handler,
+  `deps.env.get("NAME")`, which is `Deno.env` in production), documented in
   `supabase/functions/.env.example`. Never referenced in `src/`, never echoed
   in any response or error message. Provider error bodies are truncated and
   message-only before reaching the client.
@@ -312,9 +313,11 @@ can have; changes require an explicit transparency-impact note in the PR.
   (`*.test.ts` beside the module — in `_shared/` or the function's own
   directory). Two hard-won rules: the `deno.json` test task collects an
   explicit directory list, so a directory gaining its first tests must be
-  added there or they silently never run; and a test must never import a
-  function's `index.ts` (module load executes `Deno.serve`) — testable
-  logic lives in sibling or `_shared/` modules.
+  added there or they silently never run; and a test imports a function's
+  `index.ts` only through `importHandler` (`_shared/_test_support.ts`), which
+  stubs `Deno.serve` first — a plain import would start a server. Handler
+  tests drive `handler(req, deps)` with fakes; other testable logic lives in
+  sibling or `_shared/` modules.
 - Before any PR: `npm run typecheck && npm run lint && npm test`, and for edge
   changes `cd supabase/functions && deno task check` + `deno task test`.
   ⚠️ Bare `tsc --noEmit`

@@ -35,8 +35,8 @@ Apply strict coding standards to avoid future code liabilities for the open-sour
   serialization by `editor-html-roundtrip.test.ts`.
 - Supabase (Postgres, Auth, Storage); Edge Functions in `supabase/functions/`
 - Vitest 4 (frontend units) + `deno test` (edge-function units beside their
-  modules: `_shared/` plus the split function directories — the `deno.json`
-  test task holds the collected list)
+  modules, and handler tests as `<function>/index.test.ts` — the `deno.json`
+  test task holds the collected directory list)
 - LLM providers: Anthropic (Sonnet 4.6, Sonnet 5.5, Opus 4.8, Opus 5.5,
   Fable 5.1), Mistral API (Large 3,
   Medium 3.5, Small 4, and Z.ai GLM 5.3 — the default chat and FLOW model
@@ -61,7 +61,8 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   input caps, per-model context limits), `_provenance.ts`, `_similarity.ts`,
   `_conversation_memory.ts` (rolling per-thread chat summary),
   `_prompts.ts` (mode/template system prompts shared by chat +
-  context-prompt).
+  context-prompt), `_handler.ts` (the handler `deps` types),
+  `_test_support.ts` (fakes for the handler tests).
 - Edge functions (8): `chat`, `analysis`, `editor-action`, `context-prompt`,
   `extract-text`, `share-report`, `config`, `delete-account`.
 
@@ -178,6 +179,15 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   values are injected by the host (`supabase secrets set`), never
   committed. Frontend only reads publishable values via
   `import.meta.env.VITE_*`; private keys stay server-side.
+- **Handler seam**: each function's `index.ts` exports
+  `handler(req, deps = defaultDeps)` and ends with
+  `Deno.serve((req) => handler(req))` — never `Deno.serve(handler)`, which
+  would pass the connection info as `deps`. Inside a handler, environment
+  reads, Supabase clients and provider calls go through `deps`
+  (`deps.env.get`, `deps.createClient`, `deps.callLLM`; types in
+  `_shared/_handler.ts`), and a helper that calls a provider takes the
+  handler's `deps.callLLM` as `llm`. The handler tests pass fakes there
+  (`_shared/_test_support.ts`).
 
 ## 5. AI routing
 - Model registry: `src/lib/models.ts` (id, label, provider, pricing, context
@@ -255,7 +265,8 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 - Tests: `npx vitest run` (or a specific file path); edge-function units:
   `cd supabase/functions && deno task test`. ⚠️ The test task collects an
   explicit directory list — a function directory gaining its first tests
-  must be added there, or they silently never run.
+  must be added there, or they silently never run. A handler test run by
+  hand needs the task's `--allow-env=ALLOWED_ORIGIN`.
 - Typecheck (frontend): `npm run typecheck` (`tsc --noEmit -p tsconfig.app.json`;
   `strict` is on). NOTE: bare `tsc --noEmit` is a no-op here — the root
   `tsconfig.json` is solution-style (`files: []`) so it checks **zero** `src/`
