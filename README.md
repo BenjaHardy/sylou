@@ -6,6 +6,7 @@
   <a href="https://meetsylou.eu"><strong>meetsylou.eu</strong></a>
   &nbsp;·&nbsp;
   <a href="https://tally.so/r/KYvxyz">Share feedback</a>
+  &nbsp;·&nbsp;
   <a href="https://tally.so/r/labz7o">Get updates</a>
 </p>
 
