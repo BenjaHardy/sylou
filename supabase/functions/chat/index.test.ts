@@ -64,10 +64,17 @@ function world(w: World) {
         return { data: { tutor_mode: false, template: "general" }, error: null };
       case "user chat_messages":
         return { data: [], error: null };
-      case "admin imported_documents":
-        return last === "maybeSingle"
-          ? { data: { file_name: "notes.md", extracted_text: "The field notes." }, error: null }
-          : { data: w.docs ?? [], error: null };
+      case "admin imported_documents": {
+        // This project's documents and another user's, filtered by the eq
+        // steps the handler sends, as the database would.
+        const rows = [...(w.docs ?? []).map((d) => ({ project_id: "p-1", ...d })), FOREIGN_DOC];
+        const matching = rows.filter((row) =>
+          call.steps.every(([step, column, value]) =>
+            step !== "eq" || (row as Record<string, unknown>)[String(column)] === value
+          )
+        );
+        return last === "maybeSingle" ? { data: matching[0] ?? null, error: null } : { data: matching, error: null };
+      }
       case "admin chat_messages": {
         // The memory refresh's candidate read: too few to refresh.
         if (first !== "insert") return { data: [], error: null };
@@ -287,6 +294,14 @@ Deno.test("a provider error before the stream: 502 with the provider's message; 
 });
 
 const DOCS = [{ id: "d-1", file_name: "notes.md", summary: "Field notes", extracted_text: "The field notes.", is_favourite: false }];
+const FOREIGN_DOC = {
+  id: "d-other",
+  project_id: "p-2",
+  file_name: "secret.md",
+  summary: "Someone else's notes",
+  extracted_text: "Another user's text.",
+  is_favourite: false,
+};
 const readDoc = () => jsonReply({
   toolCalls: [{ id: "call-1", name: "read_imported_document", arguments: { document_id: "d-1" } }],
 });
@@ -310,6 +325,25 @@ Deno.test("tool path: reading_documents phase, then the final call's tokens; the
   assertEquals(read?.steps.filter(([step]) => step === "eq"), [["eq", "id", "d-1"], ["eq", "project_id", "p-1"]]);
   const assistant = writes(backend.calls).find(([, , values]) => (values as { role?: string }).role === "assistant");
   assertEquals((assistant?.[2] as Record<string, unknown>).documents_referenced, ["d-1"]);
+});
+
+Deno.test("tool path: a document id from another project reads as not found; its text never reaches the model", async () => {
+  const { res, backend, provider } = await send(post(ASK), {
+    world: { docs: DOCS },
+    replies: [
+      jsonReply({ toolCalls: [{ id: "call-1", name: "read_imported_document", arguments: { document_id: "d-other" } }] }),
+      jsonReply({ content: "" }),
+      streamedReply(["I could not find that document."]),
+    ],
+  });
+  await readEvents(res);
+
+  // The read carried the thread's project, so the other project's row never matched.
+  const read = backend.calls.find((c) => c.target === "imported_documents" && c.steps.at(-1)?.[0] === "maybeSingle");
+  assertEquals(read?.steps.filter(([step]) => step === "eq"), [["eq", "id", "d-other"], ["eq", "project_id", "p-1"]]);
+  const toolResult = provider.calls[1].messages.find((m) => m.role === "tool");
+  assertEquals(toolResult?.content, "Document not found in this project or text not yet extracted.");
+  assert(!JSON.stringify(provider.calls).includes("Another user's text."));
 });
 
 Deno.test("tool path: a failed final call ends the stream with an error-carrying done; nothing saved", async () => {

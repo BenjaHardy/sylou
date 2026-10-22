@@ -101,6 +101,34 @@ Deno.test("tool loop: every tool call gets exactly one result, in order", async 
   assertEquals(toolResults(toolMessages).map((m) => m.tool_call_id), ["call-0", "call-a", "call-b"]);
 });
 
+Deno.test("tool loop: a document is read within the caller's project; another project's comes back not found", async () => {
+  // Two projects' documents in one table; the fake applies the filters it receives.
+  const rows: Record<string, string>[] = [
+    { id: "doc-1", project_id: "project-1", file_name: "notes.pdf", extracted_text: "Own notes." },
+    { id: "doc-9", project_id: "project-2", file_name: "secret.pdf", extracted_text: "Another user's text." },
+  ];
+  const filters: [string, string][] = [];
+  const query = {
+    select: () => query,
+    eq: (column: string, value: string) => {
+      filters.push([column, value]);
+      return query;
+    },
+    maybeSingle: () =>
+      Promise.resolve({ data: rows.find((row) => filters.every(([column, value]) => row[column] === value)) ?? null }),
+  };
+  const toolMessages: LLMMessage[] = [];
+  await runToolLoop({
+    ...makeDeps(() => Promise.resolve(completion([])), toolMessages),
+    toolCalls: [{ id: "call-0", name: "read_imported_document", arguments: { document_id: "doc-9" } }],
+    adminSupabase: { from: () => query },
+  });
+
+  assertEquals(filters, [["id", "doc-9"], ["project_id", "project-1"]]);
+  assertEquals(toolResults(toolMessages)[0].content, "Document not found in this project or text not yet extracted.");
+  assert(!JSON.stringify(toolMessages).includes("Another user's text."));
+});
+
 Deno.test("promptChars: counts text, non-text content and echoed tool calls", () => {
   const toolCalls = [{ id: "c1", type: "function" as const, function: { name: "web_search", arguments: "{\"query\":\"x\"}" } }];
   const messages: LLMMessage[] = [
