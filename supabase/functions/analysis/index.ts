@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { providerFor, envKeyFor } from "../_shared/_llm.ts";
+import { callLLM, providerFor, envKeyFor } from "../_shared/_llm.ts";
 import { annotateWritingWithProvenance } from "../_shared/_provenance.ts";
 import { FLOW_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import {
@@ -38,6 +38,7 @@ const FLOW_IMPORTED_DOCS_BUDGET_TOKENS = 100_000;
 
 // --- CORS allow-list (parsed once at module load) ---
 import { makeCorsHeadersFor } from "../_shared/_cors.ts";
+import type { HandlerDeps } from "../_shared/_handler.ts";
 
 const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
 
@@ -49,17 +50,13 @@ const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
 // badges then flag a modified build). commit_hash can be compared with the
 // release tags, but only the domain serving a shared report can be verified
 // by a viewer: a report is as trustworthy as that domain's operator.
-const SYLOU_INSTANCE_LABEL  = Deno.env.get("SYLOU_INSTANCE_LABEL")  ?? "self-hosted";
-const SYLOU_INSTANCE_DOMAIN = Deno.env.get("SYLOU_INSTANCE_DOMAIN") ?? null;
-const SYLOU_VERSION         = Deno.env.get("SYLOU_VERSION")         ?? "unknown";
-const SYLOU_COMMIT_HASH     = Deno.env.get("SYLOU_COMMIT_HASH")     ?? "unknown";
-const GENERATOR_INFO = {
-  instance_label:  SYLOU_INSTANCE_LABEL,
-  instance_domain: SYLOU_INSTANCE_DOMAIN,
-  version:         SYLOU_VERSION,
-  commit_hash:     SYLOU_COMMIT_HASH,
+const generatorInfo = (env: HandlerDeps["env"]) => ({
+  instance_label:  env.get("SYLOU_INSTANCE_LABEL")  ?? "self-hosted",
+  instance_domain: env.get("SYLOU_INSTANCE_DOMAIN") ?? null,
+  version:         env.get("SYLOU_VERSION")         ?? "unknown",
+  commit_hash:     env.get("SYLOU_COMMIT_HASH")     ?? "unknown",
   is_modified:     false,
-} as const;
+} as const);
 
 
 
@@ -78,7 +75,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // Main handler
 // ---------------------------------------------------------------------------
 
-Deno.serve(async (req) => {
+const defaultDeps: HandlerDeps = { env: Deno.env, createClient, callLLM };
+
+export const handler = async (req: Request, deps = defaultDeps): Promise<Response> => {
   const corsHeaders = corsHeadersFor(req);
   const jsonResponse = (body: Record<string, unknown>, status = 200) =>
     new Response(JSON.stringify(body), {
@@ -97,9 +96,9 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Missing authorization" }, 401);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    const supabaseUrl = deps.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = deps.env.get("SUPABASE_ANON_KEY")!;
+    const supabase = deps.createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
@@ -162,7 +161,7 @@ Deno.serve(async (req) => {
       requestedModel || profile.preferred_flow_model || "zai-glm-5-3";
 
     const provider = providerFor(flowModel);
-    if (!Deno.env.get(envKeyFor(provider))) {
+    if (!deps.env.get(envKeyFor(provider))) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 
@@ -494,8 +493,8 @@ ${writePillarNotice}`;
     // Attempt 1 — original prompt, with repair applied.
     // Admin client for billing — created before the attempts so failure
     // paths can bill too; the success path below reuses it.
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
+    const serviceRoleKey = deps.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminSupabase = deps.createClient(supabaseUrl, serviceRoleKey);
 
     // Everything the attempt helpers (attempt.ts) used to close over.
     // jsonResponse carries the per-request CORS headers, so the handler's
@@ -510,6 +509,7 @@ ${writePillarNotice}`;
       useStructuredOutputs,
       projectId,
       jsonResponse,
+      llm: deps.callLLM,
     };
     const billingDeps = {
       supabase,
@@ -758,7 +758,7 @@ ${writePillarNotice}`;
         project_name: project.name ?? null,
         replay_snapshot: replayEvents,
         writing_snapshot: writingContent,
-        generator_info: GENERATOR_INFO,
+        generator_info: generatorInfo(deps.env),
       } as any)
       .select()
       .single();
@@ -796,4 +796,6 @@ ${writePillarNotice}`;
     console.error("Analysis function error:", err);
     return jsonResponse({ error: "Internal server error" }, 500);
   }
-});
+};
+
+Deno.serve((req) => handler(req));

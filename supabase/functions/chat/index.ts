@@ -34,10 +34,13 @@ import { persistChatExchange } from "./persist.ts";
 
 // --- CORS allow-list (parsed once at module load) ---
 import { makeCorsHeadersFor } from "../_shared/_cors.ts";
+import type { HandlerDeps } from "../_shared/_handler.ts";
 
 const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
 
-Deno.serve(async (req) => {
+const defaultDeps: HandlerDeps = { env: Deno.env, createClient, callLLM };
+
+export const handler = async (req: Request, deps = defaultDeps): Promise<Response> => {
   const corsHeaders = corsHeadersFor(req);
   const jsonResponse = (body: Record<string, unknown>, status = 200) =>
     new Response(JSON.stringify(body), {
@@ -56,9 +59,9 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Missing authorization" }, 401);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    const supabaseUrl = deps.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = deps.env.get("SUPABASE_ANON_KEY")!;
+    const supabase = deps.createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
@@ -162,8 +165,8 @@ Deno.serve(async (req) => {
     }
 
     // --- Fetch imported documents (for index + favourite full-text injection) ---
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
+    const serviceRoleKey = deps.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminSupabase = deps.createClient(supabaseUrl, serviceRoleKey);
 
     const { data: importedDocs } = await adminSupabase
       .from("imported_documents")
@@ -189,7 +192,7 @@ Deno.serve(async (req) => {
     // Gate web search on both user toggle AND BRAVE_SEARCH_API_KEY presence.
     // If unconfigured, never advertise the capability to the LLM — an empty
     // result set reads as "the web has nothing" rather than "not configured".
-    const braveConfigured = !!Deno.env.get("BRAVE_SEARCH_API_KEY");
+    const braveConfigured = !!deps.env.get("BRAVE_SEARCH_API_KEY");
     const webSearchActive = webSearchEnabled && braveConfigured;
 
     // Append web search instructions to system prompt
@@ -225,7 +228,7 @@ Deno.serve(async (req) => {
     // --- Mistral API key ---
     // API key check happens inside callLLM; surface a clean error if missing.
     const provider = providerFor(chatModel);
-    if (!Deno.env.get(provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY")) {
+    if (!deps.env.get(provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY")) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 
@@ -331,7 +334,7 @@ Deno.serve(async (req) => {
 
       let call1Res: Response;
       try {
-        call1Res = await callLLM(call1Body);
+        call1Res = await deps.callLLM(call1Body);
       } catch (err) {
         if (!isProviderTimeout(err)) throw err;
         console.error("[stream] Call #1 timed out");
@@ -402,6 +405,7 @@ Deno.serve(async (req) => {
                 userId: user.id,
                 overBudget: profile.monthly_token_budget !== null && newTotal >= profile.monthly_token_budget,
                 logTag: "[chat]",
+                llm: deps.callLLM,
               });
             } catch (err) {
               console.error("[stream] error in no-tool path:", err);
@@ -450,6 +454,7 @@ Deno.serve(async (req) => {
               mistralEffort,
               cache,
               logTag: "[stream]",
+              llm: deps.callLLM,
             });
             totalInputChars += inputCharsAdded;
             totalOutputChars += outputCharsAdded;
@@ -457,7 +462,7 @@ Deno.serve(async (req) => {
             // LLM Call #2: streaming with tool results; no tool calls allowed
             console.log("[stream] starting Call #2 streaming");
             const final = finalCall(chatModel, tools, toolMessages);
-            const call2Res = await callLLM({
+            const call2Res = await deps.callLLM({
                 model: chatModel,
                 ...final,
                 max_tokens: chatMaxTokens,
@@ -514,6 +519,7 @@ Deno.serve(async (req) => {
               userId: user.id,
               overBudget: profile.monthly_token_budget !== null && newTotal >= profile.monthly_token_budget,
               logTag: "[chat]",
+              llm: deps.callLLM,
             });
           } catch (err) {
             console.error("[stream] error in tool-use path:", err);
@@ -542,7 +548,7 @@ Deno.serve(async (req) => {
 
     let llmRes: Response;
     try {
-      llmRes = await callLLM({
+      llmRes = await deps.callLLM({
         model: chatModel,
         messages: llmMessages,
         max_tokens: chatMaxTokens,
@@ -620,6 +626,7 @@ Deno.serve(async (req) => {
             userId: user.id,
             overBudget: profile.monthly_token_budget !== null && newTotal >= profile.monthly_token_budget,
             logTag: "[chat]",
+            llm: deps.callLLM,
           });
         } catch (persistErr) {
           console.error("[stream] persistence error:", persistErr);
@@ -644,4 +651,6 @@ Deno.serve(async (req) => {
     console.error("Chat function error:", err);
     return jsonResponse({ error: "Internal server error" }, 500);
   }
-});
+};
+
+Deno.serve((req) => handler(req));

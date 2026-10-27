@@ -13,9 +13,10 @@
   "tasks": {
     "check": "deno check **/*.ts",
     "lint": "deno lint",
-    // deno test collects only *.test.ts from listed directories; the
-    // functions' index.ts files are never imported (importing one would
-    // execute Deno.serve).
-    "test": "deno test --allow-read _shared/ context-prompt/ analysis/ chat/"
+    // deno test collects only *.test.ts from listed directories. Handler
+    // tests import an index.ts through _shared/_test_support.ts, which stubs
+    // Deno.serve first; --allow-env=ALLOWED_ORIGIN lets them set the CORS
+    // allow-list that _cors.ts reads at module load.
+    "test": "deno test --allow-read --allow-env=ALLOWED_ORIGIN _shared/ context-prompt/ analysis/ chat/ share-report/"
   }
 }

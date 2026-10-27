@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 
 import { makeCorsHeadersFor } from "../_shared/_cors.ts";
+import type { ClientDeps } from "../_shared/_handler.ts";
 
 const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
 
@@ -16,7 +17,9 @@ function generateCertificateId(): string {
   return result;
 }
 
-Deno.serve(async (req) => {
+const defaultDeps: ClientDeps = { env: Deno.env, createClient };
+
+export const handler = async (req: Request, deps = defaultDeps): Promise<Response> => {
   const corsHeaders = corsHeadersFor(req);
   const jsonResponse = (body: Record<string, unknown>, status = 200) =>
     new Response(JSON.stringify(body), {
@@ -35,11 +38,11 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = deps.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = deps.env.get("SUPABASE_ANON_KEY")!;
+    const serviceRoleKey = deps.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    const supabase = deps.createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
@@ -57,7 +60,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "report_id is required" }, 400);
     }
 
-    const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
+    const adminSupabase = deps.createClient(supabaseUrl, serviceRoleKey);
 
     // Verify ownership: report -> project -> user
     const { data: report, error: reportErr } = await adminSupabase
@@ -173,4 +176,6 @@ Deno.serve(async (req) => {
     console.error("share-report error:", err);
     return jsonResponse({ error: "Internal server error" }, 500);
   }
-});
+};
+
+Deno.serve((req) => handler(req));

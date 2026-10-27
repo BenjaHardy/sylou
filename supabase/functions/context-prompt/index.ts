@@ -33,20 +33,23 @@ import { handleConfirm } from "./confirm.ts";
 
 
 // Service-role client for ai_editor_actions (bypasses RLS)
-function getAdminClient() {
-  const url = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  return createClient(url, serviceKey);
+function getAdminClient(deps: ClientDeps) {
+  const url = deps.env.get("SUPABASE_URL")!;
+  const serviceKey = deps.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  return deps.createClient(url, serviceKey);
 }
 
 // --- CORS allow-list (parsed once at module load) ---
 import { makeCorsHeadersFor } from "../_shared/_cors.ts";
+import type { ClientDeps, HandlerDeps } from "../_shared/_handler.ts";
 
 const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
 
 // ── Main handler ────────────────────────────────────────────────────────────
 
-Deno.serve(async (req) => {
+const defaultDeps: HandlerDeps = { env: Deno.env, createClient, callLLM };
+
+export const handler = async (req: Request, deps = defaultDeps): Promise<Response> => {
   const corsHeaders = corsHeadersFor(req);
   const jsonResponse = (body: Record<string, unknown>, status = 200) =>
     new Response(JSON.stringify(body), {
@@ -65,9 +68,9 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Missing authorization" }, 401);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    const supabaseUrl = deps.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = deps.env.get("SUPABASE_ANON_KEY")!;
+    const supabase = deps.createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
@@ -121,7 +124,7 @@ Deno.serve(async (req) => {
     const summary = resolveReasoning(chatModel, undefined, SUMMARY_TABLES);
     const summaryMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_SUMMARY, chatModel, summary.thinking, summary.mistralEffort !== undefined);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
-    if (!Deno.env.get(providerKeyEnv)) {
+    if (!deps.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 
@@ -139,7 +142,7 @@ Deno.serve(async (req) => {
       return await handleConfirm({
         body,
         supabase,
-        admin: getAdminClient(),
+        admin: getAdminClient(deps),
         projectId: project_id,
         jsonResponse,
       });
@@ -255,7 +258,7 @@ Deno.serve(async (req) => {
       creativeDataSection,
     );
 
-    const summaryResult = await callChatModel(chatModel, summaryMessages, summaryMaxTokens, temperature, summary.thinking, summary.effort, summary.mistralEffort);
+    const summaryResult = await callChatModel(chatModel, summaryMessages, summaryMaxTokens, temperature, summary.thinking, summary.effort, summary.mistralEffort, deps.callLLM);
     const summaryText = summaryResult.text.trim();
 
     // --- 5. Determine summary update (protocol + merge live in prompts.ts) ---
@@ -280,7 +283,7 @@ Deno.serve(async (req) => {
     }
 
     // --- Fetch imported documents (for index + favourite full-text injection) ---
-    const adminClient = getAdminClient();
+    const adminClient = getAdminClient(deps);
 
     const { data: importedDocs } = await adminClient
       .from("imported_documents")
@@ -317,7 +320,7 @@ Deno.serve(async (req) => {
     // Gate web search on both the user toggle AND BRAVE_SEARCH_API_KEY presence
     // (mirrors chat/). Without a server-side key the tool can't work, so don't
     // register it or advertise it to the model.
-    const braveConfigured = !!Deno.env.get("BRAVE_SEARCH_API_KEY");
+    const braveConfigured = !!deps.env.get("BRAVE_SEARCH_API_KEY");
     const webSearchActive = webSearchEnabled && braveConfigured;
 
     // Append web search instructions to system prompt
@@ -425,7 +428,7 @@ Deno.serve(async (req) => {
             controller.enqueue(sseEvent({ phase: "reviewing" }));
 
             // Call #2a: non-streamed with tools (provider-aware via callLLM)
-            const call2aRes = await callLLM({
+            const call2aRes = await deps.callLLM({
               model: chatModel,
               messages: responseMessages as any,
               max_tokens: contextMaxTokens,
@@ -494,6 +497,7 @@ Deno.serve(async (req) => {
                 effort,
                 mistralEffort,
                 logTag: "[stream:context-prompt]",
+                llm: deps.callLLM,
               });
               totalInputChars += inputCharsAdded;
               totalOutputChars += outputCharsAdded;
@@ -501,7 +505,7 @@ Deno.serve(async (req) => {
               // Call #2b: streaming with tool results; no tool calls allowed
               console.log("[stream:context-prompt] starting Call #2b streaming");
               const final = finalCall(chatModel, tools, toolMessages);
-              const call2bRes = await callLLM({
+              const call2bRes = await deps.callLLM({
                 model: chatModel,
                 ...final,
                 max_tokens: contextMaxTokens,
@@ -553,6 +557,7 @@ Deno.serve(async (req) => {
               overBudget: authedProfile.monthly_token_budget !== null &&
                 authedProfile.tokens_used_this_period >= authedProfile.monthly_token_budget,
               logTag: "[context-prompt]",
+              llm: deps.callLLM,
             });
             stopKeepalive();
             controller.close();
@@ -565,7 +570,7 @@ Deno.serve(async (req) => {
     // ── NO TOOLS — streaming Call #2 using ReadableStream ──
     console.log("[stream:context-prompt] no tools, standard streaming");
 
-    const llmRes = await callLLM({
+    const llmRes = await deps.callLLM({
       model: chatModel,
       messages: responseMessages as any,
       max_tokens: contextMaxTokens,
@@ -622,6 +627,7 @@ Deno.serve(async (req) => {
             overBudget: authedProfile.monthly_token_budget !== null &&
               authedProfile.tokens_used_this_period >= authedProfile.monthly_token_budget,
             logTag: "[context-prompt]",
+            llm: deps.callLLM,
           });
           stopKeepalive();
           controller.close();
@@ -634,4 +640,6 @@ Deno.serve(async (req) => {
     console.error("Context-prompt error:", err);
     return jsonResponse({ error: err instanceof Error ? err.message : "Internal server error" }, 500);
   }
-});
+};
+
+Deno.serve((req) => handler(req));

@@ -1,7 +1,10 @@
 // --- CORS allow-list (parsed once at module load) ---
 import { makeCorsHeadersFor } from "../_shared/_cors.ts";
+import type { EnvDeps } from "../_shared/_handler.ts";
 
 const corsHeadersFor = makeCorsHeadersFor("GET, OPTIONS");
+
+const defaultDeps: EnvDeps = { env: Deno.env };
 
 /**
  * GET /functions/v1/config
@@ -10,7 +13,7 @@ const corsHeadersFor = makeCorsHeadersFor("GET, OPTIONS");
  * honestly reflect what's actually configured on this Sylou deployment.
  * No auth required — response contains only feature flags, no user data.
  */
-Deno.serve((req) => {
+export const handler = (req: Request, deps = defaultDeps): Response => {
   const corsHeaders = corsHeadersFor(req);
 
   if (req.method === "OPTIONS") {
@@ -25,11 +28,13 @@ Deno.serve((req) => {
   }
 
   const body = {
-    web_search_enabled: !!Deno.env.get("BRAVE_SEARCH_API_KEY"),
+    web_search_enabled: !!deps.env.get("BRAVE_SEARCH_API_KEY"),
   };
 
   return new Response(JSON.stringify(body), {
     status: 200,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
-});
+};
+
+Deno.serve((req) => handler(req));

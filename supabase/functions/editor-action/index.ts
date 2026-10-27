@@ -14,6 +14,7 @@ import { isOverBudget, getBudgetedProfile } from "../_shared/_billing.ts";
 
 // --- CORS allow-list (parsed once at module load) ---
 import { makeCorsHeadersFor } from "../_shared/_cors.ts";
+import type { HandlerDeps } from "../_shared/_handler.ts";
 
 const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
 
@@ -29,7 +30,9 @@ const ACTION_PROMPTS: Record<string, string> = {
   translate: "Translate the following text to {target_language}. Return only the translation.",
 };
 
-Deno.serve(async (req) => {
+const defaultDeps: HandlerDeps = { env: Deno.env, createClient, callLLM };
+
+export const handler = async (req: Request, deps = defaultDeps): Promise<Response> => {
   const corsHeaders = corsHeadersFor(req);
   const jsonResponse = (body: Record<string, unknown>, status = 200) =>
     new Response(JSON.stringify(body), {
@@ -48,9 +51,9 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Missing authorization" }, 401);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    const supabaseUrl = deps.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = deps.env.get("SUPABASE_ANON_KEY")!;
+    const supabase = deps.createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
@@ -131,8 +134,8 @@ Deno.serve(async (req) => {
     }
 
     // --- Inject favourite reference documents into the system prompt ---
-    const serviceRoleKeyForDocs = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const adminForDocs = createClient(supabaseUrl, serviceRoleKeyForDocs);
+    const serviceRoleKeyForDocs = deps.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminForDocs = deps.createClient(supabaseUrl, serviceRoleKeyForDocs);
     const { data: favDocs } = await adminForDocs
       .from("imported_documents")
       .select("file_name, extracted_text")
@@ -171,12 +174,12 @@ Deno.serve(async (req) => {
     const mistralEffort = resolveMistralEffort(EDITOR_MISTRAL_EFFORT, chatModel);
     const editorMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.EDITOR_ACTION, chatModel, thinking, mistralEffort !== undefined);
     const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
-    if (!Deno.env.get(providerKeyEnv)) {
+    if (!deps.env.get(providerKeyEnv)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
+    const serviceRoleKey = deps.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminSupabase = deps.createClient(supabaseUrl, serviceRoleKey);
 
     // =========================================================
     // STREAMING PATH
@@ -186,7 +189,7 @@ Deno.serve(async (req) => {
 
       const { sseEvent, createSSEResponse } = makeSSEHelpers(corsHeaders);
 
-      const llmRes = await callLLM({
+      const llmRes = await deps.callLLM({
         model: chatModel,
         messages: llmMessages as any,
         max_tokens: editorMaxTokens,
@@ -359,7 +362,7 @@ Deno.serve(async (req) => {
     // =========================================================
     // NON-STREAMING PATH (unchanged)
     // =========================================================
-    const llmRes = await callLLM({
+    const llmRes = await deps.callLLM({
       model: chatModel,
       messages: llmMessages as any,
       max_tokens: editorMaxTokens,
@@ -448,4 +451,6 @@ Deno.serve(async (req) => {
     console.error("Editor action error:", err);
     return jsonResponse({ error: "Internal server error" }, 500);
   }
-});
+};
+
+Deno.serve((req) => handler(req));

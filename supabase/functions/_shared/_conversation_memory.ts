@@ -227,6 +227,8 @@ export async function maybeRefreshConversationMemory(opts: {
   userId: string;
   overBudget: boolean;
   logTag: string;
+  /** Replaces callLLM in unit tests. */
+  llm?: typeof callLLM;
 }): Promise<void> {
   const { admin, threadId, model, userId, overBudget, logTag } = opts;
   try {
@@ -271,7 +273,7 @@ export async function maybeRefreshConversationMemory(opts: {
 
     const messages = buildSummaryMessages(existing?.summary_text ?? null, slab, isCreative);
     const { thinking, effort, mistralEffort } = resolveReasoning(model, undefined, SUMMARY_TABLES);
-    const res = await callLLM({
+    const res = await (opts.llm ?? callLLM)({
       model,
       messages,
       max_tokens: resolveMaxTokens(OUTPUT_BUDGETS.MEMORY, model, thinking, mistralEffort !== undefined),
