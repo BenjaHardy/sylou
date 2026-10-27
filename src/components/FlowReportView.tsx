@@ -414,7 +414,7 @@ export function FlowReportView({
                 </div>
               ) : replaySnapshot ? (
                 <div className="border border-border rounded-lg overflow-hidden h-[70vh]">
-                  <FlowReplayOverlay events={replaySnapshot} onClose={() => setActiveTab("report")} />
+                  <FlowReplayOverlay events={replaySnapshot} onClose={() => setActiveTab("report")} sanitize />
                 </div>
               ) : (
                 <div className="text-center py-16 space-y-3">
