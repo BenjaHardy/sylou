@@ -106,9 +106,15 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   normally (FK referential actions bypass RLS). The same rule covers the
   **report evidence** (`20260924120000`): `flow_reports` rows are inserted
   only by the `analysis` function through its service-role client (user
-  INSERT/DELETE policies dropped; users keep SELECT and UPDATE for share
-  toggles and feedback), and `writing_versions` is user-undeletable (the
-  client inserts versions; the replay timeline must not be thinned).
+  INSERT/DELETE policies dropped), and `writing_versions` is
+  user-undeletable (the client inserts versions; the replay timeline must
+  not be thinned). On `flow_reports` users keep SELECT, and UPDATE on the
+  four `user_feedback_*` columns only (`20261027120000`, column privileges
+  as in the budget freeze below; share toggles go through the
+  `share-report` function's service-role client); its
+  `enforce_pre_feedback_once` trigger lets the pre-analysis feedback be
+  set once, on a project's first report, while the self-assessment stays
+  editable.
   `token_usage` is the deliberate exception: its user INSERT policy stays,
   because the RLS-scoped user client writes the usage row precisely so its
   `user_id` is bound to the caller — it is an audit log that neither FLOW
