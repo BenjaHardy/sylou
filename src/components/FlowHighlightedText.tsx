@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Eye, X } from "lucide-react";
 import type { ProvenanceSegment, SegmentSource } from "@/lib/provenance-tracker";
+import { parseWritingHtml } from "@/lib/parse-writing-html";
 
 interface Props {
   segments: ProvenanceSegment[];
@@ -234,10 +235,9 @@ export function FlowHighlightedText({ segments, writingContent, onClose }: Props
       return <span className="text-muted-foreground italic">No provenance data available.</span>;
     }
 
-    const container = document.createElement("div");
-    container.innerHTML = writingContent;
+    const container = parseWritingHtml(writingContent);
 
-    // Walk the container's children directly — the wrapper <div> is NOT part of
+    // Walk the container's children directly — the parsed <body> is NOT part of
     // the ProseMirror document tree, so treating it as a block node would shift
     // all positions by +1 and cause segment boundaries to drift.
     const allNodes: ReactNode[] = [];
