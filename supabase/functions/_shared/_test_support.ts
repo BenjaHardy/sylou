@@ -28,6 +28,11 @@ export async function importHandler<T>(load: () => Promise<T>): Promise<T> {
   return await load();
 }
 
+/** A real provider model id that is deliberately not on the allowlist: what
+ *  a retired id, or any other saved value the menu does not offer, looks
+ *  like to a handler. */
+export const UNLISTED_MODEL = "claude-opus-4-1";
+
 /** TEST_ENV with some variables changed; `undefined` removes one. */
 export function fakeEnv(changes: Record<string, string | undefined> = {}): HandlerDeps["env"] {
   const values: Record<string, string | undefined> = { ...TEST_ENV, ...changes };
@@ -65,7 +70,7 @@ export function post(body: unknown, opts: { authorization?: string | null; origi
 export interface DbCall {
   /** The client that issued it: the caller's user-scoped one or the service-role one. */
   client: "user" | "admin";
-  /** The table, `rpc:<name>`, or `auth:getUser` / `auth:getClaims`. */
+  /** The table, `rpc:<name>`, `storage:<bucket>`, or `auth:getUser` / `auth:getClaims`. */
   target: string;
   /** The builder steps in order, e.g. ["select", "id"], ["eq", "id", "t-1"], ["single"]. */
   steps: unknown[][];
@@ -167,6 +172,12 @@ export function fakeBackend(opts: FakeBackendOptions = {}) {
     from: (table: string) => new FakeQuery({ client, target: table, steps: [] }, finish),
     rpc: (name: string, args: Record<string, unknown>) =>
       Promise.resolve(finish({ client, target: `rpc:${name}`, steps: [["rpc", args]] })),
+    storage: {
+      from: (bucket: string) => ({
+        download: (path: string) =>
+          Promise.resolve(finish({ client, target: `storage:${bucket}`, steps: [["download", path]] })),
+      }),
+    },
   });
   const clients = { user: makeClient("user"), admin: makeClient("admin") };
   const createClient = (
