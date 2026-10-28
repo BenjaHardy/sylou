@@ -17,7 +17,8 @@
 //   4. anon holds nothing on base tables (its reads go through the granted
 //      view and RPC);
 //   5. no user role holds TRUNCATE, REFERENCES or TRIGGER;
-//   6. profiles keeps its column-level-only UPDATE (the budget freeze);
+//   6. profiles and flow_reports keep their column-level-only UPDATE (the
+//      budget freeze; the feedback columns of a report);
 //   7. on a view, a user role holds at most SELECT — an owner-executed view
 //      bypasses RLS on its base table and is writable through PostgREST
 //      when it is auto-updatable (the flow_reports_public finding of
@@ -140,8 +141,11 @@ describe("migrations: grants mirror RLS on every public table", () => {
     expect(dmlGrants(tables.get("chat_threads")!, "authenticated")).toEqual(["INSERT", "SELECT", "UPDATE"]);
     expect(dmlGrants(tables.get("flow_reports")!, "authenticated")).toEqual(["SELECT", "UPDATE"]);
     expect(dmlGrants(tables.get("writing_versions")!, "authenticated")).toEqual(["INSERT", "SELECT"]);
-    // The budget freeze: UPDATE on profiles is column-level only.
-    expect(tables.get("profiles")!.grants.authenticated.get("UPDATE")).toBe("column");
+    // UPDATE is column-level only: the budget freeze on profiles, the
+    // feedback columns on flow_reports.
+    for (const name of ["profiles", "flow_reports"]) {
+      expect(tables.get(name)!.grants.authenticated.get("UPDATE"), name).toBe("column");
+    }
   });
 
   it("on a view, a user role holds at most SELECT", () => {
