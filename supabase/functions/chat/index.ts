@@ -6,8 +6,7 @@ import {
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
-import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
-import { sliceSafe } from "../_shared/_text.ts";
+import { DEFAULT_CHAT_MODEL, INPUT_LIMITS, OUTPUT_BUDGETS, resolveModel } from "../_shared/_models.ts";
 import {
   CHAT_THINKING, CHAT_EFFORT, CHAT_MISTRAL_EFFORT,
   resolveReasoning, resolveMaxTokens,
@@ -90,22 +89,14 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     const message: string = body.message;
     const conciseMode: boolean = body.concise_mode ?? false;
     const webSearchEnabled: boolean = body.web_search_enabled ?? false;
-    const requestedModel: string | undefined = body.model;
-    // Gate the request override against the registry allowlist; an absent/empty
-    // value falls back to the profile preference as before. Without this, any
-    // authed caller could route to arbitrary provider models on the operator's
-    // key (the shipped client never sends `model`).
-    if (requestedModel && !ALLOWED_MODELS.has(requestedModel)) {
-      return jsonResponse(
-        { error: `Unsupported model: ${sliceSafe(String(requestedModel), 64)}` },
-        400,
-      );
+    const modelChoice = resolveModel(body.model, profile.preferred_chat_model, DEFAULT_CHAT_MODEL);
+    if ("error" in modelChoice) {
+      return jsonResponse({ error: modelChoice.error }, 400);
     }
     if (body.stream !== true) {
       return jsonResponse({ error: "Only streaming requests are supported (send stream: true)" }, 400);
     }
-    const chatModel: string =
-      requestedModel || profile.preferred_chat_model || "zai-glm-5-3";
+    const chatModel = modelChoice.model;
     const temperature = resolveTemperature(CHAT_TEMPERATURE, chatModel);
     const reasoning = resolveReasoning(chatModel, profile.preferred_chat_reasoning, {
       thinking: CHAT_THINKING, effort: CHAT_EFFORT, mistral: CHAT_MISTRAL_EFFORT,
@@ -114,7 +105,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     const chatMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CHAT, chatModel, thinking, mistralEffort !== undefined);
     console.log(
       `[chat] model=${chatModel} provider=${providerFor(chatModel)} source=${
-        requestedModel ? "request" : profile.preferred_chat_model ? "profile" : "default"
+        modelChoice.source
       } reasoning=${reasoning.optionId ?? "fixed"}${reasoning.userChosen ? " (user)" : ""}`,
     );
 

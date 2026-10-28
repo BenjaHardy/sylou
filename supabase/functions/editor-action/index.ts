@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, extractProviderError, fallbackReplyText, isRefusalStop, isTruncatedStop } from "../_shared/_llm.ts";
 import { makeSSEHelpers, readProviderStream } from "../_shared/_sse.ts";
 import { EDITOR_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
-import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
+import { DEFAULT_CHAT_MODEL, INPUT_LIMITS, OUTPUT_BUDGETS, resolveModel } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 import {
   EDITOR_THINKING, EDITOR_EFFORT, EDITOR_MISTRAL_EFFORT,
@@ -157,16 +157,11 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     ];
 
     // --- Resolve chat model from request body or profile ---
-    const requestedModel: string | undefined = (body as { model?: string }).model;
-    // Registry allowlist for the request override — see chat/index.ts for rationale.
-    if (requestedModel && !ALLOWED_MODELS.has(requestedModel)) {
-      return jsonResponse(
-        { error: `Unsupported model: ${sliceSafe(String(requestedModel), 64)}` },
-        400
-      );
+    const modelChoice = resolveModel(body.model, profile.preferred_chat_model, DEFAULT_CHAT_MODEL);
+    if ("error" in modelChoice) {
+      return jsonResponse({ error: modelChoice.error }, 400);
     }
-    const chatModel: string =
-      requestedModel || profile.preferred_chat_model || "zai-glm-5-3";
+    const chatModel = modelChoice.model;
     const provider = providerFor(chatModel);
     const temperature = resolveTemperature(EDITOR_TEMPERATURE, chatModel);
     const thinking = resolveThinking(EDITOR_THINKING, chatModel);
