@@ -207,6 +207,11 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 - Users pick two models in Settings: `preferred_chat_model` and
   `preferred_flow_model` on `profiles`. Editor-action and context-prompt
   reuse `preferred_chat_model` — there is no separate per-function picker.
+  Every LLM function picks its model through `resolveModel` /
+  `resolveSavedModel` (`_shared/_models.ts`): a requested `model` must be
+  on `ALLOWED_MODELS` (else 400); a saved preference is used only when
+  listed, else `DEFAULT_CHAT_MODEL` / `DEFAULT_FLOW_MODEL` with a `[model]`
+  warning. `models.test.ts` pins the server copy to the registry.
 - **Provider wire format** (`_shared/_llm.ts`): routing is by model-id
   prefix (`claude-*` → Anthropic, `deepseek-*` → DeepSeek, else Mistral).
   Two body translators only — `toAnthropicBody` and `toOpenAIBody`;
