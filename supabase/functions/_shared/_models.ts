@@ -1,21 +1,25 @@
 // Server-side request-validation constants for the LLM edge functions:
-// the model allowlist, the user-input size ceilings (audit P2-6 / F4+F5)
-// and the per-model context-window mirror (P3-7d).
+// the model allowlist and the choice of a call's model, the user-input size
+// ceilings (audit P2-6 / F4+F5) and the per-model context-window mirror
+// (P3-7d).
+
+import { sliceSafe } from "./_text.ts";
 
 /**
- * Models a request may select via the optional `model` body field.
+ * Models a call may run on: resolveModel below holds both the request's
+ * optional `model` field and the user's saved preference to this set.
  *
  * Mirror of the frontend registry (`src/lib/models.ts`) — edge functions
  * cannot import frontend modules, so the ids are duplicated deliberately.
  * KEEP IN SYNC when adding or removing a model (see the checklist in
- * docs/model-configuration.md).
+ * docs/model-configuration.md; src/lib/__tests__/models.test.ts fails when
+ * the two lists differ).
  *
- * Why: chat, editor-action and context-prompt accept a `model` override in
- * the request body. The shipped client never sends it, but any authenticated
- * caller can — and without this gate the string went verbatim to the provider
- * on the operator's API key (any model the key can access, at any price).
- * An absent/empty value is NOT gated: the functions fall back to the user's
- * profile preference, exactly as before.
+ * Why: chat, context-prompt, editor-action and analysis accept a `model`
+ * override in the request body. The shipped client never sends it, but any
+ * authenticated caller can — and without this gate the string went verbatim
+ * to the provider on the operator's API key (any model the key can access,
+ * at any price).
  */
 export const ALLOWED_MODELS: ReadonlySet<string> = new Set([
   "mistral-small-2603",
@@ -29,6 +33,40 @@ export const ALLOWED_MODELS: ReadonlySet<string> = new Set([
   "claude-fable-5-1",
   "deepseek-v4-flash",
 ]);
+
+/** The models a function falls back to when no listed model is saved:
+ *  mirrors of DEFAULT_CHAT_MODEL / DEFAULT_FLOW_MODEL in src/lib/models.ts,
+ *  which the profiles column defaults follow. */
+export const DEFAULT_CHAT_MODEL = "zai-glm-5-3";
+export const DEFAULT_FLOW_MODEL = "zai-glm-5-3";
+
+/** The saved preference when it names a listed model, else `fallback`. The
+ *  value is trusted no further than that: anything else (a retired id, say)
+ *  is logged and never reaches a provider. */
+export function resolveSavedModel(saved: unknown, fallback: string): string {
+  if (typeof saved === "string" && ALLOWED_MODELS.has(saved)) return saved;
+  if (saved) {
+    console.warn(`[model] saved model ${JSON.stringify(sliceSafe(String(saved), 64))} is not allowed; using ${fallback}`);
+  }
+  return fallback;
+}
+
+/** The model for one call: the request's `model` field when it has one (an
+ *  unlisted value is an error, which the caller answers with a 400), else
+ *  the saved preference through resolveSavedModel. */
+export function resolveModel(
+  requested: unknown,
+  saved: unknown,
+  fallback: string,
+): { model: string; source: "request" | "profile" | "default" } | { error: string } {
+  if (requested) {
+    return typeof requested === "string" && ALLOWED_MODELS.has(requested)
+      ? { model: requested, source: "request" }
+      : { error: `Unsupported model: ${sliceSafe(String(requested), 64)}` };
+  }
+  const model = resolveSavedModel(saved, fallback);
+  return { model, source: model === saved ? "profile" : "default" };
+}
 
 /**
  * Claude models whose thinking cannot be turned off: the API runs adaptive
@@ -144,9 +182,9 @@ export const CONTEXT_LIMIT_TOKENS: Readonly<Record<string, number>> = {
 };
 
 /**
- * Conservative fallback when a model id isn't in the table (e.g. a stale
- * legacy id still stored as a profile preference). Mirrors the client's
- * DEFAULT_CONTEXT_LIMIT posture in src/lib/estimateTokens.ts: an unknown
- * model under-budgets, never over.
+ * Conservative fallback when a model id isn't in the table — a safety net
+ * only, since resolveModel returns listed models and every listed model has
+ * an entry. Mirrors the client's DEFAULT_CONTEXT_LIMIT posture in
+ * src/lib/estimateTokens.ts: an unknown model under-budgets, never over.
  */
 export const FALLBACK_CONTEXT_LIMIT_TOKENS = 200_000;

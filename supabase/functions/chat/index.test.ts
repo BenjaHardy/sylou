@@ -5,7 +5,7 @@
 // changed — that needs a checkpoint, not a test edit.
 // Run with: deno task test  (from supabase/functions/)
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { INPUT_LIMITS } from "../_shared/_models.ts";
+import { DEFAULT_CHAT_MODEL, INPUT_LIMITS } from "../_shared/_models.ts";
 import {
   type DbCall,
   type DbResult,
@@ -19,6 +19,7 @@ import {
   readEvents,
   streamedReply,
   TEST_ORIGIN,
+  UNLISTED_MODEL,
   writes,
 } from "../_shared/_test_support.ts";
 
@@ -261,6 +262,18 @@ Deno.test("streamed reply: thinking phase, tokens, then done with the rows the s
     assistant_message: { id: "m-2", ...ASSISTANT_ROW },
     budget_remaining: 10_000 - 100 - amount,
   });
+});
+
+Deno.test("a saved model off the allowlist: the reply runs on the default model, and the saved row names it", async () => {
+  const { res, backend, provider } = await send(post(ASK), {
+    world: { profile: { preferred_chat_model: UNLISTED_MODEL } },
+    env: { ANTHROPIC_API_KEY: "anthropic-key" },
+    replies: [streamedReply(["Hello!"])],
+  });
+  assertEquals((await readEvents(res)).at(-1)?.done, true);
+  assertEquals(provider.calls.map((c) => c.model), [DEFAULT_CHAT_MODEL]);
+  const assistant = writes(backend.calls).find(([, , values]) => (values as { role?: string }).role === "assistant");
+  assertEquals((assistant?.[2] as Record<string, unknown>).model_used, DEFAULT_CHAT_MODEL);
 });
 
 Deno.test("no budget set (NULL): never blocked, and done reports budget_remaining null", async () => {

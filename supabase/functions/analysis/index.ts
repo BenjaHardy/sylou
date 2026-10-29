@@ -7,13 +7,13 @@ import {
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 import {
-  ALLOWED_MODELS,
   CONTEXT_LIMIT_TOKENS,
+  DEFAULT_FLOW_MODEL,
   FALLBACK_CONTEXT_LIMIT_TOKENS,
   OUTPUT_BUDGETS,
+  resolveModel,
 } from "../_shared/_models.ts";
 import { computeSimilarityPct } from "../_shared/_similarity.ts";
-import { sliceSafe } from "../_shared/_text.ts";
 import {
   FLOW_PROMPT_TEMPLATE,
   CREATIVE_FLOW_PROMPT_TEMPLATE,
@@ -143,22 +143,12 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
 
     const isCreativeProject = project.template === "creative";
 
-    // --- Resolve FLOW model (gated request override, else profile pref) ---
-    // Gate the request override against the registry allowlist; an absent/
-    // empty value falls back to the profile preference as before. Without
-    // this, any authed caller could route to arbitrary provider models on
-    // the operator's key (the shipped client never sends `model`). Mirrors
-    // chat/editor-action/context-prompt (P2-6); analysis was the one LLM
-    // function still ungated.
-    const requestedModel: string | undefined = body.model;
-    if (requestedModel && !ALLOWED_MODELS.has(requestedModel)) {
-      return jsonResponse(
-        { error: `Unsupported model: ${sliceSafe(String(requestedModel), 64)}` },
-        400,
-      );
+    // --- Resolve FLOW model (request override, else profile pref) ---
+    const modelChoice = resolveModel(body.model, profile.preferred_flow_model, DEFAULT_FLOW_MODEL);
+    if ("error" in modelChoice) {
+      return jsonResponse({ error: modelChoice.error }, 400);
     }
-    const flowModel: string =
-      requestedModel || profile.preferred_flow_model || "zai-glm-5-3";
+    const flowModel = modelChoice.model;
 
     const provider = providerFor(flowModel);
     if (!deps.env.get(envKeyFor(provider))) {
@@ -178,8 +168,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     const flowMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.FLOW, flowModel, thinking, mistralEffort !== undefined);
 
     // The model's real context window (tokens), from the server-side mirror
-    // of the src/lib/models.ts registry; conservative fallback for stale
-    // legacy preference ids.
+    // of the src/lib/models.ts registry.
     const contextLimitTokens =
       CONTEXT_LIMIT_TOKENS[flowModel] ?? FALLBACK_CONTEXT_LIMIT_TOKENS;
 

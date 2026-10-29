@@ -1,6 +1,8 @@
 // Registry sanity tests for the frontend model registry (P4-5) —
 // the client-side mirror of the edge functions' _shared/_models checks.
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   CHAT_REASONING_OPTIONS,
   DEFAULT_CHAT_MODEL,
@@ -72,6 +74,26 @@ describe("MODELS registry", () => {
   it("a retired id keeps a label so historical reports still render one (GLM 5.2, retired by Mistral 2026-10-31)", () => {
     expect(MODELS.map((m) => m.id)).not.toContain("zai-glm-5-2");
     expect(MODEL_LABELS["zai-glm-5-2"]).toBe("Z.ai GLM 5.2 (via Mistral)");
+  });
+});
+
+// The edge functions keep their own copy of the list and the defaults. They
+// replace a saved model they do not list with the default, so a model offered
+// here but missing there would quietly never run.
+describe("the edge functions' copy (supabase/functions/_shared/_models.ts)", () => {
+  // vitest runs from the repository root (see migrations-privileges.test.ts).
+  const source = readFileSync(join(process.cwd(), "supabase", "functions", "_shared", "_models.ts"), "utf8");
+
+  it("lists exactly the registry's models", () => {
+    const list = source.match(/export const ALLOWED_MODELS[^=]*=\s*new Set\(\[([^\]]*)\]\)/)?.[1];
+    expect(list, "ALLOWED_MODELS not found").toBeDefined();
+    const ids = [...(list ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    expect(ids.sort()).toEqual(MODELS.map((m) => m.id).sort());
+  });
+
+  it("falls back to the same defaults", () => {
+    expect(source.match(/export const DEFAULT_CHAT_MODEL = "([^"]+)"/)?.[1]).toBe(DEFAULT_CHAT_MODEL);
+    expect(source.match(/export const DEFAULT_FLOW_MODEL = "([^"]+)"/)?.[1]).toBe(DEFAULT_FLOW_MODEL);
   });
 });
 

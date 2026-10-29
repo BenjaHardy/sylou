@@ -1,7 +1,8 @@
 /**
  * Central registry of LLMs available to the user for chat & FLOW analysis.
- * Keep this in sync with the inline `callLLM` helper in each Supabase edge
- * function (chat/, analysis/, editor-action/, context-prompt/).
+ * Keep this in sync with the edge functions' copy in
+ * supabase/functions/_shared/_models.ts (ALLOWED_MODELS, CONTEXT_LIMIT_TOKENS);
+ * models.test.ts fails when the model lists differ.
  */
 
 export type ModelProvider = "mistral" | "anthropic" | "deepseek";
@@ -219,8 +220,9 @@ export function groupModelsForFlow(models: ModelInfo[] = MODELS): ModelGroup[] {
 
 // Defaults for new profiles, mirrored by the profiles column defaults
 // (migrations 20261001120000 / 20261011120000) and by the edge functions'
-// NULL-preference fallback. The FLOW default must be a recommended model
-// (pinned by models.test.ts).
+// fallback (DEFAULT_CHAT_MODEL / DEFAULT_FLOW_MODEL in
+// supabase/functions/_shared/_models.ts). models.test.ts pins that the FLOW
+// default is a recommended model and that the functions' copy matches.
 export const DEFAULT_CHAT_MODEL = "zai-glm-5-3";
 export const DEFAULT_FLOW_MODEL = "zai-glm-5-3";
 

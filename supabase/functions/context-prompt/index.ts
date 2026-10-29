@@ -7,7 +7,7 @@ import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_share
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { finalCall, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
-import { ALLOWED_MODELS, INPUT_LIMITS, OUTPUT_BUDGETS } from "../_shared/_models.ts";
+import { DEFAULT_CHAT_MODEL, INPUT_LIMITS, OUTPUT_BUDGETS, resolveModel } from "../_shared/_models.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 import {
   CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT, SUMMARY_TABLES,
@@ -101,16 +101,15 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     }
 
     // Resolve chat model (request override allowed); validate provider key exists.
-    const requestedModel: string | undefined = (await req.clone().json().catch(() => ({})))?.model;
-    // Registry allowlist for the request override — see chat/index.ts for rationale.
-    if (requestedModel && !ALLOWED_MODELS.has(requestedModel)) {
-      return jsonResponse(
-        { error: `Unsupported model: ${sliceSafe(String(requestedModel), 64)}` },
-        400,
-      );
+    const modelChoice = resolveModel(
+      (await req.clone().json().catch(() => ({})))?.model,
+      profile.preferred_chat_model,
+      DEFAULT_CHAT_MODEL,
+    );
+    if ("error" in modelChoice) {
+      return jsonResponse({ error: modelChoice.error }, 400);
     }
-    const chatModel: string =
-      requestedModel || profile.preferred_chat_model || "zai-glm-5-3";
+    const chatModel = modelChoice.model;
     const provider = providerFor(chatModel);
     const temperature = resolveTemperature(CONTEXT_TEMPERATURE, chatModel);
     // Reply call (#2): the user's reasoning level, else the context defaults.

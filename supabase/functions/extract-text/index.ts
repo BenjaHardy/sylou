@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { callLLM, providerFor, normaliseResponse, envKeyFor } from "../_shared/_llm.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
-import { OUTPUT_BUDGETS } from "../_shared/_models.ts";
+import { DEFAULT_CHAT_MODEL, OUTPUT_BUDGETS, resolveSavedModel } from "../_shared/_models.ts";
 import { SUMMARY_TABLES, resolveMaxTokens, resolveReasoning } from "../_shared/_thinking.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 
@@ -142,7 +142,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
         .select("preferred_chat_model")
         .eq("id", user.id)
         .single();
-      const summaryModel = profile?.preferred_chat_model || "zai-glm-5-3";
+      const summaryModel = resolveSavedModel(profile?.preferred_chat_model, DEFAULT_CHAT_MODEL);
       const provider = providerFor(summaryModel);
 
       if (!deps.env.get(envKeyFor(provider))) {
