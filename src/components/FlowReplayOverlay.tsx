@@ -23,7 +23,6 @@ export interface ReplayEvent {
 interface FlowReplayOverlayProps {
   events: ReplayEvent[];
   onClose: () => void;
-  sanitize?: boolean;
 }
 
 const SPEED_OPTIONS = [1, 2, 5, 10];
@@ -50,7 +49,7 @@ function formatTimestamp(ts: string): string {
   });
 }
 
-export function FlowReplayOverlay({ events, onClose, sanitize = false }: FlowReplayOverlayProps) {
+export function FlowReplayOverlay({ events, onClose }: FlowReplayOverlayProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -63,7 +62,7 @@ export function FlowReplayOverlay({ events, onClose, sanitize = false }: FlowRep
     for (let i = currentIndex; i >= 0; i--) {
       if (events[i].type === "writing_version" && events[i].content.html) {
         const html = events[i].content.html!;
-        return sanitize ? DOMPurify.sanitize(html) : html;
+        return DOMPurify.sanitize(html);
       }
     }
     return "<p class='text-muted-foreground text-sm italic'>No writing content yet at this point.</p>";
