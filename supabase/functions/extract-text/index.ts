@@ -13,6 +13,23 @@ const corsHeadersFor = makeCorsHeadersFor("GET, POST, OPTIONS");
 
 const defaultDeps: HandlerDeps = { env: Deno.env, createClient, callLLM };
 
+/** The path useImportedDocuments uploads to: `<user id>/<project id>/<file name>`.
+ *  The file name, also once percent-decoded, may hold no slash, backslash or
+ *  control character and may not be "." or "..": the download URL would
+ *  resolve any of them into another folder. */
+function isOwnUploadPath(path: string, userId: string, projectId: string): boolean {
+  const [owner, project, name, ...rest] = path.split("/");
+  if (rest.length > 0 || owner !== userId || project !== projectId || !name) return false;
+  let decoded = name;
+  try {
+    decoded = decodeURIComponent(name);
+  } catch {
+    // A malformed escape is left as written.
+  }
+  const unsafe = /[\\/\p{Cc}]/u;
+  return !unsafe.test(name) && !unsafe.test(decoded) && decoded !== "." && decoded !== "..";
+}
+
 export const handler = async (req: Request, deps = defaultDeps): Promise<Response> => {
   const corsHeaders = corsHeadersFor(req);
   const jsonResponse = (body: Record<string, unknown>, status = 200) =>
@@ -61,8 +78,8 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     }
 
     // --- Ownership validation ---
-    // 1. Verify file_path belongs to caller (must start with their user id)
-    if (!file_path.startsWith(`${user.id}/`)) {
+    // 1. Verify file_path is the caller's upload path in this project
+    if (!isOwnUploadPath(file_path, user.id, project_id)) {
       return jsonResponse({ error: "Forbidden: file path does not belong to caller" }, 403);
     }
 
@@ -81,10 +98,8 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
       return jsonResponse({ error: "Forbidden: project_id mismatch" }, 403);
     }
 
-    // --- Download file from storage using service role ---
-    const adminSupabase = deps.createClient(supabaseUrl, serviceRoleKey);
-
-    const { data: fileData, error: downloadErr } = await adminSupabase.storage
+    // --- Download with the caller's client: storage RLS keeps it to their folder ---
+    const { data: fileData, error: downloadErr } = await supabase.storage
       .from("imports")
       .download(file_path);
 
@@ -92,6 +107,8 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
       console.error("Storage download error:", downloadErr);
       return jsonResponse({ error: "Failed to download file from storage" }, 500);
     }
+
+    const adminSupabase = deps.createClient(supabaseUrl, serviceRoleKey);
 
     // --- Extract text based on file extension ---
     const ext = file_path.split(".").pop()?.toLowerCase() ?? "";
