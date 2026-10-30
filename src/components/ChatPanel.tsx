@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { ThinkingIndicator } from "@/components/ThinkingIndicator";
+import { MarkdownImageLink } from "@/components/MarkdownImageLink";
 import { useChatThread } from "@/hooks/useChatThread";
 import { useConversationMemory } from "@/hooks/useConversationMemory";
 import {
@@ -86,6 +87,7 @@ const markdownComponents: ComponentProps<typeof ReactMarkdown>["components"] = {
   a: ({ href, children }) => (
     <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">{children}</a>
   ),
+  img: MarkdownImageLink,
   blockquote: ({ children }) => (
     <blockquote className="border-l-2 border-primary/30 pl-3 my-2 text-muted-foreground italic">{children}</blockquote>
   ),

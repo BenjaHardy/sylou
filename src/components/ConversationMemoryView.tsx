@@ -1,6 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { BookOpen } from "lucide-react";
+import { MarkdownImageLink } from "@/components/MarkdownImageLink";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +35,8 @@ export function ConversationMemoryDivider({ onClick }: { onClick: () => void }) 
   );
 }
 
+const markdownComponents = { img: MarkdownImageLink };
+
 export function ConversationMemoryDialog({
   open,
   onOpenChange,
@@ -57,7 +60,9 @@ export function ConversationMemoryDialog({
         </DialogHeader>
         <div className="flex-1 min-h-0 overflow-y-auto rounded-md bg-muted/50 p-4">
           <div className="max-w-none text-sm text-foreground">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{memory.summary_text}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+              {memory.summary_text}
+            </ReactMarkdown>
           </div>
         </div>
         <p className="text-[11px] text-muted-foreground">

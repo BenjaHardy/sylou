@@ -361,6 +361,8 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 ## 8. Review checklist for PRs
 - No hardcoded colors or one-off CSS overrides in UI (semantic tokens only).
   Exception: FLOW band/profile palettes are domain data (see §4).
+- No `<img>` from model output: markdown renderers map `img` to
+  `MarkdownImageLink`, so a reply never makes the browser load a URL by itself.
 - No new `public` table without `ENABLE RLS` + per-op policies (add a
   `GRANT` only if a non-default role like `anon` needs access).
 - No role checks anywhere — there is no role system; don't add ad-hoc ones

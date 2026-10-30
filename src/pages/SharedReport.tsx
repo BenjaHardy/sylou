@@ -357,7 +357,7 @@ export default function SharedReport() {
                   <FlowReplayOverlay events={replaySnapshot} onClose={() => {
                     if (reportAvailable) setActiveTab("report");
                     else if (profileAvailable) setActiveTab("profile");
-                  }} sanitize />
+                  }} />
                 </div>
               ) : (
                 <div className="text-center py-16 space-y-3">
