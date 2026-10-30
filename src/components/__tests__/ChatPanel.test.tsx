@@ -3,7 +3,8 @@
 // phase, the composer (Enter sends, Shift+Enter does not, disabled while
 // sending), the web-search toggle gated by the instance configuration, the
 // model and reasoning label, the budget line, the tip banner, the document
-// upload button, and the conversation-memory divider.
+// upload button, the conversation-memory divider, and images in replies,
+// which are shown as links.
 //
 // The panel composes six hooks; each is replaced by a fixture the test
 // controls, so the assertions are about rendering and wiring, not about
@@ -143,6 +144,38 @@ describe("ChatPanel", () => {
     expect(screen.queryByText("Summary body")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("Writing Summary Update"));
     expect(screen.getByText("Summary body")).toBeInTheDocument();
+  });
+
+  it("images in an assistant reply become links the reader opens, never <img>; an address the markdown renderer rejects stays plain text", () => {
+    h.chat.messages = [
+      msg({
+        id: "m-1",
+        role: "assistant",
+        content: [
+          "Inline ![chart](https://example.com/chart.png?q=draft) and a reference ![diagram][d].",
+          "No scheme ![map](//example.org/map.png), a script ![script](javascript:alert(1)) and ![](https://example.com/x.png).",
+          "",
+          "[d]: https://example.net/diagram.png",
+        ].join("\n"),
+      }),
+    ];
+    const { container } = renderPanel();
+
+    // The Sylou avatar is the only image on the page.
+    expect(container.querySelectorAll('img:not([alt="Sylou"])')).toHaveLength(0);
+
+    const chart = screen.getByRole("link", { name: "chart" });
+    expect(chart).toHaveAttribute("href", "https://example.com/chart.png?q=draft");
+    expect(chart).toHaveAttribute("target", "_blank");
+    expect(chart).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.getByRole("link", { name: "diagram" })).toHaveAttribute("href", "https://example.net/diagram.png");
+    // A scheme-less address passes the renderer's URL filter: as an <img> it
+    // would load from that host.
+    expect(screen.getByRole("link", { name: "map" })).toHaveAttribute("href", "//example.org/map.png");
+    expect(screen.getByRole("link", { name: "Image" })).toHaveAttribute("href", "https://example.com/x.png");
+
+    expect(screen.getByText("script")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "script" })).not.toBeInTheDocument();
   });
 
   it("an empty thread invites the first message; a loading thread shows neither bubbles nor the invitation", () => {
