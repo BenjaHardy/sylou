@@ -422,7 +422,7 @@ part of the shipped application.
 - which@2.0.2
 - yallist@3.1.1
 
-### MIT (226)
+### MIT (223)
 
 - @adobe/css-tools@4.5.0
 - @asamuzakjp/css-color@5.1.11
@@ -453,11 +453,8 @@ part of the shipped application.
 - @csstools/css-color-parser@4.2.3
 - @csstools/css-parser-algorithms@4.0.0
 - @csstools/css-tokenizer@4.0.1
-- @emnapi/core@1.11.1
 - @emnapi/core@1.11.3
-- @emnapi/runtime@1.11.1
 - @emnapi/runtime@1.11.3
-- @emnapi/wasi-threads@1.2.2
 - @emnapi/wasi-threads@1.2.3
 - @eslint-community/eslint-utils@4.10.1
 - @eslint-community/regexpp@4.12.2
@@ -471,22 +468,22 @@ part of the shipped application.
 - @keyv/bigmap@1.3.1
 - @keyv/serialize@1.1.1
 - @napi-rs/wasm-runtime@1.2.3
-- @oxc-project/types@0.139.0
-- @rolldown/binding-android-arm64@1.1.5
-- @rolldown/binding-darwin-arm64@1.1.5
-- @rolldown/binding-darwin-x64@1.1.5
-- @rolldown/binding-freebsd-x64@1.1.5
-- @rolldown/binding-linux-arm-gnueabihf@1.1.5
-- @rolldown/binding-linux-arm64-gnu@1.1.5
-- @rolldown/binding-linux-arm64-musl@1.1.5
-- @rolldown/binding-linux-ppc64-gnu@1.1.5
-- @rolldown/binding-linux-s390x-gnu@1.1.5
-- @rolldown/binding-linux-x64-gnu@1.1.5
-- @rolldown/binding-linux-x64-musl@1.1.5
-- @rolldown/binding-openharmony-arm64@1.1.5
-- @rolldown/binding-wasm32-wasi@1.1.5
-- @rolldown/binding-win32-arm64-msvc@1.1.5
-- @rolldown/binding-win32-x64-msvc@1.1.5
+- @oxc-project/types@0.156.0
+- @rolldown/binding-android-arm-eabi@1.2.16
+- @rolldown/binding-android-arm64@1.2.16
+- @rolldown/binding-darwin-arm64@1.2.16
+- @rolldown/binding-darwin-x64@1.2.16
+- @rolldown/binding-freebsd-x64@1.2.16
+- @rolldown/binding-linux-arm-gnueabihf@1.2.16
+- @rolldown/binding-linux-arm64-gnu@1.2.16
+- @rolldown/binding-linux-arm64-musl@1.2.16
+- @rolldown/binding-linux-ppc64-gnu@1.2.16
+- @rolldown/binding-linux-s390x-gnu@1.2.16
+- @rolldown/binding-linux-x64-gnu@1.2.16
+- @rolldown/binding-linux-x64-musl@1.2.16
+- @rolldown/binding-openharmony-arm64@1.2.16
+- @rolldown/binding-win32-arm64-msvc@1.2.16
+- @rolldown/binding-win32-x64-msvc@1.2.16
 - @rolldown/pluginutils@1.0.1
 - @standard-schema/spec@1.1.0
 - @tailwindcss/node@4.3.3
@@ -597,7 +594,7 @@ part of the shipped application.
 - lz-string@1.5.0
 - magic-string@0.30.21
 - min-indent@1.0.1
-- nanoid@3.3.18
+- nanoid@3.3.20
 - natural-compare@1.4.0
 - node-releases@2.0.54
 - obug@2.1.4
@@ -609,7 +606,7 @@ part of the shipped application.
 - path-key@3.1.1
 - pathe@2.0.3
 - picomatch@4.0.7
-- postcss@8.5.23
+- postcss@8.5.32
 - prelude-ls@1.2.1
 - pretty-format@27.5.1
 - punycode@2.3.1
@@ -617,7 +614,7 @@ part of the shipped application.
 - react-is@17.0.2
 - redent@3.0.0
 - require-from-string@2.0.2
-- rolldown@1.1.5
+- rolldown@1.2.16
 - shebang-command@2.0.0
 - shebang-regex@3.0.0
 - stackback@0.0.2
@@ -639,7 +636,7 @@ part of the shipped application.
 - undici-types@6.21.0
 - undici@7.30.1
 - update-browserslist-db@1.3.2
-- vite@8.1.3
+- vite@8.3.5
 - vitest@4.1.12
 - w3c-xmlserializer@5.0.0
 - whatwg-mimetype@5.0.0
