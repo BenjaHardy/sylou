@@ -1,0 +1,15 @@
+# Keeps the GitHub Actions in .github/workflows current: Dependabot moves
+# each SHA pin and the version comment beside it. npm security updates are
+# set in the repository settings and are not affected by this file.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      actions-minor-and-patch:
+        update-types: ["minor", "patch"]
