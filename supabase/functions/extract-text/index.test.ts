@@ -1,5 +1,5 @@
-// extract-text/index.test.ts — the extract-text handler over HTTP: the
-// model an imported document's summary runs on.
+// extract-text/index.test.ts — the extract-text handler over HTTP: which
+// file it reads, and the model an imported document's summary runs on.
 // Fakes: _shared/_test_support.ts. A red test means the HTTP contract
 // changed — that needs a checkpoint, not a test edit.
 // Run with: deno task test  (from supabase/functions/)
@@ -21,7 +21,7 @@ import {
 const { handler } = await importHandler(() => import("./index.ts"));
 
 const MODEL = "mistral-small-2603";
-const IMPORT = { file_path: "u-1/notes.txt", project_id: "p-1", document_id: "d-1" };
+const IMPORT = { file_path: "u-1/p-1/notes.txt", project_id: "p-1", document_id: "d-1" };
 // Over the 500-character threshold, so the document gets an AI summary.
 const NOTES = "Field notes on the estuary. ".repeat(30);
 const SUMMARY = "Notes on the estuary.";
@@ -32,7 +32,7 @@ function world(profile: Record<string, unknown>) {
     switch (`${call.client} ${call.target}`) {
       case "user imported_documents":
         return { data: { id: "d-1", project_id: "p-1" }, error: null };
-      case "admin storage:imports":
+      case "user storage:imports":
         return { data: new Blob([NOTES]), error: null };
       case "user profiles":
         return { data: { preferred_chat_model: MODEL, ...profile }, error: null };
@@ -57,6 +57,36 @@ async function send(
 
 const usageRow = (backend: ReturnType<typeof fakeBackend>) =>
   writes(backend.calls).find(([, table]) => table === "token_usage")?.[2] as Record<string, unknown> | undefined;
+
+Deno.test("the file is read with the caller's own client, from the path the request names", async () => {
+  const { res, backend } = await send(post(IMPORT), { replies: [jsonReply({ content: SUMMARY })] });
+  assertEquals(res.status, 200);
+  assertEquals(backend.calls.filter((c) => c.target.startsWith("storage:")), [
+    { client: "user", target: "storage:imports", steps: [["download", IMPORT.file_path]] },
+  ]);
+});
+
+// Each names a file outside u-1's folder for project p-1, as written or
+// once the download URL resolves it.
+const FOREIGN_PATHS: [string, string][] = [
+  ["a path in another user's folder", "u-2/p-1/notes.txt"],
+  ["a path in another project's folder", "u-1/p-2/notes.txt"],
+  ["a path with a parent-folder step", "u-1/../u-2/p-1/notes.txt"],
+  ["a file name that decodes to a parent-folder step", "u-1/p-1/%2e%2E"],
+  ["a file name with an encoded slash", "u-1/p-1/..%2Fnotes.txt"],
+  ["a path with backslashes", "u-1/p-1/..\\..\\u-2\\notes.txt"],
+  ["a file name with a control character", "u-1/p-1/.\t."],
+];
+
+for (const [label, file_path] of FOREIGN_PATHS) {
+  Deno.test(`${label}: refused before any lookup`, async () => {
+    const { res, backend, provider } = await send(post({ ...IMPORT, file_path }));
+    assertEquals(res.status, 403);
+    assertEquals(await res.json(), { error: "Forbidden: file path does not belong to caller" });
+    assertEquals(backend.calls.map((c) => c.target), ["auth:getUser"]);
+    assertEquals(provider.calls.length, 0);
+  });
+}
 
 Deno.test("the summary runs on the saved model when it is listed, and the usage row names it", async () => {
   const { res, backend, provider } = await send(post(IMPORT), { replies: [jsonReply({ content: SUMMARY })] });
