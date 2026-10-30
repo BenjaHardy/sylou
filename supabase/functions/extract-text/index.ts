@@ -30,6 +30,19 @@ function isOwnUploadPath(path: string, userId: string, projectId: string): boole
   return !unsafe.test(name) && !unsafe.test(decoded) && decoded !== "." && decoded !== "..";
 }
 
+const IMPORT_EXTENSIONS = ["txt", "md", "pdf", "docx"];
+/** The app's upload cap (useImportedDocuments), also the imports bucket's file_size_limit. */
+const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
+
+/** Whether the bytes are what the extension says: a PDF has its header in the
+ *  first 1 KiB (where PDF.js looks for it), a .docx is a ZIP archive. Text
+ *  files may hold any bytes. */
+function contentMatchesType(bytes: Uint8Array, ext: string): boolean {
+  if (ext === "pdf") return new TextDecoder("latin1").decode(bytes.subarray(0, 1024)).includes("%PDF-");
+  if (ext === "docx") return bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+  return true;
+}
+
 export const handler = async (req: Request, deps = defaultDeps): Promise<Response> => {
   const corsHeaders = corsHeadersFor(req);
   const jsonResponse = (body: Record<string, unknown>, status = 200) =>
@@ -83,6 +96,12 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
       return jsonResponse({ error: "Forbidden: file path does not belong to caller" }, 403);
     }
 
+    // A file type extract-text reads (the content is checked after download)
+    const ext = file_path.split(".").pop()?.toLowerCase() ?? "";
+    if (!IMPORT_EXTENSIONS.includes(ext)) {
+      return jsonResponse({ error: `Unsupported file type: .${ext}` }, 400);
+    }
+
     // 2. Verify document_id belongs to caller via user-scoped client (RLS)
     const { data: ownedDoc, error: ownerErr } = await supabase
       .from("imported_documents")
@@ -108,38 +127,40 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
       return jsonResponse({ error: "Failed to download file from storage" }, 500);
     }
 
+    // --- Size and content checks, before any parsing ---
+    if (fileData.size > MAX_IMPORT_BYTES) {
+      return jsonResponse({ error: "File too large" }, 413);
+    }
+    const bytes = new Uint8Array(await fileData.arrayBuffer());
+    if (!contentMatchesType(bytes, ext)) {
+      return jsonResponse({ error: "File content does not match its type" }, 415);
+    }
+
     const adminSupabase = deps.createClient(supabaseUrl, serviceRoleKey);
 
     // --- Extract text based on file extension ---
-    const ext = file_path.split(".").pop()?.toLowerCase() ?? "";
     let extractedText = "";
 
     if (ext === "txt" || ext === "md") {
-      extractedText = await fileData.text();
+      extractedText = new TextDecoder().decode(bytes);
     } else if (ext === "pdf") {
       try {
-        const pdfParse = (await import("npm:pdf-parse@1.1.1/lib/pdf-parse.js")).default;
-        const { Buffer } = await import("node:buffer");
-        const buffer = Buffer.from(await fileData.arrayBuffer());
-        const pdfData = await pdfParse(buffer);
-        extractedText = pdfData.text || "";
+        const { extractText } = await import("npm:unpdf@1.9.1");
+        extractedText = (await extractText(bytes, { mergePages: true })).text;
       } catch (pdfErr) {
         console.error("PDF parse error:", pdfErr);
         return jsonResponse({ error: "Failed to parse PDF file" }, 500);
       }
-    } else if (ext === "docx") {
+    } else {
       try {
-        const mammoth = await import("https://esm.sh/mammoth@1.6.0");
+        const mammoth = await import("npm:mammoth@1.12.3");
         const { Buffer } = await import("node:buffer");
-        const buffer = Buffer.from(await fileData.arrayBuffer());
-        const result = await mammoth.extractRawText({ buffer });
+        const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
         extractedText = result.value || "";
       } catch (docxErr) {
         console.error("DOCX parse error:", docxErr);
         return jsonResponse({ error: "Failed to parse DOCX file" }, 500);
       }
-    } else {
-      return jsonResponse({ error: `Unsupported file type: .${ext}` }, 400);
     }
 
     // --- Generate summary ---

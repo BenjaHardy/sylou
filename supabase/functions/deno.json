@@ -16,7 +16,9 @@
     // deno test collects only *.test.ts from listed directories. Handler
     // tests import an index.ts through _shared/_test_support.ts, which stubs
     // Deno.serve first; --allow-env=ALLOWED_ORIGIN lets them set the CORS
-    // allow-list that _cors.ts reads at module load.
-    "test": "deno test --allow-read --allow-env=ALLOWED_ORIGIN _shared/ context-prompt/ analysis/ chat/ share-report/ editor-action/ extract-text/"
+    // allow-list that _cors.ts reads at module load. The other names are
+    // read by mammoth's promise library (bluebird) when extract-text's tests
+    // parse a .docx.
+    "test": "deno test --allow-read --allow-env=ALLOWED_ORIGIN,BLUEBIRD_DEBUG,BLUEBIRD_LONG_STACK_TRACES,BLUEBIRD_W_FORGOTTEN_RETURN,BLUEBIRD_WARNINGS,NODE_ENV _shared/ context-prompt/ analysis/ chat/ share-report/ editor-action/ extract-text/"
   }
 }
