@@ -13,8 +13,10 @@ after `npm ci`).
 ## Edge-function dependencies (imported by URL)
 
 - @supabase/supabase-js@2.110.5 — MIT — via esm.sh (all edge functions)
-- mammoth@1.6.0 — BSD-2-Clause — via esm.sh (extract-text)
-- pdf-parse@1.1.1 — MIT — via npm: specifier (extract-text)
+- mammoth@1.12.3 — BSD-2-Clause — via npm: specifier (extract-text)
+- unpdf@1.9.1 — MIT — via npm: specifier (extract-text)
+- PDF.js@6.4.299 — Apache-2.0 — via unpdf's bundle (extract-text)
+- jszip@3.10.2 — (MIT OR GPL-3.0-or-later) — via npm: specifier (edge-function tests only)
 - Deno standard library (std)@0.224.0 — MIT — via deno.land (edge-function tests only)
 
 ## Runtime dependencies (npm)

@@ -277,7 +277,8 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   `cd supabase/functions && deno task test`. ⚠️ The test task collects an
   explicit directory list — a function directory gaining its first tests
   must be added there, or they silently never run. A handler test run by
-  hand needs the task's `--allow-env=ALLOWED_ORIGIN`.
+  hand needs the task's `--allow-env` list (`ALLOWED_ORIGIN`, plus the
+  names mammoth's bluebird reads when extract-text's tests parse a .docx).
 - Typecheck (frontend): `npm run typecheck` (`tsc --noEmit -p tsconfig.app.json`;
   `strict` is on). NOTE: bare `tsc --noEmit` is a no-op here — the root
   `tsconfig.json` is solution-style (`files: []`) so it checks **zero** `src/`

@@ -23,8 +23,10 @@ const OUT_PATH = join(root, "THIRD_PARTY_LICENSES.md");
 
 const EDGE_DEPS = [
   { name: "@supabase/supabase-js", version: "2.110.5", license: "MIT", via: "esm.sh (all edge functions)" },
-  { name: "mammoth", version: "1.6.0", license: "BSD-2-Clause", via: "esm.sh (extract-text)" },
-  { name: "pdf-parse", version: "1.1.1", license: "MIT", via: "npm: specifier (extract-text)" },
+  { name: "mammoth", version: "1.12.3", license: "BSD-2-Clause", via: "npm: specifier (extract-text)" },
+  { name: "unpdf", version: "1.9.1", license: "MIT", via: "npm: specifier (extract-text)" },
+  { name: "PDF.js", version: "6.4.299", license: "Apache-2.0", via: "unpdf's bundle (extract-text)" },
+  { name: "jszip", version: "3.10.2", license: "(MIT OR GPL-3.0-or-later)", via: "npm: specifier (edge-function tests only)" },
   { name: "Deno standard library (std)", version: "0.224.0", license: "MIT", via: "deno.land (edge-function tests only)" },
 ];
 

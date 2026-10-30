@@ -15,7 +15,15 @@ export interface ImportedDocument {
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const ALLOWED_EXTENSIONS = ["pdf", "txt", "md", "docx"];
+// The type each accepted extension is uploaded as: the imports bucket accepts
+// only these, and browsers declare no type for some files (.md often).
+const UPLOAD_TYPES: Record<string, string> = {
+  pdf: "application/pdf",
+  txt: "text/plain",
+  md: "text/markdown",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+};
+const ALLOWED_EXTENSIONS = Object.keys(UPLOAD_TYPES);
 const FAVOURITE_SOFT_CAP_CHARS = 30_000;
 
 export function useImportedDocuments(projectId: string | null) {
@@ -88,10 +96,10 @@ export function useImportedDocuments(projectId: string | null) {
 
         const storagePath = `${user.id}/${projectId}/${fileName}`;
 
-        // Upload to storage
+        // Upload to storage, typed from the extension
         const { error: uploadErr } = await supabase.storage
           .from("imports")
-          .upload(storagePath, file);
+          .upload(storagePath, new File([file], fileName, { type: UPLOAD_TYPES[ext] }));
 
         if (uploadErr) {
           console.error("Storage upload error:", uploadErr);
