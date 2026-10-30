@@ -58,10 +58,10 @@
     "clsx": "2.1.1",
     "date-fns": "3.6.0",
     "docx": "9.7.1",
-    "dompurify": "3.4.16",
+    "dompurify": "3.4.17",
     "file-saver": "2.0.5",
     "lucide-react": "0.577.0",
-    "markdown-it": "14.3.1",
+    "markdown-it": "14.3.3",
     "next-themes": "0.3.0",
     "prosemirror-markdown": "1.13.4",
     "qrcode.react": "4.2.0",
@@ -98,7 +98,7 @@
     "vitest": "4.1.11"
   },
   "overrides": {
-    "markdown-it": "14.3.1",
+    "markdown-it": "14.3.3",
     "prosemirror-changeset": "2.4.1",
     "prosemirror-commands": "1.7.1",
     "prosemirror-dropcursor": "1.8.2",
