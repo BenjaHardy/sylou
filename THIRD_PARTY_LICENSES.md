@@ -526,13 +526,13 @@ part of the shipped application.
 - @typescript-eslint/utils@8.70.0
 - @typescript-eslint/visitor-keys@8.70.0
 - @vitejs/plugin-react-swc@4.3.1
-- @vitest/expect@4.1.11
-- @vitest/mocker@4.1.11
-- @vitest/pretty-format@4.1.11
-- @vitest/runner@4.1.11
-- @vitest/snapshot@4.1.11
-- @vitest/spy@4.1.11
-- @vitest/utils@4.1.11
+- @vitest/expect@4.1.12
+- @vitest/mocker@4.1.12
+- @vitest/pretty-format@4.1.12
+- @vitest/runner@4.1.12
+- @vitest/snapshot@4.1.12
+- @vitest/spy@4.1.12
+- @vitest/utils@4.1.12
 - acorn-jsx@5.3.2
 - acorn@8.18.0
 - ajv@6.15.0
@@ -544,7 +544,7 @@ part of the shipped application.
 - brace-expansion@5.0.12
 - browserslist@4.28.9
 - cacheable@2.5.0
-- chai@6.2.2
+- chai@6.3.0
 - convert-source-map@2.0.0
 - cross-spawn@7.0.6
 - css-tree@3.2.1
@@ -629,7 +629,7 @@ part of the shipped application.
 - tinybench@2.9.0
 - tinyexec@1.3.1
 - tinyglobby@0.2.17
-- tinyrainbow@3.1.1
+- tinyrainbow@3.2.0
 - tldts-core@7.4.13
 - tldts@7.4.13
 - tr46@6.0.0
@@ -637,10 +637,10 @@ part of the shipped application.
 - type-check@0.4.0
 - typescript-eslint@8.70.0
 - undici-types@6.21.0
-- undici@7.29.1
+- undici@7.30.1
 - update-browserslist-db@1.3.2
 - vite@8.1.3
-- vitest@4.1.11
+- vitest@4.1.12
 - w3c-xmlserializer@5.0.0
 - whatwg-mimetype@5.0.0
 - whatwg-url@16.0.1
@@ -649,7 +649,7 @@ part of the shipped application.
 - xmlchars@2.2.0
 - yocto-queue@0.1.0
 - zod-validation-error@4.0.2
-- zod@4.6.5
+- zod@4.6.7
 
 ### MIT-0 (2)
 
