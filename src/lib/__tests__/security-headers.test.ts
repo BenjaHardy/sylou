@@ -6,8 +6,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// Report-Only while the policy is checked on staging.
-const CSP_HEADER = "Content-Security-Policy-Report-Only";
+const CSP_HEADER = "Content-Security-Policy";
 
 type HeaderRules = Record<string, Record<string, string>>;
 
