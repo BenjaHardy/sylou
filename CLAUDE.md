@@ -185,6 +185,16 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   values are injected by the host (`supabase secrets set`), never
   committed. Frontend only reads publishable values via
   `import.meta.env.VITE_*`; private keys stay server-side.
+- **Security headers**: `vercel.json` and `public/_headers` (Cloudflare
+  Pages, Netlify) send the same headers on the same paths: on every page a
+  Content-Security-Policy, `X-Content-Type-Options: nosniff` and
+  `X-Frame-Options: DENY` (pinned by
+  `src/lib/__tests__/security-headers.test.ts`). `script-src` stays
+  `'self'`: the build emits no inline script and nothing reachable needs
+  eval. `style-src` keeps `'unsafe-inline'`: TipTap, Radix and Sonner write
+  styles at runtime, and editor marks are `style` attributes. Supabase is
+  allowed in `connect-src` only; an outside origin the app starts loading
+  (image, font, API) needs an entry in both files.
 - **Handler seam**: each function's `index.ts` exports
   `handler(req, deps = defaultDeps)` and ends with
   `Deno.serve((req) => handler(req))` — never `Deno.serve(handler)`, which
@@ -363,6 +373,9 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   Exception: FLOW band/profile palettes are domain data (see §4).
 - No `<img>` from model output: markdown renderers map `img` to
   `MarkdownImageLink`, so a reply never makes the browser load a URL by itself.
+- No new outside origin (script, image, font, API) without its CSP entry in
+  both `vercel.json` and `public/_headers`; never `'unsafe-inline'` or
+  `'unsafe-eval'` in `script-src`.
 - No new `public` table without `ENABLE RLS` + per-op policies (add a
   `GRANT` only if a non-default role like `anon` needs access).
 - No role checks anywhere — there is no role system; don't add ad-hoc ones
