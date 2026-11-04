@@ -6,7 +6,8 @@
 // test task grants env access to that one variable). The fakes stand in for
 // everything a handler's deps carry: the environment, the Supabase clients
 // (a chained query builder recording one ordered call log, as in the persist
-// tests) and the provider (canned JSON and SSE replies, Mistral shape).
+// tests) and the provider (canned JSON and SSE replies, Mistral shape, plus
+// an Anthropic stream for the stop reasons only Anthropic sends).
 
 import type { HandlerDeps } from "./_handler.ts";
 
@@ -246,6 +247,18 @@ export function streamedReply(deltas: string[], opts: { thinking?: boolean; fini
   for (const content of deltas) chunks.push({ choices: [{ delta: { content } }] });
   chunks.push({ choices: [{ delta: {}, finish_reason: opts.finish ?? "stop" }] });
   const body = chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") + "data: [DONE]\n\n";
+  return new Response(body, { headers: { "Content-Type": "text/event-stream" } });
+}
+
+/** A streamed Anthropic reply: one text delta per entry, then the stop reason
+ *  (such as "refusal", the safety stop). */
+export function anthropicStreamedReply(deltas: string[], stopReason: string): Response {
+  const events = [
+    ...deltas.map((text) => ({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text } })),
+    { type: "message_delta", delta: { stop_reason: stopReason } },
+    { type: "message_stop" },
+  ];
+  const body = events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join("");
   return new Response(body, { headers: { "Content-Type": "text/event-stream" } });
 }
 
