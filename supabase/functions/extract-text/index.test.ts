@@ -1,10 +1,11 @@
-// extract-text/index.test.ts — the extract-text handler over HTTP: which
-// file it reads, which files it refuses before parsing, the text it saves,
-// and the model an imported document's summary runs on.
+// extract-text/index.test.ts — the extract-text handler over HTTP: CORS, the
+// token check, which document and file it reads, which files it refuses
+// before parsing, the text and summary it saves, and the model and billing
+// of an imported document's summary.
 // Fakes: _shared/_test_support.ts. A red test means the HTTP contract
 // changed — that needs a checkpoint, not a test edit.
 // Run with: deno task test  (from supabase/functions/)
-import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import JSZip from "npm:jszip@3.10.2";
 import { DEFAULT_CHAT_MODEL } from "../_shared/_models.ts";
 import {
@@ -16,6 +17,8 @@ import {
   importHandler,
   jsonReply,
   post,
+  preflight,
+  TEST_ORIGIN,
   UNLISTED_MODEL,
   writes,
 } from "../_shared/_test_support.ts";
@@ -28,16 +31,35 @@ const IMPORT = { file_path: "u-1/p-1/notes.txt", project_id: "p-1", document_id:
 const NOTES = "Field notes on the estuary. ".repeat(30);
 const SUMMARY = "Notes on the estuary.";
 
+interface World {
+  /** Profile overrides. */
+  profile?: Record<string, unknown>;
+  /** The stored file; NOTES as text unless given. */
+  file?: Blob;
+  /** The project of document d-1 as the caller's client sees it; null when RLS hides the row. */
+  documentProject?: string | null;
+  /** The download fails. */
+  failDownload?: boolean;
+  /** The update of the document fails. */
+  failUpdate?: boolean;
+}
+
 /** User u-1's document d-1 in project p-1, stored as `file`. */
-function world(profile: Record<string, unknown>, file: Blob) {
+function world(w: World) {
   return (call: DbCall): DbResult | undefined => {
     switch (`${call.client} ${call.target}`) {
-      case "user imported_documents":
-        return { data: { id: "d-1", project_id: "p-1" }, error: null };
+      case "user imported_documents": {
+        const project = w.documentProject === undefined ? "p-1" : w.documentProject;
+        return { data: project === null ? null : { id: "d-1", project_id: project }, error: null };
+      }
       case "user storage:imports":
-        return { data: file, error: null };
+        return w.failDownload
+          ? { data: null, error: { message: "Object not found" } }
+          : { data: w.file ?? new Blob([NOTES]), error: null };
       case "user profiles":
-        return { data: { preferred_chat_model: MODEL, ...profile }, error: null };
+        return { data: { preferred_chat_model: MODEL, ...w.profile }, error: null };
+      case "admin imported_documents":
+        return { data: null, error: w.failUpdate ? { message: "update denied" } : null };
     }
     return undefined;
   };
@@ -88,16 +110,15 @@ async function docxWith(...paragraphs: string[]): Promise<Blob> {
 
 async function send(
   req: Request,
-  opts: {
-    profile?: Record<string, unknown>;
-    file?: Blob;
+  opts: World & {
+    user?: { id: string } | null;
     replies?: Response[];
     env?: Record<string, string | undefined>;
   } = {},
 ) {
   const backend = fakeBackend({
-    user: { id: "u-1" },
-    respond: world(opts.profile ?? {}, opts.file ?? new Blob([NOTES])),
+    user: opts.user === undefined ? { id: "u-1" } : opts.user,
+    respond: world(opts),
   });
   const provider = fakeProvider(...(opts.replies ?? []));
   const res = await handler(req, {
@@ -115,6 +136,42 @@ const savedText = (backend: ReturnType<typeof fakeBackend>) =>
   (writes(backend.calls).find(([, table]) => table === "imported_documents")?.[2] as
     | { extracted_text?: string }
     | undefined)?.extracted_text;
+
+const clientsBuilt = (backend: ReturnType<typeof fakeBackend>) => backend.created.map((c) => c.client);
+
+/** The summary when no AI summary was made: the text's first 500 characters. */
+const FALLBACK_SUMMARY = `${NOTES.slice(0, 500)}...`;
+
+// ── CORS and the token check ─────────────────────────────────────────────
+
+Deno.test("preflight from the allowed origin: CORS headers, and no client is built", async () => {
+  const { res, backend } = await send(preflight());
+  assertEquals(res.status, 200);
+  assertEquals(res.headers.get("Access-Control-Allow-Origin"), TEST_ORIGIN);
+  assertEquals(res.headers.get("Access-Control-Allow-Methods"), "GET, POST, OPTIONS");
+  assertEquals(res.headers.get("Vary"), "Origin");
+  assertEquals(backend.created, []);
+});
+
+Deno.test("no bearer token: 401 before any client is built", async () => {
+  for (const authorization of [null, "Basic dXNlcjpwYXNz"]) {
+    const { res, backend } = await send(post(IMPORT, { authorization }));
+    assertEquals(res.status, 401);
+    assertEquals(await res.json(), { error: "Missing authorization" });
+    assertEquals(backend.created, []);
+  }
+});
+
+Deno.test("a token Supabase Auth rejects: 401; only the user-scoped client checked it", async () => {
+  const { res, backend, provider } = await send(post(IMPORT), { user: null });
+  assertEquals(res.status, 401);
+  assertEquals(await res.json(), { error: "Unauthorized" });
+  assertEquals(backend.created, [{ client: "user", authorization: "Bearer user-jwt" }]);
+  assertEquals(backend.calls.map((c) => `${c.client} ${c.target}`), ["user auth:getUser"]);
+  assertEquals(provider.calls.length, 0);
+});
+
+// ── Extraction and the file checks ───────────────────────────────────────
 
 Deno.test("a PDF: its text is extracted and saved", async () => {
   const { res, backend } = await send(post({ ...IMPORT, file_path: "u-1/p-1/paper.pdf" }), {
@@ -164,6 +221,8 @@ for (const [label, file_path, content] of MISLABELLED) {
   });
 }
 
+// ── Which document and file ──────────────────────────────────────────────
+
 Deno.test("the file is read with the caller's own client, from the path the request names", async () => {
   const { res, backend } = await send(post(IMPORT), { replies: [jsonReply({ content: SUMMARY })] });
   assertEquals(res.status, 200);
@@ -194,6 +253,44 @@ for (const [label, file_path] of FOREIGN_PATHS) {
   });
 }
 
+Deno.test("a missing field: 400 before any lookup", async () => {
+  for (const field of ["file_path", "project_id", "document_id"]) {
+    const { res, backend } = await send(post({ ...IMPORT, [field]: undefined }));
+    assertEquals(res.status, 400);
+    assertEquals(await res.json(), { error: "file_path, project_id, and document_id are required" });
+    assertEquals(backend.calls.map((c) => c.target), ["auth:getUser"]);
+  }
+});
+
+Deno.test("a document RLS hides from the caller: 403 from the user-scoped lookup, before the download or a service-role client", async () => {
+  const { res, backend, provider } = await send(post(IMPORT), { documentProject: null });
+  assertEquals(res.status, 403);
+  assertEquals(await res.json(), { error: "Forbidden: document not found or not owned" });
+  assertEquals(backend.calls.find((c) => c.target === "imported_documents")?.client, "user");
+  assertEquals(backend.calls.some((c) => c.target.startsWith("storage:")), false);
+  assertEquals(clientsBuilt(backend), ["user"]);
+  assertEquals(provider.calls.length, 0);
+});
+
+Deno.test("a document from another of the caller's projects: 403 before the download, nothing written", async () => {
+  const { res, backend } = await send(post(IMPORT), { documentProject: "p-2" });
+  assertEquals(res.status, 403);
+  assertEquals(await res.json(), { error: "Forbidden: project_id mismatch" });
+  assertEquals(backend.calls.some((c) => c.target.startsWith("storage:")), false);
+  assertEquals(clientsBuilt(backend), ["user"]);
+  assertEquals(writes(backend.calls), []);
+});
+
+Deno.test("a download that fails: 500, nothing saved and no provider call", async () => {
+  const { res, backend, provider } = await send(post(IMPORT), { failDownload: true });
+  assertEquals(res.status, 500);
+  assertEquals(await res.json(), { error: "Failed to download file from storage" });
+  assertEquals(writes(backend.calls), []);
+  assertEquals(provider.calls.length, 0);
+});
+
+// ── The summary and the save ─────────────────────────────────────────────
+
 Deno.test("the summary runs on the saved model when it is listed, and the usage row names it", async () => {
   const { res, backend, provider } = await send(post(IMPORT), { replies: [jsonReply({ content: SUMMARY })] });
   assertEquals(await res.json(), { success: true, text_length: NOTES.length, summary_length: SUMMARY.length });
@@ -210,4 +307,56 @@ Deno.test("a saved model off the allowlist: the summary runs on the default mode
   assertEquals(await res.json(), { success: true, text_length: NOTES.length, summary_length: SUMMARY.length });
   assertEquals(provider.calls.map((c) => c.model), [DEFAULT_CHAT_MODEL]);
   assertEquals(usageRow(backend)?.model_used, DEFAULT_CHAT_MODEL);
+});
+
+Deno.test("a summarised import: the text, summary, usage row and billing go through the service-role client, for d-1 and u-1", async () => {
+  const { res, backend } = await send(post(IMPORT), { replies: [jsonReply({ content: SUMMARY })] });
+  assertEquals(res.status, 200);
+  const [usage, update] = writes(backend.calls);
+  assertEquals(usage.slice(0, 2), ["admin", "token_usage"]);
+  const { input_tokens, output_tokens, ...row } = usage[2] as Record<string, unknown>;
+  assertEquals(row, { user_id: "u-1", project_id: "p-1", function_name: "extract-text", model_used: MODEL });
+  assertEquals(update, ["admin", "imported_documents", { extracted_text: NOTES, summary: SUMMARY }]);
+  const updateCall = backend.calls.find((c) => c.client === "admin" && c.target === "imported_documents");
+  assertEquals(updateCall?.steps.filter(([step]) => step === "eq"), [["eq", "id", "d-1"]]);
+  const billing = backend.calls.find((c) => c.target === "rpc:increment_tokens_used");
+  assertEquals(billing?.client, "admin");
+  assertEquals(billing?.steps[0][1], { user_uuid: "u-1", amount: Number(input_tokens) + Number(output_tokens) });
+  assert(Number(input_tokens) > 0 && Number(output_tokens) > 0);
+});
+
+Deno.test("a short text is its own summary: no provider call, and only the document is updated", async () => {
+  const { res, backend, provider } = await send(post(IMPORT), { file: new Blob(["Short notes."]) });
+  assertEquals(await res.json(), { success: true, text_length: 12, summary_length: 12 });
+  assertEquals(provider.calls.length, 0);
+  assertEquals(writes(backend.calls), [
+    ["admin", "imported_documents", { extracted_text: "Short notes.", summary: "Short notes." }],
+  ]);
+});
+
+Deno.test("no key for the summary's provider: the text's first 500 characters, no provider call, nothing billed", async () => {
+  const { res, backend, provider } = await send(post(IMPORT), { env: { MISTRAL_API_KEY: undefined } });
+  assertEquals(res.status, 200);
+  assertEquals(provider.calls.length, 0);
+  assertEquals(writes(backend.calls), [
+    ["admin", "imported_documents", { extracted_text: NOTES, summary: FALLBACK_SUMMARY }],
+  ]);
+  assertEquals(backend.calls.some((c) => c.target === "rpc:increment_tokens_used"), false);
+});
+
+Deno.test("a provider error: the text's first 500 characters, nothing billed", async () => {
+  const { res, backend } = await send(post(IMPORT), {
+    replies: [Response.json({ message: "Overloaded" }, { status: 503 })],
+  });
+  assertEquals(res.status, 200);
+  assertEquals(writes(backend.calls), [
+    ["admin", "imported_documents", { extracted_text: NOTES, summary: FALLBACK_SUMMARY }],
+  ]);
+  assertEquals(backend.calls.some((c) => c.target === "rpc:increment_tokens_used"), false);
+});
+
+Deno.test("the document update fails: 500", async () => {
+  const { res } = await send(post(IMPORT), { replies: [jsonReply({ content: SUMMARY })], failUpdate: true });
+  assertEquals(res.status, 500);
+  assertEquals(await res.json(), { error: "Failed to save extracted text" });
 });
