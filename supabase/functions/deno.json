@@ -19,6 +19,6 @@
     // allow-list that _cors.ts reads at module load. The other names are
     // read by mammoth's promise library (bluebird) when extract-text's tests
     // parse a .docx.
-    "test": "deno test --allow-read --allow-env=ALLOWED_ORIGIN,BLUEBIRD_DEBUG,BLUEBIRD_LONG_STACK_TRACES,BLUEBIRD_W_FORGOTTEN_RETURN,BLUEBIRD_WARNINGS,NODE_ENV _shared/ context-prompt/ analysis/ chat/ share-report/ editor-action/ extract-text/"
+    "test": "deno test --allow-read --allow-env=ALLOWED_ORIGIN,BLUEBIRD_DEBUG,BLUEBIRD_LONG_STACK_TRACES,BLUEBIRD_W_FORGOTTEN_RETURN,BLUEBIRD_WARNINGS,NODE_ENV _shared/ context-prompt/ analysis/ chat/ share-report/ editor-action/ extract-text/ config/ delete-account/"
   }
 }

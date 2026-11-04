@@ -64,13 +64,19 @@ export function post(body: unknown, opts: { authorization?: string | null; origi
   return new Request(FUNCTION_URL, { method: "POST", headers, body: JSON.stringify(body) });
 }
 
+/** A browser's request without a body or a token: config's GET, or a method
+ *  a function does not serve. */
+export function request(method: string): Request {
+  return new Request(FUNCTION_URL, { method, headers: { Origin: TEST_ORIGIN } });
+}
+
 // ── Supabase ─────────────────────────────────────────────────────────────
 
-/** One finished query, RPC or token check, as the handler issued it. */
+/** One finished query, RPC, storage or auth call, as the handler issued it. */
 export interface DbCall {
   /** The client that issued it: the caller's user-scoped one or the service-role one. */
   client: "user" | "admin";
-  /** The table, `rpc:<name>`, `storage:<bucket>`, or `auth:getUser` / `auth:getClaims`. */
+  /** The table, `rpc:<name>`, `storage:<bucket>`, or `auth:getUser` / `auth:getClaims` / `auth:deleteUser`. */
   target: string;
   /** The builder steps in order, e.g. ["select", "id"], ["eq", "id", "t-1"], ["single"]. */
   steps: unknown[][];
@@ -168,6 +174,10 @@ export function fakeBackend(opts: FakeBackendOptions = {}) {
             : { data: null, error: { message: "invalid JWT" } },
         );
       },
+      admin: {
+        deleteUser: (id: string) =>
+          Promise.resolve(finish({ client, target: "auth:deleteUser", steps: [["deleteUser", id]] })),
+      },
     },
     from: (table: string) => new FakeQuery({ client, target: table, steps: [] }, finish),
     rpc: (name: string, args: Record<string, unknown>) =>
@@ -176,6 +186,10 @@ export function fakeBackend(opts: FakeBackendOptions = {}) {
       from: (bucket: string) => ({
         download: (path: string) =>
           Promise.resolve(finish({ client, target: `storage:${bucket}`, steps: [["download", path]] })),
+        list: (prefix: string, options: unknown) =>
+          Promise.resolve(finish({ client, target: `storage:${bucket}`, steps: [["list", prefix, options]] })),
+        remove: (paths: string[]) =>
+          Promise.resolve(finish({ client, target: `storage:${bucket}`, steps: [["remove", paths]] })),
       }),
     },
   });
