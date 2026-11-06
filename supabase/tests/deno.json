@@ -1,0 +1,18 @@
+{
+  "nodeModulesDir": "auto",
+  "exclude": ["node_modules"],
+  "lint": {
+    "rules": {
+      // Inline npm:/https: imports, as in supabase/functions.
+      "exclude": ["no-import-prefix"]
+    }
+  },
+  "tasks": {
+    // Database tests (rls/): setup.ts builds a fresh database on the server
+    // at DATABASE_URL (default: the local container in CLAUDE.md §6), then
+    // the tests run against it. Network access stops at this machine; the
+    // environment names are DATABASE_URL and the ones pg reads (PG*, USER,
+    // USERNAME, NODE_PG_FORCE_NATIVE).
+    "test:db": "deno run --check --allow-net=127.0.0.1 --allow-read=../migrations,rls '--allow-env=DATABASE_URL,PG*,USER,USERNAME,NODE_PG_FORCE_NATIVE' rls/setup.ts && deno test --allow-net=127.0.0.1 '--allow-env=DATABASE_URL,PG*,USER,USERNAME,NODE_PG_FORCE_NATIVE' rls/"
+  }
+}

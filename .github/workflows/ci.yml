@@ -97,3 +97,38 @@ jobs:
       - name: deno test
         run: deno task test
         working-directory: supabase/functions
+
+  database:
+    name: Database access rules (postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # A throwaway server with production's PostgreSQL version, pinned by
+    # digest like the actions; update it when production's version changes.
+    services:
+      postgres:
+        image: postgres:17.6@sha256:00bc86618629af00d2937fdc5a5d63db3ff8450acf52f0636ec813c7f4902929
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.x
+
+      # Replays every migration on the server, then checks RLS, grants and
+      # function access as each Data API role (supabase/tests/rls/).
+      - name: deno task test:db
+        run: deno task test:db
+        working-directory: supabase/tests

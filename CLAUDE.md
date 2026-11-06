@@ -36,7 +36,10 @@ Apply strict coding standards to avoid future code liabilities for the open-sour
 - Supabase (Postgres, Auth, Storage); Edge Functions in `supabase/functions/`
 - Vitest 4 (frontend units) + `deno test` (edge-function units beside their
   modules, and handler tests as `<function>/index.test.ts` — the `deno.json`
-  test task holds the collected directory list)
+  test task holds the collected directory list) + database tests in
+  `supabase/tests/rls/` (the migrations replayed on a plain PostgreSQL server
+  of production's version, behind a small Supabase stand-in, then RLS and
+  grants checked as each Data API role)
 - LLM providers: Anthropic (Sonnet 4.6, Sonnet 5.5, Opus 4.8, Opus 5.5,
   Fable 5.1), Mistral API (Large 3,
   Medium 3.5, Small 4, and Z.ai GLM 5.3 — the default chat and FLOW model
@@ -289,6 +292,13 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   must be added there, or they silently never run. A handler test run by
   hand needs the task's `--allow-env` list (`ALLOWED_ORIGIN`, plus the
   names mammoth's bluebird reads when extract-text's tests parse a .docx).
+- Database tests: start a throwaway server with Docker
+  (`docker run --rm -d --name sylou-rls-db -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:54329:5432 postgres:17.6`),
+  then `cd supabase/tests && deno task test:db`. Each run rebuilds the
+  `sylou_rls` database from the migrations (`DATABASE_URL` points the task
+  at another server). CI runs the same against the service container pinned
+  in `ci.yml`. A new `public` table needs its case in
+  `supabase/tests/rls/isolation.test.ts`, or the suite fails.
 - Typecheck (frontend): `npm run typecheck` (`tsc --noEmit -p tsconfig.app.json`;
   `strict` is on). NOTE: bare `tsc --noEmit` is a no-op here — the root
   `tsconfig.json` is solution-style (`files: []`) so it checks **zero** `src/`
