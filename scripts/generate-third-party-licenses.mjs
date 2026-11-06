@@ -27,7 +27,8 @@ const EDGE_DEPS = [
   { name: "unpdf", version: "1.9.1", license: "MIT", via: "npm: specifier (extract-text)" },
   { name: "PDF.js", version: "6.4.299", license: "Apache-2.0", via: "unpdf's bundle (extract-text)" },
   { name: "jszip", version: "3.10.2", license: "(MIT OR GPL-3.0-or-later)", via: "npm: specifier (edge-function tests only)" },
-  { name: "Deno standard library (std)", version: "0.224.0", license: "MIT", via: "deno.land (edge-function tests only)" },
+  { name: "pg", version: "8.23.1", license: "MIT", via: "npm: specifier (database tests only)" },
+  { name: "Deno standard library (std)", version: "0.224.0", license: "MIT", via: "deno.land (edge-function and database tests only)" },
 ];
 
 const lock = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"));
