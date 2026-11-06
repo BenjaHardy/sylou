@@ -896,6 +896,10 @@ export type Database = {
       }
       owns_project: { Args: { _project_id: string }; Returns: boolean }
       owns_thread: { Args: { _thread_id: string }; Returns: boolean }
+      record_activity: {
+        Args: { _project_id: string; _writing: boolean }
+        Returns: undefined
+      }
       reset_tokens_if_stale: { Args: { user_uuid: string }; Returns: undefined }
     }
     Enums: {

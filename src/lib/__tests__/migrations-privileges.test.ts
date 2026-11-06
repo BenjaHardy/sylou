@@ -135,7 +135,7 @@ describe("migrations: grants mirror RLS on every public table", () => {
   });
 
   it("the deliberate lockdowns are visible at the grant layer", () => {
-    for (const name of ["chat_messages", "writing_summary_log", "ai_editor_actions", "chat_thread_summaries"]) {
+    for (const name of ["chat_messages", "writing_summary_log", "ai_editor_actions", "chat_thread_summaries", "project_stats"]) {
       expect(dmlGrants(tables.get(name)!, "authenticated"), name).toEqual(["SELECT"]);
     }
     expect(dmlGrants(tables.get("chat_threads")!, "authenticated")).toEqual(["INSERT", "SELECT", "UPDATE"]);

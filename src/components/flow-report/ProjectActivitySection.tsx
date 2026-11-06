@@ -1,4 +1,4 @@
-import { BarChart3, Clock, Pencil, MessageSquare } from "lucide-react";
+import { BarChart3, Clock, Info, Pencil, MessageSquare } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -19,6 +19,12 @@ export function ProjectActivitySection({ metrics }: { metrics: MetricsSnapshot }
       <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
         <BarChart3 className="h-3.5 w-3.5" />
         Project Activity (at analysis time)
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild><Info className="h-3 w-3 cursor-help" aria-label="How activity is counted" /></TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs text-xs font-normal normal-case tracking-normal">Recorded by Sylou while the project was open and in use.</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </h4>
       <div className="grid grid-cols-2 gap-y-2 text-xs">
         <TooltipProvider>

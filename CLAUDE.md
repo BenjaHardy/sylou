@@ -117,7 +117,11 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   `share-report` function's service-role client); its
   `enforce_pre_feedback_once` trigger lets the pre-analysis feedback be
   set once, on a project's first report, while the self-assessment stays
-  editable.
+  editable. `project_stats` (the report's activity box) is user-read-only
+  too (`20261106130000`): the `record_activity` RPC adds activity time by
+  the database's clock, at most 30 s per heartbeat and never faster than
+  real time (`useActivityTracker` only reports that the project is in use),
+  and the functions' service role adds the prompt counts.
   `token_usage` is the deliberate exception: its user INSERT policy stays,
   because the RLS-scoped user client writes the usage row precisely so its
   `user_id` is bound to the caller — it is an audit log that neither FLOW
