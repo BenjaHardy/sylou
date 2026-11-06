@@ -94,7 +94,7 @@ const TABLES: Record<string, TableCase> = {
     scope: "project",
     row: (u) => ({ project_id: u.project }),
     change: ["total_active_time_seconds", 1],
-    locked: ["delete"],
+    locked: ["insert", "update", "delete"],
   },
   projects: {
     scope: "user",
