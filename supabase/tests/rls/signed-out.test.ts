@@ -42,13 +42,20 @@ for (const { name, first_column } of relations) {
     }));
 }
 
+// Refused for want of the EXECUTE privilege: a function's own ownership
+// check can raise the same 42501, so the message is checked too.
 for (const { name, args } of functions) {
   if (name === "get_shared_report") continue;
   Deno.test(`signed out: ${name}() cannot be called`, () =>
     inTransaction(async (s) => {
       await s.as("anon");
       const nulls = args ? args.split(", ").map((type) => `NULL::${type}`).join(", ") : "";
-      assertDenied(await s.attempt(`SELECT public.${ident(name)}(${nulls})`), `${name}(), signed out`);
+      const outcome = await s.attempt(`SELECT public.${ident(name)}(${nulls})`);
+      assertDenied(outcome, `${name}(), signed out`);
+      assert(
+        !outcome.ok && outcome.message.startsWith("permission denied for function"),
+        `${name}(), signed out: anon may execute it (only the function's own checks refused)`,
+      );
     }));
 }
 

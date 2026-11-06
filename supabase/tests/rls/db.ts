@@ -32,8 +32,9 @@ export function connect(database: string): Promise<PgClient> {
   return client.connect().then(() => client);
 }
 
-/** A signed-in user, a signed-out visitor, or the edge functions. */
-export type Caller = { user: string } | "anon" | "service_role";
+/** A signed-in user, a signed-out visitor, or the edge functions.
+ * `{ user: null }` is the signed-in role with no user id in its token. */
+export type Caller = { user: string | null } | "anon" | "service_role";
 
 /** How one statement ended: the rows it returned or touched, or the error. */
 export type Outcome =
@@ -54,7 +55,7 @@ export class Session {
   /** Acts as `caller` for the rest of the transaction, as the Data API does. */
   async as(caller: Caller): Promise<void> {
     const [role, claims] = typeof caller === "object"
-      ? ["authenticated", { sub: caller.user, role: "authenticated" }]
+      ? ["authenticated", caller.user ? { sub: caller.user, role: "authenticated" } : { role: "authenticated" }]
       : [caller, { role: caller }];
     await this.#client.query("SELECT set_config('request.jwt.claims', $1, true)", [
       JSON.stringify(claims),
