@@ -92,6 +92,7 @@ CREATE TABLE storage.objects (
 ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 GRANT ALL ON storage.buckets, storage.objects TO anon, authenticated, service_role;
+REVOKE TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON storage.buckets, storage.objects FROM anon, authenticated;
 
 CREATE FUNCTION storage.foldername(name text) RETURNS text[]
 LANGUAGE plpgsql IMMUTABLE

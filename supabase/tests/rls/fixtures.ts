@@ -1,5 +1,5 @@
 // The two users the database tests act as. setup.ts gives each of them a
-// project and one row in every table, with the ids below.
+// project, one row in every table and one uploaded file, with the ids below.
 
 export interface User {
   name: string;
@@ -8,6 +8,8 @@ export interface User {
   project: string;
   thread: string;
   message: string;
+  /** The user's uploaded file in the imports bucket, under their own folder. */
+  file: string;
   /** Table name → id of this user's row in it. */
   rows: Record<string, string>;
 }
@@ -22,6 +24,7 @@ function fixtureUser(letter: "a" | "b"): User {
     project: id(1),
     thread: id(2),
     message: id(3),
+    file: `${user}/notes.txt`,
     rows: {
       profiles: user,
       projects: id(1),
@@ -75,8 +78,9 @@ INSERT INTO public.ai_editor_actions (id, project_id, action_type, outcome)
   VALUES ('${r.ai_editor_actions}', '${u.project}', 'rewrite', 'accepted');
 INSERT INTO public.flow_reports (id, project_id, ai_summary, ai_find, ai_lead, ai_organize, ai_write, model_used)
   VALUES ('${r.flow_reports}', '${u.project}', 'Report for ${u.name}', '{}', '{}', '{}', '{}', 'test-model');
+INSERT INTO storage.objects (bucket_id, name, owner) VALUES ('imports', '${u.file}', '${u.user}');
 INSERT INTO public.imported_documents (id, project_id, file_name, file_path)
-  VALUES ('${r.imported_documents}', '${u.project}', 'notes.txt', '${u.user}/notes.txt');
+  VALUES ('${r.imported_documents}', '${u.project}', 'notes.txt', '${u.file}');
 INSERT INTO public.post_its (id, project_id, content)
   VALUES ('${r.post_its}', '${u.project}', 'Note by ${u.name}');
 INSERT INTO public.project_creative_data (id, project_id, tool_type)
