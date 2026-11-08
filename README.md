@@ -69,6 +69,11 @@ The transparency architecture, covering all the means, whats, whys, hows to achi
 
 Sylou is built on React + TypeScript on the frontend, Supabase (PostgreSQL + Edge Functions) on the backend, and uses LLMs via API.
 
+<p align="center"><em>A step-by-step closer look to the Sylou workspace can be found by clicking the screen below.</em></p>
+<p align="center">
+  <a href="https://meetsylou.eu/#tour"><img src="https://meetsylou.eu/assets/tour/screen-workspace.webp" width="60%" alt="The Sylou workspace: the editor with a passage selected and the AI actions panel open, next to the AI chat panel"></a>
+</p>
+
 ---
 
 ## Try it
