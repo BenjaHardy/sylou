@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, Play, Pause, ChevronLeft, ChevronRight } from "lucide-react";
-import DOMPurify from "dompurify";
+import { ReplayChangeSummary, ReplayWritingPanel } from "@/components/flow-report/ReplayWritingPanel";
+import { writingStepAt } from "@/lib/replay-diff";
 
 export interface ReplayEvent {
   timestamp: string;
@@ -56,17 +57,8 @@ export function FlowReplayOverlay({ events, onClose }: FlowReplayOverlayProps) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
 
-  // Find nearest writing version at or before current event
   const currentEvent = events[currentIndex];
-  const writingHtml = (() => {
-    for (let i = currentIndex; i >= 0; i--) {
-      if (events[i].type === "writing_version" && events[i].content.html) {
-        const html = events[i].content.html!;
-        return DOMPurify.sanitize(html);
-      }
-    }
-    return "<p class='text-muted-foreground text-sm italic'>No writing content yet at this point.</p>";
-  })();
+  const writingStep = useMemo(() => writingStepAt(events, currentIndex), [events, currentIndex]);
 
   // Play/pause
   useEffect(() => {
@@ -190,10 +182,7 @@ export function FlowReplayOverlay({ events, onClose }: FlowReplayOverlayProps) {
             <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
               Writing at this point
             </h4>
-            <div
-              className="max-w-none text-sm"
-              dangerouslySetInnerHTML={{ __html: writingHtml }}
-            />
+            <ReplayWritingPanel step={writingStep} formatTime={formatTimestamp} />
           </div>
         </ScrollArea>
 
@@ -221,11 +210,7 @@ export function FlowReplayOverlay({ events, onClose }: FlowReplayOverlayProps) {
                   </span>
                 </div>
 
-                {currentEvent.type === "writing_version" && (
-                  <p className="text-xs text-muted-foreground italic">
-                    Writing version saved at this timestamp. The left panel shows the document content.
-                  </p>
-                )}
+                {currentEvent.type === "writing_version" && <ReplayChangeSummary step={writingStep} />}
 
                 {currentEvent.type === "chat_message" && (
                   <div className="space-y-2">
