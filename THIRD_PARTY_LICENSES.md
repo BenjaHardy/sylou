@@ -52,6 +52,10 @@ Packages bundled into (or supporting) the shipped application.
 
 - entities@4.5.0
 
+### BSD-3-Clause (1)
+
+- diff@9.0.0
+
 ### ISC (5)
 
 - @ungap/structured-clone@1.4.0
