@@ -3,7 +3,7 @@
 // Run with: deno task test  (from supabase/functions/)
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { estimatePromptTokens } from "../_shared/_fit.ts";
-import { type ChatPromptParts, chatTooLongError, fitLocalChat, LOCAL_CHAT_MIN_REPLY } from "./local.ts";
+import { type ChatPromptParts, chatTooLongError, fitFinalReply, fitLocalChat, LOCAL_CHAT_MIN_REPLY } from "./local.ts";
 
 const favourite = (id: string, chars: number) => ({
   id,
@@ -65,6 +65,14 @@ Deno.test("a long conversation takes the reply's room down to its minimum, then 
   assert(tight && tight.maxTokens >= LOCAL_CHAT_MIN_REPLY && tight.maxTokens < 4_000, String(tight?.maxTokens));
   const tooLong = fitLocalChat({ ...PARTS, history: [{ role: "assistant", content: "y".repeat(21_000) }] }, 8_192, 4_000);
   assertEquals(tooLong, null);
+});
+
+Deno.test("the reply after a tool round takes whatever room is left; no room is the refusal", () => {
+  const call = { messages: [{ role: "user" as const, content: "x".repeat(3_000) }] }; // 1,008 tokens
+  assertEquals(fitFinalReply("ollama/sylou-ministral-8k", 2_000, call, 4_000), { maxTokens: 736 }); // 2,000 − 256 − 1,008
+  assertEquals(fitFinalReply("ollama/sylou-ministral-8k", 1_200, call, 4_000), {
+    error: chatTooLongError("ollama/sylou-ministral-8k", 1_200),
+  });
 });
 
 Deno.test("the refusal names the model and its window, and says what to do, in under 200 characters", () => {

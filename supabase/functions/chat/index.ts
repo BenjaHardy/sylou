@@ -7,7 +7,6 @@ import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_share
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { DEFAULT_CHAT_MODEL, INPUT_LIMITS, OUTPUT_BUDGETS, resolveModel } from "../_shared/_models.ts";
 import { fetchLocalModelInfo, isOllamaModel } from "../_shared/_ollama.ts";
-import { estimatePromptTokens, fitReply } from "../_shared/_fit.ts";
 import {
   CHAT_THINKING, CHAT_EFFORT, CHAT_MISTRAL_EFFORT,
   resolveReasoning, resolveMaxTokens,
@@ -29,7 +28,7 @@ import {
   WEB_SEARCH_PROMPT,
 } from "../_shared/_prompts.ts";
 import { buildChatMessages, buildDocIndex, buildFavBlock, chatTools } from "./context.ts";
-import { chatTooLongError, fitLocalChat, LOCAL_CHAT_MIN_REPLY, LOCAL_EARLY_REFRESHES } from "./local.ts";
+import { fitFinalReply, fitLocalChatRequest, LOCAL_CHAT_MIN_REPLY } from "./local.ts";
 import { finalCall, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { persistChatExchange } from "./persist.ts";
 
@@ -203,8 +202,8 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     // of the verbatim window that follows it (fetchVerbatimWindow,
     // buildChatMessages). Read via the user-context client so RLS scopes
     // both to the caller's own threads.
-    let conversationMemory = await fetchConversationMemory(supabase, threadId);
-    let history = await fetchVerbatimWindow(supabase, threadId, conversationMemory, memoryProfile);
+    const conversationMemory = await fetchConversationMemory(supabase, threadId);
+    const history = await fetchVerbatimWindow(supabase, threadId, conversationMemory, memoryProfile);
 
     // --- Build messages array and tools ---
     let llmMessages: LLMMessage[];
@@ -215,12 +214,9 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
       llmMessages = buildChatMessages(systemHead + favBlock + systemTail, conversationMemory, history, message);
       tools = chatTools(hasNonFavDocs, webSearchActive);
     } else {
-      // A local model takes the prompt only when it fits its window
-      // (chat/local.ts). Too long: early memory refreshes, which shorten the
-      // verbatim window, then a clear refusal — never a silent cut.
-      const contextTokens = local.contextTokens;
-      const fit = () =>
-        fitLocalChat({
+      // A local model takes the prompt only when it fits its window (chat/local.ts).
+      const fitted = await fitLocalChatRequest({
+        parts: {
           head: systemHead,
           tail: systemTail,
           favourites,
@@ -230,29 +226,18 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
           memory: conversationMemory,
           history,
           message,
-        }, contextTokens, chatMaxTokens);
-      let fitted = fit();
-      for (let pass = 1; !fitted && history.length > 0 && pass <= LOCAL_EARLY_REFRESHES; pass++) {
-        console.log(`[chat] prompt too long for ${chatModel}: early memory refresh ${pass} of ${LOCAL_EARLY_REFRESHES}`);
-        const refreshed = await maybeRefreshConversationMemory({
-          admin: adminSupabase,
-          threadId,
-          model: chatModel,
-          userId: user.id,
-          overBudget: false,
-          logTag: "[chat]",
-          profile: memoryProfile,
-          force: true,
-          llm: deps.callLLM,
-        });
-        if (!refreshed) break; // nothing left to fold in, or the summarizer failed
-        conversationMemory = await fetchConversationMemory(supabase, threadId);
-        history = await fetchVerbatimWindow(supabase, threadId, conversationMemory, memoryProfile);
-        fitted = fit();
-      }
-      if (!fitted) {
-        return jsonResponse({ error: chatTooLongError(chatModel, contextTokens) }, 400);
-      }
+        },
+        contextTokens: local.contextTokens,
+        replyBudget: chatMaxTokens,
+        profile: memoryProfile,
+        userClient: supabase,
+        admin: adminSupabase,
+        threadId,
+        model: chatModel,
+        userId: user.id,
+        llm: deps.callLLM,
+      });
+      if ("error" in fitted) return jsonResponse({ error: fitted.error }, fitted.status);
       ({ messages: llmMessages, tools, maxTokens: chatMaxTokens } = fitted);
     }
 
@@ -491,23 +476,17 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
             // LLM Call #2: streaming with tool results; no tool calls allowed
             console.log("[stream] starting Call #2 streaming");
             const final = finalCall(chatModel, tools, toolMessages);
-            let call2MaxTokens = chatMaxTokens;
-            if (local) {
-              // The loop left the reply its minimum, less the loop's own short
-              // notes: the reply takes whatever room is left.
-              const fit = fitReply(local.contextTokens, estimatePromptTokens(final.messages, final.tools), chatMaxTokens, 1);
-              if (fit === null) {
-                try {
-                  controller.enqueue(sseEvent({ done: true, error: chatTooLongError(chatModel, local.contextTokens) }));
-                } catch { /* */ }
-                return;
-              }
-              call2MaxTokens = fit;
+            const call2Fit = local
+              ? fitFinalReply(chatModel, local.contextTokens, final, chatMaxTokens)
+              : { maxTokens: chatMaxTokens };
+            if ("error" in call2Fit) {
+              try { controller.enqueue(sseEvent({ done: true, error: call2Fit.error })); } catch { /* */ }
+              return;
             }
             const call2Res = await deps.callLLM({
                 model: chatModel,
                 ...final,
-                max_tokens: call2MaxTokens,
+                max_tokens: call2Fit.maxTokens,
                 stream: true,
                 temperature,
                 thinking,
