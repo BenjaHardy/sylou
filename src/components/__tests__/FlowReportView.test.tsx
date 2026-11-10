@@ -1,13 +1,22 @@
 // Behaviour pins for the FLOW report view rendered from a fixture report:
 // the loading and empty states, band labels (never raw scores), the Report
-// ID and share controls, the frozen writing snapshot on the Writing tab and
-// behind "View Highlighted Text" (paired with the frozen provenance map, not
-// any live writing), and the per-pillar reasoning disclosure.
+// ID and share controls (with the note on a Sylou served from this
+// computer, whose links open nowhere else), the frozen writing snapshot on
+// the Writing tab and behind "View Highlighted Text" (paired with the frozen
+// provenance map, not any live writing), and the per-pillar reasoning
+// disclosure.
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FlowReport } from "@/hooks/useFlowAnalysis";
 
-const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
+const { invokeMock, site } = vi.hoisted(() => ({ invokeMock: vi.fn(), site: { url: "https://sylou.example" } }));
+
+vi.mock("@/lib/site", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/site")>()),
+  get PUBLIC_SITE_URL() {
+    return site.url;
+  },
+}));
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
@@ -94,6 +103,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   invokeMock.mockReset();
+  site.url = "https://sylou.example";
 });
 
 describe("FlowReportView", () => {
@@ -128,6 +138,19 @@ describe("FlowReportView", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Explain this assessment" })[0]);
     expect(screen.getByText("Find reasoning.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hide reasoning" })).toBeInTheDocument();
+  });
+
+  it("share links from a Sylou on this computer: the share box says they open only here; a public Sylou says nothing", () => {
+    site.url = "http://localhost:8080";
+    const local = renderView(makeReport());
+    expect(screen.getByText(/This Sylou runs on this computer, so its share links, and the QR codes on the badges,\s+open only here\./)).toBeInTheDocument();
+    expect(screen.getByDisplayValue("http://localhost:8080/report/tok-1")).toBeInTheDocument();
+    local.unmount();
+
+    site.url = "https://sylou.example";
+    renderView(makeReport());
+    expect(screen.queryByText(/open only here/)).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("https://sylou.example/report/tok-1")).toBeInTheDocument();
   });
 
   it("a shared report shows its Report ID; the switch toggles sharing through the share-report function", async () => {

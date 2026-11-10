@@ -26,7 +26,7 @@ import { useBookmarks } from "@/hooks/useBookmarks";
 import { format } from "date-fns";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 import { useUserSettings } from "@/hooks/useUserSettings";
-import { MODEL_LABELS, resolveReasoningLabel } from "@/lib/models";
+import { isLocalModel, modelLabel, resolveReasoningLabel } from "@/lib/models";
 import { useInstanceConfig } from "@/hooks/useInstanceConfig";
 
 interface Props {
@@ -343,9 +343,19 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   const [localUserWantsWebSearch, setLocalUserWantsWebSearch] = useState(false);
   const userWantsWebSearch = webSearchEnabledProp ?? localUserWantsWebSearch;
   const setUserWantsWebSearch = onWebSearchEnabledChange ?? setLocalUserWantsWebSearch;
-  const { webSearchEnabled: webSearchConfigured } = useInstanceConfig();
+  const { webSearchEnabled: webSearchConfigured, localModels } = useInstanceConfig();
+  // A local chat model, as the instance reported it (undefined: not listed,
+  // or the list is not known yet).
+  const chatModel = userSettings.preferred_chat_model;
+  const chatModelIsLocal = isLocalModel(chatModel);
+  const chatLocalModel = chatModelIsLocal ? localModels?.find((m) => m.id === chatModel) : undefined;
+  const chatLocalModelMissing = chatModelIsLocal && localModels !== null && !chatLocalModel;
+  // Web search is a tool call: a local model without tools cannot make it
+  // (the chat function skips it), so the toggle says so instead.
+  const webSearchNeedsTools = chatLocalModel?.tools === false;
+  const webSearchAvailable = webSearchConfigured && !webSearchNeedsTools;
   // Effective state: send to backend & paint as active only when both true.
-  const webSearchActive = userWantsWebSearch && webSearchConfigured;
+  const webSearchActive = userWantsWebSearch && webSearchAvailable;
   const [tipDismissed, setTipDismissed] = useState(false);
   const [showBookmarkList, setShowBookmarkList] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -572,7 +582,8 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
             className="text-[10px] text-muted-foreground/70 hidden md:inline"
             title="Active chat model and reasoning level — change in Settings"
           >
-            {MODEL_LABELS[userSettings.preferred_chat_model] ?? "Model"}
+            {modelLabel(chatModel) ?? "Model"}
+            {chatModelIsLocal && (chatLocalModelMissing ? " · not set up" : " · local, Beta")}
             {reasoningLabel && ` · Reasoning: ${reasoningLabel}`}
           </span>
         </div>
@@ -610,8 +621,9 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
           <Info className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary/60" />
           <span className="flex-1">
             <span className="font-medium text-foreground">Tip:</span> Select text in
-            your editor and use Ask or Propose for context-aware AI feedback (looks up
-            the whole writing and creative tools contents prior to replying).
+            your editor and use Ask or Propose{chatModelIsLocal && " (with a cloud chat model)"} for
+            context-aware AI feedback (looks up the whole writing and creative tools
+            contents prior to replying).
           </span>
           <button onClick={dismissTip} className="text-muted-foreground/60 hover:text-foreground">
             <X className="h-3.5 w-3.5" />
@@ -731,7 +743,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
-                {webSearchConfigured ? (
+                {webSearchAvailable ? (
                   <button
                     onClick={() => setUserWantsWebSearch(!userWantsWebSearch)}
                     className={`h-7 w-7 shrink-0 flex items-center justify-center rounded-md transition-colors ${
@@ -752,7 +764,7 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
                       type="button"
                       disabled
                       aria-disabled="true"
-                      aria-label="Web search not configured"
+                      aria-label={webSearchConfigured ? "Web search needs a model that can use tools" : "Web search not configured"}
                       className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md text-muted-foreground/40 opacity-40 cursor-not-allowed pointer-events-none"
                     >
                       <Globe className="h-3.5 w-3.5" />
@@ -762,11 +774,13 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
               </TooltipTrigger>
               <TooltipContent side="top">
                 <span>
-                  {webSearchConfigured
-                    ? webSearchActive
-                      ? "Web search enabled"
-                      : "Enable web search"
-                    : "Web search is not configured on this instance. Ask the operator to set the BRAVE_SEARCH_API_KEY environment variable to enable it."}
+                  {!webSearchConfigured
+                    ? "Web search is not configured on this instance. Ask the operator to set the BRAVE_SEARCH_API_KEY environment variable to enable it."
+                    : webSearchNeedsTools
+                    ? `Web search needs a model that can use tools, and ${chatLocalModel?.name} can't. Pick another model in Settings → Models.`
+                    : `${webSearchActive ? "Web search enabled" : "Enable web search"}${
+                        chatModelIsLocal ? " (your search words go to Brave, on the internet)" : ""
+                      }`}
                 </span>
               </TooltipContent>
             </Tooltip>

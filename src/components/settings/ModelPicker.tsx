@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   PROVIDER_LABELS,
   resolveReasoningId,
+  type LocalModelCard,
   type ModelGroup,
   type ModelInfo,
   type ReasoningOptionsByModel,
@@ -22,10 +23,34 @@ const MAX_LEVEL_NOTICE =
 // The cards themselves are unchanged: price, badges and notes stay visible
 // where the choice is made. The chat picker adds a reasoning-level select
 // under the selected card (CHAT_REASONING_OPTIONS in lib/models); the FLOW
-// picker passes no options and shows none.
+// picker passes no options and shows none. A local model's card (see
+// localModelInfos) shows a Beta badge and its window and tools in place of
+// a price, or what keeps it from running.
 
 function formatPrice(n: number): string {
   return `$${n.toFixed(2)}`;
+}
+
+/** 16384 → "16k". */
+function formatWindow(tokens: number): string {
+  return tokens >= 1024 ? `${Math.round(tokens / 1024)}k` : String(tokens);
+}
+
+/** The line under a local model's name: what it can take, or what is wrong. */
+function localModelLine(local: LocalModelCard): { text: string; warning: boolean } {
+  if (local.missing) {
+    return {
+      text: "Not set up on this Sylou any more. Chat, editor actions and document summaries refuse until you pick another model; Sylou never switches you to a cloud model by itself.",
+      warning: true,
+    };
+  }
+  if (local.unchecked) return { text: "Couldn't check this Sylou's local models. Reload the page to try again.", warning: true };
+  if (local.checking) return { text: "Checking…", warning: false };
+  if (local.notAnswering) return { text: "Not checked: Ollama isn't answering.", warning: true };
+  if (local.problem) return { text: local.problem, warning: true };
+  const window = local.contextTokens ? `${formatWindow(local.contextTokens)}-token window` : "Window unknown";
+  const tools = local.tools ? "can use tools" : "can't use tools (no document reading or web search)";
+  return { text: `${window} · ${tools}`, warning: false };
 }
 
 function ModelOption({
@@ -39,6 +64,7 @@ function ModelOption({
   onSelect: () => void;
   showProviderTag: boolean;
 }) {
+  const localLine = model.local ? localModelLine(model.local) : null;
   return (
     <button
       type="button"
@@ -64,12 +90,26 @@ function ModelOption({
               experimental
             </Badge>
           )}
+          {model.local && (
+            <Badge variant="outline" className="text-[10px] py-0 h-4 px-1.5">
+              Beta
+            </Badge>
+          )}
         </div>
-        <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-          ~{formatPrice(model.pricing.input)} in · ~{formatPrice(model.pricing.output)} out
-          <span className="ml-1 opacity-60">/ 1M tok</span>
-        </span>
+        {model.local ? (
+          <span className="text-[11px] text-muted-foreground shrink-0">No API cost</span>
+        ) : (
+          <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
+            ~{formatPrice(model.pricing.input)} in · ~{formatPrice(model.pricing.output)} out
+            <span className="ml-1 opacity-60">/ 1M tok</span>
+          </span>
+        )}
       </div>
+      {localLine && (
+        <p className={`text-[11px] mt-1 ${localLine.warning ? "text-destructive" : "text-muted-foreground"}`}>
+          {localLine.text}
+        </p>
+      )}
       {model.note && (
         <p className="text-[11px] text-muted-foreground mt-1">{model.note}</p>
       )}

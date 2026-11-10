@@ -23,8 +23,8 @@ export interface HandlerDeps {
   localModelInfo?: typeof fetchLocalModelInfo;
 }
 
-/** config reads the environment only. */
-export type EnvDeps = Pick<HandlerDeps, "env">;
+/** config checks a sign-in and asks the local model server; no provider call. */
+export type ConfigDeps = Pick<HandlerDeps, "env" | "createClient" | "localModelInfo">;
 
 /** share-report and delete-account make no provider call. */
 export type ClientDeps = Pick<HandlerDeps, "env" | "createClient">;

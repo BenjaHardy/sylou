@@ -10,6 +10,7 @@
 // an Anthropic stream for the stop reasons only Anthropic sends).
 
 import type { HandlerDeps } from "./_handler.ts";
+import { NOT_ANSWERING_ERROR } from "./_ollama.ts";
 
 export const TEST_ORIGIN = "https://app.sylou.test";
 
@@ -50,9 +51,7 @@ export function fakeLocalModels(windows: Record<string, number> = {}, opts: { to
     lookedUp.push(model);
     const contextTokens = windows[model];
     return Promise.resolve(
-      contextTokens
-        ? { contextTokens, tools: opts.tools ?? true }
-        : { error: "The local model server (Ollama) is not answering. Start Ollama, then try again." },
+      contextTokens ? { contextTokens, tools: opts.tools ?? true } : { error: NOT_ANSWERING_ERROR },
     );
   };
   return { lookedUp, localModelInfo };
@@ -89,10 +88,13 @@ export function post(body: unknown, opts: { authorization?: string | null; origi
   return new Request(FUNCTION_URL, { method: "POST", headers, body: JSON.stringify(body) });
 }
 
-/** A browser's request without a body or a token: config's GET, or a method
- *  a function does not serve. */
-export function request(method: string): Request {
-  return new Request(FUNCTION_URL, { method, headers: { Origin: TEST_ORIGIN } });
+/** A browser's request without a body: config's GET, or a method a function
+ *  does not serve. No token unless `authorization` (the whole header value)
+ *  is given. */
+export function request(method: string, authorization?: string): Request {
+  const headers = new Headers({ Origin: TEST_ORIGIN });
+  if (authorization) headers.set("Authorization", authorization);
+  return new Request(FUNCTION_URL, { method, headers });
 }
 
 // ── Supabase ─────────────────────────────────────────────────────────────

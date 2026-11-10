@@ -3,7 +3,7 @@ import { HighlightedTextErrorBoundary } from "@/components/flow-report/Highlight
 
 import { supabase } from "@/integrations/supabase/client";
 import sylouLogo from "@/assets/sylou-logo.png";
-import { PUBLIC_SITE_URL } from "@/lib/site";
+import { PUBLIC_SITE_URL, isLoopbackUrl } from "@/lib/site";
 import { FlowHighlightedText } from "@/components/FlowHighlightedText";
 import { FlowReplayOverlay, type ReplayEvent } from "@/components/FlowReplayOverlay";
 
@@ -487,6 +487,13 @@ export function FlowReportView({
                     </Button>
                   )}
                 </div>
+
+                {isLoopbackUrl(PUBLIC_SITE_URL) && (
+                  <p className="text-xs text-muted-foreground">
+                    This Sylou runs on this computer, so its share links, and the QR codes on the badges,
+                    open only here.
+                  </p>
+                )}
 
                 {shareToken && shareEnabled && (
                   <div className="space-y-3">

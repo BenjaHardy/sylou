@@ -9,7 +9,9 @@
 //     editor; a failed provenance load opens the editor but warns;
 //   - the loaded text seeds the tracker and the parent, typing afterwards
 //     reaches the save path, and the parent gets one stable flush that runs
-//     both saves.
+//     both saves;
+//   - a saved local FLOW model greys the analysis buttons with the reason,
+//     while an existing report still opens.
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Editor } from "@tiptap/core";
@@ -39,10 +41,12 @@ const h = vi.hoisted(() => ({
   },
   tracker: null as unknown,
   toast: { error: vi.fn(), warning: vi.fn(), success: vi.fn(), info: vi.fn() },
+  settings: { preferred_chat_model: "zai-glm-5-3", preferred_flow_model: "zai-glm-5-3" },
 }));
 
 vi.mock("@/hooks/useWritingContent", () => ({ useWritingContent: () => h.writing }));
 vi.mock("@/hooks/useProvenanceTracker", () => ({ useProvenanceTracker: () => h.prov }));
+vi.mock("@/hooks/useUserSettings", () => ({ useUserSettings: () => ({ settings: h.settings }) }));
 // The toolbar reads the project name on mount, for export file names.
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
@@ -96,6 +100,7 @@ beforeEach(() => {
   h.prov.initWithContentLength.mockImplementation((len: number) => tracker.init(null, len));
   h.toast.error.mockReset();
   h.toast.warning.mockReset();
+  h.settings.preferred_flow_model = "zai-glm-5-3";
 });
 
 describe("WritingEditor", () => {
@@ -190,5 +195,37 @@ describe("WritingEditor", () => {
     expect(h.writing.flushSave).toHaveBeenCalledTimes(1);
     expect(h.prov.flushSave).toHaveBeenCalledTimes(1);
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+  });
+
+  it("a cloud FLOW model: the FLOW buttons are offered, with no note", () => {
+    h.writing.loading = false;
+    h.prov.provenanceLoaded = true;
+    const onFlowClick = vi.fn();
+    renderEditor({ onFlowClick });
+    fireEvent.click(screen.getByRole("button", { name: "Analyze with FLOW" }));
+    expect(onFlowClick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/FLOW needs a cloud model/)).not.toBeInTheDocument();
+  });
+
+  it("a saved local FLOW model: Analyze and Re-analyze are greyed with the reason, and View FLOW still opens the report", () => {
+    h.writing.loading = false;
+    h.prov.provenanceLoaded = true;
+    h.settings.preferred_flow_model = "ollama/sylou-nemo-16k";
+    const onFlowClick = vi.fn();
+    const onReanalyzeClick = vi.fn();
+    const first = renderEditor({ onFlowClick, onReanalyzeClick });
+    const analyze = screen.getByRole("button", { name: "Analyze with FLOW" });
+    expect(analyze).toBeDisabled();
+    expect(analyze).toHaveAccessibleDescription("FLOW needs a cloud model: pick one in Settings → Models");
+    fireEvent.click(analyze);
+    expect(onFlowClick).not.toHaveBeenCalled();
+    first.unmount();
+
+    renderEditor({ onFlowClick, onReanalyzeClick, hasFlowReport: true });
+    expect(screen.getByRole("button", { name: "Re-analyze" })).toBeDisabled();
+    const view = screen.getByRole("button", { name: "View FLOW" });
+    expect(view).toBeEnabled();
+    fireEvent.click(view);
+    expect(onFlowClick).toHaveBeenCalledTimes(1);
   });
 });

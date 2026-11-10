@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo, useId } from "react";
 import type { ChatMessage } from "@/hooks/useChatMessages";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import { sylouStarterKit } from "@/lib/editor-extensions/sylou-starter";
@@ -12,6 +12,8 @@ import { FontSize } from "@/lib/tiptap-font-size";
 import { Pagination } from "@/lib/editor-extensions/pagination";
 import { useWritingContent } from "@/hooks/useWritingContent";
 import { useProvenanceTracker } from "@/hooks/useProvenanceTracker";
+import { useUserSettings } from "@/hooks/useUserSettings";
+import { isLocalModel } from "@/lib/models";
 import { EditorToolbar } from "@/components/EditorToolbar";
 import { AISelectionButton } from "@/components/AISelectionButton";
 import { TextSelectionWindow } from "@/components/TextSelectionWindow";
@@ -46,6 +48,12 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
   
   const { content, loading, loadFailed, saveState, updateContent, isDirty, manualSave, flushSave: flushWritingContent } = useWritingContent(projectId);
   const { getTracker, initWithContentLength, scheduleSave, flushSave: flushProvenance, provenanceLoaded, provenanceLoadFailed } = useProvenanceTracker(projectId);
+  // FLOW refuses local models (the analysis function answers 400): a saved
+  // local FLOW model, which the Settings picker never offers, keeps the
+  // analysis buttons greyed with the reason. Viewing a report needs no model.
+  const { settings } = useUserSettings();
+  const flowNeedsCloud = isLocalModel(settings.preferred_flow_model);
+  const flowNoteId = useId();
   const [initialSet, setInitialSet] = useState(false);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
   const prevDocLenRef = useRef<number>(0);
@@ -551,19 +559,26 @@ export function WritingEditor({ projectId, tutorMode = false, threadId, onWritin
               Saved
             </span>
           )}
+          {flowNeedsCloud && (
+            <span id={flowNoteId} className="text-destructive">
+              FLOW needs a cloud model: pick one in Settings → Models
+            </span>
+          )}
           {hasFlowReport && (
             <button
               onClick={onReanalyzeClick}
-              disabled={flowLoading}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-sm font-medium text-muted-foreground hover:text-foreground border border-border hover:border-foreground/30 transition-colors disabled:opacity-70"
+              disabled={flowLoading || flowNeedsCloud}
+              aria-describedby={flowNeedsCloud ? flowNoteId : undefined}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-sm font-medium text-muted-foreground hover:text-foreground border border-border hover:border-foreground/30 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
             >
               Re-analyze
             </button>
           )}
           <button
             onClick={onFlowClick}
-            disabled={flowLoading}
-            className="inline-flex items-center gap-1.5 px-4 py-1 rounded text-sm font-medium text-white transition-colors disabled:opacity-70"
+            disabled={flowLoading || (flowNeedsCloud && !hasFlowReport)}
+            aria-describedby={flowNeedsCloud && !hasFlowReport ? flowNoteId : undefined}
+            className="inline-flex items-center gap-1.5 px-4 py-1 rounded text-sm font-medium text-white transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
             style={{ backgroundColor: flowLoading ? '#6c757d' : '#6A8C8C' }}
           >
             {flowLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}

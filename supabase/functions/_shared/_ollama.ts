@@ -64,6 +64,9 @@ export interface LocalModelInfo {
 
 const INFO_TIMEOUT_MS = 10_000;
 
+/** fetchLocalModelInfo's error when the server cannot be reached. */
+export const NOT_ANSWERING_ERROR = "The local model server (Ollama) is not answering. Start Ollama, then try again.";
+
 /** The parts of Ollama's /api/show answer read here. */
 interface ShowResponse {
   parameters?: string;
@@ -85,7 +88,7 @@ export async function fetchLocalModelInfo(
   fetchImpl: typeof fetch = fetch,
 ): Promise<LocalModelInfo | { error: string }> {
   const name = ollamaName(model);
-  const notAnswering = { error: "The local model server (Ollama) is not answering. Start Ollama, then try again." };
+  const notAnswering = { error: NOT_ANSWERING_ERROR };
   const base = ollamaBaseUrl(env);
   if (!base) return notAnswering;
 

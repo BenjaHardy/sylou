@@ -52,7 +52,11 @@ const h = vi.hoisted(() => ({
     refreshBookmarks: vi.fn(),
   },
   memory: { memory: null as Record<string, unknown> | null, refetch: vi.fn(async () => null) },
-  instance: { webSearchEnabled: true, loading: false },
+  instance: {
+    webSearchEnabled: true,
+    localModels: [] as { id: string; name: string; contextTokens?: number; tools?: boolean }[] | null,
+    loading: false,
+  },
 }));
 
 vi.mock("@/hooks/useChatThread", () => ({ useChatThread: () => h.thread }));
@@ -110,6 +114,7 @@ beforeEach(() => {
   h.settings.preferred_chat_reasoning = {};
   h.memory.memory = null;
   h.instance.webSearchEnabled = true;
+  h.instance.localModels = [];
 });
 
 afterEach(() => {
@@ -243,6 +248,26 @@ describe("ChatPanel", () => {
     expect(h.chat.sendMessage).toHaveBeenCalledWith("What happened today?", false, true);
   });
 
+  it("a local chat model that cannot use tools: the toggle is greyed with the reason, and messages carry no web search", () => {
+    h.settings.preferred_chat_model = "ollama/sylou-ministral-8k";
+    h.instance.localModels = [{ id: "ollama/sylou-ministral-8k", name: "sylou-ministral-8k", contextTokens: 8_192, tools: false }];
+    renderPanel({ webSearchEnabled: true, onWebSearchEnabledChange: vi.fn() });
+    expect(screen.getByRole("button", { name: "Web search needs a model that can use tools" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Toggle web search" })).not.toBeInTheDocument();
+    typeAndEnter("Any news?");
+    expect(h.chat.sendMessage).toHaveBeenCalledWith("Any news?", false, false);
+  });
+
+  it("a local chat model that can use tools keeps the toggle, and the Ask/Propose tip says they need a cloud model", () => {
+    h.settings.preferred_chat_model = "ollama/sylou-nemo-16k";
+    h.instance.localModels = [{ id: "ollama/sylou-nemo-16k", name: "sylou-nemo-16k", contextTokens: 16_384, tools: true }];
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Toggle web search" }));
+    typeAndEnter("Any news?");
+    expect(h.chat.sendMessage).toHaveBeenCalledWith("Any news?", false, true);
+    expect(screen.getByText(/use Ask or Propose \(with a cloud chat model\) for/)).toBeInTheDocument();
+  });
+
   it("a controlled web-search preference reports toggles to the parent instead of flipping locally", () => {
     const onWebSearchEnabledChange = vi.fn();
     renderPanel({ webSearchEnabled: true, onWebSearchEnabledChange });
@@ -271,6 +296,23 @@ describe("ChatPanel", () => {
     expect(screen.getByText("Main")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("switch"));
     expect(props.onConciseModeChange).toHaveBeenCalledWith(true);
+  });
+
+  it("a local chat model: the header shows its name, marked local and Beta — or not set up when the instance no longer lists it", () => {
+    h.settings.preferred_chat_model = "ollama/sylou-nemo-16k";
+    h.instance.localModels = [{ id: "ollama/sylou-nemo-16k", name: "sylou-nemo-16k", contextTokens: 16_384, tools: true }];
+    const { rerender } = renderPanel();
+    const label = () => screen.getByTitle("Active chat model and reasoning level — change in Settings");
+    expect(label()).toHaveTextContent(/^sylou-nemo-16k · local, Beta$/);
+
+    h.instance.localModels = [];
+    rerender();
+    expect(label()).toHaveTextContent(/^sylou-nemo-16k · not set up$/);
+
+    // The list could not be read: no claim either way.
+    h.instance.localModels = null;
+    rerender();
+    expect(label()).toHaveTextContent(/^sylou-nemo-16k · local, Beta$/);
   });
 
   it("the budget line appears only when the operator set a cap", () => {
