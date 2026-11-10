@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, envKeyFor } from "../_shared/_llm.ts";
+import { callLLM, providerFor, providerConfigured } from "../_shared/_llm.ts";
 import { annotateWritingWithProvenance } from "../_shared/_provenance.ts";
 import { FLOW_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import {
@@ -151,7 +151,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     const flowModel = modelChoice.model;
 
     const provider = providerFor(flowModel);
-    if (!deps.env.get(envKeyFor(provider))) {
+    if (!providerConfigured(provider, deps.env)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 

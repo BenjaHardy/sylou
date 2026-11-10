@@ -65,6 +65,12 @@ export function envKeyFor(provider: ProviderId): string {
   return "MISTRAL_API_KEY";
 }
 
+/** True when the operator has set the provider up (its API key is set). The
+ *  functions check it before their first call, to answer with a clear error. */
+export function providerConfigured(provider: ProviderId, env: Pick<Deno.Env, "get">): boolean {
+  return !!env.get(envKeyFor(provider));
+}
+
 export function authHeadersFor(provider: ProviderId, key: string): Record<string, string> {
   if (provider === "anthropic") {
     return {

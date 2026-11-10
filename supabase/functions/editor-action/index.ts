@@ -1,5 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, normaliseResponse, extractProviderError, fallbackReplyText, isRefusalStop, isTruncatedStop } from "../_shared/_llm.ts";
+import {
+  callLLM, providerFor, providerConfigured, normaliseResponse, extractProviderError, fallbackReplyText,
+  isRefusalStop, isTruncatedStop,
+} from "../_shared/_llm.ts";
 import { makeSSEHelpers, readProviderStream } from "../_shared/_sse.ts";
 import { EDITOR_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { DEFAULT_CHAT_MODEL, INPUT_LIMITS, OUTPUT_BUDGETS, resolveModel } from "../_shared/_models.ts";
@@ -168,8 +171,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     const effort = resolveEffort(EDITOR_EFFORT, chatModel);
     const mistralEffort = resolveMistralEffort(EDITOR_MISTRAL_EFFORT, chatModel);
     const editorMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.EDITOR_ACTION, chatModel, thinking, mistralEffort !== undefined);
-    const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
-    if (!deps.env.get(providerKeyEnv)) {
+    if (!providerConfigured(provider, deps.env)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 

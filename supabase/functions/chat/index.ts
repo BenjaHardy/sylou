@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import {
-  callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, fallbackReplyText,
-  isProviderTimeout, PROVIDER_TIMEOUT_MESSAGE, type CacheHint, type LLMMessage, type LLMTool,
+  callLLM, providerFor, providerConfigured, normaliseResponse, extractProviderError, cleanLLMContent,
+  fallbackReplyText, isProviderTimeout, PROVIDER_TIMEOUT_MESSAGE, type CacheHint, type LLMMessage, type LLMTool,
 } from "../_shared/_llm.ts";
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
@@ -216,10 +216,10 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
       { role: "user", content: message.trim() },
     ];
 
-    // --- Mistral API key ---
+    // --- Provider API key ---
     // API key check happens inside callLLM; surface a clean error if missing.
     const provider = providerFor(chatModel);
-    if (!deps.env.get(provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY")) {
+    if (!providerConfigured(provider, deps.env)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 

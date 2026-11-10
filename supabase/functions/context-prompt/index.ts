@@ -1,7 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import {
-  callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, fallbackReplyText,
-  isProviderTimeout, isRefusalStop, isTruncatedStop, PROVIDER_TIMEOUT_MESSAGE, type LLMMessage, type LLMTool,
+  callLLM, providerFor, providerConfigured, normaliseResponse, extractProviderError, cleanLLMContent,
+  fallbackReplyText, isProviderTimeout, isRefusalStop, isTruncatedStop, PROVIDER_TIMEOUT_MESSAGE,
+  type LLMMessage, type LLMTool,
 } from "../_shared/_llm.ts";
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
@@ -122,8 +123,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     // and is a delta summary, not a reply.
     const summary = resolveReasoning(chatModel, undefined, SUMMARY_TABLES);
     const summaryMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_SUMMARY, chatModel, summary.thinking, summary.mistralEffort !== undefined);
-    const providerKeyEnv = provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY";
-    if (!deps.env.get(providerKeyEnv)) {
+    if (!providerConfigured(provider, deps.env)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 

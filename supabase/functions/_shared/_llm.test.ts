@@ -15,6 +15,7 @@ import {
   isTruncatedStop,
   fetchWithTimeout,
   normaliseResponse,
+  providerConfigured,
   ProviderTimeoutError,
   sanitizeAnthropicSchema,
   toAnthropicBody,
@@ -654,4 +655,13 @@ Deno.test("toOpenAIBody: raw_content never reaches the OpenAI-shape wire", () =>
     ],
   });
   assertEquals(body.messages, [{ role: "assistant", content: "x" }, { role: "user", content: "y" }]);
+});
+
+Deno.test("providerConfigured: true exactly when the provider's API key is set", () => {
+  const env = (values: Record<string, string>) => ({ get: (name: string) => values[name] });
+  assert(providerConfigured("mistral", env({ MISTRAL_API_KEY: "k" })));
+  assert(providerConfigured("anthropic", env({ ANTHROPIC_API_KEY: "k" })));
+  assert(providerConfigured("deepseek", env({ DEEPSEEK_API_KEY: "k" })));
+  assert(!providerConfigured("anthropic", env({ MISTRAL_API_KEY: "k" })));
+  assert(!providerConfigured("mistral", env({ MISTRAL_API_KEY: "" })));
 });
