@@ -65,8 +65,21 @@ Deno.test("fetchLocalModelInfo: the window is the model's num_ctx, asked of /api
     parameters: 'num_ctx                        16384\nstop                           "[INST]"',
     capabilities: ["completion", "tools"],
   });
-  assertEquals(await fetchLocalModelInfo("ollama/sylou-nemo-16k", LOCAL, server.fetchImpl), { contextTokens: 16384 });
+  assertEquals(await fetchLocalModelInfo("ollama/sylou-nemo-16k", LOCAL, server.fetchImpl), {
+    contextTokens: 16384,
+    tools: true,
+  });
   assertEquals(server.requests, [{ url: `${SERVER}/api/show`, body: { model: "sylou-nemo-16k" } }]);
+});
+
+Deno.test("fetchLocalModelInfo: a model calls tools only when its capabilities list them", async () => {
+  for (const capabilities of [["completion", "vision"], undefined]) {
+    const server = fakeServer(200, { parameters: "num_ctx 8192", capabilities });
+    assertEquals(await fetchLocalModelInfo("ollama/sylou-ministral-8k", LOCAL, server.fetchImpl), {
+      contextTokens: 8192,
+      tools: false,
+    });
+  }
 });
 
 Deno.test("fetchLocalModelInfo: a model without a window of its own is refused", async () => {

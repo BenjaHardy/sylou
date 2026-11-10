@@ -8,8 +8,9 @@
 // CONTRACT (pinned by persist.test.ts; a red test means the contract
 // changed — that needs a checkpoint, not a test edit):
 //   - Sequence: user insert -> assistant insert -> token estimate ->
-//     billing RPC -> prompt count. All on the service-role client
-//     (write-surface lockdown; thread ownership verified upstream).
+//     billing RPC (none for a local model) -> prompt count. All on the
+//     service-role client (write-surface lockdown; thread ownership
+//     verified upstream).
 //   - finalInputChars / finalOutputChars are CALLER-computed: the running
 //     accumulators are zero on the no-tools paths, and the non-streaming
 //     path deliberately bills its defaulted text while the streaming
@@ -28,6 +29,7 @@
 //     stay entirely caller-side.
 
 import { incrementPromptCount } from "../_shared/_stats.ts";
+import { countsTowardBudget } from "../_shared/_billing.ts";
 
 // Minimal structural view of the admin client (the concrete client's
 // generic instance type does not cross module boundaries cleanly — the
@@ -117,12 +119,15 @@ export async function persistChatExchange(
   if (assistantMsgErr) console.error("[chat] assistant message insert failed:", JSON.stringify(assistantMsgErr));
 
   const estimatedTokens = Math.ceil((finalInputChars + finalOutputChars) / 4);
-  const newTotal = ctx.tokensUsedThisPeriod + estimatedTokens;
-  const { error: rpcErr } = await admin.rpc("increment_tokens_used", {
-    user_uuid: ctx.userId,
-    amount: estimatedTokens,
-  });
-  if (rpcErr) console.error("[chat] increment_tokens_used failed:", JSON.stringify(rpcErr));
+  const counted = countsTowardBudget(ctx.chatModel);
+  const newTotal = ctx.tokensUsedThisPeriod + (counted ? estimatedTokens : 0);
+  if (counted) {
+    const { error: rpcErr } = await admin.rpc("increment_tokens_used", {
+      user_uuid: ctx.userId,
+      amount: estimatedTokens,
+    });
+    if (rpcErr) console.error("[chat] increment_tokens_used failed:", JSON.stringify(rpcErr));
+  }
 
   await incrementPromptCount(ctx.admin, ctx.projectId, ctx.tutorMode, "[stream]");
 

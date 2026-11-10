@@ -58,6 +58,8 @@ export function ollamaBody(body: Record<string, unknown>): Record<string, unknow
 export interface LocalModelInfo {
   /** The context window the server loads the model with (its num_ctx). */
   contextTokens: number;
+  /** Whether the model can call tools (its capabilities list "tools"). */
+  tools: boolean;
 }
 
 const INFO_TIMEOUT_MS = 10_000;
@@ -65,6 +67,7 @@ const INFO_TIMEOUT_MS = 10_000;
 /** The parts of Ollama's /api/show answer read here. */
 interface ShowResponse {
   parameters?: string;
+  capabilities?: string[];
   remote_host?: string;
   remote_model?: string;
 }
@@ -120,5 +123,5 @@ export async function fetchLocalModelInfo(
         "Create a copy of it with num_ctx set, and list that copy in OLLAMA_MODELS.",
     };
   }
-  return { contextTokens };
+  return { contextTokens, tools: show.capabilities?.includes("tools") ?? false };
 }

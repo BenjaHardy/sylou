@@ -41,16 +41,17 @@ export const LOCAL_ENV: Readonly<Record<string, string>> = {
   OLLAMA_MODELS: "sylou-nemo-16k",
 };
 
-/** A local model server reporting these windows (model id → num_ctx); any
- *  other model gets the not-answering error. Records each lookup. */
-export function fakeLocalModels(windows: Record<string, number> = {}) {
+/** A local model server reporting these windows (model id → num_ctx), its
+ *  models able to call tools unless `tools` is false; any other model gets
+ *  the not-answering error. Records each lookup. */
+export function fakeLocalModels(windows: Record<string, number> = {}, opts: { tools?: boolean } = {}) {
   const lookedUp: string[] = [];
   const localModelInfo: NonNullable<HandlerDeps["localModelInfo"]> = (model) => {
     lookedUp.push(model);
     const contextTokens = windows[model];
     return Promise.resolve(
       contextTokens
-        ? { contextTokens }
+        ? { contextTokens, tools: opts.tools ?? true }
         : { error: "The local model server (Ollama) is not answering. Start Ollama, then try again." },
     );
   };

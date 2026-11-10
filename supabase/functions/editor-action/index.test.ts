@@ -439,6 +439,37 @@ Deno.test("a listed local model: the rewrite runs on it, sized to its window, lo
   assertEquals(billing(backend), undefined);
 });
 
+Deno.test("a local model: a favourite too long for its window goes in as its summary, and the rewrite runs", async () => {
+  const { res, provider } = await send(post(REWRITE), {
+    profile: { preferred_chat_model: LOCAL_MODEL },
+    env: LOCAL_ENV,
+    localModels: fakeLocalModels({ [LOCAL_MODEL]: 8_192 }),
+    docs: [
+      { id: "d-1", file_name: "style.md", extracted_text: "Prefer short sentences.", summary: "Style.", is_favourite: true },
+      { id: "d-2", file_name: "thesis.md", extracted_text: "t".repeat(30_000), summary: "A thesis on tides.", is_favourite: true },
+    ],
+    replies: [streamedReply([RESULT])],
+  });
+  assertEquals((await readEvents(res)).at(-1)?.result, RESULT);
+  const system = String(provider.calls[0].messages[0].content);
+  assert(system.includes("=== style.md ===\n\nPrefer short sentences."), system);
+  assert(system.includes('- Document: "thesis.md"\n  Summary: A thesis on tides.'), system);
+  assert(!system.includes("ttttt") && !system.includes("read_imported_document"), "no full text, and no tool to read it");
+  // The full rewrite budget still fits beside them.
+  assertEquals(provider.calls[0].max_tokens, 4_000);
+});
+
+Deno.test("a cloud model: every favourite's full text, however long", async () => {
+  const { res, provider } = await send(post(REWRITE), {
+    docs: [{ id: "d-2", file_name: "thesis.md", extracted_text: "t".repeat(30_000), summary: "A thesis.", is_favourite: true }],
+    replies: [streamedReply([RESULT])],
+  });
+  await readEvents(res);
+  const system = String(provider.calls[0].messages[0].content);
+  assert(system.endsWith(`=== thesis.md ===\n\n${"t".repeat(30_000)}\n\n`));
+  assert(!system.includes("TOO LONG TO INCLUDE"));
+});
+
 Deno.test("a selection too long for the local model's window: 400 naming the model, and no provider call", async () => {
   const { res, provider } = await send(post({ ...REWRITE, selected_text: "word ".repeat(3_000) }), {
     profile: { preferred_chat_model: LOCAL_MODEL },

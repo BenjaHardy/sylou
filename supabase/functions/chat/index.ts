@@ -4,18 +4,19 @@ import {
   fallbackReplyText, isProviderTimeout, PROVIDER_TIMEOUT_MESSAGE, type CacheHint, type LLMMessage, type LLMTool,
 } from "../_shared/_llm.ts";
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
-import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { DEFAULT_CHAT_MODEL, INPUT_LIMITS, OUTPUT_BUDGETS, resolveModel } from "../_shared/_models.ts";
-import { isOllamaModel } from "../_shared/_ollama.ts";
+import { fetchLocalModelInfo, isOllamaModel } from "../_shared/_ollama.ts";
+import { estimatePromptTokens, fitReply } from "../_shared/_fit.ts";
 import {
   CHAT_THINKING, CHAT_EFFORT, CHAT_MISTRAL_EFFORT,
   resolveReasoning, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 import {
-  buildMemoryInjection,
+  CLOUD_MEMORY,
   fetchConversationMemory,
   fetchVerbatimWindow,
+  localMemoryProfile,
   maybeRefreshConversationMemory,
 } from "../_shared/_conversation_memory.ts";
 
@@ -27,7 +28,8 @@ import {
   TUTOR_MODE_SYSTEM_PROMPT,
   WEB_SEARCH_PROMPT,
 } from "../_shared/_prompts.ts";
-import { buildDocIndex, buildFavBlock } from "./context.ts";
+import { buildChatMessages, buildDocIndex, buildFavBlock, chatTools } from "./context.ts";
+import { chatTooLongError, fitLocalChat, LOCAL_CHAT_MIN_REPLY, LOCAL_EARLY_REFRESHES } from "./local.ts";
 import { finalCall, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { persistChatExchange } from "./persist.ts";
 
@@ -94,9 +96,6 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     if ("error" in modelChoice) {
       return jsonResponse({ error: modelChoice.error }, 400);
     }
-    if (isOllamaModel(modelChoice.model)) {
-      return jsonResponse({ error: "Chat does not run on local models yet. Pick a cloud model for chat in Settings." }, 400);
-    }
     if (body.stream !== true) {
       return jsonResponse({ error: "Only streaming requests are supported (send stream: true)" }, 400);
     }
@@ -106,7 +105,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
       thinking: CHAT_THINKING, effort: CHAT_EFFORT, mistral: CHAT_MISTRAL_EFFORT,
     });
     const { thinking, effort, mistralEffort } = reasoning;
-    const chatMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CHAT, chatModel, thinking, mistralEffort !== undefined);
+    let chatMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CHAT, chatModel, thinking, mistralEffort !== undefined);
     console.log(
       `[chat] model=${chatModel} provider=${providerFor(chatModel)} source=${
         modelChoice.source
@@ -144,19 +143,28 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
 
     const tutorMode = project?.tutor_mode ?? false;
 
-    // --- Build system prompt ---
-    let systemPrompt = tutorMode
+    // A local model: what its server says it can take (_ollama.ts), asked
+    // before the prompt is built — the tools and the memory depend on it.
+    const local = isOllamaModel(chatModel) ? await (deps.localModelInfo ?? fetchLocalModelInfo)(chatModel, deps.env) : null;
+    if (local && "error" in local) {
+      return jsonResponse({ error: local.error }, 503);
+    }
+    const canUseTools = local?.tools ?? true;
+    const memoryProfile = local ? localMemoryProfile(local.contextTokens) : CLOUD_MEMORY;
+
+    // --- Build system prompt (the favourites block goes between head and tail) ---
+    let systemHead = tutorMode
       ? TUTOR_MODE_SYSTEM_PROMPT
       : CLASSIC_MODE_SYSTEM_PROMPT;
 
     // --- Append template-specific context ---
     const templateAddition = TEMPLATE_PROMPTS[project?.template ?? ""];
     if (templateAddition) {
-      systemPrompt += `\n\n# PROJECT TEMPLATE\n\n${templateAddition}`;
+      systemHead += `\n\n# PROJECT TEMPLATE\n\n${templateAddition}`;
     }
 
     if (conciseMode) {
-      systemPrompt += "\n\n" + CONCISE_MODE_MODIFIER;
+      systemHead += "\n\n" + CONCISE_MODE_MODIFIER;
     }
 
     // --- Fetch imported documents (for index + favourite full-text injection) ---
@@ -172,53 +180,81 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     const favourites = allDocs.filter((d: any) => d.is_favourite && d.extracted_text);
     const nonFavourites = allDocs.filter((d: any) => !d.is_favourite);
     const hasNonFavDocs = nonFavourites.length > 0;
-    const hasDocuments = hasNonFavDocs; // controls doc tool registration / index block
 
     // Append document index to system prompt for NON-favourites only
     if (hasNonFavDocs) {
-      systemPrompt += buildDocIndex(nonFavourites);
-    }
-
-    // Append full text of FAVOURITE documents — always available, no tool call needed
-    if (favourites.length > 0) {
-      systemPrompt += buildFavBlock(favourites, hasNonFavDocs);
+      systemHead += buildDocIndex(nonFavourites, canUseTools);
     }
 
     // Gate web search on both user toggle AND BRAVE_SEARCH_API_KEY presence.
     // If unconfigured, never advertise the capability to the LLM — an empty
     // result set reads as "the web has nothing" rather than "not configured".
+    // Nor to a local model that cannot call tools.
     const braveConfigured = !!deps.env.get("BRAVE_SEARCH_API_KEY");
-    const webSearchActive = webSearchEnabled && braveConfigured;
-
-    // Append web search instructions to system prompt
-    if (webSearchActive) {
-      systemPrompt += WEB_SEARCH_PROMPT;
+    const webSearchActive = webSearchEnabled && braveConfigured && canUseTools;
+    if (webSearchEnabled && braveConfigured && !canUseTools) {
+      console.log(`[chat] web search off: ${chatModel} cannot call tools`);
     }
 
-    // conversation-memory: the rolling thread summary (if one exists) ahead
-    // of the verbatim window that follows it (fetchVerbatimWindow). User
-    // zone, deliberately never the system prompt — it is condensed USER
-    // conversation and must stay exactly as privileged as the raw messages
-    // it summarizes. Read via the user-context client so RLS scopes both to
-    // the caller's own threads.
-    const conversationMemory = await fetchConversationMemory(supabase, threadId);
-    const history = await fetchVerbatimWindow(supabase, threadId, conversationMemory);
+    // Web search instructions, after the favourites block
+    const systemTail = webSearchActive ? WEB_SEARCH_PROMPT : "";
 
-    // --- Build messages array ---
-    const llmMessages: LLMMessage[] = [
-      { role: "system", content: systemPrompt },
-      ...(conversationMemory
-        ? [{
-            role: "user" as const,
-            content: buildMemoryInjection(conversationMemory.summary_text),
-          }]
-        : []),
-      ...history.map((m): LLMMessage => ({
-        role: m.role as LLMMessage["role"],
-        content: m.content,
-      })),
-      { role: "user", content: message.trim() },
-    ];
+    // conversation-memory: the rolling thread summary (if one exists) ahead
+    // of the verbatim window that follows it (fetchVerbatimWindow,
+    // buildChatMessages). Read via the user-context client so RLS scopes
+    // both to the caller's own threads.
+    let conversationMemory = await fetchConversationMemory(supabase, threadId);
+    let history = await fetchVerbatimWindow(supabase, threadId, conversationMemory, memoryProfile);
+
+    // --- Build messages array and tools ---
+    let llmMessages: LLMMessage[];
+    let tools: LLMTool[];
+    if (!local) {
+      // Full text of FAVOURITE documents — always available, no tool call needed
+      const favBlock = favourites.length > 0 ? buildFavBlock(favourites, hasNonFavDocs) : "";
+      llmMessages = buildChatMessages(systemHead + favBlock + systemTail, conversationMemory, history, message);
+      tools = chatTools(hasNonFavDocs, webSearchActive);
+    } else {
+      // A local model takes the prompt only when it fits its window
+      // (chat/local.ts). Too long: early memory refreshes, which shorten the
+      // verbatim window, then a clear refusal — never a silent cut.
+      const contextTokens = local.contextTokens;
+      const fit = () =>
+        fitLocalChat({
+          head: systemHead,
+          tail: systemTail,
+          favourites,
+          hasNonFavDocs,
+          canUseTools,
+          webSearchActive,
+          memory: conversationMemory,
+          history,
+          message,
+        }, contextTokens, chatMaxTokens);
+      let fitted = fit();
+      for (let pass = 1; !fitted && history.length > 0 && pass <= LOCAL_EARLY_REFRESHES; pass++) {
+        console.log(`[chat] prompt too long for ${chatModel}: early memory refresh ${pass} of ${LOCAL_EARLY_REFRESHES}`);
+        const refreshed = await maybeRefreshConversationMemory({
+          admin: adminSupabase,
+          threadId,
+          model: chatModel,
+          userId: user.id,
+          overBudget: false,
+          logTag: "[chat]",
+          profile: memoryProfile,
+          force: true,
+          llm: deps.callLLM,
+        });
+        if (!refreshed) break; // nothing left to fold in, or the summarizer failed
+        conversationMemory = await fetchConversationMemory(supabase, threadId);
+        history = await fetchVerbatimWindow(supabase, threadId, conversationMemory, memoryProfile);
+        fitted = fit();
+      }
+      if (!fitted) {
+        return jsonResponse({ error: chatTooLongError(chatModel, contextTokens) }, 400);
+      }
+      ({ messages: llmMessages, tools, maxTokens: chatMaxTokens } = fitted);
+    }
 
     // --- Provider API key ---
     // API key check happens inside callLLM; surface a clean error if missing.
@@ -233,11 +269,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     const documentsReferenced: string[] = [];
     const webSearchesPerformed: string[] = [];
 
-    // --- Build tools array ---
-    const hasTools = hasDocuments || webSearchActive;
-    const tools: LLMTool[] = [];
-    if (hasDocuments) tools.push(buildDocumentTool());
-    if (webSearchActive) tools.push(buildWebSearchTool());
+    const hasTools = tools.length > 0;
 
     // Prompt caching: every call of this request and the next turn of a
     // lively exchange re-send this prefix (docs/model-configuration.md).
@@ -400,6 +432,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
                 userId: user.id,
                 overBudget: profile.monthly_token_budget !== null && newTotal >= profile.monthly_token_budget,
                 logTag: "[chat]",
+                profile: memoryProfile,
                 llm: deps.callLLM,
               });
             } catch (err) {
@@ -448,6 +481,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
               effort,
               mistralEffort,
               cache,
+              localWindow: local ? { contextTokens: local.contextTokens, minReply: LOCAL_CHAT_MIN_REPLY } : undefined,
               logTag: "[stream]",
               llm: deps.callLLM,
             });
@@ -457,10 +491,23 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
             // LLM Call #2: streaming with tool results; no tool calls allowed
             console.log("[stream] starting Call #2 streaming");
             const final = finalCall(chatModel, tools, toolMessages);
+            let call2MaxTokens = chatMaxTokens;
+            if (local) {
+              // The loop left the reply its minimum, less the loop's own short
+              // notes: the reply takes whatever room is left.
+              const fit = fitReply(local.contextTokens, estimatePromptTokens(final.messages, final.tools), chatMaxTokens, 1);
+              if (fit === null) {
+                try {
+                  controller.enqueue(sseEvent({ done: true, error: chatTooLongError(chatModel, local.contextTokens) }));
+                } catch { /* */ }
+                return;
+              }
+              call2MaxTokens = fit;
+            }
             const call2Res = await deps.callLLM({
                 model: chatModel,
                 ...final,
-                max_tokens: chatMaxTokens,
+                max_tokens: call2MaxTokens,
                 stream: true,
                 temperature,
                 thinking,
@@ -514,6 +561,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
               userId: user.id,
               overBudget: profile.monthly_token_budget !== null && newTotal >= profile.monthly_token_budget,
               logTag: "[chat]",
+              profile: memoryProfile,
               llm: deps.callLLM,
             });
           } catch (err) {
@@ -621,6 +669,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
             userId: user.id,
             overBudget: profile.monthly_token_budget !== null && newTotal >= profile.monthly_token_budget,
             logTag: "[chat]",
+            profile: memoryProfile,
             llm: deps.callLLM,
           });
         } catch (persistErr) {

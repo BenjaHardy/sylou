@@ -2,11 +2,12 @@
 // Run with: deno test --allow-read supabase/functions/_shared/_tool_loop.test.ts
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
-  FINAL_CALL_NOTE, finalCall, promptChars, ROUND_LIMIT_NOTE, runToolLoop,
+  FINAL_CALL_NOTE, finalCall, promptChars, RESULT_CUT_NOTE, ROUND_LIMIT_NOTE, runToolLoop,
   type ToolLoopDeps,
 } from "./_tool_loop.ts";
-import { buildWebSearchTool } from "./_tools.ts";
+import { buildDocumentTool, buildWebSearchTool } from "./_tools.ts";
 import type { LLMMessage } from "./_llm.ts";
+import { estimatePromptTokens } from "./_fit.ts";
 
 // Document reads always succeed, so no network is needed.
 const docClient = {
@@ -166,6 +167,68 @@ Deno.test("tool loop: the cache hint reaches every check call", async () => {
   deps.cache = { key: "thread-1", scope: "conversation" };
   await runToolLoop(deps);
   assertEquals(seen, [deps.cache, deps.cache]);
+});
+
+/** A document of `chars` characters, read by every call. */
+const longDocClient = (chars: number) => ({
+  from: () => ({
+    select: () => ({
+      eq: () => ({
+        eq: () => ({
+          maybeSingle: () => Promise.resolve({ data: { extracted_text: "w".repeat(chars), file_name: "long.pdf" } }),
+        }),
+      }),
+    }),
+  }),
+});
+
+Deno.test("tool loop, cloud model: a long document comes back whole", async () => {
+  const toolMessages: LLMMessage[] = [{ role: "system", content: "S" }];
+  await runToolLoop({
+    ...makeDeps(() => Promise.resolve(completion([])), toolMessages),
+    adminSupabase: longDocClient(60_000),
+  });
+  assertEquals(toolResults(toolMessages)[0].content, `Document "long.pdf":\n\n${"w".repeat(60_000)}`);
+});
+
+Deno.test("tool loop, local model: a document is cut to the room the window leaves beside the reply's minimum", async () => {
+  const tools = [buildDocumentTool()];
+  const toolMessages: LLMMessage[] = [{ role: "system", content: "S".repeat(3_000) }];
+  const maxTokensSeen: number[] = [];
+  await runToolLoop({
+    ...makeDeps((opts) => {
+      maxTokensSeen.push(opts.max_tokens);
+      return Promise.resolve(completion([]));
+    }, toolMessages),
+    adminSupabase: longDocClient(60_000),
+    tools,
+    chatMaxTokens: 4_000,
+    localWindow: { contextTokens: 8_192, minReply: 1_000 },
+  });
+
+  const result = String(toolResults(toolMessages)[0].content);
+  assert(result.startsWith(`Document "long.pdf":\n\nwww`), result.slice(0, 40));
+  assert(result.endsWith(RESULT_CUT_NOTE));
+  // What is left after the cut result: the reply's minimum, which the check call gets.
+  const left = 8_192 - 256 - estimatePromptTokens(toolMessages, tools);
+  assert(left >= 1_000 && left < 1_010, String(left));
+  assertEquals(maxTokensSeen, [left]);
+});
+
+Deno.test("tool loop, local model: a second document with no room left is only the note", async () => {
+  const toolMessages: LLMMessage[] = [{ role: "system", content: "S" }];
+  await runToolLoop({
+    ...makeDeps(() => Promise.resolve(completion([])), toolMessages),
+    toolCalls: [
+      { id: "call-a", name: "read_imported_document", arguments: { document_id: "doc-1" } },
+      { id: "call-b", name: "read_imported_document", arguments: { document_id: "doc-1" } },
+    ],
+    adminSupabase: longDocClient(60_000),
+    localWindow: { contextTokens: 8_192, minReply: 1_000 },
+  });
+  const [first, second] = toolResults(toolMessages).map((m) => String(m.content));
+  assert(first.endsWith(RESULT_CUT_NOTE) && first.length > 10_000, String(first.length));
+  assertEquals(second, RESULT_CUT_NOTE);
 });
 
 Deno.test("finalCall: Anthropic keeps the tool list with tool_choice none and appends the note after the tool results; the other providers get the loop's messages and no tools", () => {
