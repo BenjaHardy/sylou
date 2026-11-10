@@ -1,4 +1,28 @@
-project_id = "mqvgobuvbeozzizjqpsu"
+project_id = "sylou"
+
+# The sections below apply to the local stack (`supabase start`) only.
+[db]
+major_version = 17
+
+[auth]
+site_url = "http://localhost:8080"
+additional_redirect_urls = ["http://localhost:8080/**"]
+enable_signup = false
+
+[storage.s3_protocol]
+enabled = false
+
+[storage.image_transformation]
+enabled = false
+
+[realtime]
+enabled = false
+
+[studio]
+enabled = false
+
+[analytics]
+enabled = false
 
 [functions.chat]
 verify_jwt = false
