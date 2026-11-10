@@ -6,13 +6,15 @@ import {
 import { makeSSEHelpers, readProviderStream } from "../_shared/_sse.ts";
 import { EDITOR_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { DEFAULT_CHAT_MODEL, INPUT_LIMITS, OUTPUT_BUDGETS, resolveModel } from "../_shared/_models.ts";
+import { fetchLocalModelInfo, isOllamaModel } from "../_shared/_ollama.ts";
+import { fitLocalCall } from "../_shared/_fit.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 import {
   EDITOR_THINKING, EDITOR_EFFORT, EDITOR_MISTRAL_EFFORT,
   resolveThinking, resolveEffort, resolveMistralEffort, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 
-import { isOverBudget, getBudgetedProfile } from "../_shared/_billing.ts";
+import { countsTowardBudget, isOverBudget, getBudgetedProfile } from "../_shared/_billing.ts";
 
 
 // --- CORS allow-list (parsed once at module load) ---
@@ -155,12 +157,12 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     }
 
     const llmMessages = [
-      { role: "system", content: prompt },
-      { role: "user", content: selectedText },
+      { role: "system" as const, content: prompt },
+      { role: "user" as const, content: selectedText },
     ];
 
     // --- Resolve chat model from request body or profile ---
-    const modelChoice = resolveModel(body.model, profile.preferred_chat_model, DEFAULT_CHAT_MODEL);
+    const modelChoice = resolveModel(body.model, profile.preferred_chat_model, DEFAULT_CHAT_MODEL, deps.env);
     if ("error" in modelChoice) {
       return jsonResponse({ error: modelChoice.error }, 400);
     }
@@ -170,9 +172,23 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     const thinking = resolveThinking(EDITOR_THINKING, chatModel);
     const effort = resolveEffort(EDITOR_EFFORT, chatModel);
     const mistralEffort = resolveMistralEffort(EDITOR_MISTRAL_EFFORT, chatModel);
-    const editorMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.EDITOR_ACTION, chatModel, thinking, mistralEffort !== undefined);
+    let editorMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.EDITOR_ACTION, chatModel, thinking, mistralEffort !== undefined);
     if (!providerConfigured(provider, deps.env)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
+    }
+    // A local model takes the call only when it fits the model's window.
+    if (isOllamaModel(chatModel)) {
+      const fit = await fitLocalCall({
+        model: chatModel,
+        messages: llmMessages,
+        budget: editorMaxTokens,
+        // A rewrite runs about as long as the selection (~4 characters a token).
+        minReply: Math.min(editorMaxTokens, Math.ceil(selectedText.length / 4)),
+        env: deps.env,
+        lookup: deps.localModelInfo ?? fetchLocalModelInfo,
+      });
+      if ("error" in fit) return jsonResponse({ error: fit.error }, fit.status);
+      editorMaxTokens = fit.maxTokens;
     }
 
     const serviceRoleKey = deps.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -288,12 +304,15 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
 
               // Update budget (atomic RPC, unchanged from P2-1; newTotal is only
               // the request-start estimate for the budget_remaining display).
-              const newTotal = profile.tokens_used_this_period + estimatedTokens;
-              const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
-                user_uuid: user.id,
-                amount: estimatedTokens,
-              });
-              if (rpcErr) console.error("[editor-action] increment_tokens_used failed:", JSON.stringify(rpcErr));
+              const counted = countsTowardBudget(chatModel);
+              const newTotal = profile.tokens_used_this_period + (counted ? estimatedTokens : 0);
+              if (counted) {
+                const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
+                  user_uuid: user.id,
+                  amount: estimatedTokens,
+                });
+                if (rpcErr) console.error("[editor-action] increment_tokens_used failed:", JSON.stringify(rpcErr));
+              }
 
               if (!clientDisconnected) {
                 try {
@@ -430,12 +449,15 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     if (usageErr) console.error("[editor-action] token_usage insert failed:", JSON.stringify(usageErr));
 
     // --- Update budget ---
-    const newTotal = profile.tokens_used_this_period + estimatedTokens;
-    const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
-      user_uuid: user.id,
-      amount: estimatedTokens,
-    });
-    if (rpcErr) console.error("[editor-action] increment_tokens_used failed:", JSON.stringify(rpcErr));
+    const counted = countsTowardBudget(chatModel);
+    const newTotal = profile.tokens_used_this_period + (counted ? estimatedTokens : 0);
+    if (counted) {
+      const { error: rpcErr } = await adminSupabase.rpc("increment_tokens_used", {
+        user_uuid: user.id,
+        amount: estimatedTokens,
+      });
+      if (rpcErr) console.error("[editor-action] increment_tokens_used failed:", JSON.stringify(rpcErr));
+    }
 
     return jsonResponse({
       proposed_text: proposedText,

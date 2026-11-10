@@ -34,6 +34,29 @@ export async function importHandler<T>(load: () => Promise<T>): Promise<T> {
  *  like to a handler. */
 export const UNLISTED_MODEL = "claude-opus-4-1";
 
+/** A local model, and the variables of an instance that lists it. */
+export const LOCAL_MODEL = "ollama/sylou-nemo-16k";
+export const LOCAL_ENV: Readonly<Record<string, string>> = {
+  OLLAMA_URL: "http://ollama.test:11434",
+  OLLAMA_MODELS: "sylou-nemo-16k",
+};
+
+/** A local model server reporting these windows (model id → num_ctx); any
+ *  other model gets the not-answering error. Records each lookup. */
+export function fakeLocalModels(windows: Record<string, number> = {}) {
+  const lookedUp: string[] = [];
+  const localModelInfo: NonNullable<HandlerDeps["localModelInfo"]> = (model) => {
+    lookedUp.push(model);
+    const contextTokens = windows[model];
+    return Promise.resolve(
+      contextTokens
+        ? { contextTokens }
+        : { error: "The local model server (Ollama) is not answering. Start Ollama, then try again." },
+    );
+  };
+  return { lookedUp, localModelInfo };
+}
+
 /** TEST_ENV with some variables changed; `undefined` removes one. */
 export function fakeEnv(changes: Record<string, string | undefined> = {}): HandlerDeps["env"] {
   const values: Record<string, string | undefined> = { ...TEST_ENV, ...changes };

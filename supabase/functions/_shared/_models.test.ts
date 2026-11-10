@@ -11,6 +11,7 @@ import {
   DEFAULT_FLOW_MODEL,
   FALLBACK_CONTEXT_LIMIT_TOKENS,
   INPUT_LIMITS,
+  isAllowedModel,
   resolveModel,
   resolveSavedModel,
 } from "./_models.ts";
@@ -29,6 +30,8 @@ function recordingWarnings<T>(fn: () => T): { result: T; warnings: string[] } {
 
 const LISTED = "mistral-small-2603";
 const UNLISTED = "claude-opus-4-1"; // a real Anthropic id, deliberately not on the menu
+/** An instance without local models. */
+const ENV = { get: (_name: string) => undefined };
 
 Deno.test("allowlist contains exactly the ten registry models", () => {
   assertEquals([...ALLOWED_MODELS].sort(), [
@@ -79,59 +82,59 @@ Deno.test("both fallback defaults are allowed models", () => {
 });
 
 Deno.test("resolveModel: a listed requested model wins over the saved one", () => {
-  assertEquals(resolveModel("claude-sonnet-4-6", LISTED, DEFAULT_CHAT_MODEL), {
+  assertEquals(resolveModel("claude-sonnet-4-6", LISTED, DEFAULT_CHAT_MODEL, ENV), {
     model: "claude-sonnet-4-6",
     source: "request",
   });
 });
 
 Deno.test("resolveModel: an unlisted requested model is an error naming it, cut to 64 characters", () => {
-  assertEquals(resolveModel("gpt-9", LISTED, DEFAULT_CHAT_MODEL), { error: "Unsupported model: gpt-9" });
-  assertEquals(resolveModel(UNLISTED, LISTED, DEFAULT_CHAT_MODEL), { error: `Unsupported model: ${UNLISTED}` });
-  assertEquals(resolveModel("x".repeat(100), null, DEFAULT_CHAT_MODEL), { error: `Unsupported model: ${"x".repeat(64)}` });
-  assertEquals(resolveModel(42, LISTED, DEFAULT_CHAT_MODEL), { error: "Unsupported model: 42" });
+  assertEquals(resolveModel("gpt-9", LISTED, DEFAULT_CHAT_MODEL, ENV), { error: "Unsupported model: gpt-9" });
+  assertEquals(resolveModel(UNLISTED, LISTED, DEFAULT_CHAT_MODEL, ENV), { error: `Unsupported model: ${UNLISTED}` });
+  assertEquals(resolveModel("x".repeat(100), null, DEFAULT_CHAT_MODEL, ENV), { error: `Unsupported model: ${"x".repeat(64)}` });
+  assertEquals(resolveModel(42, LISTED, DEFAULT_CHAT_MODEL, ENV), { error: "Unsupported model: 42" });
 });
 
 Deno.test("resolveModel: an absent or empty requested model falls through to the saved one", () => {
   for (const requested of [undefined, null, ""]) {
-    assertEquals(resolveModel(requested, LISTED, DEFAULT_CHAT_MODEL), { model: LISTED, source: "profile" });
+    assertEquals(resolveModel(requested, LISTED, DEFAULT_CHAT_MODEL, ENV), { model: LISTED, source: "profile" });
   }
   // Saving the default itself still counts as the user's choice.
-  assertEquals(resolveModel(undefined, DEFAULT_FLOW_MODEL, DEFAULT_FLOW_MODEL), {
+  assertEquals(resolveModel(undefined, DEFAULT_FLOW_MODEL, DEFAULT_FLOW_MODEL, ENV), {
     model: DEFAULT_FLOW_MODEL,
     source: "profile",
   });
 });
 
 Deno.test("resolveModel: an unlisted saved model gets the default, with one warning naming it", () => {
-  const { result, warnings } = recordingWarnings(() => resolveModel(undefined, UNLISTED, DEFAULT_CHAT_MODEL));
+  const { result, warnings } = recordingWarnings(() => resolveModel(undefined, UNLISTED, DEFAULT_CHAT_MODEL, ENV));
   assertEquals(result, { model: DEFAULT_CHAT_MODEL, source: "default" });
   assertEquals(warnings, [`[model] saved model "${UNLISTED}" is not allowed; using ${DEFAULT_CHAT_MODEL}`]);
 });
 
 Deno.test("resolveSavedModel: every listed model is kept, silently", () => {
   const { warnings } = recordingWarnings(() => {
-    for (const id of ALLOWED_MODELS) assertEquals(resolveSavedModel(id, DEFAULT_CHAT_MODEL), id);
+    for (const id of ALLOWED_MODELS) assertEquals(resolveSavedModel(id, DEFAULT_CHAT_MODEL, ENV), id);
   });
   assertEquals(warnings, []);
 });
 
 Deno.test("resolveSavedModel: retired, unknown and non-text values get the fallback, one warning each", () => {
   const saved = ["mistral-large-latest", "claude-opus-4-7", "zai-glm-5-2", "gpt-9", 7];
-  const { result, warnings } = recordingWarnings(() => saved.map((s) => resolveSavedModel(s, DEFAULT_FLOW_MODEL)));
+  const { result, warnings } = recordingWarnings(() => saved.map((s) => resolveSavedModel(s, DEFAULT_FLOW_MODEL, ENV)));
   assertEquals(result, saved.map(() => DEFAULT_FLOW_MODEL));
   assertEquals(warnings.length, saved.length);
 });
 
 Deno.test("resolveSavedModel: nothing saved gets the fallback without a warning", () => {
-  const { result, warnings } = recordingWarnings(() => [null, undefined, ""].map((s) => resolveSavedModel(s, DEFAULT_CHAT_MODEL)));
+  const { result, warnings } = recordingWarnings(() => [null, undefined, ""].map((s) => resolveSavedModel(s, DEFAULT_CHAT_MODEL, ENV)));
   assertEquals(result, [DEFAULT_CHAT_MODEL, DEFAULT_CHAT_MODEL, DEFAULT_CHAT_MODEL]);
   assertEquals(warnings, []);
 });
 
 Deno.test("resolveSavedModel: the warning escapes the saved value and cuts it to 64 characters", () => {
   const saved = "line one\nline two " + "y".repeat(100);
-  const { warnings } = recordingWarnings(() => resolveSavedModel(saved, DEFAULT_CHAT_MODEL));
+  const { warnings } = recordingWarnings(() => resolveSavedModel(saved, DEFAULT_CHAT_MODEL, ENV));
   assertEquals(warnings, [
     `[model] saved model ${JSON.stringify(saved.slice(0, 64))} is not allowed; using ${DEFAULT_CHAT_MODEL}`,
   ]);
@@ -159,4 +162,53 @@ Deno.test("context limits are sane and the fallback is the floor", () => {
     );
   }
   assert(FALLBACK_CONTEXT_LIMIT_TOKENS >= 100_000);
+});
+
+// ── Local models (_ollama.ts) ────────────────────────────────────────────
+
+/** An instance whose functions reach an Ollama server listing two models. */
+const LOCAL_ENV = {
+  get: (name: string) =>
+    ({ OLLAMA_URL: "http://host.docker.internal:11434", OLLAMA_MODELS: "sylou-nemo-16k,sylou-gemma-32k" } as Record<
+      string,
+      string
+    >)[name],
+};
+
+Deno.test("isAllowedModel: a local model is allowed while OLLAMA_MODELS lists it and OLLAMA_URL is set", () => {
+  assert(isAllowedModel("ollama/sylou-nemo-16k", LOCAL_ENV));
+  assert(isAllowedModel("ollama/sylou-gemma-32k", LOCAL_ENV));
+  assert(!isAllowedModel("ollama/qwen3.8:27b", LOCAL_ENV), "an unlisted local model");
+  assert(!isAllowedModel("sylou-nemo-16k", LOCAL_ENV), "the prefix is part of the id");
+  assert(!isAllowedModel("ollama/sylou-nemo-16k", ENV), "no local models without the settings");
+  assert(isAllowedModel(LISTED, ENV));
+});
+
+Deno.test("resolveModel: a listed local model runs, requested or saved", () => {
+  assertEquals(resolveModel("ollama/sylou-nemo-16k", LISTED, DEFAULT_CHAT_MODEL, LOCAL_ENV), {
+    model: "ollama/sylou-nemo-16k",
+    source: "request",
+  });
+  assertEquals(resolveModel(undefined, "ollama/sylou-gemma-32k", DEFAULT_CHAT_MODEL, LOCAL_ENV), {
+    model: "ollama/sylou-gemma-32k",
+    source: "profile",
+  });
+});
+
+Deno.test("resolveModel: a saved local model that is no longer listed is an error, never the cloud default", () => {
+  const { result, warnings } = recordingWarnings(() => [
+    resolveModel(undefined, "ollama/qwen3.8:27b", DEFAULT_CHAT_MODEL, LOCAL_ENV),
+    resolveModel(undefined, "ollama/sylou-nemo-16k", DEFAULT_CHAT_MODEL, ENV),
+    resolveSavedModel("ollama/sylou-nemo-16k", DEFAULT_CHAT_MODEL, ENV),
+  ]);
+  assertEquals(result, [
+    { error: "Your local model (qwen3.8:27b) is not set up on this Sylou instance. Pick another model in Settings." },
+    { error: "Your local model (sylou-nemo-16k) is not set up on this Sylou instance. Pick another model in Settings." },
+    { error: "Your local model (sylou-nemo-16k) is not set up on this Sylou instance. Pick another model in Settings." },
+  ]);
+  assertEquals(warnings, [
+    '[model] saved local model "qwen3.8:27b" is not listed in OLLAMA_MODELS',
+    '[model] saved local model "sylou-nemo-16k" is not listed in OLLAMA_MODELS',
+    '[model] saved local model "sylou-nemo-16k" is not listed in OLLAMA_MODELS',
+  ]);
 });

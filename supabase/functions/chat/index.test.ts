@@ -14,6 +14,8 @@ import {
   fakeProvider,
   importHandler,
   jsonReply,
+  LOCAL_ENV,
+  LOCAL_MODEL,
   post,
   preflight,
   readEvents,
@@ -369,4 +371,18 @@ Deno.test("tool path: a failed final call ends the stream with an error-carrying
     { done: true, error: "Mistral: Overloaded" },
   ]);
   assertEquals(writes(backend.calls), []);
+});
+
+// ── A local model (_ollama.ts) ───────────────────────────────────────────
+
+Deno.test("a listed local model: 400, chat does not run on local models yet, and no provider call", async () => {
+  const { res, provider } = await send(post(ASK), {
+    world: { profile: { preferred_chat_model: LOCAL_MODEL } },
+    env: LOCAL_ENV,
+  });
+  assertEquals(res.status, 400);
+  assertEquals(await res.json(), {
+    error: "Chat does not run on local models yet. Pick a cloud model for chat in Settings.",
+  });
+  assertEquals(provider.calls.length, 0);
 });

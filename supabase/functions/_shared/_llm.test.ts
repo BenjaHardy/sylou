@@ -4,6 +4,7 @@
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   extractDeltaText,
+  extractProviderError,
   extractStopDetails,
   extractStopReason,
   extractStreamUsage,
@@ -16,6 +17,7 @@ import {
   fetchWithTimeout,
   normaliseResponse,
   providerConfigured,
+  providerFor,
   ProviderTimeoutError,
   sanitizeAnthropicSchema,
   toAnthropicBody,
@@ -664,4 +666,21 @@ Deno.test("providerConfigured: true exactly when the provider's API key is set",
   assert(providerConfigured("deepseek", env({ DEEPSEEK_API_KEY: "k" })));
   assert(!providerConfigured("anthropic", env({ MISTRAL_API_KEY: "k" })));
   assert(!providerConfigured("mistral", env({ MISTRAL_API_KEY: "" })));
+});
+
+Deno.test("ollama/ ids: routed to the local server, which needs OLLAMA_URL rather than a key", () => {
+  assertEquals(providerFor("ollama/sylou-nemo-16k"), "ollama");
+  assertEquals(providerFor("mistral-small-2603"), "mistral");
+  const env = (values: Record<string, string>) => ({ get: (name: string) => values[name] });
+  assert(providerConfigured("ollama", env({ OLLAMA_URL: "http://host.docker.internal:11434" })));
+  assert(!providerConfigured("ollama", env({ MISTRAL_API_KEY: "k" })));
+});
+
+Deno.test("Ollama: its streamed reasoning is a thinking signal, and its errors are labelled Ollama", () => {
+  assert(isThinkingDelta({ choices: [{ delta: { reasoning: "Weighing it up." } }] }));
+  assert(!isThinkingDelta({ choices: [{ delta: { reasoning: "", content: "Hi" } }] }));
+  assertEquals(
+    extractProviderError("ollama", 404, JSON.stringify({ error: { message: "model 'x' not found" } })),
+    "Ollama: model 'x' not found",
+  );
 });

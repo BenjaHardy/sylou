@@ -16,9 +16,12 @@ import {
   type DbResult,
   fakeBackend,
   fakeEnv,
+  fakeLocalModels,
   fakeProvider,
   importHandler,
   jsonReply,
+  LOCAL_ENV,
+  LOCAL_MODEL,
   post,
   preflight,
   readEvents,
@@ -97,6 +100,7 @@ async function send(
     user?: { id: string } | null;
     replies?: Response[];
     env?: Record<string, string | undefined>;
+    localModels?: ReturnType<typeof fakeLocalModels>;
   } = {},
 ) {
   const backend = fakeBackend({
@@ -108,6 +112,7 @@ async function send(
     env: fakeEnv(opts.env),
     createClient: backend.createClient,
     callLLM: provider.callLLM,
+    localModelInfo: opts.localModels?.localModelInfo,
   });
   return { res, backend, provider };
 }
@@ -412,4 +417,58 @@ Deno.test("without stream: true, a provider error: 502; nothing saved or billed"
   assertEquals(await res.json(), { error: "Mistral: Overloaded" });
   assertEquals(writes(backend.calls), []);
   assertEquals(billing(backend), undefined);
+});
+
+// ── A local model (_ollama.ts) ───────────────────────────────────────────
+
+Deno.test("a listed local model: the rewrite runs on it, sized to its window, logged but not counted toward the budget", async () => {
+  const local = fakeLocalModels({ [LOCAL_MODEL]: 16_384 });
+  const { res, backend, provider } = await send(post(REWRITE), {
+    profile: { preferred_chat_model: LOCAL_MODEL },
+    env: LOCAL_ENV,
+    localModels: local,
+    replies: [streamedReply([RESULT])],
+  });
+  const done = (await readEvents(res)).at(-1);
+  assertEquals(done?.result, RESULT);
+  assertEquals(done?.budget_remaining, 10_000 - 100);
+  assertEquals(local.lookedUp, [LOCAL_MODEL]);
+  assertEquals(provider.calls.map((c) => [c.model, c.max_tokens]), [[LOCAL_MODEL, 4_000]]);
+  const usage = writes(backend.calls).find(([, table]) => table === "token_usage");
+  assertEquals((usage?.[2] as Record<string, unknown>).model_used, LOCAL_MODEL);
+  assertEquals(billing(backend), undefined);
+});
+
+Deno.test("a selection too long for the local model's window: 400 naming the model, and no provider call", async () => {
+  const { res, provider } = await send(post({ ...REWRITE, selected_text: "word ".repeat(3_000) }), {
+    profile: { preferred_chat_model: LOCAL_MODEL },
+    env: LOCAL_ENV,
+    localModels: fakeLocalModels({ [LOCAL_MODEL]: 4_096 }),
+  });
+  assertEquals(res.status, 400);
+  const { error } = await res.json();
+  assert(String(error).startsWith("Too long for sylou-nemo-16k:"), error);
+  assertEquals(provider.calls.length, 0);
+});
+
+Deno.test("the local model server does not answer: 503 with its message, and no provider call", async () => {
+  const { res, provider } = await send(post(REWRITE), {
+    profile: { preferred_chat_model: LOCAL_MODEL },
+    env: LOCAL_ENV,
+    localModels: fakeLocalModels(),
+  });
+  assertEquals(res.status, 503);
+  assertEquals(await res.json(), {
+    error: "The local model server (Ollama) is not answering. Start Ollama, then try again.",
+  });
+  assertEquals(provider.calls.length, 0);
+});
+
+Deno.test("a saved local model the instance does not list: 400, and no cloud model runs in its place", async () => {
+  const { res, provider } = await send(post(REWRITE), { profile: { preferred_chat_model: LOCAL_MODEL } });
+  assertEquals(res.status, 400);
+  assertEquals(await res.json(), {
+    error: "Your local model (sylou-nemo-16k) is not set up on this Sylou instance. Pick another model in Settings.",
+  });
+  assertEquals(provider.calls.length, 0);
 });

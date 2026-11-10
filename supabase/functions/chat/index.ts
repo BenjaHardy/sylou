@@ -7,6 +7,7 @@ import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_share
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { DEFAULT_CHAT_MODEL, INPUT_LIMITS, OUTPUT_BUDGETS, resolveModel } from "../_shared/_models.ts";
+import { isOllamaModel } from "../_shared/_ollama.ts";
 import {
   CHAT_THINKING, CHAT_EFFORT, CHAT_MISTRAL_EFFORT,
   resolveReasoning, resolveMaxTokens,
@@ -89,9 +90,12 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     const message: string = body.message;
     const conciseMode: boolean = body.concise_mode ?? false;
     const webSearchEnabled: boolean = body.web_search_enabled ?? false;
-    const modelChoice = resolveModel(body.model, profile.preferred_chat_model, DEFAULT_CHAT_MODEL);
+    const modelChoice = resolveModel(body.model, profile.preferred_chat_model, DEFAULT_CHAT_MODEL, deps.env);
     if ("error" in modelChoice) {
       return jsonResponse({ error: modelChoice.error }, 400);
+    }
+    if (isOllamaModel(modelChoice.model)) {
+      return jsonResponse({ error: "Chat does not run on local models yet. Pick a cloud model for chat in Settings." }, 400);
     }
     if (body.stream !== true) {
       return jsonResponse({ error: "Only streaming requests are supported (send stream: true)" }, 400);

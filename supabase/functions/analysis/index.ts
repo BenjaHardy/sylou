@@ -13,6 +13,7 @@ import {
   OUTPUT_BUDGETS,
   resolveModel,
 } from "../_shared/_models.ts";
+import { isOllamaModel } from "../_shared/_ollama.ts";
 import { computeSimilarityPct } from "../_shared/_similarity.ts";
 import {
   FLOW_PROMPT_TEMPLATE,
@@ -144,9 +145,12 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     const isCreativeProject = project.template === "creative";
 
     // --- Resolve FLOW model (request override, else profile pref) ---
-    const modelChoice = resolveModel(body.model, profile.preferred_flow_model, DEFAULT_FLOW_MODEL);
+    const modelChoice = resolveModel(body.model, profile.preferred_flow_model, DEFAULT_FLOW_MODEL, deps.env);
     if ("error" in modelChoice) {
       return jsonResponse({ error: modelChoice.error }, 400);
+    }
+    if (isOllamaModel(modelChoice.model)) {
+      return jsonResponse({ error: "FLOW analyses run on cloud models only. Pick a cloud model for FLOW in Settings." }, 400);
     }
     const flowModel = modelChoice.model;
 

@@ -19,6 +19,8 @@ import {
   fakeProvider,
   importHandler,
   jsonReply,
+  LOCAL_ENV,
+  LOCAL_MODEL,
   post,
   preflight,
   readEvents,
@@ -642,4 +644,27 @@ Deno.test("an exchange that was not saved: done carries the error, not the reply
     { token: REPLY },
     { done: true, error: "Messages may not have been saved." },
   ]);
+});
+
+// ── A local model (_ollama.ts) ───────────────────────────────────────────
+
+Deno.test("a listed local model: 400, Ask and Propose do not run on local models yet, and no provider call", async () => {
+  const { res, provider } = await send(post(ASK), {
+    profile: { preferred_chat_model: LOCAL_MODEL },
+    env: LOCAL_ENV,
+  });
+  assertEquals(res.status, 400);
+  assertEquals(await res.json(), {
+    error: "Ask and Propose do not run on local models yet. Pick a cloud model for chat in Settings.",
+  });
+  assertEquals(provider.calls.length, 0);
+});
+
+Deno.test("a listed local model leaves CONFIRM alone: the decision on an earlier proposal is still recorded", async () => {
+  const { res, backend } = await send(post(CONFIRM), {
+    profile: { preferred_chat_model: LOCAL_MODEL },
+    env: LOCAL_ENV,
+  });
+  assertEquals(res.status, 200);
+  assertEquals(writes(backend.calls), [["admin", "ai_editor_actions", { outcome: "accepted" }]]);
 });

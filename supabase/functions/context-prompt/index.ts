@@ -9,6 +9,7 @@ import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { finalCall, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { DEFAULT_CHAT_MODEL, INPUT_LIMITS, OUTPUT_BUDGETS, resolveModel } from "../_shared/_models.ts";
+import { isOllamaModel } from "../_shared/_ollama.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 import {
   CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT, SUMMARY_TABLES,
@@ -106,6 +107,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
       (await req.clone().json().catch(() => ({})))?.model,
       profile.preferred_chat_model,
       DEFAULT_CHAT_MODEL,
+      deps.env,
     );
     if ("error" in modelChoice) {
       return jsonResponse({ error: modelChoice.error }, 400);
@@ -148,6 +150,10 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     }
 
     // ── Main context-prompt flow ────────────────────────────────────────
+    // After CONFIRM, which records a decision without a model call.
+    if (isOllamaModel(chatModel)) {
+      return jsonResponse({ error: "Ask and Propose do not run on local models yet. Pick a cloud model for chat in Settings." }, 400);
+    }
     if (!project_id || !thread_id || !action_type || !selected_text || !instruction || !source_module) {
       return jsonResponse(
         { error: "project_id, thread_id, action_type, selected_text, instruction, and source_module are required" },
