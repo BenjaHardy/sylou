@@ -45,6 +45,8 @@ interface World {
   docs?: Record<string, unknown>[];
   /** The thread's saved messages, oldest first. */
   messages?: { role: string; content: string; created_at: string }[];
+  /** The thread's conversation memory, if it has one. */
+  memory?: Record<string, unknown>;
   /** The assistant-message insert fails. */
   failAssistantInsert?: boolean;
 }
@@ -53,7 +55,7 @@ interface World {
  *  no documents unless given. A memory the refresh writes is read back. */
 function world(w: World) {
   let inserts = 0;
-  let memory: Record<string, unknown> | null = null;
+  let memory: Record<string, unknown> | null = w.memory ?? null;
   // The thread's messages a read selects: its created_at bounds, order and limit.
   const readMessages = (steps: unknown[][]) => {
     let rows = [...(w.messages ?? [])];
@@ -424,6 +426,48 @@ Deno.test("a cloud chat's system prompt: mode, index, favourites, then web searc
   assertEquals(provider.calls[0].messages[0], { role: "system", content: expected });
   assertEquals(provider.calls[0].tools?.map((t) => t.function.name), ["read_imported_document", "web_search"]);
   assertEquals(provider.calls[0].max_tokens, 4_000);
+});
+
+// ── The conversation memory on a cloud model ─────────────────────────────
+
+/** n saved messages "m1" … "mn", a minute apart. */
+const savedThread = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({
+    role: i % 2 ? "assistant" : "user",
+    content: `m${i + 1}`,
+    created_at: `2026-11-10T10:${String(i).padStart(2, "0")}:00.000Z`,
+  }));
+
+Deno.test("cloud chat: the memory, the 20 messages before its watermark, everything after it, then the message", async () => {
+  const messages = savedThread(60);
+  const memory = { summary_text: "The plan so far.", covers_through: messages[39].created_at, covered_message_count: 40, updated_at: "" };
+  const { res, provider } = await send(post(ASK), { world: { messages, memory }, replies: [streamedReply(["Ok."])] });
+  await readEvents(res);
+  const sent = provider.calls[0].messages;
+  assertEquals(sent[1].role, "user");
+  assert(String(sent[1].content).startsWith("[CONVERSATION MEMORY]") && String(sent[1].content).includes("The plan so far."));
+  assertEquals(sent.slice(2, -1).map((m) => m.content), messages.slice(20).map((m) => m.content)); // m21 … m60
+  assertEquals(sent.at(-1), { role: "user", content: "Hi there" });
+  assertEquals(provider.calls.length, 1, "20 unsummarised messages: no refresh");
+});
+
+Deno.test("cloud chat: the memory refreshes after the reply once 50 messages are unsummarised, not before", async () => {
+  const below = await send(post(ASK), { world: { messages: savedThread(49) }, replies: [streamedReply(["Ok."])] });
+  await readEvents(below.res);
+  assertEquals(below.provider.calls.length, 1);
+
+  const { res, backend, provider } = await send(post(ASK), {
+    world: { messages: savedThread(50) },
+    replies: [streamedReply(["Ok."]), jsonReply({ content: "1. Direction: the plan." })],
+  });
+  await readEvents(res);
+  // Without a memory yet, the reply saw the newest 70 messages (here all 50).
+  assertEquals(provider.calls[0].messages.length, 1 + 50 + 1);
+  const summarizer = provider.calls[1];
+  assert(String(summarizer.messages[1].content).startsWith("PREVIOUS MEMORY:"));
+  assertEquals(summarizer.max_tokens, 3_000);
+  const saved = writes(backend.calls).find(([, table]) => table === "chat_thread_summaries")?.[2] as Record<string, unknown>;
+  assertEquals([saved.covered_message_count, saved.summary_text], [50, "1. Direction: the plan."]);
 });
 
 // ── A local model (_ollama.ts) ───────────────────────────────────────────
