@@ -4,10 +4,14 @@
 // (P3-7d).
 
 import { sliceSafe } from "./_text.ts";
+import { isOllamaModel, listedOllamaModels, ollamaName } from "./_ollama.ts";
+
+type Env = Pick<Deno.Env, "get">;
 
 /**
- * Models a call may run on: resolveModel below holds both the request's
- * optional `model` field and the user's saved preference to this set.
+ * Models a call may run on, with the local models isAllowedModel adds:
+ * resolveModel below holds both the request's optional `model` field and the
+ * user's saved preference to them.
  *
  * Mirror of the frontend registry (`src/lib/models.ts`) — edge functions
  * cannot import frontend modules, so the ids are duplicated deliberately.
@@ -40,11 +44,24 @@ export const ALLOWED_MODELS: ReadonlySet<string> = new Set([
 export const DEFAULT_CHAT_MODEL = "zai-glm-5-3";
 export const DEFAULT_FLOW_MODEL = "zai-glm-5-3";
 
-/** The saved preference when it names a listed model, else `fallback`. The
+/** Whether a call may run on `model`: a registry model, or a local model the
+ *  operator lists in OLLAMA_MODELS (_ollama.ts). */
+export function isAllowedModel(model: string, env: Env): boolean {
+  return ALLOWED_MODELS.has(model) || (isOllamaModel(model) && listedOllamaModels(env).includes(model));
+}
+
+/** The saved preference when it names an allowed model, else `fallback`. The
  *  value is trusted no further than that: anything else (a retired id, say)
- *  is logged and never reaches a provider. */
-export function resolveSavedModel(saved: unknown, fallback: string): string {
-  if (typeof saved === "string" && ALLOWED_MODELS.has(saved)) return saved;
+ *  is logged and never reaches a provider. A local model that is no longer
+ *  listed is an error instead: a cloud model in its place would send the
+ *  user's text off their machine. */
+export function resolveSavedModel(saved: unknown, fallback: string, env: Env): string | { error: string } {
+  if (typeof saved === "string" && isAllowedModel(saved, env)) return saved;
+  if (typeof saved === "string" && isOllamaModel(saved)) {
+    const name = sliceSafe(ollamaName(saved), 64);
+    console.warn(`[model] saved local model ${JSON.stringify(name)} is not listed in OLLAMA_MODELS`);
+    return { error: `Your local model (${name}) is not set up on this Sylou instance. Pick another model in Settings.` };
+  }
   if (saved) {
     console.warn(`[model] saved model ${JSON.stringify(sliceSafe(String(saved), 64))} is not allowed; using ${fallback}`);
   }
@@ -58,13 +75,15 @@ export function resolveModel(
   requested: unknown,
   saved: unknown,
   fallback: string,
+  env: Env,
 ): { model: string; source: "request" | "profile" | "default" } | { error: string } {
   if (requested) {
-    return typeof requested === "string" && ALLOWED_MODELS.has(requested)
+    return typeof requested === "string" && isAllowedModel(requested, env)
       ? { model: requested, source: "request" }
       : { error: `Unsupported model: ${sliceSafe(String(requested), 64)}` };
   }
-  const model = resolveSavedModel(saved, fallback);
+  const model = resolveSavedModel(saved, fallback, env);
+  if (typeof model !== "string") return model;
   return { model, source: model === saved ? "profile" : "default" };
 }
 

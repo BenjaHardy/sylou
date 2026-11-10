@@ -1,7 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
-import { callLLM, providerFor, normaliseResponse, envKeyFor } from "../_shared/_llm.ts";
+import { callLLM, providerFor, providerConfigured, normaliseResponse } from "../_shared/_llm.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { DEFAULT_CHAT_MODEL, OUTPUT_BUDGETS, resolveSavedModel } from "../_shared/_models.ts";
+import { fetchLocalModelInfo, isOllamaModel } from "../_shared/_ollama.ts";
+import { fitLocalCall } from "../_shared/_fit.ts";
+import { countsTowardBudget } from "../_shared/_billing.ts";
 import { SUMMARY_TABLES, resolveMaxTokens, resolveReasoning } from "../_shared/_thinking.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 
@@ -180,22 +183,39 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
         .select("preferred_chat_model")
         .eq("id", user.id)
         .single();
-      const summaryModel = resolveSavedModel(profile?.preferred_chat_model, DEFAULT_CHAT_MODEL);
-      const provider = providerFor(summaryModel);
+      const choice = resolveSavedModel(profile?.preferred_chat_model, DEFAULT_CHAT_MODEL, deps.env);
+      // An error means a saved local model that is no longer set up: it
+      // degrades too, so the document never goes to a cloud model instead.
+      const summaryModel = typeof choice === "string" ? choice : null;
 
-      if (!deps.env.get(envKeyFor(provider))) {
-        // Chosen provider's key isn't configured — degrade gracefully.
+      if (!summaryModel || !providerConfigured(providerFor(summaryModel), deps.env)) {
+        // No usable model, or its provider isn't configured — degrade gracefully.
         summary = sliceSafe(extractedText, SHORT_TEXT_THRESHOLD) + "...";
       } else {
+        const provider = providerFor(summaryModel);
         const textForSummary = sliceSafe(extractedText, 10000);
         const summaryPrompt = `Summarize the following document in 3-5 sentences. Focus on the main topics, arguments, and conclusions. This summary will be used to help an AI assistant decide whether to read the full document when answering user questions.\n\n${textForSummary}`;
 
         try {
           const { thinking, effort, mistralEffort } = resolveReasoning(summaryModel, undefined, SUMMARY_TABLES);
+          const messages = [{ role: "user" as const, content: summaryPrompt }];
+          let maxTokens = resolveMaxTokens(OUTPUT_BUDGETS.DOC_SUMMARY, summaryModel, thinking, mistralEffort !== undefined);
+          if (isOllamaModel(summaryModel)) {
+            const fit = await fitLocalCall({
+              model: summaryModel,
+              messages,
+              budget: maxTokens,
+              minReply: maxTokens,
+              env: deps.env,
+              lookup: deps.localModelInfo ?? fetchLocalModelInfo,
+            });
+            if ("error" in fit) throw new Error(fit.error);
+            maxTokens = fit.maxTokens;
+          }
           const llmRes = await deps.callLLM({
             model: summaryModel,
-            messages: [{ role: "user" as const, content: summaryPrompt }],
-            max_tokens: resolveMaxTokens(OUTPUT_BUDGETS.DOC_SUMMARY, summaryModel, thinking, mistralEffort !== undefined),
+            messages,
+            max_tokens: maxTokens,
             temperature: resolveTemperature(CHAT_TEMPERATURE, summaryModel),
             thinking,
             effort,
@@ -221,10 +241,12 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
               output_tokens: outputTokens,
             });
 
-            await adminSupabase.rpc("increment_tokens_used", {
-              user_uuid: user.id,
-              amount: inputTokens + outputTokens,
-            });
+            if (countsTowardBudget(summaryModel)) {
+              await adminSupabase.rpc("increment_tokens_used", {
+                user_uuid: user.id,
+                amount: inputTokens + outputTokens,
+              });
+            }
           } else {
             console.error("Summary LLM error:", llmRes.status, await llmRes.text());
             summary = sliceSafe(extractedText, SHORT_TEXT_THRESHOLD) + "...";

@@ -13,9 +13,12 @@ import {
   type DbResult,
   fakeBackend,
   fakeEnv,
+  fakeLocalModels,
   fakeProvider,
   importHandler,
   jsonReply,
+  LOCAL_ENV,
+  LOCAL_MODEL,
   post,
   preflight,
   TEST_ORIGIN,
@@ -114,6 +117,7 @@ async function send(
     user?: { id: string } | null;
     replies?: Response[];
     env?: Record<string, string | undefined>;
+    localModels?: ReturnType<typeof fakeLocalModels>;
   } = {},
 ) {
   const backend = fakeBackend({
@@ -125,6 +129,7 @@ async function send(
     env: fakeEnv(opts.env),
     createClient: backend.createClient,
     callLLM: provider.callLLM,
+    localModelInfo: opts.localModels?.localModelInfo,
   });
   return { res, backend, provider };
 }
@@ -359,4 +364,43 @@ Deno.test("the document update fails: 500", async () => {
   const { res } = await send(post(IMPORT), { replies: [jsonReply({ content: SUMMARY })], failUpdate: true });
   assertEquals(res.status, 500);
   assertEquals(await res.json(), { error: "Failed to save extracted text" });
+});
+
+// ── A local model (_ollama.ts) ───────────────────────────────────────────
+
+Deno.test("a listed local model writes the summary, sized to its window; logged but not counted toward the budget", async () => {
+  const local = fakeLocalModels({ [LOCAL_MODEL]: 16_384 });
+  const { res, backend, provider } = await send(post(IMPORT), {
+    profile: { preferred_chat_model: LOCAL_MODEL },
+    env: LOCAL_ENV,
+    localModels: local,
+    replies: [jsonReply({ content: SUMMARY })],
+  });
+  assertEquals(await res.json(), { success: true, text_length: NOTES.length, summary_length: SUMMARY.length });
+  assertEquals(local.lookedUp, [LOCAL_MODEL]);
+  assertEquals(provider.calls.map((c) => [c.model, c.max_tokens]), [[LOCAL_MODEL, 500]]);
+  assertEquals(usageRow(backend)?.model_used, LOCAL_MODEL);
+  assertEquals(backend.calls.some((c) => c.target === "rpc:increment_tokens_used"), false);
+});
+
+Deno.test("a saved local model the instance does not list: the text's first 500 characters, and no cloud model runs in its place", async () => {
+  const { res, backend, provider } = await send(post(IMPORT), { profile: { preferred_chat_model: LOCAL_MODEL } });
+  assertEquals(res.status, 200);
+  assertEquals(provider.calls.length, 0);
+  assertEquals(writes(backend.calls), [
+    ["admin", "imported_documents", { extracted_text: NOTES, summary: FALLBACK_SUMMARY }],
+  ]);
+});
+
+Deno.test("the local model server does not answer: the text's first 500 characters, and no provider call", async () => {
+  const { res, backend, provider } = await send(post(IMPORT), {
+    profile: { preferred_chat_model: LOCAL_MODEL },
+    env: LOCAL_ENV,
+    localModels: fakeLocalModels(),
+  });
+  assertEquals(res.status, 200);
+  assertEquals(provider.calls.length, 0);
+  assertEquals(writes(backend.calls), [
+    ["admin", "imported_documents", { extracted_text: NOTES, summary: FALLBACK_SUMMARY }],
+  ]);
 });

@@ -22,6 +22,15 @@
 //
 // A NULL monthly_token_budget means "no limit" (operator hasn't set one).
 
+import { isOllamaModel } from "./_ollama.ts";
+
+/** Whether a call's tokens count toward the monthly budget. A local model
+ *  runs on the operator's own machine at no cost: its calls are logged in
+ *  token_usage like any other, but not counted. */
+export function countsTowardBudget(model: string): boolean {
+  return !isOllamaModel(model);
+}
+
 export interface BudgetProfile {
   monthly_token_budget: number | null;
   tokens_used_this_period: number;

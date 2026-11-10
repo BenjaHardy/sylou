@@ -9,15 +9,19 @@
 //
 // Provider-agnostic LLM call helper: translates OpenAI-style messages
 // + tools into the right shape per provider (Anthropic / Mistral /
-// DeepSeek), issues the fetch, and normalises non-streaming responses
-// back to OpenAI shape so callers don't branch. Also exposes a
-// streaming-delta extractor and a safe upstream-error formatter.
+// DeepSeek / a local Ollama server), issues the fetch, and normalises
+// non-streaming responses back to OpenAI shape so callers don't branch.
+// Also exposes a streaming-delta extractor and a safe upstream-error
+// formatter.
 // ============================================================
 
 import { sliceSafe } from "./_text.ts";
 import { CLAUDE_THINKING_OFF_BETWEEN_TOOLS, type ClaudeEffort, type MistralEffort } from "./_models.ts";
+import { isOllamaModel, ollamaBaseUrl, ollamaBody } from "./_ollama.ts";
 
-export type ProviderId = "mistral" | "anthropic" | "deepseek";
+export type ProviderId = "mistral" | "anthropic" | "deepseek" | "ollama";
+/** The providers reached over the internet with the operator's API key. */
+type KeyedProvider = Exclude<ProviderId, "ollama">;
 export type { ClaudeEffort, MistralEffort };
 
 export interface LLMTool {
@@ -50,22 +54,31 @@ export interface LLMMessage {
 export function providerFor(modelId: string): ProviderId {
   if (modelId.startsWith("claude-")) return "anthropic";
   if (modelId.startsWith("deepseek-")) return "deepseek";
+  if (isOllamaModel(modelId)) return "ollama";
   return "mistral";
 }
 
-export function endpointFor(provider: ProviderId): string {
+export function endpointFor(provider: KeyedProvider): string {
   if (provider === "anthropic") return "https://api.anthropic.com/v1/messages";
   if (provider === "deepseek") return "https://api.deepseek.com/v1/chat/completions";
   return "https://api.mistral.ai/v1/chat/completions";
 }
 
-export function envKeyFor(provider: ProviderId): string {
+export function envKeyFor(provider: KeyedProvider): string {
   if (provider === "anthropic") return "ANTHROPIC_API_KEY";
   if (provider === "deepseek") return "DEEPSEEK_API_KEY";
   return "MISTRAL_API_KEY";
 }
 
-export function authHeadersFor(provider: ProviderId, key: string): Record<string, string> {
+/** True when the operator has set the provider up: its API key is set, or
+ *  OLLAMA_URL for the local server. The functions check it before their
+ *  first call, to answer with a clear error. */
+export function providerConfigured(provider: ProviderId, env: Pick<Deno.Env, "get">): boolean {
+  if (provider === "ollama") return ollamaBaseUrl(env) !== null;
+  return !!env.get(envKeyFor(provider));
+}
+
+export function authHeadersFor(provider: KeyedProvider, key: string): Record<string, string> {
   if (provider === "anthropic") {
     return {
       "x-api-key": key,
@@ -351,7 +364,7 @@ export function sanitizeAnthropicSchema<T>(schema: T): T {
 }
 
 
-// Build OpenAI-shape body (used by Mistral & DeepSeek).
+// Build OpenAI-shape body (used by Mistral, DeepSeek and Ollama).
 //
 // `reasoning_effort` is Mistral-only and is rejected with HTTP 422 by
 // non-reasoning Mistral models (e.g. mistral-large-2512) and by every
@@ -478,7 +491,7 @@ interface RawResponse {
   usage?: RawUsage;
 }
 interface RawStreamChunk {
-  choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown }; finish_reason?: string }>;
+  choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown; reasoning?: unknown }; finish_reason?: string }>;
   type?: string;
   delta?: { type?: string; text?: string; stop_reason?: string; stop_details?: unknown };
   stop_details?: unknown;
@@ -614,7 +627,7 @@ export function normaliseResponse(
       stopDetails: r.stop_details ?? null,
     };
   }
-  // OpenAI-shape (Mistral/DeepSeek)
+  // OpenAI-shape (Mistral/DeepSeek/Ollama)
   const msg: RawMessage = r.choices?.[0]?.message ?? {};
   // Mistral reasoning models (reasoning_effort ≠ "none") return content as
   // an ARRAY of chunks (ThinkChunk + TextChunk) instead of a string. A
@@ -720,10 +733,11 @@ export function extractStopReason(parsed: unknown): string | null {
 /**
  * True when a streaming chunk carries the model's reasoning rather than
  * answer text: an OpenAI-shape delta whose content array holds a "thinking"
- * block (Mistral reasoning models, GLM via the Mistral API) or a non-empty
- * `reasoning_content` (DeepSeek-style), or Anthropic's thinking block start
- * / thinking_delta. Only ever used as a signal (the "thinking" phase): the
- * reasoning text itself is neither forwarded nor stored.
+ * block (Mistral reasoning models, GLM via the Mistral API), a non-empty
+ * `reasoning_content` (DeepSeek-style) or `reasoning` (Ollama), or
+ * Anthropic's thinking block start / thinking_delta. Only ever used as a
+ * signal (the "thinking" phase): the reasoning text itself is neither
+ * forwarded nor stored.
  */
 export function isThinkingDelta(parsed: unknown): boolean {
   if (!parsed || typeof parsed !== "object") return false;
@@ -731,6 +745,7 @@ export function isThinkingDelta(parsed: unknown): boolean {
   const delta = p.choices?.[0]?.delta;
   if (delta) {
     if (typeof delta.reasoning_content === "string" && delta.reasoning_content.length > 0) return true;
+    if (typeof delta.reasoning === "string" && delta.reasoning.length > 0) return true;
     if (Array.isArray(delta.content) && (delta.content as RawContentBlock[]).some((b) => b?.type === "thinking")) {
       return true;
     }
@@ -855,11 +870,10 @@ export async function callLLM(opts: {
   cache?: CacheHint;
 }): Promise<Response> {
   const provider = providerFor(opts.model);
-  const key = Deno.env.get(envKeyFor(provider));
-  if (!key) throw new Error(`Missing API key for ${provider}`);
+  const { url, headers } = connectionFor(provider);
   // Both translators consume tools/tool_choice/forceTool from the spread and
   // ignore the other path's knobs; only per-provider quirks are gated here.
-  const body =
+  let body: Record<string, unknown> =
     provider === "anthropic"
       ? toAnthropicBody({ ...opts })
       : toOpenAIBody({
@@ -874,6 +888,8 @@ export async function callLLM(opts: {
           reasoning_effort: provider === "mistral" ? opts.mistral_effort : undefined,
           prompt_cache_key: provider === "mistral" ? opts.cache?.key : undefined,
         });
+  // Ollama quirks: the model's name on the server, thinking off, usage on streams.
+  if (provider === "ollama") body = ollamaBody(body);
   // Mistral quirk: `temperature === 0` triggers greedy sampling, and the
   // API then rejects the request unless `top_p` is exactly 1.0
   // (HTTP 400, code 3054, "top_p must be 1 when using greedy sampling").
@@ -915,11 +931,24 @@ export async function callLLM(opts: {
     }
     console.log("[callLLM] outbound", JSON.stringify(logLine));
   }
-  return await fetchWithTimeout(endpointFor(provider), {
+  return await fetchWithTimeout(url, {
     method: "POST",
-    headers: authHeadersFor(provider, key),
+    headers,
     body: JSON.stringify(body),
   }, opts.timeoutMs ?? DEFAULT_LLM_TIMEOUT_MS);
+}
+
+/** Where callLLM sends a provider's requests, and their headers. The local
+ *  Ollama server takes no key. */
+function connectionFor(provider: ProviderId): { url: string; headers: Record<string, string> } {
+  if (provider === "ollama") {
+    const base = ollamaBaseUrl(Deno.env);
+    if (!base) throw new Error("OLLAMA_URL is not set");
+    return { url: `${base}/v1/chat/completions`, headers: { "Content-Type": "application/json" } };
+  }
+  const key = Deno.env.get(envKeyFor(provider));
+  if (!key) throw new Error(`Missing API key for ${provider}`);
+  return { url: endpointFor(provider), headers: authHeadersFor(provider, key) };
 }
 
 /** Default outbound-request timeout for provider calls (see callLLM.timeoutMs). */
@@ -960,8 +989,15 @@ export async function fetchWithTimeout(
 // Extract a safe, user-friendly error message from an upstream provider error
 // body. Only surfaces `error.message` (string), truncated, to avoid leaking
 // keys, account IDs, request IDs, headers, or stack traces.
+const PROVIDER_NAMES: Record<ProviderId, string> = {
+  anthropic: "Claude",
+  mistral: "Mistral",
+  deepseek: "DeepSeek",
+  ollama: "Ollama",
+};
+
 export function extractProviderError(provider: ProviderId, status: number, rawBody: string): string {
-  const providerName = provider === "anthropic" ? "Claude" : provider === "deepseek" ? "DeepSeek" : "Mistral";
+  const providerName = PROVIDER_NAMES[provider];
   let msg = "";
   try {
     const j = JSON.parse(rawBody);

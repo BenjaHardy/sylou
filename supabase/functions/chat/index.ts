@@ -1,12 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import {
-  callLLM, providerFor, normaliseResponse, extractProviderError, cleanLLMContent, fallbackReplyText,
-  isProviderTimeout, PROVIDER_TIMEOUT_MESSAGE, type CacheHint, type LLMMessage, type LLMTool,
+  callLLM, providerFor, providerConfigured, normaliseResponse, extractProviderError, cleanLLMContent,
+  fallbackReplyText, isProviderTimeout, PROVIDER_TIMEOUT_MESSAGE, type CacheHint, type LLMMessage, type LLMTool,
 } from "../_shared/_llm.ts";
 import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_shared/_sse.ts";
 import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { DEFAULT_CHAT_MODEL, INPUT_LIMITS, OUTPUT_BUDGETS, resolveModel } from "../_shared/_models.ts";
+import { isOllamaModel } from "../_shared/_ollama.ts";
 import {
   CHAT_THINKING, CHAT_EFFORT, CHAT_MISTRAL_EFFORT,
   resolveReasoning, resolveMaxTokens,
@@ -89,9 +90,12 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     const message: string = body.message;
     const conciseMode: boolean = body.concise_mode ?? false;
     const webSearchEnabled: boolean = body.web_search_enabled ?? false;
-    const modelChoice = resolveModel(body.model, profile.preferred_chat_model, DEFAULT_CHAT_MODEL);
+    const modelChoice = resolveModel(body.model, profile.preferred_chat_model, DEFAULT_CHAT_MODEL, deps.env);
     if ("error" in modelChoice) {
       return jsonResponse({ error: modelChoice.error }, 400);
+    }
+    if (isOllamaModel(modelChoice.model)) {
+      return jsonResponse({ error: "Chat does not run on local models yet. Pick a cloud model for chat in Settings." }, 400);
     }
     if (body.stream !== true) {
       return jsonResponse({ error: "Only streaming requests are supported (send stream: true)" }, 400);
@@ -216,10 +220,10 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
       { role: "user", content: message.trim() },
     ];
 
-    // --- Mistral API key ---
+    // --- Provider API key ---
     // API key check happens inside callLLM; surface a clean error if missing.
     const provider = providerFor(chatModel);
-    if (!deps.env.get(provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : "MISTRAL_API_KEY")) {
+    if (!providerConfigured(provider, deps.env)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
 

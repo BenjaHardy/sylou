@@ -65,7 +65,9 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   `_conversation_memory.ts` (rolling per-thread chat summary),
   `_prompts.ts` (mode/template system prompts shared by chat +
   context-prompt), `_handler.ts` (the handler `deps` types),
-  `_test_support.ts` (fakes for the handler tests).
+  `_test_support.ts` (fakes for the handler tests), `_ollama.ts` (the
+  local Ollama provider: its settings, request body and model lookup),
+  `_fit.ts` (sizing a call to a local model's context window).
 - Edge functions (8): `chat`, `analysis`, `editor-action`, `context-prompt`,
   `extract-text`, `share-report`, `config`, `delete-account`.
 
@@ -228,13 +230,21 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   `resolveSavedModel` (`_shared/_models.ts`): a requested `model` must be
   on `ALLOWED_MODELS` (else 400); a saved preference is used only when
   listed, else `DEFAULT_CHAT_MODEL` / `DEFAULT_FLOW_MODEL` with a `[model]`
-  warning. `models.test.ts` pins the server copy to the registry.
+  warning. `models.test.ts` pins the server copy to the registry. Local
+  models (`ollama/<name>`, offered only while `OLLAMA_URL` and
+  `OLLAMA_MODELS` are set) are allowed too, and **never replaced by a cloud
+  model**: a saved local model that is no longer listed is an error.
 - **Provider wire format** (`_shared/_llm.ts`): routing is by model-id
-  prefix (`claude-*` → Anthropic, `deepseek-*` → DeepSeek, else Mistral).
+  prefix (`claude-*` → Anthropic, `deepseek-*` → DeepSeek, `ollama/*` →
+  the operator's Ollama server, else Mistral).
   Two body translators only — `toAnthropicBody` and `toOpenAIBody`;
-  **DeepSeek shares the OpenAI path with Mistral** (no third translator).
+  **DeepSeek and Ollama share the OpenAI path with Mistral** (no third
+  translator; Ollama's differences are `ollamaBody` in `_ollama.ts`).
   `normaliseResponse` maps every provider back to OpenAI shape so callers
-  don't branch.
+  don't branch. Ollama cuts what overflows a model's window without an
+  error, so a call to a local model is sized first (`fitLocalCall`,
+  `_fit.ts`) and refused when it does not fit; chat, context-prompt and
+  analysis refuse local models.
 - **FLOW structured output**: for Anthropic, `analysis` uses **Structured
   Outputs** (json_schema) plus a repair-then-retry loop (`_repair.ts` fixes
   Claude's occasional stringified-pillar output; one retry on validation

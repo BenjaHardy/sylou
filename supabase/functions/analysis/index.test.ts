@@ -16,6 +16,8 @@ import {
   fakeProvider,
   importHandler,
   jsonReply,
+  LOCAL_ENV,
+  LOCAL_MODEL,
   post,
   preflight,
   TEST_ORIGIN,
@@ -415,4 +417,19 @@ Deno.test("writing that repeats the AI's replies (35% or more): the Write score 
   assert(write.narrative.endsWith("[Note: Write score capped at 2.0 due to automated similarity detection finding 100% overlap with AI chat responses.]"));
   const meta = row.flow_meta as { similarity_pct: number; write_score_capped: boolean };
   assertEquals([meta.similarity_pct, meta.write_score_capped], [100, true]);
+});
+
+// ── A local model (_ollama.ts) ───────────────────────────────────────────
+
+Deno.test("a listed local model: 400, FLOW runs on cloud models only, before the writing is read", async () => {
+  const { res, backend, provider } = await send(post(ANALYSE), {
+    profile: { preferred_flow_model: LOCAL_MODEL },
+    env: LOCAL_ENV,
+  });
+  assertEquals(res.status, 400);
+  assertEquals(await res.json(), {
+    error: "FLOW analyses run on cloud models only. Pick a cloud model for FLOW in Settings.",
+  });
+  assertEquals(backend.calls.some((c) => c.target === "writing_content"), false);
+  assertEquals(provider.calls.length, 0);
 });

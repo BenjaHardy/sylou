@@ -9,6 +9,7 @@
 
 import type { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import type { callLLM } from "./_llm.ts";
+import type { fetchLocalModelInfo } from "./_ollama.ts";
 
 export interface HandlerDeps {
   /** Environment variables (Deno.env in production). */
@@ -17,6 +18,9 @@ export interface HandlerDeps {
   createClient: typeof createClient;
   /** Every provider request the handler makes, directly or through its helpers. */
   callLLM: typeof callLLM;
+  /** Replaces fetchLocalModelInfo in tests: the functions that run local
+   *  models ask the model's server what it can take before each call. */
+  localModelInfo?: typeof fetchLocalModelInfo;
 }
 
 /** config reads the environment only. */
