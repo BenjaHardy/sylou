@@ -67,7 +67,8 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   context-prompt), `_handler.ts` (the handler `deps` types),
   `_test_support.ts` (fakes for the handler tests), `_ollama.ts` (the
   local Ollama provider: its settings, request body and model lookup),
-  `_fit.ts` (sizing a call to a local model's context window).
+  `_fit.ts` (sizing a call to a local model's context window),
+  `_favourites.ts` (favourite documents beside a local model's window).
 - Edge functions (8): `chat`, `analysis`, `editor-action`, `context-prompt`,
   `extract-text`, `share-report`, `config`, `delete-account`.
 
@@ -129,11 +130,13 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   `user_id` is bound to the caller — it is an audit log that neither FLOW
   nor the budget counter reads. The per-thread **conversation memory**
   (`chat_thread_summaries`, maintained by `_shared/_conversation_memory.ts`
-  in the chat/context-prompt stream tails) follows the same pattern —
+  in the chat/context-prompt stream tails, and once early in a chat request
+  whose prompt does not fit a local model's window) follows the same pattern —
   user-read-only, service-role writes, injected into chat and
   context-prompt prompts ahead of the verbatim window (`fetchVerbatimWindow`:
-  the 20 newest covered messages, then everything after the watermark, so
-  the prompt prefix only grows between refreshes) — and is **never** read
+  the 20 newest covered messages, 5 for a local model, then everything
+  after the watermark, so the prompt prefix only grows between refreshes)
+  — and is **never** read
   by FLOW (same principle
   as the withheld `writing_summary_log`: continuity aid, not assessment
   evidence). Don't collapse these paths.
@@ -242,9 +245,14 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   translator; Ollama's differences are `ollamaBody` in `_ollama.ts`).
   `normaliseResponse` maps every provider back to OpenAI shape so callers
   don't branch. Ollama cuts what overflows a model's window without an
-  error, so a call to a local model is sized first (`fitLocalCall`,
-  `_fit.ts`) and refused when it does not fit; chat, context-prompt and
-  analysis refuse local models.
+  error, so a call to a local model is sized first (`_fit.ts`) and refused
+  when it does not fit; context-prompt and analysis refuse local models.
+  Chat on a local model (`chat/local.ts`) keeps a smaller memory sized to
+  the window (`localMemoryProfile`), gives the favourites that do not fit
+  as their summaries (`_favourites.ts`; editor-action too), offers tools
+  only when Ollama lists the model's "tools" capability, cuts tool results
+  to the room left, and answers a prompt still too long after up to three
+  early memory refreshes with a 400 (start a new thread).
 - **FLOW structured output**: for Anthropic, `analysis` uses **Structured
   Outputs** (json_schema) plus a repair-then-retry loop (`_repair.ts` fixes
   Claude's occasional stringified-pillar output; one retry on validation

@@ -7,7 +7,10 @@ import { makeSSEHelpers, readProviderStream } from "../_shared/_sse.ts";
 import { EDITOR_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { DEFAULT_CHAT_MODEL, INPUT_LIMITS, OUTPUT_BUDGETS, resolveModel } from "../_shared/_models.ts";
 import { fetchLocalModelInfo, isOllamaModel } from "../_shared/_ollama.ts";
-import { fitLocalCall } from "../_shared/_fit.ts";
+import { estimatePromptTokens, fitWindow, roomLeft } from "../_shared/_fit.ts";
+import {
+  buildSummarizedFavBlock, type FavouriteDoc, favouriteEntry, splitFavourites,
+} from "../_shared/_favourites.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 import {
   EDITOR_THINKING, EDITOR_EFFORT, EDITOR_MISTRAL_EFFORT,
@@ -34,6 +37,15 @@ const ACTION_PROMPTS: Record<string, string> = {
     "Expand the following text with more detail and depth while maintaining the same tone. Return only the expanded text.",
   translate: "Translate the following text to {target_language}. Return only the translation.",
 };
+
+const FAVOURITES_HEADER =
+  `\n\n# REFERENCE DOCUMENTS (ALWAYS AVAILABLE)\n\nThe following documents have been provided by the user as key reference material. Their full content is included below. Use them to inform your response when relevant.\n\n`;
+
+/** The favourite documents' full text, appended to the system prompt; none
+ *  without any. */
+function favouritesBlock(docs: FavouriteDoc[]): string {
+  return docs.length > 0 ? FAVOURITES_HEADER + docs.map(favouriteEntry).join("") : "";
+}
 
 const defaultDeps: HandlerDeps = { env: Deno.env, createClient, callLLM };
 
@@ -138,28 +150,16 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
       prompt = prompt.replace("{target_language}", targetLanguage!);
     }
 
-    // --- Inject favourite reference documents into the system prompt ---
+    // --- Favourite reference documents, for the system prompt ---
     const serviceRoleKeyForDocs = deps.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const adminForDocs = deps.createClient(supabaseUrl, serviceRoleKeyForDocs);
     const { data: favDocs } = await adminForDocs
       .from("imported_documents")
-      .select("file_name, extracted_text")
+      .select("id, file_name, extracted_text, summary")
       .eq("project_id", projectId)
       .eq("is_favourite", true);
 
-    const favourites = (favDocs ?? []).filter((d: any) => d.extracted_text);
-    if (favourites.length > 0) {
-      let favBlock = `\n\n# REFERENCE DOCUMENTS (ALWAYS AVAILABLE)\n\nThe following documents have been provided by the user as key reference material. Their full content is included below. Use them to inform your response when relevant.\n\n`;
-      for (const doc of favourites) {
-        favBlock += `=== ${doc.file_name} ===\n\n${doc.extracted_text}\n\n`;
-      }
-      prompt += favBlock;
-    }
-
-    const llmMessages = [
-      { role: "system" as const, content: prompt },
-      { role: "user" as const, content: selectedText },
-    ];
+    const favourites: FavouriteDoc[] = (favDocs ?? []).filter((d: any) => d.extracted_text);
 
     // --- Resolve chat model from request body or profile ---
     const modelChoice = resolveModel(body.model, profile.preferred_chat_model, DEFAULT_CHAT_MODEL, deps.env);
@@ -176,16 +176,30 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     if (!providerConfigured(provider, deps.env)) {
       return jsonResponse({ error: `${provider} API key not configured` }, 500);
     }
-    // A local model takes the call only when it fits the model's window.
+
+    const messagesWith = (system: string) => [
+      { role: "system" as const, content: system },
+      { role: "user" as const, content: selectedText },
+    ];
+    let llmMessages = messagesWith(prompt + favouritesBlock(favourites));
+    // A local model takes the call only when it fits the model's window. A
+    // favourite goes in whole while a full-length rewrite still fits beside
+    // it; the others go in as their summaries.
     if (isOllamaModel(chatModel)) {
-      const fit = await fitLocalCall({
+      const info = await (deps.localModelInfo ?? fetchLocalModelInfo)(chatModel, deps.env);
+      if ("error" in info) return jsonResponse({ error: info.error }, 503);
+      const reserved = estimatePromptTokens(messagesWith(prompt + FAVOURITES_HEADER + buildSummarizedFavBlock(favourites, false)));
+      const { whole, summarized } = splitFavourites(favourites, roomLeft(info.contextTokens, reserved, editorMaxTokens));
+      llmMessages = messagesWith(
+        prompt + favouritesBlock(whole) + (summarized.length > 0 ? buildSummarizedFavBlock(summarized, false) : ""),
+      );
+      const fit = fitWindow({
         model: chatModel,
+        contextTokens: info.contextTokens,
         messages: llmMessages,
         budget: editorMaxTokens,
         // A rewrite runs about as long as the selection (~4 characters a token).
         minReply: Math.min(editorMaxTokens, Math.ceil(selectedText.length / 4)),
-        env: deps.env,
-        lookup: deps.localModelInfo ?? fetchLocalModelInfo,
       });
       if ("error" in fit) return jsonResponse({ error: fit.error }, fit.status);
       editorMaxTokens = fit.maxTokens;

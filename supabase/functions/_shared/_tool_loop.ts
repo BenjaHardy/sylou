@@ -8,7 +8,8 @@
 // calls past the per-turn limit and unknown tool names get stub results,
 // or the follow-up request 400s on unpaired ids. All five tool-result
 // string shapes are provider-visible and byte-frozen (one carries an em
-// dash). A failed intermediate call silently ends the loop (no log, no
+// dash); for a local model a result may be cut short, closed by
+// RESULT_CUT_NOTE. A failed intermediate call silently ends the loop (no log, no
 // error event) and falls through to the caller's final call with the
 // accumulated messages — deliberate, preserved.
 //
@@ -39,9 +40,13 @@ import {
 } from "./_llm.ts";
 import { formatWebSearchResults, searchWeb } from "./_tools.ts";
 import { contentLogsEnabled } from "./_debug.ts";
+import { cutToFit, estimatePromptTokens, fitReply, roomLeft } from "./_fit.ts";
 
 export const ROUND_LIMIT_NOTE =
   "Tool-use limit reached for this request: write your answer now from the information above.";
+
+/** Closes a tool result cut to fit a local model's window. */
+export const RESULT_CUT_NOTE = "\n\n[Cut here: the rest of this result does not fit in this model's context window.]";
 
 /** Appended to the final call on Anthropic: with the tool list still on the
  *  wire and calls forbidden, a model could otherwise spend the reply planning
@@ -116,6 +121,10 @@ export interface ToolLoopDeps {
   mistralEffort: Parameters<typeof callLLM>[0]["mistral_effort"];
   /** Forwarded to every check call: each one re-sends the previous call's prefix. */
   cache?: CacheHint;
+  /** A local model's window (_fit.ts): each tool result is cut to what the
+   *  window leaves beside the reply's minimum, and each check call's reply
+   *  to the room left. */
+  localWindow?: { contextTokens: number; minReply: number };
   /** Log prefix, so each function keeps its own log lines. */
   logTag: string;
   /** Replaces callLLM in unit tests. */
@@ -130,12 +139,20 @@ export async function runToolLoop(
   const {
     toolMessages, toolCalls, documentsReferenced, webSearchesPerformed,
     emitPhase, projectId, chatModel, chatMaxTokens, tools, temperature,
-    thinking, effort, mistralEffort, cache, logTag,
+    thinking, effort, mistralEffort, cache, localWindow, logTag,
   } = deps;
   const adminSupabase = deps.adminSupabase as DocReadClient;
   const llm = deps.llm ?? callLLM;
   let inputCharsAdded = 0;
   let outputCharsAdded = 0;
+
+  const pushResult = (toolCallId: string, content: string) => {
+    if (localWindow) {
+      const used = estimatePromptTokens([...toolMessages, { role: "tool", content: "" }], tools);
+      content = cutToFit(content, roomLeft(localWindow.contextTokens, used, localWindow.minReply), RESULT_CUT_NOTE);
+    }
+    toolMessages.push({ role: "tool", tool_call_id: toolCallId, content });
+  };
 
   // Resolve tool calls iteratively (up to 5 iterations)
   let iteration = 0;
@@ -153,11 +170,10 @@ export async function runToolLoop(
 
     for (const [tcIndex, tc] of currentToolCalls.entries()) {
       if (tcIndex >= TOOL_CALL_LIMIT) {
-        toolMessages.push({
-          role: "tool",
-          tool_call_id: tc.id,
-          content: "Not executed: at most 5 tool calls run per round. Make the remaining calls in your next round if still needed.",
-        });
+        pushResult(
+          tc.id,
+          "Not executed: at most 5 tool calls run per round. Make the remaining calls in your next round if still needed.",
+        );
       } else if (tc.name === "read_imported_document") {
         const docId = tc.arguments.document_id as string;
         console.log(`${logTag} reading document:`, docId);
@@ -176,11 +192,7 @@ export async function runToolLoop(
           ? `Document "${docData.file_name}":\n\n${docData.extracted_text}`
           : `Document not found in this project or text not yet extracted.`;
 
-        toolMessages.push({
-          role: "tool",
-          tool_call_id: tc.id,
-          content: toolResult,
-        });
+        pushResult(tc.id, toolResult);
       } else if (tc.name === "web_search") {
         const query = tc.arguments.query as string;
         console.log(`${logTag} web search:`, contentLogsEnabled() ? query : `(${query.length} chars)`);
@@ -189,19 +201,9 @@ export async function runToolLoop(
         emitPhase("searching_web");
 
         const results = await searchWeb(query);
-        const toolResult = formatWebSearchResults(query, results);
-
-        toolMessages.push({
-          role: "tool",
-          tool_call_id: tc.id,
-          content: toolResult,
-        });
+        pushResult(tc.id, formatWebSearchResults(query, results));
       } else {
-        toolMessages.push({
-          role: "tool",
-          tool_call_id: tc.id,
-          content: `Unknown tool "${tc.name}" — not executed.`,
-        });
+        pushResult(tc.id, `Unknown tool "${tc.name}" — not executed.`);
       }
     }
 
@@ -212,11 +214,17 @@ export async function runToolLoop(
 
     // Check if the LLM wants to make more tool calls
     if (iteration < MAX_ITERATIONS) {
+      let maxTokens = chatMaxTokens;
+      if (localWindow) {
+        const fit = fitReply(localWindow.contextTokens, estimatePromptTokens(toolMessages, tools), chatMaxTokens, localWindow.minReply);
+        if (fit === null) break; // no room left for another round
+        maxTokens = fit;
+      }
       const promptSize = promptChars(toolMessages);
       const nextRes = await llm({
           model: chatModel,
           messages: toolMessages,
-          max_tokens: chatMaxTokens,
+          max_tokens: maxTokens,
           tools,
           temperature,
           thinking,

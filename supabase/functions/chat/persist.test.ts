@@ -120,6 +120,15 @@ Deno.test("a billing RPC error is log-only — count still runs, nothing throws"
   assert(calls.some((c) => c.op === "stats-update"));
 });
 
+Deno.test("a local model's exchange is saved and counted as a prompt, but not billed: the total stays", async () => {
+  const { calls, ctx } = makeFakes();
+  const res = await persistChatExchange({ ...ctx, chatModel: "ollama/sylou-nemo-16k" }, "answer", 100, 20);
+  assertEquals(calls.map((c) => c.op), ["insert", "insert", "stats-select", "stats-update"]);
+  assertEquals(calls[1].values?.model_used, "ollama/sylou-nemo-16k");
+  assertEquals(res.estimatedTokens, 30);
+  assertEquals(res.newTotal, 100);
+});
+
 Deno.test("finals are caller-computed params: zeros bill zero (the accumulator contract)", async () => {
   // The running accumulators are zero on the no-tools paths — callers
   // MUST pass their own recomputed finals (and fold the tool-loop's

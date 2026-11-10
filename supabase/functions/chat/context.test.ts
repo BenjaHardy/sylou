@@ -4,7 +4,7 @@
 // means the prompt framing changed — checkpoint, not test edit.
 // Run with: deno task test  (from supabase/functions/)
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { buildDocIndex, buildFavBlock } from "./context.ts";
+import { buildChatMessages, buildDocIndex, buildFavBlock, chatTools } from "./context.ts";
 
 Deno.test("doc index: header, per-doc rows, and the missing-summary fallback", () => {
   const out = buildDocIndex([
@@ -15,6 +15,31 @@ Deno.test("doc index: header, per-doc rows, and the missing-summary fallback", (
   assert(out.includes("use the read_imported_document tool"));
   assert(out.includes('- Document: "paper.pdf" (ID: id-1)\n  Summary: About birds.\n\n'));
   assert(out.includes('- Document: "notes.txt" (ID: id-2)\n  Summary: No summary available\n\n'));
+});
+
+Deno.test("doc index for a model that cannot call tools: the summaries only, and no tool named", () => {
+  const out = buildDocIndex([{ id: "id-1", file_name: "paper.pdf", summary: "About birds." }], false);
+  assert(out.startsWith("\n\n# IMPORTED DOCUMENTS\n\n"));
+  assert(out.includes("their full text is not available in this chat"));
+  assert(!out.includes("read_imported_document") && !out.includes("(ID:"));
+  assert(out.endsWith('- Document: "paper.pdf"\n  Summary: About birds.\n\n'));
+});
+
+Deno.test("chat messages: system prompt, memory in the user zone, the verbatim window, the trimmed message", () => {
+  const memory = { summary_text: "The plan so far.", covers_through: "t", covered_message_count: 4, updated_at: "" };
+  const messages = buildChatMessages("SYSTEM", memory, [{ role: "assistant", content: "Earlier." }], "  Next?  ");
+  assertEquals(messages.map((m) => m.role), ["system", "user", "assistant", "user"]);
+  assertEquals(messages[0].content, "SYSTEM");
+  assert(String(messages[1].content).startsWith("[CONVERSATION MEMORY]"));
+  assert(String(messages[1].content).includes("The plan so far."));
+  assertEquals(messages.slice(2), [{ role: "assistant", content: "Earlier." }, { role: "user", content: "Next?" }]);
+  assertEquals(buildChatMessages("SYSTEM", null, [], "Hi").map((m) => m.role), ["system", "user"]);
+});
+
+Deno.test("chat tools: the document tool first, then web search, each only when asked for", () => {
+  assertEquals(chatTools(true, true).map((t) => t.function.name), ["read_imported_document", "web_search"]);
+  assertEquals(chatTools(false, true).map((t) => t.function.name), ["web_search"]);
+  assertEquals(chatTools(false, false), []);
 });
 
 Deno.test("favourites block: header, fenced full text, and the conditional tool note", () => {
