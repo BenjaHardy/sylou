@@ -5,7 +5,9 @@
  * models.test.ts fails when the model lists differ.
  */
 
-export type ModelProvider = "mistral" | "anthropic" | "deepseek";
+/** "ollama": a local model the instance's own Ollama server runs (see
+ *  localModelInfos); never part of MODELS. */
+export type ModelProvider = "mistral" | "anthropic" | "deepseek" | "ollama";
 
 /** Where the maintainer's field tests place a model for FLOW analysis:
  *  "recommended" = the defaults (reliability, speed and cost), "alternative"
@@ -37,6 +39,36 @@ export interface ModelInfo {
    *  holds the rationale per model. Until 2026-09 this lived only in the
    *  wording of `note`. */
   flowTier?: FlowTier;
+  /** A local model's card state (localModelInfos); registry models have none. */
+  local?: LocalModelCard;
+}
+
+/** What the instance's model server reported for a local model when the
+ *  page loaded (the config function, through useInstanceConfig). */
+export interface LocalModelReport {
+  /** The window the server loads it with, in tokens. */
+  contextTokens?: number;
+  /** Whether it can call tools: read imported documents, search the web. */
+  tools?: boolean;
+  /** Why the server cannot run it. */
+  problem?: string;
+  /** The server did not answer. */
+  notAnswering?: boolean;
+}
+
+export interface LocalModel extends LocalModelReport {
+  /** `ollama/<name>`. */
+  id: string;
+  name: string;
+}
+
+export interface LocalModelCard extends LocalModelReport {
+  /** The saved chat model is local, and the instance no longer lists it. */
+  missing?: boolean;
+  /** The saved chat model is local, and the instance's list could not be read. */
+  unchecked?: boolean;
+  /** The saved chat model is local, and the instance's list is still loading. */
+  checking?: boolean;
 }
 
 export const MODELS: ModelInfo[] = [
@@ -154,6 +186,50 @@ export function getModel(id: string): ModelInfo | undefined {
   return MODELS.find((m) => m.id === id);
 }
 
+/** Local models are named `ollama/<name>`: mirror of OLLAMA_PREFIX in
+ *  supabase/functions/_shared/_ollama.ts (models.test.ts pins the two). */
+export const LOCAL_MODEL_PREFIX = "ollama/";
+
+export function isLocalModel(id: string): boolean {
+  return id.startsWith(LOCAL_MODEL_PREFIX);
+}
+
+/** A local model's name on its server. */
+export function localModelName(id: string): string {
+  return id.slice(LOCAL_MODEL_PREFIX.length);
+}
+
+/** The name shown for a model id: its registry label, a local model's own
+ *  name, else null. */
+export function modelLabel(id: string): string | null {
+  return MODEL_LABELS[id] ?? (isLocalModel(id) ? localModelName(id) : null);
+}
+
+/** The chat picker's local cards: each model the instance lists, then the
+ *  saved chat model when it is local but not among them (`localModels` null:
+ *  the list could not be read; undefined: it is still loading). The saved
+ *  choice stays on screen as it is: nothing here, or anywhere in the app,
+ *  swaps it for a cloud model. */
+export function localModelInfos(localModels: LocalModel[] | null | undefined, savedId: string): ModelInfo[] {
+  const cards = (localModels ?? []).map(({ id, name, ...report }) => localCard(id, name, report));
+  if (isLocalModel(savedId) && !cards.some((c) => c.id === savedId)) {
+    const state: LocalModelCard = localModels ? { missing: true } : localModels === null ? { unchecked: true } : { checking: true };
+    cards.push(localCard(savedId, localModelName(savedId), state));
+  }
+  return cards;
+}
+
+function localCard(id: string, name: string, local: LocalModelCard): ModelInfo {
+  return {
+    id,
+    label: name,
+    provider: "ollama",
+    pricing: { input: 0, output: 0 },
+    contextLimit: local.contextTokens ?? 0,
+    local,
+  };
+}
+
 /** The reference the Settings pickers link to for per-model rationale. */
 export const MODEL_CONFIG_DOC_URL =
   "https://github.com/BenjaHardy/sylou/blob/main/docs/model-configuration.md";
@@ -165,6 +241,7 @@ export const PROVIDER_LABELS: Record<ModelProvider, string> = {
   anthropic: "Anthropic",
   mistral: "Mistral API",
   deepseek: "DeepSeek",
+  ollama: "Ollama",
 };
 
 /** A titled slice of the registry, as rendered by the Settings pickers. */
@@ -174,18 +251,23 @@ export interface ModelGroup {
   models: ModelInfo[];
 }
 
-/** Chat picker: models grouped by the API that serves them. A provider
- *  without a dedicated group lands in "Other providers", so adding one to
- *  the registry needs no change here. Empty groups are omitted; registry
- *  order is kept inside each group. */
-export function groupModelsByProvider(models: ModelInfo[] = MODELS): ModelGroup[] {
+export const LOCAL_GROUP_ID = "local";
+
+/** Chat picker: models grouped by the API that serves them, the local
+ *  models (localModelInfos) first under `localLabel`. A provider without a
+ *  dedicated group lands in "Other providers", so adding one to the registry
+ *  needs no change here. Empty groups are omitted; registry order is kept
+ *  inside each group. */
+export function groupModelsByProvider(models: ModelInfo[] = MODELS, localLabel = "On this computer"): ModelGroup[] {
+  const dedicated: ModelProvider[] = ["ollama", "anthropic", "mistral"];
   const groups: ModelGroup[] = [
+    { id: LOCAL_GROUP_ID, label: localLabel, models: models.filter((m) => m.provider === "ollama") },
     { id: "anthropic", label: "Anthropic (Claude)", models: models.filter((m) => m.provider === "anthropic") },
     { id: "mistral", label: "Mistral API", models: models.filter((m) => m.provider === "mistral") },
     {
       id: "other",
       label: "Other providers",
-      models: models.filter((m) => m.provider !== "anthropic" && m.provider !== "mistral"),
+      models: models.filter((m) => !dedicated.includes(m.provider)),
     },
   ];
   return groups.filter((g) => g.models.length > 0);
@@ -206,10 +288,13 @@ function flowProviderRank(m: ModelInfo): number {
 
 /** FLOW picker: the recommended models first, the alternatives behind a
  *  second group, every other model behind a third (the UI tops the last two
- *  with a notice each). Empty groups are omitted. */
+ *  with a notice each). Empty groups are omitted. Local models are never
+ *  offered: FLOW runs on cloud models only. */
 export function groupModelsForFlow(models: ModelInfo[] = MODELS): ModelGroup[] {
   const tier = (t: FlowTier | undefined): ModelInfo[] =>
-    models.filter((m) => m.flowTier === t).sort((a, b) => flowProviderRank(a) - flowProviderRank(b));
+    models
+      .filter((m) => m.flowTier === t && m.provider !== "ollama")
+      .sort((a, b) => flowProviderRank(a) - flowProviderRank(b));
   const groups: ModelGroup[] = [
     { id: FLOW_RECOMMENDED_GROUP_ID, label: "Recommended for FLOW", models: tier("recommended") },
     { id: FLOW_ALTERNATIVE_GROUP_ID, label: "Alternatives for FLOW", models: tier("alternative") },

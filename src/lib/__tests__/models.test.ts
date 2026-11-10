@@ -10,13 +10,19 @@ import {
   FLOW_ALTERNATIVE_GROUP_ID,
   FLOW_OTHER_GROUP_ID,
   FLOW_RECOMMENDED_GROUP_ID,
+  LOCAL_GROUP_ID,
+  LOCAL_MODEL_PREFIX,
   MODELS,
   MODEL_LABELS,
   PROVIDER_LABELS,
   groupModelsByProvider,
   groupModelsForFlow,
+  isLocalModel,
+  localModelInfos,
+  modelLabel,
   resolveReasoningId,
   resolveReasoningLabel,
+  type LocalModel,
   type ModelInfo,
 } from "@/lib/models";
 
@@ -217,5 +223,79 @@ describe("chat reasoning options (UI mirror of _shared/_thinking.ts)", () => {
     expect(resolveReasoningLabel("zai-glm-5-3", { "zai-glm-5-3": "max" })).toBe("Max (slow)");
     expect(resolveReasoningLabel("claude-opus-4-8", {})).toBe("High");
     expect(resolveReasoningLabel("deepseek-v4-flash", {})).toBeNull();
+  });
+});
+
+describe("local models (the instance's Ollama server, listed by the config function)", () => {
+  const nemo: LocalModel = { id: "ollama/sylou-nemo-16k", name: "sylou-nemo-16k", contextTokens: 16_384, tools: true };
+  const down: LocalModel = { id: "ollama/sylou-ministral-8k", name: "sylou-ministral-8k", notAnswering: true };
+  const ids = (models: ModelInfo[]) => models.map((m) => m.id);
+
+  it("the prefix is the server's (OLLAMA_PREFIX in _shared/_ollama.ts)", () => {
+    const source = readFileSync(join(process.cwd(), "supabase", "functions", "_shared", "_ollama.ts"), "utf8");
+    expect(source.match(/export const OLLAMA_PREFIX = "([^"]+)"/)?.[1]).toBe(LOCAL_MODEL_PREFIX);
+    expect(isLocalModel("ollama/sylou-nemo-16k")).toBe(true);
+    for (const m of MODELS) expect(isLocalModel(m.id), m.id).toBe(false);
+  });
+
+  it("each listed model becomes a card with its server's report, no price, and its window as the limit", () => {
+    const cards = localModelInfos([nemo, down], DEFAULT_CHAT_MODEL);
+    expect(cards).toEqual([
+      {
+        id: nemo.id,
+        label: "sylou-nemo-16k",
+        provider: "ollama",
+        pricing: { input: 0, output: 0 },
+        contextLimit: 16_384,
+        local: { contextTokens: 16_384, tools: true },
+      },
+      {
+        id: down.id,
+        label: "sylou-ministral-8k",
+        provider: "ollama",
+        pricing: { input: 0, output: 0 },
+        contextLimit: 0,
+        local: { notAnswering: true },
+      },
+    ]);
+  });
+
+  it("a saved local model the instance does not list stays on screen: missing, unchecked or still checking — never swapped", () => {
+    expect(localModelInfos([nemo], "ollama/sylou-gone").map((c) => [c.id, c.local])).toEqual([
+      [nemo.id, { contextTokens: 16_384, tools: true }],
+      ["ollama/sylou-gone", { missing: true }],
+    ]);
+    expect(localModelInfos([], "ollama/sylou-gone").map((c) => c.local)).toEqual([{ missing: true }]);
+    expect(localModelInfos(null, "ollama/sylou-gone").map((c) => c.local)).toEqual([{ unchecked: true }]);
+    expect(localModelInfos(undefined, "ollama/sylou-gone").map((c) => c.local)).toEqual([{ checking: true }]);
+    // A listed saved model is not repeated, and a cloud choice adds nothing.
+    expect(ids(localModelInfos([nemo], nemo.id))).toEqual([nemo.id]);
+    expect(localModelInfos(null, DEFAULT_CHAT_MODEL)).toEqual([]);
+  });
+
+  it("chat: the local group comes first, under the label given; without local models the groups are unchanged", () => {
+    const groups = groupModelsByProvider([...localModelInfos([nemo], DEFAULT_CHAT_MODEL), ...MODELS], "On this computer");
+    expect(groups.map((g) => [g.id, g.label])).toEqual([
+      [LOCAL_GROUP_ID, "On this computer"],
+      ["anthropic", "Anthropic (Claude)"],
+      ["mistral", "Mistral API"],
+      ["other", "Other providers"],
+    ]);
+    expect(ids(groups[0].models)).toEqual([nemo.id]);
+    expect(groups[3].models.map((m) => m.provider)).toEqual(["deepseek"]);
+    expect(groupModelsByProvider().map((g) => g.id)).toEqual(["anthropic", "mistral", "other"]);
+  });
+
+  it("FLOW never offers a local model, even one handed to the grouping", () => {
+    const grouped = groupModelsForFlow([...localModelInfos([nemo], nemo.id), ...MODELS]).flatMap((g) => ids(g.models));
+    expect(grouped.some(isLocalModel)).toBe(false);
+    expect(grouped.sort()).toEqual(ids(MODELS).sort());
+  });
+
+  it("labels: a registry model's label, a local model's own name, else null", () => {
+    expect(modelLabel("zai-glm-5-3")).toBe("Z.ai GLM 5.3 (via Mistral)");
+    expect(modelLabel("zai-glm-5-2")).toBe("Z.ai GLM 5.2 (via Mistral)");
+    expect(modelLabel("ollama/sylou-nemo-16k")).toBe("sylou-nemo-16k");
+    expect(modelLabel("made-up-model")).toBeNull();
   });
 });

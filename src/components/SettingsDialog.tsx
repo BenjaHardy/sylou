@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { LogOut, Trash2 } from "lucide-react";
 import { useUserSettings } from "@/hooks/useUserSettings";
+import { useInstanceConfig } from "@/hooks/useInstanceConfig";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -38,10 +39,16 @@ import {
   FLOW_ALTERNATIVE_GROUP_ID,
   FLOW_OTHER_GROUP_ID,
   FLOW_RECOMMENDED_GROUP_ID,
+  LOCAL_GROUP_ID,
+  MODELS,
   MODEL_CONFIG_DOC_URL,
   groupModelsByProvider,
   groupModelsForFlow,
+  isLocalModel,
+  localModelInfos,
+  localModelName,
 } from "@/lib/models";
+import { isLoopbackHost } from "@/lib/site";
 import { ModelPicker } from "@/components/settings/ModelPicker";
 
 interface Props {
@@ -59,8 +66,8 @@ const LANGUAGES = [
   "Nederlands",
 ];
 
-// The registry is static, so the two groupings are computed once.
-const CHAT_MODEL_GROUPS = groupModelsByProvider();
+// The registry is static, so the FLOW grouping is computed once; the chat
+// grouping adds the instance's local models.
 const FLOW_MODEL_GROUPS = groupModelsForFlow();
 
 const modelConfigLink = (
@@ -76,7 +83,23 @@ const modelConfigLink = (
 
 export function SettingsDialog({ open, onOpenChange }: Props) {
   const { settings, loading, update } = useUserSettings();
+  const { localModels, loading: configLoading } = useInstanceConfig();
   const { signOut } = useAuth();
+
+  // Local models run where this Sylou runs: on this computer when the app
+  // itself is served from it.
+  const servedHere = isLoopbackHost(window.location.hostname);
+  const chatModelGroups = useMemo(
+    () =>
+      groupModelsByProvider(
+        [...localModelInfos(configLoading ? undefined : localModels, settings.preferred_chat_model), ...MODELS],
+        servedHere ? "On this computer" : "On this Sylou's own server",
+      ),
+    [configLoading, localModels, settings.preferred_chat_model, servedHere],
+  );
+  const instanceHasLocalModels = (localModels?.length ?? 0) > 0;
+  const ollamaNotAnswering = localModels?.some((m) => m.notAnswering) ?? false;
+  const flowModelIsLocal = isLocalModel(settings.preferred_flow_model);
 
   const [displayName, setDisplayName] = useState(settings.display_name ?? "");
   useEffect(() => {
@@ -134,9 +157,28 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                 document summaries use the selected model with fixed settings.
               </p>
               <ModelPicker
-                groups={CHAT_MODEL_GROUPS}
+                groups={chatModelGroups}
                 selectedId={settings.preferred_chat_model}
                 onSelect={(id) => update({ preferred_chat_model: id })}
+                defaultOpenGroupIds={instanceHasLocalModels ? [LOCAL_GROUP_ID] : []}
+                groupNotices={{
+                  [LOCAL_GROUP_ID]: (
+                    <>
+                      <span className="font-medium text-foreground">Beta.</span> These models run{" "}
+                      {servedHere ? "on this computer" : "on this Sylou's own server"} through Ollama, not on a
+                      cloud API. They are much smaller than the cloud models: expect weaker answers. They handle
+                      chat, editor actions and document summaries; Ask, Propose and FLOW need a cloud model. The
+                      window is how much text a model reads at once; a model that can use tools can open your
+                      imported documents and search the web.
+                      {ollamaNotAnswering && (
+                        <span className="mt-1 block text-foreground">
+                          Ollama isn't answering. Start Ollama, then reload this page to see each model's window
+                          and tools.
+                        </span>
+                      )}
+                    </>
+                  ),
+                }}
                 reasoningOptions={CHAT_REASONING_OPTIONS}
                 reasoningChoices={settings.preferred_chat_reasoning}
                 onReasoningChange={(modelId, optionId) =>
@@ -152,7 +194,16 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
               <p className="text-xs text-muted-foreground mb-2">
                 Used when running a FLOW report on your project. Its reasoning settings are fixed
                 in code (see the {modelConfigLink}).
+                {instanceHasLocalModels && !flowModelIsLocal && (
+                  <> Local models can't run FLOW analyses: FLOW always runs on a cloud model.</>
+                )}
               </p>
+              {flowModelIsLocal && (
+                <p role="alert" className="text-xs text-destructive mb-2">
+                  Your saved FLOW model, {localModelName(settings.preferred_flow_model)}, is a local model, and
+                  FLOW runs on cloud models only. Pick a cloud model below; until then FLOW stays unavailable.
+                </p>
+              )}
               <ModelPicker
                 groups={FLOW_MODEL_GROUPS}
                 selectedId={settings.preferred_flow_model}

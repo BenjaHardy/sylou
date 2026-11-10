@@ -52,7 +52,11 @@ const h = vi.hoisted(() => ({
     refreshBookmarks: vi.fn(),
   },
   memory: { memory: null as Record<string, unknown> | null, refetch: vi.fn(async () => null) },
-  instance: { webSearchEnabled: true, loading: false },
+  instance: {
+    webSearchEnabled: true,
+    localModels: [] as { id: string; name: string; contextTokens?: number; tools?: boolean }[] | null,
+    loading: false,
+  },
 }));
 
 vi.mock("@/hooks/useChatThread", () => ({ useChatThread: () => h.thread }));
@@ -110,6 +114,7 @@ beforeEach(() => {
   h.settings.preferred_chat_reasoning = {};
   h.memory.memory = null;
   h.instance.webSearchEnabled = true;
+  h.instance.localModels = [];
 });
 
 afterEach(() => {
@@ -271,6 +276,23 @@ describe("ChatPanel", () => {
     expect(screen.getByText("Main")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("switch"));
     expect(props.onConciseModeChange).toHaveBeenCalledWith(true);
+  });
+
+  it("a local chat model: the header shows its name, marked local and Beta — or not set up when the instance no longer lists it", () => {
+    h.settings.preferred_chat_model = "ollama/sylou-nemo-16k";
+    h.instance.localModels = [{ id: "ollama/sylou-nemo-16k", name: "sylou-nemo-16k", contextTokens: 16_384, tools: true }];
+    const { rerender } = renderPanel();
+    const label = () => screen.getByTitle("Active chat model and reasoning level — change in Settings");
+    expect(label()).toHaveTextContent(/^sylou-nemo-16k · local, Beta$/);
+
+    h.instance.localModels = [];
+    rerender();
+    expect(label()).toHaveTextContent(/^sylou-nemo-16k · not set up$/);
+
+    // The list could not be read: no claim either way.
+    h.instance.localModels = null;
+    rerender();
+    expect(label()).toHaveTextContent(/^sylou-nemo-16k · local, Beta$/);
   });
 
   it("the budget line appears only when the operator set a cap", () => {

@@ -9,8 +9,10 @@ import {
   FLOW_ALTERNATIVE_GROUP_ID,
   FLOW_OTHER_GROUP_ID,
   FLOW_RECOMMENDED_GROUP_ID,
+  MODELS,
   groupModelsByProvider,
   groupModelsForFlow,
+  localModelInfos,
 } from "@/lib/models";
 
 // A group header's accessible name starts with "<label> (<count>)". Anchored
@@ -187,5 +189,50 @@ describe("ModelPicker", () => {
       />,
     );
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  });
+});
+
+describe("ModelPicker: local models", () => {
+  const listed = [
+    { id: "ollama/sylou-nemo-16k", name: "sylou-nemo-16k", contextTokens: 16_384, tools: true },
+    { id: "ollama/sylou-ministral-8k", name: "sylou-ministral-8k", contextTokens: 8_192, tools: false },
+    { id: "ollama/sylou-cloud", name: "sylou-cloud", problem: "\"sylou-cloud\" runs in Ollama's cloud, not on this computer." },
+    { id: "ollama/sylou-gemma-32k", name: "sylou-gemma-32k", notAnswering: true },
+  ];
+  const groupsFor = (savedId: string) =>
+    groupModelsByProvider([...localModelInfos(listed, savedId), ...MODELS], "On this computer");
+
+  it("each card: a Beta badge, no price, the window and tools — or what keeps the model from running", () => {
+    render(<ModelPicker groups={groupsFor("ollama/sylou-gone")} selectedId="ollama/sylou-gone" onSelect={() => {}} />);
+
+    expect(header("On this computer", 5)).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByText("Beta")).toHaveLength(5);
+    expect(screen.getAllByText("No API cost")).toHaveLength(5);
+    expect(screen.queryByText(/\/ 1M tok/)).not.toBeInTheDocument();
+    expect(screen.getByText("16k-token window · can use tools")).toBeInTheDocument();
+    expect(screen.getByText("8k-token window · can't use tools (no document reading or web search)")).toBeInTheDocument();
+    expect(screen.getByText(/runs in Ollama's cloud/)).toBeInTheDocument();
+    expect(screen.getByText("Not checked: Ollama isn't answering.")).toBeInTheDocument();
+    // The saved model the instance no longer lists: still the selection, with the warning.
+    expect(screen.getByRole("button", { name: /^sylou-gone/, pressed: true })).toHaveTextContent(
+      /Not set up on this Sylou any more.*never switches you to a cloud model/,
+    );
+  });
+
+  it("picking a local card reports its id, and a local model gets no reasoning select", () => {
+    const onSelect = vi.fn();
+    render(
+      <ModelPicker
+        groups={groupsFor("ollama/sylou-nemo-16k")}
+        selectedId="ollama/sylou-nemo-16k"
+        onSelect={onSelect}
+        reasoningOptions={CHAT_REASONING_OPTIONS}
+        reasoningChoices={{}}
+        onReasoningChange={() => {}}
+      />,
+    );
+    expect(screen.queryByLabelText("Reasoning")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^sylou-ministral-8k/ }));
+    expect(onSelect).toHaveBeenCalledWith("ollama/sylou-ministral-8k");
   });
 });

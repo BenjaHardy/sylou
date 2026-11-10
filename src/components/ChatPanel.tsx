@@ -26,7 +26,7 @@ import { useBookmarks } from "@/hooks/useBookmarks";
 import { format } from "date-fns";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 import { useUserSettings } from "@/hooks/useUserSettings";
-import { MODEL_LABELS, resolveReasoningLabel } from "@/lib/models";
+import { isLocalModel, modelLabel, resolveReasoningLabel } from "@/lib/models";
 import { useInstanceConfig } from "@/hooks/useInstanceConfig";
 
 interface Props {
@@ -343,9 +343,15 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
   const [localUserWantsWebSearch, setLocalUserWantsWebSearch] = useState(false);
   const userWantsWebSearch = webSearchEnabledProp ?? localUserWantsWebSearch;
   const setUserWantsWebSearch = onWebSearchEnabledChange ?? setLocalUserWantsWebSearch;
-  const { webSearchEnabled: webSearchConfigured } = useInstanceConfig();
+  const { webSearchEnabled: webSearchConfigured, localModels } = useInstanceConfig();
   // Effective state: send to backend & paint as active only when both true.
   const webSearchActive = userWantsWebSearch && webSearchConfigured;
+  // A local chat model, as the instance reported it (undefined: not listed,
+  // or the list is not known yet).
+  const chatModel = userSettings.preferred_chat_model;
+  const chatModelIsLocal = isLocalModel(chatModel);
+  const chatLocalModel = chatModelIsLocal ? localModels?.find((m) => m.id === chatModel) : undefined;
+  const chatLocalModelMissing = chatModelIsLocal && localModels !== null && !chatLocalModel;
   const [tipDismissed, setTipDismissed] = useState(false);
   const [showBookmarkList, setShowBookmarkList] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -572,7 +578,8 @@ export function ChatPanel({ projectId, chatExpanded, onToggleChat, refreshTrigge
             className="text-[10px] text-muted-foreground/70 hidden md:inline"
             title="Active chat model and reasoning level — change in Settings"
           >
-            {MODEL_LABELS[userSettings.preferred_chat_model] ?? "Model"}
+            {modelLabel(chatModel) ?? "Model"}
+            {chatModelIsLocal && (chatLocalModelMissing ? " · not set up" : " · local, Beta")}
             {reasoningLabel && ` · Reasoning: ${reasoningLabel}`}
           </span>
         </div>
