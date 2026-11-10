@@ -248,6 +248,26 @@ describe("ChatPanel", () => {
     expect(h.chat.sendMessage).toHaveBeenCalledWith("What happened today?", false, true);
   });
 
+  it("a local chat model that cannot use tools: the toggle is greyed with the reason, and messages carry no web search", () => {
+    h.settings.preferred_chat_model = "ollama/sylou-ministral-8k";
+    h.instance.localModels = [{ id: "ollama/sylou-ministral-8k", name: "sylou-ministral-8k", contextTokens: 8_192, tools: false }];
+    renderPanel({ webSearchEnabled: true, onWebSearchEnabledChange: vi.fn() });
+    expect(screen.getByRole("button", { name: "Web search needs a model that can use tools" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Toggle web search" })).not.toBeInTheDocument();
+    typeAndEnter("Any news?");
+    expect(h.chat.sendMessage).toHaveBeenCalledWith("Any news?", false, false);
+  });
+
+  it("a local chat model that can use tools keeps the toggle, and the Ask/Propose tip says they need a cloud model", () => {
+    h.settings.preferred_chat_model = "ollama/sylou-nemo-16k";
+    h.instance.localModels = [{ id: "ollama/sylou-nemo-16k", name: "sylou-nemo-16k", contextTokens: 16_384, tools: true }];
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Toggle web search" }));
+    typeAndEnter("Any news?");
+    expect(h.chat.sendMessage).toHaveBeenCalledWith("Any news?", false, true);
+    expect(screen.getByText(/use Ask or Propose \(with a cloud chat model\) for/)).toBeInTheDocument();
+  });
+
   it("a controlled web-search preference reports toggles to the parent instead of flipping locally", () => {
     const onWebSearchEnabledChange = vi.fn();
     renderPanel({ webSearchEnabled: true, onWebSearchEnabledChange });

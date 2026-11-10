@@ -10,11 +10,14 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // vi.mock factories are hoisted above every import, so their state must be too.
-const { invokeMock, toastMock, session } = vi.hoisted(() => ({
+const { invokeMock, toastMock, session, settings } = vi.hoisted(() => ({
   invokeMock: vi.fn(),
   toastMock: { info: vi.fn(), error: vi.fn(), success: vi.fn() },
   session: { token: "token" as string | null },
+  settings: { preferred_chat_model: "zai-glm-5-3" },
 }));
+
+vi.mock("@/hooks/useUserSettings", () => ({ useUserSettings: () => ({ settings }) }));
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
@@ -110,6 +113,7 @@ beforeEach(() => {
   toastMock.info.mockReset();
   toastMock.error.mockReset();
   session.token = "token";
+  settings.preferred_chat_model = "zai-glm-5-3";
 });
 
 afterEach(() => {
@@ -136,6 +140,45 @@ describe("TextSelectionWindow", () => {
     expect(button("Ask")).toBeInTheDocument();
     expect(queryButton("Fix grammar")).not.toBeInTheDocument();
     expect(queryButton("Propose")).not.toBeInTheDocument();
+  });
+
+  it("a local chat model: Ask and Propose are greyed with the reason, in every mode, while the editor actions still run", async () => {
+    settings.preferred_chat_model = "ollama/sylou-nemo-16k";
+    fetchMock.mockResolvedValueOnce(sseResponse({ done: true, result: "The quick brown fox.", action_id: "act-1" }));
+    const normal = renderWindow();
+    for (const name of ["Ask", "Propose"]) {
+      expect(button(name)).toBeDisabled();
+      expect(button(name)).toHaveAccessibleDescription(
+        "Ask and Propose need a cloud model, and your chat model is a local one. Pick a cloud chat model in Settings → Models to use them.",
+      );
+    }
+    // A click on the greyed button opens no prompt box and sends nothing.
+    fireEvent.click(button("Ask"));
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    expect(button("Fix grammar")).toBeEnabled();
+    fireEvent.click(button("Fix grammar"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchMock.mock.calls[0][0]).toBe("https://test.supabase.co/functions/v1/editor-action");
+    normal.unmount();
+
+    const tutor = renderWindow({ tutorMode: true });
+    expect(button("Ask")).toBeDisabled();
+    expect(button("Ask")).toHaveAccessibleDescription(/^Ask needs a cloud model/);
+    expect(button("Translate")).toBeEnabled();
+    tutor.unmount();
+
+    renderWindow({ sourceModule: "worldbuilding" });
+    expect(button("Ask")).toBeDisabled();
+    expect(screen.getByText(/^Ask needs a cloud model/)).toBeInTheDocument();
+  });
+
+  it("a cloud chat model: Ask and Propose are offered, with no local-model note", () => {
+    renderWindow();
+    expect(button("Ask")).toBeEnabled();
+    expect(button("Propose")).toBeEnabled();
+    expect(screen.queryByText(/need a cloud model/)).not.toBeInTheDocument();
   });
 
   it("hides the editor actions behind the large-selection notice until acknowledged; Ask and Propose stay", () => {
