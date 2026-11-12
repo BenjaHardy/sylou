@@ -17,7 +17,9 @@
 //   - Two summary destinations, deliberately split: the per-turn DELTA
 //     (summaryUpdate) goes to chat flagged 'not_assessed' (fed to FLOW);
 //     the FULL merged summary (updatedSummary) goes only to
-//     writing_summary_log (withheld from FLOW).
+//     writing_summary_log (withheld from FLOW). On a local model the
+//     summary is a fresh one for this request (local.ts): it goes to chat
+//     whole, and writing_summary_log is left as it is (keepSummaryLog).
 //   - Client split: the service-role client writes the FLOW-input tables
 //     (ai_editor_actions, chat_messages, writing_summary_log) behind the
 //     caller's upfront ownership checks; token_usage + the billing RPC go
@@ -42,6 +44,7 @@
 
 import { sliceSafe } from "../_shared/_text.ts";
 import { incrementPromptCount } from "../_shared/_stats.ts";
+import { countsTowardBudget } from "../_shared/_billing.ts";
 
 type Row = Record<string, unknown>;
 
@@ -90,6 +93,9 @@ export interface PersistCtx {
   updatedSummary: string;
   /** Existing writing_summary_log row, if any (drives update-vs-insert). */
   summaryRow: { id: string } | null;
+  /** Leave writing_summary_log as it is: a local model's request-scoped
+   *  summary is not the running summary the next cloud request diffs against. */
+  keepSummaryLog?: boolean;
   /** Populated by the tool loops before any persistence call fires;
    *  captured by reference (const arrays), which is safe. */
   documentsReferenced: string[];
@@ -163,15 +169,18 @@ export async function persistContextExchange(
   });
   if (usageErr) console.error("[context-prompt] token_usage insert failed:", JSON.stringify(usageErr));
 
-  const { error: rpcErr } = await userClient.rpc("increment_tokens_used", {
-    user_uuid: ctx.userId,
-    amount: totalTokens,
-  });
-  if (rpcErr) console.error("[context-prompt] increment_tokens_used failed:", JSON.stringify(rpcErr));
+  const counted = countsTowardBudget(ctx.chatModel);
+  if (counted) {
+    const { error: rpcErr } = await userClient.rpc("increment_tokens_used", {
+      user_uuid: ctx.userId,
+      amount: totalTokens,
+    });
+    if (rpcErr) console.error("[context-prompt] increment_tokens_used failed:", JSON.stringify(rpcErr));
+  }
 
   const budgetRemaining: number | null = ctx.monthlyTokenBudget === null
     ? null
-    : ctx.monthlyTokenBudget - ctx.tokensUsedThisPeriod - totalTokens;
+    : ctx.monthlyTokenBudget - ctx.tokensUsedThisPeriod - (counted ? totalTokens : 0);
 
   const insertedMessages: unknown[] = [];
 
@@ -242,7 +251,7 @@ export async function persistContextExchange(
     }
     if (responseMsg) insertedMessages.push(responseMsg);
 
-    if (ctx.summaryUpdate !== "No update needed.") {
+    if (ctx.summaryUpdate !== "No update needed." && !ctx.keepSummaryLog) {
       if (ctx.summaryRow) {
         const { error: logErr } = await admin
           .from("writing_summary_log")

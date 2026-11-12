@@ -146,7 +146,10 @@ describe("SettingsDialog: local models", () => {
     expect(groups[0]).toMatch(/^On this computer \(1\)/);
     expect(header("On this computer")).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText(/These models run on this computer through Ollama, not on a cloud API/)).toBeInTheDocument();
-    expect(screen.getByText(/Ask, Propose and FLOW need a cloud model/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/They handle chat, Ask, Propose, editor actions and document summaries; FLOW needs a cloud model/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/a small model may open a document that doesn't help and answer about it instead/)).toBeInTheDocument();
     expect(screen.queryByText(/Ollama isn't answering/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^sylou-nemo-16k/ }));

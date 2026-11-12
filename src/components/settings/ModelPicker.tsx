@@ -40,7 +40,7 @@ function formatWindow(tokens: number): string {
 function localModelLine(local: LocalModelCard): { text: string; warning: boolean } {
   if (local.missing) {
     return {
-      text: "Not set up on this Sylou any more. Chat, editor actions and document summaries refuse until you pick another model; Sylou never switches you to a cloud model by itself.",
+      text: "Not set up on this Sylou any more. Chat, Ask, Propose, editor actions and document summaries refuse until you pick another model; Sylou never switches you to a cloud model by itself.",
       warning: true,
     };
   }
