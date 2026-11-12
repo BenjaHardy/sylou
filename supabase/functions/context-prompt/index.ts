@@ -9,15 +9,17 @@ import { buildDocumentTool, buildWebSearchTool } from "../_shared/_tools.ts";
 import { finalCall, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { DEFAULT_CHAT_MODEL, INPUT_LIMITS, OUTPUT_BUDGETS, resolveModel } from "../_shared/_models.ts";
-import { isOllamaModel } from "../_shared/_ollama.ts";
+import { fetchLocalModelInfo, isOllamaModel } from "../_shared/_ollama.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 import {
   CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT, SUMMARY_TABLES,
   resolveReasoning, resolveMaxTokens,
 } from "../_shared/_thinking.ts";
 import {
+  CLOUD_MEMORY,
   fetchConversationMemory,
   fetchVerbatimWindow,
+  localMemoryProfile,
   maybeRefreshConversationMemory,
 } from "../_shared/_conversation_memory.ts";
 import { WEB_SEARCH_PROMPT } from "../_shared/_prompts.ts";
@@ -26,12 +28,16 @@ import { isOverBudget, getBudgetedProfile } from "../_shared/_billing.ts";
 import { persistContextExchange, type PersistCtx } from "./persist.ts";
 import { formatCreativeDataForSummary } from "./creative.ts";
 import {
-  mergeSummary, buildSummaryPrompt, buildResponsePrompt,
+  mergeSummary, buildSummaryPrompt, buildResponsePrompt, buildContextDocIndex, buildContextFavBlock,
   CLASSIC_MODE_SYSTEM_PROMPT, TUTOR_MODE_SYSTEM_PROMPT,
   CONCISE_MODE_MODIFIER, TEMPLATE_PROMPTS,
 } from "./prompts.ts";
 import { callChatModel } from "./call-model.ts";
 import { handleConfirm } from "./confirm.ts";
+import {
+  answerTooLongError, fitLocalConversation, fitLocalFinal, fitLocalReply, fitLocalSummary,
+  LOCAL_ANSWER_MIN_REPLY, type ReplyPromptParts,
+} from "./local.ts";
 
 
 // Service-role client for ai_editor_actions (bypasses RLS)
@@ -119,7 +125,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     const { thinking, effort, mistralEffort } = resolveReasoning(chatModel, profile.preferred_chat_reasoning, {
       thinking: CONTEXT_THINKING, effort: CONTEXT_EFFORT, mistral: CONTEXT_MISTRAL_EFFORT,
     });
-    const contextMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_RESPONSE, chatModel, thinking, mistralEffort !== undefined);
+    let contextMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_RESPONSE, chatModel, thinking, mistralEffort !== undefined);
     // Writing-summary call (#1) keeps fixed settings whatever the user picked:
     // it runs before the stream starts (the hosted idle limit is counting)
     // and is a delta summary, not a reply.
@@ -151,9 +157,6 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
 
     // ── Main context-prompt flow ────────────────────────────────────────
     // After CONFIRM, which records a decision without a model call.
-    if (isOllamaModel(chatModel)) {
-      return jsonResponse({ error: "Ask and Propose do not run on local models yet. Pick a cloud model for chat in Settings." }, 400);
-    }
     if (!project_id || !thread_id || !action_type || !selected_text || !instruction || !source_module) {
       return jsonResponse(
         { error: "project_id, thread_id, action_type, selected_text, instruction, and source_module are required" },
@@ -214,6 +217,15 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
 
     const projectLanguage = project.language ?? "English";
 
+    // A local model: what its server says it can take (_ollama.ts), asked
+    // before the prompts are built — the tools and the memory depend on it.
+    const local = isOllamaModel(chatModel) ? await (deps.localModelInfo ?? fetchLocalModelInfo)(chatModel, deps.env) : null;
+    if (local && "error" in local) {
+      return jsonResponse({ error: local.error }, 503);
+    }
+    const canUseTools = local?.tools ?? true;
+    const memoryProfile = local ? localMemoryProfile(local.contextTokens) : CLOUD_MEMORY;
+
     // --- 1. Fetch writing content ---
     const { data: writingRow } = await supabase
       .from("writing_content")
@@ -236,11 +248,17 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     }
 
     // --- 2b. Fetch existing summary ---
-    const { data: summaryRow } = await supabase
-      .from("writing_summary_log")
-      .select("id, summary_text")
-      .eq("project_id", project_id)
-      .single();
+    // A cloud model's only: on a local model the summary call writes a fresh
+    // summary for this request (local.ts), and the stored one stays as it is.
+    let summaryRow: { id: string; summary_text: string | null } | null = null;
+    if (!local) {
+      const { data } = await supabase
+        .from("writing_summary_log")
+        .select("id, summary_text")
+        .eq("project_id", project_id)
+        .single();
+      summaryRow = data;
+    }
 
     const existingSummary = summaryRow?.summary_text ?? null;
 
@@ -250,9 +268,11 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     // same context container that carries the raw messages — identical
     // relative privilege.
     const conversationMemory = await fetchConversationMemory(supabase, thread_id);
-    const recentChat = await fetchVerbatimWindow(supabase, thread_id, conversationMemory);
+    const recentChat = await fetchVerbatimWindow(supabase, thread_id, conversationMemory, memoryProfile);
 
     // --- 4. LLM Call #1: Writing Summary (non-streamed) ---
+    // A cloud model's runs here. A local model's runs once both calls are
+    // known to fit its window, which takes the reply call's prompt (step 5).
     const summaryMessages = buildSummaryPrompt(
       writingContent,
       existingSummary,
@@ -262,29 +282,26 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
       projectLanguage,
       creativeDataSection,
     );
+    const runSummaryCall = (maxTokens: number) =>
+      callChatModel(chatModel, summaryMessages, maxTokens, temperature, summary.thinking, summary.effort, summary.mistralEffort, deps.callLLM);
+    let summaryResult = local ? null : await runSummaryCall(summaryMaxTokens);
 
-    const summaryResult = await callChatModel(chatModel, summaryMessages, summaryMaxTokens, temperature, summary.thinking, summary.effort, summary.mistralEffort, deps.callLLM);
-    const summaryText = summaryResult.text.trim();
-
-    // --- 5. Determine summary update (protocol + merge live in prompts.ts) ---
-    const { updatedSummary, summaryUpdate } = mergeSummary(summaryText, existingSummary);
-
-    // --- 6. Build LLM Call #2 prompt ---
+    // --- 5. Build LLM Call #2 prompt ---
     const tutorMode = project.tutor_mode ?? false;
     const conciseMode = body.concise_mode ?? false;
 
-    let systemPrompt = tutorMode
+    let systemHead = tutorMode
       ? TUTOR_MODE_SYSTEM_PROMPT
       : CLASSIC_MODE_SYSTEM_PROMPT;
 
     // --- Append template-specific context ---
     const templateAddition = TEMPLATE_PROMPTS[project?.template ?? ""];
     if (templateAddition) {
-      systemPrompt += `\n\n# PROJECT TEMPLATE\n\n${templateAddition}`;
+      systemHead += `\n\n# PROJECT TEMPLATE\n\n${templateAddition}`;
     }
 
     if (conciseMode) {
-      systemPrompt += "\n\n" + CONCISE_MODE_MODIFIER;
+      systemHead += "\n\n" + CONCISE_MODE_MODIFIER;
     }
 
     // --- Fetch imported documents (for index + favourite full-text injection) ---
@@ -299,51 +316,93 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     const favourites = allDocs.filter((d: any) => d.is_favourite && d.extracted_text);
     const nonFavourites = allDocs.filter((d: any) => !d.is_favourite);
     const hasNonFavDocs = nonFavourites.length > 0;
-    const hasDocuments = hasNonFavDocs; // controls doc tool registration
 
     // Append document index to system prompt for NON-favourites only
     if (hasNonFavDocs) {
-      let docIndex = `\n\n# IMPORTED DOCUMENTS\n\nThe user has imported the following reference documents into this project. You can see their titles and summaries below. If you need the full text of any document to answer the user's question or fulfill their request, use the read_imported_document tool. Only retrieve documents that are directly relevant.\n\n`;
-      for (const doc of nonFavourites) {
-        docIndex += `- Document: "${doc.file_name}" (ID: ${doc.id})\n  Summary: ${doc.summary ?? "No summary available"}\n\n`;
-      }
-      systemPrompt += docIndex;
-    }
-
-    // Append full text of FAVOURITE documents — always available, no tool call needed
-    if (favourites.length > 0) {
-      let favBlock = `\n\n# REFERENCE DOCUMENTS (ALWAYS AVAILABLE)\n\nThe following documents have been provided by the user as key reference material. Their full content is included below. Use them to inform your responses without needing to call the read_imported_document tool.\n\n`;
-      for (const doc of favourites) {
-        favBlock += `=== ${doc.file_name} ===\n\n${doc.extracted_text}\n\n`;
-      }
-      if (hasNonFavDocs) {
-        favBlock += `Note: You also have access to additional imported documents via the read_imported_document tool. Prefer the reference documents above when they contain relevant information; use the tool for the others.\n\n`;
-      }
-      systemPrompt += favBlock;
+      systemHead += buildContextDocIndex(nonFavourites, canUseTools);
     }
 
     // Gate web search on both the user toggle AND BRAVE_SEARCH_API_KEY presence
     // (mirrors chat/). Without a server-side key the tool can't work, so don't
-    // register it or advertise it to the model.
+    // register it or advertise it to the model. Nor to a local model that
+    // cannot call tools.
     const braveConfigured = !!deps.env.get("BRAVE_SEARCH_API_KEY");
-    const webSearchActive = webSearchEnabled && braveConfigured;
-
-    // Append web search instructions to system prompt
-    if (webSearchActive) {
-      systemPrompt += WEB_SEARCH_PROMPT;
+    const webSearchActive = webSearchEnabled && braveConfigured && canUseTools;
+    if (webSearchEnabled && braveConfigured && !canUseTools) {
+      console.log(`[context-prompt] web search off: ${chatModel} cannot call tools`);
     }
 
-    const responseMessages = buildResponsePrompt(
-      systemPrompt,
-      updatedSummary,
-      selected_text,
-      instruction,
-      source_module,
-      recentChat,
-      action_type,
-      projectLanguage,
-      conversationMemory?.summary_text ?? null,
-    );
+    // Web search instructions, after the favourites block
+    const systemTail = webSearchActive ? WEB_SEARCH_PROMPT : "";
+
+    // What the reply call is made of; the favourites block goes between the
+    // head and the tail, and the writing summary comes from call #1.
+    let replyParts: ReplyPromptParts = {
+      messages: (favBlock, writingSummary, memory, history) =>
+        buildResponsePrompt(
+          systemHead + favBlock + systemTail,
+          writingSummary,
+          selected_text,
+          instruction,
+          source_module,
+          history,
+          action_type,
+          projectLanguage,
+          memory?.summary_text ?? null,
+        ),
+      // The document tool when there is a document to read with it, web search when on.
+      tools: (summaries) => {
+        const replyTools: LLMTool[] = [];
+        if (canUseTools && (hasNonFavDocs || summaries)) replyTools.push(buildDocumentTool());
+        if (webSearchActive) replyTools.push(buildWebSearchTool());
+        return replyTools;
+      },
+      favourites,
+      hasNonFavDocs,
+      canUseTools,
+      memory: conversationMemory,
+      history: recentChat,
+    };
+
+    if (local) {
+      // Both calls must fit the window before the first one runs (local.ts).
+      const summaryFit = fitLocalSummary(chatModel, local.contextTokens, summaryMessages, summaryMaxTokens);
+      if ("error" in summaryFit) return jsonResponse({ error: summaryFit.error }, 400);
+      const fitted = await fitLocalConversation({
+        parts: replyParts,
+        contextTokens: local.contextTokens,
+        profile: memoryProfile,
+        userClient: supabase,
+        admin: adminClient,
+        threadId: thread_id,
+        model: chatModel,
+        userId: authedUser.id,
+        llm: deps.callLLM,
+      });
+      if ("error" in fitted) return jsonResponse({ error: fitted.error }, 400);
+      replyParts = fitted;
+      summaryResult = await runSummaryCall(summaryFit.maxTokens);
+    }
+    if (!summaryResult) throw new Error("The writing-summary call did not run."); // ran on both paths above
+    const summaryText = summaryResult.text.trim();
+
+    // --- 6. Determine summary update (protocol + merge live in prompts.ts) ---
+    // On a local model existingSummary is null: the fresh summary is both.
+    const { updatedSummary, summaryUpdate } = mergeSummary(summaryText, existingSummary);
+
+    // --- 7. The reply call's messages and tools ---
+    let responseMessages: { role: string; content: string }[];
+    let tools: LLMTool[];
+    if (!local) {
+      // Full text of FAVOURITE documents — always available, no tool call needed
+      const favBlock = favourites.length > 0 ? buildContextFavBlock(favourites, hasNonFavDocs) : "";
+      responseMessages = replyParts.messages(favBlock, updatedSummary, replyParts.memory, replyParts.history);
+      tools = replyParts.tools(false);
+    } else {
+      const fitted = fitLocalReply(replyParts, updatedSummary, local.contextTokens, contextMaxTokens);
+      if (!fitted) return jsonResponse({ error: answerTooLongError(chatModel, local.contextTokens) }, 400);
+      ({ messages: responseMessages, tools, maxTokens: contextMaxTokens } = fitted);
+    }
 
     // Track totals across all calls
     let totalInputChars = summaryResult.inputChars;
@@ -375,18 +434,12 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
       summaryUpdate,
       updatedSummary,
       summaryRow: summaryRow ?? null,
+      keepSummaryLog: local !== null,
       documentsReferenced,
       webSearchesPerformed,
     };
 
-    // --- Build tools array ---
-    const hasTools = hasDocuments || webSearchActive;
-    // LLMTool[] since seam 2b: the shared builders are precisely typed, and
-    // the previous Record<string, unknown>[] annotation can't hold them.
-    // Type-level only — erased at compile time.
-    const tools: LLMTool[] = [];
-    if (hasDocuments) tools.push(buildDocumentTool());
-    if (webSearchActive) tools.push(buildWebSearchTool());
+    const hasTools = tools.length > 0;
 
     // All LLM calls (tool-bearing and not) go through callLLM, which handles
     // provider routing + body translation. normaliseResponse uniformly extracts
@@ -501,6 +554,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
                 thinking,
                 effort,
                 mistralEffort,
+                localWindow: local ? { contextTokens: local.contextTokens, minReply: LOCAL_ANSWER_MIN_REPLY } : undefined,
                 logTag: "[stream:context-prompt]",
                 llm: deps.callLLM,
               });
@@ -510,10 +564,17 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
               // Call #2b: streaming with tool results; no tool calls allowed
               console.log("[stream:context-prompt] starting Call #2b streaming");
               const final = finalCall(chatModel, tools, toolMessages);
+              const call2bFit = local
+                ? fitLocalFinal(chatModel, local.contextTokens, final, contextMaxTokens)
+                : { maxTokens: contextMaxTokens };
+              if ("error" in call2bFit) {
+                controller.enqueue(sseEvent({ done: true, error: call2bFit.error }));
+                return;
+              }
               const call2bRes = await deps.callLLM({
                 model: chatModel,
                 ...final,
-                max_tokens: contextMaxTokens,
+                max_tokens: call2bFit.maxTokens,
                 stream: true,
                 temperature,
                 thinking,
@@ -562,6 +623,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
               overBudget: authedProfile.monthly_token_budget !== null &&
                 authedProfile.tokens_used_this_period >= authedProfile.monthly_token_budget,
               logTag: "[context-prompt]",
+              profile: memoryProfile,
               llm: deps.callLLM,
             });
             stopKeepalive();
@@ -632,6 +694,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
             overBudget: authedProfile.monthly_token_budget !== null &&
               authedProfile.tokens_used_this_period >= authedProfile.monthly_token_budget,
             logTag: "[context-prompt]",
+            profile: memoryProfile,
             llm: deps.callLLM,
           });
           stopKeepalive();

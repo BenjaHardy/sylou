@@ -258,14 +258,14 @@ describe("ChatPanel", () => {
     expect(h.chat.sendMessage).toHaveBeenCalledWith("Any news?", false, false);
   });
 
-  it("a local chat model that can use tools keeps the toggle, and the Ask/Propose tip says they need a cloud model", () => {
+  it("a local chat model that can use tools keeps the toggle, and the usual Ask/Propose tip", () => {
     h.settings.preferred_chat_model = "ollama/sylou-nemo-16k";
     h.instance.localModels = [{ id: "ollama/sylou-nemo-16k", name: "sylou-nemo-16k", contextTokens: 16_384, tools: true }];
     renderPanel();
     fireEvent.click(screen.getByRole("button", { name: "Toggle web search" }));
     typeAndEnter("Any news?");
     expect(h.chat.sendMessage).toHaveBeenCalledWith("Any news?", false, true);
-    expect(screen.getByText(/use Ask or Propose \(with a cloud chat model\) for/)).toBeInTheDocument();
+    expect(screen.getByText(/use Ask or Propose for context-aware AI feedback/)).toBeInTheDocument();
   });
 
   it("a controlled web-search preference reports toggles to the parent instead of flipping locally", () => {

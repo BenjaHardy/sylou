@@ -210,6 +210,28 @@ Deno.test("budgetRemaining: null budget → null; set budget → budget - used -
   assertEquals(capped.budgetRemaining, 10_000 - 2_000 - Math.ceil(500 / 4));
 });
 
+Deno.test("keepSummaryLog (a local model): the chat still gets the summary, not assessed; the summary log is not written", async () => {
+  const fakes = makeFakes();
+  const ctx = makeCtx(fakes, { summaryRow: null, keepSummaryLog: true });
+  await persistContextExchange(ctx, "reply", 40, 10);
+  assert(!fakes.calls.some((c) => c.table === "writing_summary_log"));
+  const summaryMsg = fakes.calls.find((c) => c.table === "chat_messages" && c.values?.source_type === "writing_summary");
+  assertEquals([summaryMsg?.values?.content, summaryMsg?.values?.flow_flag], [ctx.summaryUpdate, "not_assessed"]);
+});
+
+Deno.test("a local model's exchange: the usage row is kept, no billing RPC, and the budget left is unchanged", async () => {
+  const fakes = makeFakes();
+  const result = await persistContextExchange(
+    makeCtx(fakes, { chatModel: "ollama/sylou-nemo-16k", monthlyTokenBudget: 10_000, tokensUsedThisPeriod: 2_000 }),
+    "reply",
+    400,
+    100,
+  );
+  assertEquals(fakes.calls.find((c) => c.table === "token_usage")?.values?.model_used, "ollama/sylou-nemo-16k");
+  assert(!fakes.calls.some((c) => c.op === "rpc"));
+  assertEquals(result.budgetRemaining, 10_000 - 2_000);
+});
+
 Deno.test("doc/web telemetry rides the response row only when non-empty", async () => {
   const withTools = makeFakes();
   await persistContextExchange(

@@ -167,9 +167,10 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                       <span className="font-medium text-foreground">Beta.</span> These models run{" "}
                       {servedHere ? "on this computer" : "on this Sylou's own server"} through Ollama, not on a
                       cloud API. They are much smaller than the cloud models: expect weaker answers. They handle
-                      chat, editor actions and document summaries; Ask, Propose and FLOW need a cloud model. The
-                      window is how much text a model reads at once; a model that can use tools can open your
-                      imported documents and search the web.
+                      chat, Ask, Propose, editor actions and document summaries; FLOW needs a cloud model. The
+                      window is how much text a model reads at once. A model that can use tools can open your
+                      imported documents and search the web, though a small model may open a document that
+                      doesn't help and answer about it instead.
                       {ollamaNotAnswering && (
                         <span className="mt-1 block text-foreground">
                           Ollama isn't answering. Start Ollama, then reload this page to see each model's window

@@ -12,6 +12,7 @@
 // comma, slightly wider than the prompt mandates.
 
 import { buildMemoryInjection } from "../_shared/_conversation_memory.ts";
+import { documentRow, type FavouriteDoc, favouriteEntry } from "../_shared/_favourites.ts";
 
 /** Fold LLM Call #1's reply into the running summary state.
  *  Returns the pair the §4 transparency contract keeps distinct:
@@ -143,6 +144,35 @@ ${taskInstruction}`;
     { role: "system", content: contextPrompt },
     { role: "user", content: instruction },
   ];
+}
+
+/** The index of the non-favourite documents, appended to the reply call's
+ *  system prompt. `canRead` false: a local model that cannot call tools, so
+ *  no tool is named. */
+export function buildContextDocIndex(
+  docs: Pick<FavouriteDoc, "id" | "file_name" | "summary">[],
+  canRead = true,
+): string {
+  let docIndex = canRead
+    ? `\n\n# IMPORTED DOCUMENTS\n\nThe user has imported the following reference documents into this project. You can see their titles and summaries below. If you need the full text of any document to answer the user's question or fulfill their request, use the read_imported_document tool. Only retrieve documents that are directly relevant.\n\n`
+    : `\n\n# IMPORTED DOCUMENTS\n\nThe user has imported the following reference documents into this project. You can see their titles and summaries below; their full text is not available in this request.\n\n`;
+  for (const doc of docs) docIndex += documentRow(doc, canRead);
+  return docIndex;
+}
+
+/** The full text of the favourite documents, appended to the reply call's
+ *  system prompt. `toolNote`: the other documents can be read with the
+ *  read_imported_document tool. */
+export function buildContextFavBlock(
+  docs: Pick<FavouriteDoc, "file_name" | "extracted_text">[],
+  toolNote: boolean,
+): string {
+  let favBlock = `\n\n# REFERENCE DOCUMENTS (ALWAYS AVAILABLE)\n\nThe following documents have been provided by the user as key reference material. Their full content is included below. Use them to inform your responses without needing to call the read_imported_document tool.\n\n`;
+  for (const doc of docs) favBlock += favouriteEntry(doc);
+  if (toolNote) {
+    favBlock += `Note: You also have access to additional imported documents via the read_imported_document tool. Prefer the reference documents above when they contain relevant information; use the tool for the others.\n\n`;
+  }
+  return favBlock;
 }
 
 // ── Mode & template system prompts ──────────────────────────────────

@@ -10,12 +10,15 @@
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { fallbackReplyText } from "../_shared/_llm.ts";
 import { DEFAULT_CHAT_MODEL, INPUT_LIMITS } from "../_shared/_models.ts";
+import { estimatePromptTokens } from "../_shared/_fit.ts";
+import { RESULT_CUT_NOTE } from "../_shared/_tool_loop.ts";
 import {
   anthropicStreamedReply,
   type DbCall,
   type DbResult,
   fakeBackend,
   fakeEnv,
+  fakeLocalModels,
   fakeProvider,
   importHandler,
   jsonReply,
@@ -61,6 +64,10 @@ interface World {
   actionDecided?: boolean;
   /** The reply's chat_messages insert fails. */
   failReplyInsert?: boolean;
+  /** The project's writing (HTML); one sentence unless given. */
+  writing?: string;
+  /** Thread t-1's saved messages; none unless given. */
+  messages?: { role: string; content: string; created_at: string }[];
 }
 
 /** Another user's favourite document, in project p-2. */
@@ -86,10 +93,30 @@ const NOTES_DOC = {
  *  used): writing, no summary, memory, history or documents unless given. */
 function world(w: World) {
   let inserts = 0;
+  // The thread's conversation memory, once a refresh wrote one.
+  let memory: Record<string, unknown> | null = null;
+  // The saved messages a query selects: its bounds, order and limit applied.
+  const readMessages = (steps: unknown[][]) => {
+    let rows = [...(w.messages ?? [])];
+    for (const [step, , value] of steps) {
+      if (step === "lte") rows = rows.filter((r) => r.created_at <= String(value));
+      if (step === "gt") rows = rows.filter((r) => r.created_at > String(value));
+    }
+    const ascending = (steps.find(([step]) => step === "order")?.[2] as { ascending?: boolean })?.ascending ?? true;
+    rows.sort((a, b) => a.created_at.localeCompare(b.created_at) * (ascending ? 1 : -1));
+    const limit = steps.find(([step]) => step === "limit")?.[1] as number | undefined;
+    return rows.slice(0, limit);
+  };
   return (call: DbCall): DbResult | undefined => {
     const first = call.steps[0]?.[0];
     const last = call.steps.at(-1)?.[0];
     const eqs = call.steps.filter(([step]) => step === "eq");
+    if (call.target === "chat_thread_summaries") {
+      const values = call.steps[0][1] as Record<string, unknown>;
+      if (first === "update" && memory) memory = { ...memory, ...values };
+      if (first === "insert") memory = values;
+      return first === "update" ? { data: memory ? [{ id: "s-1" }] : [], error: null } : { data: memory, error: null };
+    }
     switch (`${call.client} ${call.target}`) {
       case "user profiles":
         return w.profile === null ? NO_ROW : {
@@ -112,11 +139,11 @@ function world(w: World) {
         return { data: visible ? { id: "t-1" } : null, error: null };
       }
       case "user writing_content":
-        return { data: { content: "<p>The tide came in.</p>" }, error: null };
+        return { data: { content: w.writing ?? "<p>The tide came in.</p>" }, error: null };
       case "user writing_summary_log":
         return w.summary === undefined ? NO_ROW : { data: { id: "s-1", summary_text: w.summary }, error: null };
       case "user chat_messages":
-        return { data: [], error: null };
+        return { data: readMessages(call.steps).map(({ role, content }) => ({ role, content })), error: null };
       case "admin imported_documents": {
         // Filtered by the eq steps the handler sends, as the database would.
         const rows = [...(w.docs ?? []).map((d) => ({ project_id: "p-1", ...d })), FOREIGN_DOC];
@@ -129,8 +156,8 @@ function world(w: World) {
         if (first === "update") return { data: w.actionDecided ? null : { id: "a-1" }, error: null };
         return { data: { id: "a-1" }, error: null };
       case "admin chat_messages": {
-        // The memory refresh's candidate read: too few to refresh.
-        if (first !== "insert") return { data: [], error: null };
+        // The memory refresh's candidate read.
+        if (first !== "insert") return { data: readMessages(call.steps), error: null };
         const values = call.steps[0][1] as Record<string, unknown>;
         if (w.failReplyInsert && String(values.source_type).endsWith("_response")) {
           return { data: null, error: { message: "insert denied" } };
@@ -150,6 +177,7 @@ async function send(
     user?: { id: string } | null;
     replies?: Response[];
     env?: Record<string, string | undefined>;
+    localModels?: ReturnType<typeof fakeLocalModels>;
   } = {},
 ) {
   const backend = fakeBackend({
@@ -161,6 +189,7 @@ async function send(
     env: fakeEnv(opts.env),
     createClient: backend.createClient,
     callLLM: provider.callLLM,
+    localModelInfo: opts.localModels?.localModelInfo,
   });
   return { res, backend, provider };
 }
@@ -648,23 +677,275 @@ Deno.test("an exchange that was not saved: done carries the error, not the reply
 
 // ── A local model (_ollama.ts) ───────────────────────────────────────────
 
-Deno.test("a listed local model: 400, Ask and Propose do not run on local models yet, and no provider call", async () => {
-  const { res, provider } = await send(post(ASK), {
-    profile: { preferred_chat_model: LOCAL_MODEL },
-    env: LOCAL_ENV,
+const LOCAL = { profile: { preferred_chat_model: LOCAL_MODEL }, env: LOCAL_ENV };
+
+/** The prompt of a provider call fits the window beside its reply. */
+const fitsWindow = (
+  call: {
+    messages: Parameters<typeof estimatePromptTokens>[0];
+    tools?: Parameters<typeof estimatePromptTokens>[1];
+    max_tokens: number;
+  },
+  window: number,
+) => estimatePromptTokens(call.messages, call.tools ?? []) + call.max_tokens <= window - 256;
+
+const systemOf = (call: { messages: { content: unknown }[] }) => String(call.messages[0].content);
+
+Deno.test("a listed local model: Ask runs on it, sized to its window; the exchange is saved but not counted", async () => {
+  const local = fakeLocalModels({ [LOCAL_MODEL]: 16_384 });
+  const { res, backend, provider } = await send(post(ASK), {
+    ...LOCAL,
+    localModels: local,
+    replies: [summaryReply(), streamedReply([REPLY])],
   });
+  const events = await readEvents(res);
+  assertEquals(local.lookedUp, [LOCAL_MODEL]);
+  // The summary call, then the streamed reply: both on the local model, within its window.
+  assertEquals(provider.calls.map((c) => [c.model, c.stream ?? false, c.max_tokens]), [
+    [LOCAL_MODEL, false, 2_000],
+    [LOCAL_MODEL, true, 4_000],
+  ]);
+  for (const call of provider.calls) assert(fitsWindow(call, 16_384));
+  assert(systemOf(provider.calls[1]).includes(`relevant to their request:\n${SUMMARY}\n`), "the reply call reads the summary");
+  const done = events.at(-1);
+  assertEquals([done?.ai_response, done?.summary_update, done?.budget_remaining], [REPLY, SUMMARY, 10_000 - 100]);
+  // The usage row is kept; the billing RPC is not called.
+  const input = sentChars(provider, 0) + sentChars(provider, 1);
+  const output = SUMMARY.length + REPLY.length;
+  assertEquals(writes(backend.calls), [
+    ["user", "token_usage", {
+      user_id: "u-1",
+      project_id: "p-1",
+      function_name: "context-prompt",
+      model_used: LOCAL_MODEL,
+      input_tokens: Math.ceil(input / 4),
+      output_tokens: Math.ceil(output / 4),
+    }],
+    ["admin", "chat_messages", PROMPT_ROW],
+    ["admin", "chat_messages", SUMMARY_ROW],
+    ["admin", "chat_messages", { ...REPLY_ROW, model_used: LOCAL_MODEL }],
+    ["admin", "project_stats", { chat_prompt_count_normal: 3 }],
+  ]);
+  assertEquals(billing(backend), undefined);
+});
+
+Deno.test("local model: the summary call writes a fresh summary; the stored summary is neither read nor changed", async () => {
+  const { res, backend, provider } = await send(post(PROPOSE), {
+    ...LOCAL,
+    summary: "The stored summary.",
+    localModels: fakeLocalModels({ [LOCAL_MODEL]: 16_384 }),
+    replies: [summaryReply(), streamedReply(["The tide rushed in."])],
+  });
+  await readEvents(res);
+  assert(systemOf(provider.calls[0]).includes("=== EXISTING WRITING SUMMARY (if any) ===\nNone\n"));
+  assert(!JSON.stringify(provider.calls).includes("The stored summary."));
+  assertEquals(backend.calls.some((c) => c.target === "writing_summary_log"), false);
+  // The fresh summary goes to the chat whole, not assessed, and to the pending action row.
+  const rows = writes(backend.calls);
+  assertEquals((rows[0][2] as Record<string, unknown>).proposed_summary, SUMMARY);
+  const summaryRow = rows.find(([, , values]) => (values as { source_type?: string }).source_type === "writing_summary");
+  assertEquals(summaryRow, ["admin", "chat_messages", SUMMARY_ROW]);
+});
+
+Deno.test("the local model server does not answer: 503 with its message; no provider call, nothing saved", async () => {
+  const { res, backend, provider } = await send(post(ASK), { ...LOCAL, localModels: fakeLocalModels() });
+  assertEquals(res.status, 503);
+  assertEquals(await res.json(), {
+    error: "The local model server (Ollama) is not answering. Start Ollama, then try again.",
+  });
+  assertEquals(provider.calls.length, 0);
+  assertEquals(writes(backend.calls), []);
+});
+
+Deno.test("a saved local model the instance does not list: 400, and no cloud model runs in its place", async () => {
+  const { res, provider } = await send(post(ASK), { profile: { preferred_chat_model: LOCAL_MODEL } });
   assertEquals(res.status, 400);
   assertEquals(await res.json(), {
-    error: "Ask and Propose do not run on local models yet. Pick a cloud model for chat in Settings.",
+    error: "Your local model (sylou-nemo-16k) is not set up on this Sylou instance. Pick another model in Settings.",
   });
   assertEquals(provider.calls.length, 0);
 });
 
-Deno.test("a listed local model leaves CONFIRM alone: the decision on an earlier proposal is still recorded", async () => {
-  const { res, backend } = await send(post(CONFIRM), {
-    profile: { preferred_chat_model: LOCAL_MODEL },
-    env: LOCAL_ENV,
+Deno.test("local model: writing too long for its window: 400 before any provider call; nothing saved", async () => {
+  const { res, backend, provider } = await send(post(ASK), {
+    ...LOCAL,
+    writing: `<p>${"w".repeat(30_000)}</p>`,
+    localModels: fakeLocalModels({ [LOCAL_MODEL]: 8_192 }),
   });
+  assertEquals(res.status, 400);
+  assertEquals(await res.json(), {
+    error: "Too long for sylou-nemo-16k: Ask and Propose read your whole writing and the selection, which need " +
+      "more room than its window of 8,192 tokens leaves. Pick a model with a larger window in Settings.",
+  });
+  assertEquals(provider.calls.length, 0);
+  assertEquals(writes(backend.calls), []);
+});
+
+Deno.test("local model: a reply that cannot fit even without a conversation: 400 before any provider call", async () => {
+  // Thirty documents whose summaries alone fill the window.
+  const docs = Array.from({ length: 30 }, (_, i) => ({ ...NOTES_DOC, id: `d-${i}`, summary: "s".repeat(1_000) }));
+  const { res, backend, provider } = await send(post(ASK), {
+    ...LOCAL,
+    docs,
+    localModels: fakeLocalModels({ [LOCAL_MODEL]: 8_192 }),
+  });
+  assertEquals(res.status, 400);
+  assertEquals(await res.json(), {
+    error: "Too long for sylou-nemo-16k: this request needs more room than its window of 8,192 tokens leaves. " +
+      "Select less text, start a new thread, or pick a model with a larger window in Settings.",
+  });
+  assertEquals(provider.calls.length, 0);
+  assertEquals(writes(backend.calls), []);
+});
+
+Deno.test("local model: a long writing that still fits: the summary call's reply gets the room its window leaves", async () => {
+  const { res, provider } = await send(post(ASK), {
+    ...LOCAL,
+    writing: `<p>${"w".repeat(19_000)}</p>`,
+    localModels: fakeLocalModels({ [LOCAL_MODEL]: 8_192 }),
+    replies: [summaryReply(), streamedReply([REPLY])],
+  });
+  assertEquals((await readEvents(res)).at(-1)?.ai_response, REPLY);
+  const summaryCall = provider.calls[0];
+  assert(summaryCall.max_tokens >= 600 && summaryCall.max_tokens < 2_000, String(summaryCall.max_tokens));
+  assert(fitsWindow(summaryCall, 8_192));
+});
+
+Deno.test("local model: a summary that leaves the reply no room: 400 after the summary call; nothing saved", async () => {
+  const { res, backend, provider } = await send(post(ASK), {
+    ...LOCAL,
+    localModels: fakeLocalModels({ [LOCAL_MODEL]: 8_192 }),
+    replies: [jsonReply({ content: "s".repeat(24_000) })],
+  });
+  assertEquals(res.status, 400);
+  assert(String((await res.json()).error).startsWith("Too long for sylou-nemo-16k: this request needs"));
+  assertEquals(provider.calls.length, 1);
+  assertEquals(writes(backend.calls), []);
+});
+
+Deno.test("local model that cannot call tools: no tool and no web search; the index names no tool", async () => {
+  const { res, provider } = await send(post({ ...ASK, web_search_enabled: true }), {
+    ...LOCAL,
+    env: { ...LOCAL_ENV, BRAVE_SEARCH_API_KEY: "brave-key" },
+    docs: [NOTES_DOC],
+    localModels: fakeLocalModels({ [LOCAL_MODEL]: 16_384 }, { tools: false }),
+    replies: [summaryReply(), streamedReply([REPLY])],
+  });
+  await readEvents(res);
+  assertEquals(provider.calls.map((c) => [c.stream ?? false, c.tools]), [[false, undefined], [true, undefined]]);
+  const system = systemOf(provider.calls[1]);
+  assert(system.includes("their full text is not available in this request"), system);
+  assert(system.includes('- Document: "notes.md"\n  Summary: Field notes'), system);
+  assert(!system.includes("read_imported_document") && !system.includes("# WEB SEARCH"), system);
+});
+
+Deno.test("local model: a favourite too long for the window goes in as its summary, and the document tool is offered", async () => {
+  const thesis = { id: "d-9", file_name: "thesis.md", summary: "A thesis on tides.", extracted_text: "t".repeat(60_000), is_favourite: true };
+  const { res, provider } = await send(post(ASK), {
+    ...LOCAL,
+    docs: [thesis],
+    localModels: fakeLocalModels({ [LOCAL_MODEL]: 16_384 }),
+    replies: [summaryReply(), jsonReply({ content: "From its summary." })],
+  });
+  assertEquals((await readEvents(res)).at(-1)?.ai_response, "From its summary.");
+  const system = systemOf(provider.calls[1]);
+  assert(system.includes('- Document: "thesis.md" (ID: d-9)\n  Summary: A thesis on tides.'), system);
+  assert(!system.includes("ttttt"), "the full text stays out");
+  assertEquals(provider.calls[1].tools?.map((t) => t.function.name), ["read_imported_document"]);
+  assert(fitsWindow(provider.calls[1], 16_384));
+});
+
+Deno.test("local model: a favourite that fits goes in whole, as on a cloud model", async () => {
+  const notes = { id: "d-8", file_name: "short.md", summary: "Short notes.", extracted_text: "The short notes.", is_favourite: true };
+  const { res, provider } = await send(post(ASK), {
+    ...LOCAL,
+    docs: [notes],
+    localModels: fakeLocalModels({ [LOCAL_MODEL]: 16_384 }),
+    replies: [summaryReply(), streamedReply([REPLY])],
+  });
+  await readEvents(res);
+  assert(systemOf(provider.calls[1]).includes("# REFERENCE DOCUMENTS (ALWAYS AVAILABLE)"));
+  assert(systemOf(provider.calls[1]).includes("=== short.md ===\n\nThe short notes.\n\n"));
+  assertEquals(provider.calls[1].tools, undefined);
+});
+
+Deno.test("local model: a document read by the tool is cut to the room the window leaves, and the answer fits", async () => {
+  const longNotes = { ...NOTES_DOC, extracted_text: "w".repeat(60_000) };
+  const { res, provider } = await send(post(ASK), {
+    ...LOCAL,
+    docs: [longNotes],
+    localModels: fakeLocalModels({ [LOCAL_MODEL]: 8_192 }),
+    replies: [summaryReply(), readDoc(), jsonReply({ content: "" }), streamedReply(["From your notes."])],
+  });
+  assertEquals((await readEvents(res)).at(-1)?.ai_response, "From your notes.");
+  const result = String(provider.calls[2].messages.find((m) => m.role === "tool")?.content);
+  assert(result.startsWith('Document "notes.md":\n\nwww') && result.endsWith(RESULT_CUT_NOTE), result.slice(-100));
+  for (const call of provider.calls) assert(fitsWindow(call, 8_192), `call of ${call.max_tokens} tokens`);
+  assert(provider.calls[3].max_tokens >= 900, String(provider.calls[3].max_tokens));
+});
+
+/** n saved messages of ~1,800 characters (~600 tokens each), a minute apart. */
+const longThread = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({
+    role: i % 2 ? "assistant" : "user",
+    content: `${i + 1} ${"m".repeat(1_800)}`,
+    created_at: `2026-11-10T10:${String(i).padStart(2, "0")}:00.000Z`,
+  }));
+
+Deno.test("local model: a thread too long for the window gets an early memory refresh before the summary call", async () => {
+  const { res, provider } = await send(post(ASK), {
+    ...LOCAL,
+    messages: longThread(10),
+    localModels: fakeLocalModels({ [LOCAL_MODEL]: 8_192 }),
+    replies: [jsonReply({ content: "1. Direction: tides." }), summaryReply(), streamedReply([REPLY])],
+  });
+  assertEquals((await readEvents(res)).at(-1)?.ai_response, REPLY);
+  // The memory refresh, the summary call, then the reply with the new memory and a shorter window.
+  assertEquals(provider.calls.map((c) => c.stream ?? false), [false, false, true]);
+  assert(String(provider.calls[0].messages[1].content).startsWith("PREVIOUS MEMORY:"));
+  assert(systemOf(provider.calls[1]).includes("=== CURRENT WRITING ==="));
+  const reply = systemOf(provider.calls[2]);
+  assert(reply.includes("1. Direction: tides."), "the memory is injected");
+  assert(!reply.includes("\nuser: 1 mmm"), "the oldest messages left the window");
+  for (const call of provider.calls) assert(fitsWindow(call, 8_192), `call of ${call.max_tokens} tokens`);
+});
+
+/** A summarizer's answer of ~1,500 characters (~500 tokens in the next prompts). */
+const longMemory = () => jsonReply({ content: `1. Direction: ${"d".repeat(1_500)}` });
+
+Deno.test("local model: at most 3 early refreshes, then the 400; neither Ask call runs, nothing saved", async () => {
+  const { res, backend, provider } = await send(post(ASK), {
+    ...LOCAL,
+    messages: longThread(40),
+    localModels: fakeLocalModels({ [LOCAL_MODEL]: 8_192 }),
+    replies: [longMemory(), longMemory(), longMemory()],
+  });
+  assertEquals(res.status, 400);
+  assert(String((await res.json()).error).startsWith("Too long for sylou-nemo-16k: this request needs"));
+  assertEquals(provider.calls.length, 3);
+  assert(provider.calls.every((c) => String(c.messages[1].content).startsWith("PREVIOUS MEMORY:")));
+  assertEquals(writes(backend.calls).filter(([, table]) => table === "chat_messages"), []);
+});
+
+Deno.test("local model: the memory refreshes after the reply at the local threshold, not the cloud one", async () => {
+  // Twenty short messages: a local model's 16k-window threshold, far below the cloud's 50.
+  const thread = longThread(20).map((m) => ({ ...m, content: m.content.slice(0, 40) }));
+  const { res, provider } = await send(post(ASK), {
+    ...LOCAL,
+    messages: thread,
+    localModels: fakeLocalModels({ [LOCAL_MODEL]: 16_384 }),
+    replies: [summaryReply(), streamedReply([REPLY]), jsonReply({ content: "1. Direction: tides." })],
+  });
+  await readEvents(res);
+  assertEquals(provider.calls.map((c) => c.stream ?? false), [false, true, false]);
+  assert(String(provider.calls[2].messages[1].content).startsWith("PREVIOUS MEMORY:"));
+  assert(fitsWindow(provider.calls[2], 16_384));
+});
+
+Deno.test("CONFIRM on a local model: the decision is recorded without asking the model server", async () => {
+  const local = fakeLocalModels();
+  const { res, backend } = await send(post(CONFIRM), { ...LOCAL, localModels: local });
   assertEquals(res.status, 200);
   assertEquals(writes(backend.calls), [["admin", "ai_editor_actions", { outcome: "accepted" }]]);
+  assertEquals(local.lookedUp, []);
 });

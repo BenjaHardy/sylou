@@ -93,7 +93,9 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   `writing_summary_log` is deliberately **withheld from FLOW** (the
   `analysis` function never reads it). The writing summary reaches FLOW
   only as a chat message flagged `flow_flag='not_assessed'` (the per-turn
-  delta, never the full summary). `Ask` and `Propose` both persist the
+  delta, never the full summary; on a local model, a fresh summary for that
+  request, and `writing_summary_log` is neither read nor written). `Ask`
+  and `Propose` both persist the
   exchange (prompt + summary delta + reply, summary log advanced) **at
   delivery time**, server-side in the stream-first flush — a dismissed or
   never-decided proposal is still logged (deliberate contract, 2026-07).
@@ -246,13 +248,16 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   `normaliseResponse` maps every provider back to OpenAI shape so callers
   don't branch. Ollama cuts what overflows a model's window without an
   error, so a call to a local model is sized first (`_fit.ts`) and refused
-  when it does not fit; context-prompt and analysis refuse local models.
+  when it does not fit; analysis refuses local models.
   Chat on a local model (`chat/local.ts`) keeps a smaller memory sized to
   the window (`localMemoryProfile`), gives the favourites that do not fit
   as their summaries (`_favourites.ts`; editor-action too), offers tools
   only when Ollama lists the model's "tools" capability, cuts tool results
   to the room left, and answers a prompt still too long after up to three
-  early memory refreshes with a 400 (start a new thread).
+  early memory refreshes with a 400 (start a new thread). Ask and Propose
+  on a local model (`context-prompt/local.ts`) do the same for the reply
+  call, checked before the summary call runs; that summary call gets no
+  stored summary and writes a fresh one for the request (§4).
 - **FLOW structured output**: for Anthropic, `analysis` uses **Structured
   Outputs** (json_schema) plus a repair-then-retry loop (`_repair.ts` fixes
   Claude's occasional stringified-pillar output; one retry on validation

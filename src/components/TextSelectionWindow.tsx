@@ -1,4 +1,4 @@
-import { useState, useEffect, useId, useLayoutEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from "react";
 import { X, Loader2, Check, XCircle, Send } from "lucide-react";
 import type { ChatMessage } from "@/hooks/useChatMessages";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,6 @@ import { toast } from "sonner";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 import { consumeSSEStream, SSEServerError, STREAM_CUT_OFF_MESSAGE } from "@/lib/sse-stream";
 import { assessSelectionSize } from "@/lib/editor-limits";
-import { isLocalModel } from "@/lib/models";
-import { useUserSettings } from "@/hooks/useUserSettings";
 import { LargeSelectionNotice } from "@/components/text-selection/LargeSelectionNotice";
 import { TruncatedAcceptDialog } from "@/components/text-selection/TruncatedAcceptDialog";
 import { ThinkingIndicator } from "@/components/ThinkingIndicator";
@@ -145,11 +143,6 @@ export function TextSelectionWindow({
 
   const isCreativeModule = sourceModule !== "editor";
   const actions = isCreativeModule ? CREATIVE_ACTIONS : tutorMode ? TUTOR_ACTIONS : NORMAL_ACTIONS;
-  // Ask and Propose run on the chat model, and the context-prompt function
-  // refuses local models: say so here instead of letting the call fail.
-  const { settings } = useUserSettings();
-  const contextActionsNeedCloud = isLocalModel(settings.preferred_chat_model);
-  const localNoteId = useId();
 
   // Anchor geometry, resolved ONCE per open into the editor wrapper's
   // content coordinates (the panel is an absolute child of that scrollable
@@ -568,7 +561,6 @@ export function TextSelectionWindow({
 
 
       if (actionId === "ask" || actionId === "propose") {
-        if (contextActionsNeedCloud) return;
         setPhase("input");
         return;
       }
@@ -582,7 +574,7 @@ export function TextSelectionWindow({
         callEditorActionStreaming(actionType);
       }
     },
-    [callEditorActionStreaming, contextActionsNeedCloud]
+    [callEditorActionStreaming]
   );
 
   const handleInputSubmit = () => {
@@ -668,25 +660,19 @@ export function TextSelectionWindow({
   // output budget; Ask/Propose (row 2, or row 1 in tutor mode) are exempt.
   const selectionSize = isCreativeModule ? "ok" : assessSelectionSize(selectedText.length);
   const editorActionsGated = selectionSize !== "ok" && !largeSelectionAcknowledged;
-  const showLocalNote = contextActionsNeedCloud && actions.some((a) => isProminent(a.id));
-  const renderActionButton = (a: { id: ActionId; label: string }) => {
-    const needsCloud = contextActionsNeedCloud && isProminent(a.id);
-    return (
-      <button
-        key={a.id}
-        onClick={() => handleAction(a.id)}
-        disabled={needsCloud}
-        aria-describedby={needsCloud ? localNoteId : undefined}
-        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border disabled:cursor-not-allowed disabled:opacity-50 ${
-          isProminent(a.id)
-            ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90 disabled:hover:bg-primary"
-            : "bg-secondary text-secondary-foreground border-border hover:bg-accent"
-        }`}
-      >
-        {a.label}
-      </button>
-    );
-  };
+  const renderActionButton = (a: { id: ActionId; label: string }) => (
+    <button
+      key={a.id}
+      onClick={() => handleAction(a.id)}
+      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+        isProminent(a.id)
+          ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+          : "bg-secondary text-secondary-foreground border-border hover:bg-accent"
+      }`}
+    >
+      {a.label}
+    </button>
+  );
 
   return (
     <div
@@ -739,13 +725,6 @@ export function TextSelectionWindow({
             )}
             {row2.length > 0 && (
               <div className="flex flex-wrap gap-1.5">{row2.map(renderActionButton)}</div>
-            )}
-            {showLocalNote && (
-              <p id={localNoteId} className="text-[11px] text-muted-foreground">
-                {isCreativeModule || tutorMode ? "Ask needs" : "Ask and Propose need"} a cloud model, and your chat
-                model is a local one. Pick a cloud chat model in Settings → Models to use{" "}
-                {isCreativeModule || tutorMode ? "it" : "them"}.
-              </p>
             )}
           </div>
         )}
