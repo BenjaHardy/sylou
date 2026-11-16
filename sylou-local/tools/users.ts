@@ -58,6 +58,23 @@ async function call(request: Request, fetcher: Fetcher): Promise<{ status: numbe
   return { status: response.status, body };
 }
 
+/** The sign-in service's own word for an address that already has an account.
+ *  It answers 422 for other refusals too - an address it cannot use, say -
+ *  and those must not be taken for an account that exists. */
+function alreadyRegistered(body: unknown): boolean {
+  // `error_code` in the answer these requests get; `code` in the one GoTrue
+  // gives when asked for its 2024-01-01 API.
+  const { error_code, code } = (body ?? {}) as { error_code?: unknown; code?: unknown };
+  return [error_code, code].some((value) => value === "email_exists" || value === "user_already_exists");
+}
+
+/** The sign-in service's own explanation, when it gives one. */
+function reasonOf(body: unknown): string {
+  const { msg, message } = (body ?? {}) as { msg?: unknown; message?: unknown };
+  const text = typeof msg === "string" ? msg : typeof message === "string" ? message : "";
+  return text ? `: ${text}` : "";
+}
+
 export interface UserOptions {
   fetcher?: Fetcher;
   key?: string;
@@ -76,10 +93,10 @@ export async function addUser(email: string, options: UserOptions = {}): Promise
     adminRequest("/admin/users", key, { email, email_confirm: true }),
     fetcher,
   );
-  if (created.status === 422) {
+  if (created.status === 422 && alreadyRegistered(created.body)) {
     console.log(`add-user: ${email} already has an account; sending it a link to set a new password.`);
   } else if (created.status >= 300) {
-    console.error(`add-user: the sign-in service refused (${created.status}).`);
+    console.error(`add-user: the sign-in service refused (${created.status}${reasonOf(created.body)}).`);
     return 1;
   }
 

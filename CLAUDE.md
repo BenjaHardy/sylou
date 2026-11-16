@@ -85,10 +85,15 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   headers, a Host check and four API paths) and, through `gateway.conf` in
   the same image, the gateway inside Docker; `functions/` bundles the eight
   edge functions into their runtime image and routes to them; `tools/` is
-  the Deno image behind `secrets`, `migrate` and the account commands;
-  `sylou.ps1` / `sylou.cmd` / `sylou` are the commands themselves, which
-  only gather facts and call Docker. `tests/` holds the recipe and script
-  tests (`deno task test` from that folder). The repository-root
+  the Deno image behind `secrets`, `migrate`, the account commands, `doctor`
+  and the window finder; `db/backup.sh`, `restore.sh` and `rotate.sh` run in
+  the database's own image, where pg_dump and psql live. `sylou.ps1` /
+  `sylou.cmd` / `sylou` are the commands themselves (`setup`, `start`,
+  `stop`, `status`, `doctor`, `backup`, `restore`, `update`, `models`,
+  `rotate`, `local-only`, `remove`, `add-user`, `reset-password`), and they
+  only gather facts and call Docker — every rule lives in the tools image, so
+  there is one implementation and one test stack (D4). `tests/` holds the
+  recipe, data-command and script tests (`deno task test` from that folder). The repository-root
   `.dockerignore` is an allow-list deciding what any image build may see,
   and `.gitattributes` keeps the package's files at LF.
 
@@ -465,6 +470,11 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   `'unsafe-eval'` in `script-src`.
 - No new `public` table without `ENABLE RLS` + per-op policies (add a
   `GRANT` only if a non-default role like `anon` needs access).
+- A Sylou Local backup must never carry the session tables (`auth.sessions`,
+  `auth.refresh_tokens`, `auth.mfa_amr_claims`, `auth.flow_state`,
+  `auth.one_time_tokens`) or the services' own migration tables: a session
+  there is a row, not a signed token, so a restore would hand an old one
+  back. The list is pinned by `sylou-local/tests/data-commands.test.ts`.
 - A new edge function is unreachable in a Sylou Local install until its name
   is in both route lists — `sylou-local/web/nginx.conf` (the door) and
   `sylou-local/web/gateway.conf` (the gateway) — and in the bundle loop of
@@ -472,7 +482,10 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   repository's function folders by tests.
 - No role checks anywhere — there is no role system; don't add ad-hoc ones
   against profile rows or client storage `(not yet implemented)`.
-- No new backend server code — Edge Functions only.
+- No new backend server code — Edge Functions only. The one exception is the
+  Sylou Local package (`sylou-local/`): its router, tools image and nginx
+  configs exist to run those same functions on one computer, and nothing in
+  it is deployed with hosted Sylou.
 - Keep components small; extract hooks rather than growing components.
   (Known oversized offender flagged for the refactor audit:
   `ProjectContentArea.tsx`. `context-prompt/`, `analysis/` and `chat/`

@@ -14,6 +14,11 @@
 // Token checks are left to the functions, as on hosted Sylou, where the
 // platform is told not to make them (verify_jwt = false).
 
+// The functions' own reading of the local-only switch, so the router and the
+// functions can never disagree about whether it is on. The image keeps this
+// file's place beside the router (sylou-local/functions/Dockerfile).
+import { localOnly } from "../../supabase/functions/_shared/_local_only.ts";
+
 /**
  * The part of the runtime's own API this router uses. It exists only inside
  * the edge runtime, so it is spelled out here rather than imported.
@@ -86,8 +91,7 @@ const WORKER = {
   allowRemoteModules: false,
 };
 
-const ON = new Set(["true", "1", "yes", "on"]);
-const localOnly = ON.has((Deno.env.get("SYLOU_LOCAL_ONLY") ?? "").trim().toLowerCase());
+const localOnlyMode = localOnly(Deno.env);
 
 function readSecret(name: string): string | undefined {
   try {
@@ -117,6 +121,10 @@ for (const name of PLAIN) {
 }
 const configured: string[] = [];
 for (const name of SECRETS) {
+  // In local-only mode no cloud key reaches a worker, even when its file is
+  // there: the mode's compose file mounts none, and this holds as well when
+  // the switch is set without that file.
+  if (localOnlyMode && name in PROVIDER_HOSTS) continue;
   const value = readSecret(name);
   if (!value) continue;
   workerEnv.push([name, value]);
@@ -139,16 +147,16 @@ if (gateway) {
 }
 const ollama = ollamaAddress();
 if (ollama) allowNet.push(ollama);
-if (!localOnly) {
-  for (const name of configured) {
-    const host = PROVIDER_HOSTS[name];
-    if (host) allowNet.push(host);
-  }
+// Only providers whose key was handed over above, which local-only mode never
+// does.
+for (const name of configured) {
+  const host = PROVIDER_HOSTS[name];
+  if (host) allowNet.push(host);
 }
 
 console.log(
   `router: ${NAMES.size} functions; settings ${workerEnv.map(([name]) => name).join(", ")}; ` +
-    `may reach ${allowNet.join(", ") || "nothing"}${localOnly ? " (local-only mode)" : ""}`,
+    `may reach ${allowNet.join(", ") || "nothing"}${localOnlyMode ? " (local-only mode)" : ""}`,
 );
 
 const bundles = new Map<string, Uint8Array>();

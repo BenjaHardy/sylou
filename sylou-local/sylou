@@ -31,7 +31,14 @@ setting() {
   name=$1
   fallback=$2
   if [ -f "$SETTINGS_FILE" ]; then
-    value=$(sed -n "s/^[[:space:]]*$name[[:space:]]*=[[:space:]]*//p" "$SETTINGS_FILE" | tail -n 1)
+    value=$(sed -n "s/^[[:space:]]*$name[[:space:]]*=[[:space:]]*//p" "$SETTINGS_FILE" | tail -n 1 | tr -d '\r')
+    # As `docker compose --env-file` reads it: a value in quotes is what
+    # stands between them, and an unquoted one ends where a comment begins.
+    case "$value" in
+      \"*) value=${value#\"}; value=${value%%\"*} ;;
+      \'*) value=${value#\'}; value=${value%%\'*} ;;
+      *) value=$(printf '%s' "$value" | sed 's/[[:space:]][[:space:]]*#.*$//; s/[[:space:]]*$//') ;;
+    esac
     if [ -n "${value:-}" ]; then printf '%s' "$value"; return; fi
   fi
   printf '%s' "$fallback"
@@ -101,6 +108,312 @@ protect_config() {
     chmod 700 "$SECRETS_DIR" 2>/dev/null || true
     find "$SECRETS_DIR" -type f -exec chmod 600 {} + 2>/dev/null || true
   fi
+}
+
+# --------------------------------------------------------------------------
+# The facts only this computer can tell us, for `doctor`
+#
+# Each is read on its own and left out when it cannot be: doctor then says it
+# could not look, rather than guessing. Nothing here decides anything - the
+# rules all live in the tools image (D4).
+# --------------------------------------------------------------------------
+
+# A JSON string, with the few characters that would break one escaped.
+json_string() {
+  printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/ /g')"
+}
+
+release_field() {
+  file="$PACKAGE_DIR/VERSION"
+  if [ -f "$file" ]; then
+    sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$file" | tail -n 1
+  fi
+}
+
+# Everything listening on a port, as "address:port" lines.
+listeners_on() {
+  port=$1
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnH 2>/dev/null | awk -v p=":$port\$" '$4 ~ p { print $4 }'
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 { print $9 }'
+  fi
+}
+
+listeners_json() {
+  first=1
+  printf '['
+  listeners_on "$1" | while IFS= read -r entry; do
+    address=${entry%:*}
+    port=${entry##*:}
+    address=$(printf '%s' "$address" | tr -d '[]')
+    case "$address" in "*"|"") address="0.0.0.0" ;; esac
+    if [ "$first" = "0" ]; then printf ','; fi
+    first=0
+    printf '{"address":%s,"port":%s}' "$(json_string "$address")" "$port"
+  done
+  printf ']'
+}
+
+disk_encryption() {
+  if [ "$(uname -s)" = "Darwin" ] && command -v fdesetup >/dev/null 2>&1; then
+    case "$(fdesetup status 2>/dev/null)" in
+      *"FileVault is On"*) printf 'on' ; return ;;
+      *"FileVault is Off"*) printf 'off' ; return ;;
+    esac
+  fi
+  if command -v lsblk >/dev/null 2>&1 && lsblk -o TYPE 2>/dev/null | grep -q crypt; then
+    printf 'on'
+    return
+  fi
+  printf 'unknown'
+}
+
+secrets_owner_only() {
+  [ -d "$SECRETS_DIR" ] || { printf 'null'; return; }
+  mode=$(stat -c %a "$SECRETS_DIR" 2>/dev/null || stat -f %Lp "$SECRETS_DIR" 2>/dev/null || printf '')
+  case "$mode" in
+    700|0700) printf 'true' ;;
+    "") printf 'null' ;;
+    *) printf 'false' ;;
+  esac
+}
+
+last_backup_json() {
+  file="$CONFIG_DIR/last-backup.json"
+  if [ -f "$file" ]; then cat "$file"; else printf 'null'; fi
+}
+
+ollama_json() {
+  url=$(setting OLLAMA_URL "")
+  models=$(setting OLLAMA_MODELS "")
+  if [ -z "$url" ] && [ -z "$models" ]; then printf 'null'; return; fi
+  here="http://127.0.0.1:11434"
+  no_cloud=false
+  if [ "${OLLAMA_NO_CLOUD:-}" = "1" ]; then no_cloud=true; fi
+  version=""
+  reachable=false
+  if command -v curl >/dev/null 2>&1; then
+    version=$(curl -fsS --max-time 3 "$here/api/version" 2>/dev/null | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    if [ -n "$version" ]; then reachable=true; fi
+  fi
+  printf '{"reachable":%s,"address":%s,"version":%s,"noCloud":%s,"listeners":%s,"models":[' \
+    "$reachable" "$(json_string "$url")" "$(json_string "$version")" "$no_cloud" "$(listeners_json 11434)"
+  first=1
+  old_ifs=$IFS
+  IFS=,
+  for name in $models; do
+    name=$(printf '%s' "$name" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    [ -n "$name" ] || continue
+    if [ "$first" = "0" ]; then printf ','; fi
+    first=0
+    window=""
+    if [ "$reachable" = "true" ] && command -v curl >/dev/null 2>&1; then
+      window=$(curl -fsS --max-time 10 -X POST "$here/api/show" -H 'content-type: application/json' \
+        --data "{\"model\":\"$name\"}" 2>/dev/null |
+        sed -n 's/.*"[a-z0-9_.]*context_length"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p' | head -n 1)
+    fi
+    if [ -n "$window" ]; then
+      printf '{"name":%s,"contextLength":%s}' "$(json_string "$name")" "$window"
+    else
+      printf '{"name":%s}' "$(json_string "$name")"
+    fi
+  done
+  IFS=$old_ifs
+  printf ']}'
+}
+
+host_facts() {
+  port=$(setting SYLOU_PORT 8080)
+  platform=linux
+  if [ "$(uname -s)" = "Darwin" ]; then platform=macos; fi
+  engine=$(docker version --format '{{.Server.Version}}' 2>/dev/null || printf '')
+  compose=$(docker compose version --short 2>/dev/null || printf '')
+  printf '{"platform":%s,"packageVersion":%s,"packageDate":%s,"port":%s,' \
+    "$(json_string "$platform")" "$(json_string "$(release_field version)")" \
+    "$(json_string "$(release_field date)")" "$port"
+  printf '"docker":{"engine":%s,"compose":%s},' "$(json_string "$engine")" "$(json_string "$compose")"
+  printf '"listeners":%s,' "$(listeners_json "$port")"
+  printf '"diskEncryption":%s,' "$(json_string "$(disk_encryption)")"
+  printf '"secrets":{"path":%s,"ownerOnly":%s,"syncedTo":%s},' \
+    "$(json_string "$SECRETS_DIR")" "$(secrets_owner_only)" \
+    "$(if [ -n "$(synced_folder)" ]; then json_string "$(synced_folder)"; else printf 'null'; fi)"
+  printf '"lastBackup":%s,' "$(last_backup_json)"
+  printf '"ollama":%s}' "$(ollama_json)"
+}
+
+cmd_doctor() {
+  check_docker
+  # The facts travel as a file rather than down a pipe, so the bytes are the
+  # same whatever shell wrote them (the Windows side had this both ways).
+  file="$CONFIG_DIR/doctor-facts.json"
+  host_facts > "$file"
+  run_compose run --rm -v "$file:/facts.json:ro" tools doctor
+  code=$?
+  rm -f "$file"
+  return $code
+}
+
+confirm_step() {
+  question=$1
+  shift
+  for argument in "$@"; do
+    if [ "$argument" = "--yes" ]; then return 0; fi
+  done
+  printf '%s Type yes to continue: ' "$question"
+  read -r answer
+  [ "$answer" = "yes" ]
+}
+
+absolute() {
+  case "$1" in
+    /*) printf '%s' "$1" ;;
+    *) printf '%s/%s' "$(pwd)" "$1" ;;
+  esac
+}
+
+cmd_backup() {
+  check_docker
+  case "${1:-}" in ""|--*) fail "Give the folder to back up into, for example: backup ~/sylou-backups" ;; esac
+  folder=$(absolute "$1")
+  mkdir -p "$folder"
+  target="$folder/sylou-$(date +%Y-%m-%d-%H%M)"
+  mkdir -p "$target"
+
+  step "Backing up"
+  run_compose run --rm -v "$target:/backup" dump || fail "The backup did not finish. Nothing was written to $target."
+
+  # Doctor reads this to say how long ago the last backup was.
+  printf '{"at":"%s","path":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$target" > "$CONFIG_DIR/last-backup.json"
+  step "Backed up to $target"
+  note "This install's secrets are not in it. Keep config/secrets/ too, or the backup opens nothing."
+}
+
+cmd_restore() {
+  check_docker
+  case "${1:-}" in ""|--*) fail "Give the backup folder to restore from, for example: restore ~/sylou-backups/sylou-2026-11-16-1830" ;; esac
+  folder=$(absolute "$1")
+  [ -f "$folder/data.sql" ] || fail "There is no data.sql in $folder, so that is not a backup this can read."
+
+  warn "Restoring replaces what this install holds now with what the backup holds."
+  note "Everyone signs in again afterwards: sessions are not part of a backup."
+  confirm_step "Restore from $folder?" "$@" || fail "Nothing was changed."
+
+  step "Making sure the install is running and migrated"
+  run_compose up -d --wait || fail "The install did not start."
+
+  step "Restoring"
+  run_compose run --rm -v "$folder:/backup" load || fail "The restore stopped. The install is as it was before it started."
+  step "Restored. Sign in again at http://localhost:$(setting SYLOU_PORT 8080)"
+}
+
+set_setting() {
+  name=$1
+  value=$2
+  [ -f "$SETTINGS_FILE" ] || cp "$EXAMPLE_SETTINGS" "$SETTINGS_FILE"
+  if grep -q "^[[:space:]]*$name[[:space:]]*=" "$SETTINGS_FILE"; then
+    sed "s|^[[:space:]]*$name[[:space:]]*=.*|$name=$value|" "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp"
+    mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+  else
+    printf '%s=%s\n' "$name" "$value" >> "$SETTINGS_FILE"
+  fi
+}
+
+cmd_models() {
+  check_docker
+  case "${1:-}" in ""|--*) fail "Name the model to make a window for, for example: models mistral-nemo" ;; esac
+  step "Looking for the largest window that runs on the graphics card"
+  note "This makes a copy per size and loads it, so it takes a few minutes."
+  run_compose run --rm models window "$1"
+}
+
+cmd_rotate() {
+  check_docker
+  warn "New secrets for this install."
+  note "Everyone signs in again afterwards. Your writing, your projects and your documents are untouched."
+  confirm_step "Make new secrets?" "$@" || fail "Nothing was changed."
+
+  staging="$CONFIG_DIR/secrets-new"
+  rm -rf "$staging"
+  mkdir -p "$staging"
+
+  step "Making the new secrets"
+  docker run --rm -v "$staging:/out" "ghcr.io/benjahardy/sylou-tools:$(setting SYLOU_IMAGE_TAG dev)" secrets \
+    || fail "The new secrets could not be made. Nothing was changed."
+
+  # Your API keys are yours, not this install's: they carry over.
+  for name in anthropic_api_key mistral_api_key deepseek_api_key brave_search_api_key; do
+    if [ -f "$SECRETS_DIR/$name" ]; then cp "$SECRETS_DIR/$name" "$staging/$name"; fi
+  done
+
+  step "Making sure the install is running"
+  run_compose up -d --wait || fail "The install did not start. Nothing was changed."
+
+  step "Telling the database about the new passwords"
+  run_compose run --rm -v "$staging:/new" rotate || fail "The database kept its old passwords. Nothing was changed."
+
+  step "Putting the new secrets in place"
+  old="$CONFIG_DIR/secrets-old-$(date +%Y-%m-%d-%H%M)"
+  mv "$SECRETS_DIR" "$old"
+  mv "$staging" "$SECRETS_DIR"
+  protect_config
+
+  step "Starting again with them"
+  run_compose down >/dev/null 2>&1 || true
+  run_compose up -d --wait || fail "Sylou did not start with the new secrets. The old ones are in $old."
+  step "Done. Sign in again at http://localhost:$(setting SYLOU_PORT 8080)"
+  note "The old secrets are in $old. Delete that folder once you are sure."
+}
+
+cmd_local_only() {
+  check_docker
+  case "$(lower "${1:-}")" in
+    on)
+      set_setting SYLOU_LOCAL_ONLY true
+      step "Local-only mode on"
+      note "No service that holds or reads your writing has a way out now. The one route left goes to"
+      note "Ollama on this computer; cloud models and web search say they are unavailable."
+      ;;
+    off)
+      set_setting SYLOU_LOCAL_ONLY ""
+      # A service kept behind a profile is not an orphan, so the restart
+      # would leave the relay running: it has to be taken away by name.
+      run_compose --profile local-only rm -s -f relay >/dev/null 2>&1 || true
+      step "Local-only mode off"
+      note "The functions may reach the AI providers you have keys for again."
+      ;;
+    *) fail "Say which: local-only on, or local-only off" ;;
+  esac
+  step "Starting again"
+  run_compose up -d --wait --remove-orphans || fail "Sylou did not start again. \"./sylou logs\" shows what each part said."
+}
+
+cmd_remove() {
+  check_docker
+  warn "This deletes everything this install holds: your writing, the projects, the documents, the accounts."
+  note "The settings and secrets in config/ stay where they are. A backup is the only way back."
+  confirm_step "Delete this install's data?" "$@" || fail "Nothing was deleted."
+  run_compose down -v --remove-orphans
+  step "Deleted. \"./sylou setup\" makes a fresh install in this folder."
+}
+
+cmd_update() {
+  check_docker
+  case "${1:-}" in ""|--*) fail "Give a folder to back up into first: update ~/sylou-backups" ;; esac
+  cmd_backup "$@"
+
+  if [ "$(setting SYLOU_IMAGE_TAG dev)" = "dev" ]; then
+    step "Building the images again"
+    run_compose build || fail "The images could not be built."
+  else
+    step "Downloading the images this release names"
+    run_compose pull || fail "The images could not be downloaded."
+  fi
+
+  step "Starting the new version (the migrations run on the way up)"
+  run_compose up -d --wait || fail "The new version did not start. Your backup is in the folder above."
+  step "Updated. Checking the install"
+  cmd_doctor
 }
 
 # --------------------------------------------------------------------------
@@ -185,6 +498,14 @@ Sylou Local
   start                    start it again
   stop                     stop it (nothing is deleted)
   status                   what is running
+  doctor                   check this install and the computer around it
+  backup <folder>          everything you have written, into a folder you pick
+  restore <folder>         a backup, back into this install
+  update <folder>          back up, then start the new version
+  models <model>           the largest window that runs on your graphics card
+  rotate                   new secrets for this install
+  local-only on|off        this computer and nothing else
+  remove                   delete this install's data (not its settings)
   logs [service]           what the parts are saying
   add-user <email>         make another account
   reset-password <email>   a one-time link to set a new password
@@ -211,6 +532,14 @@ case "$command" in
     step "Sylou is stopped. Your writing and settings stay where they are."
     ;;
   status) check_docker; run_compose ps ;;
+  doctor) cmd_doctor ;;
+  backup) cmd_backup "$@" ;;
+  restore) cmd_restore "$@" ;;
+  update) cmd_update "$@" ;;
+  models) cmd_models "$@" ;;
+  rotate) cmd_rotate "$@" ;;
+  local-only) cmd_local_only "$@" ;;
+  remove) cmd_remove "$@" ;;
   logs) check_docker; run_compose logs --tail 200 "$@" ;;
   add-user)
     check_docker

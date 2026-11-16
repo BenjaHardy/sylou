@@ -55,6 +55,18 @@ if (Deno.args[0] === "run" && Deno.args.includes("secrets")) {
   Deno.exit(0);
 }
 
+// docker compose run --rm -v <file>:/facts.json:ro tools doctor
+if (Deno.args.includes("doctor")) {
+  // "<host file>:/facts.json:ro" - and the host side carries a drive letter
+  // with a colon of its own, so the read-only suffix comes off first.
+  const mount = (Deno.args[Deno.args.indexOf("-v") + 1] ?? "").replace(/:(ro|rw)$/, "");
+  const from = mount.includes(";") ? mount.slice(0, mount.indexOf(";")) : mount.slice(0, mount.lastIndexOf(":"));
+  const facts = Deno.env.get("FAKE_DOCKER_FACTS");
+  if (facts && from) Deno.copyFileSync(from, facts);
+  console.log("doctor: the facts were read");
+  Deno.exit(0);
+}
+
 if (Deno.args.includes("add-user")) {
   console.log("add-user: open this once, in your browser:");
   console.log("  http://localhost:8080/auth/v1/verify?token=fake&type=recovery");
@@ -67,6 +79,8 @@ Deno.exit(0);
 interface Install {
   dir: string;
   log: string;
+  /** Where the fake docker writes what `doctor` handed it on stdin. */
+  facts: string;
   binDir: string;
   port: number;
 }
@@ -87,7 +101,7 @@ async function stagedInstall(folderName = "sylou local", port = freePort()): Pro
   const root = await Deno.makeTempDir({ prefix: "sylou-scripts-" });
   const dir = join(root, folderName);
   await Deno.mkdir(dir, { recursive: true });
-  for (const name of ["sylou", "sylou.ps1", "sylou.cmd", "compose.yaml", "compose.local-only.yaml", "settings.example.env"]) {
+  for (const name of ["sylou", "sylou.ps1", "sylou.cmd", "compose.yaml", "compose.local-only.yaml", "settings.example.env", "VERSION"]) {
     await Deno.copyFile(join(PACKAGE_DIR, name), join(dir, name));
   }
   if (!WINDOWS) await Deno.chmod(join(dir, "sylou"), 0o755);
@@ -110,7 +124,7 @@ async function stagedInstall(folderName = "sylou local", port = freePort()): Pro
   await Deno.writeTextFile(join(binDir, "docker"), `#!/bin/sh\nexec deno run --allow-all "${posix(fake)}" "$@"\n`);
   if (!WINDOWS) await Deno.chmod(join(binDir, "docker"), 0o755);
 
-  return { dir, log: join(root, "docker.log"), binDir, port };
+  return { dir, log: join(root, "docker.log"), facts: join(root, "facts.json"), binDir, port };
 }
 
 /** C:\a\b as a POSIX shell on Windows wants it: /c/a/b. */
@@ -118,6 +132,35 @@ function posix(path: string): string {
   const drive = path.match(/^([A-Za-z]):[\\/]/);
   if (!drive) return path;
   return `/${drive[1].toLowerCase()}/${path.slice(3).replace(/\\/g, "/")}`;
+}
+
+/**
+ * What a Windows PowerShell 5.1 started from PowerShell 7 inherits: PowerShell
+ * 7's module folders first in PSModulePath, holding a Microsoft.PowerShell.
+ * Security that 5.1 cannot load. Every step on a GitHub Windows runner runs in
+ * PowerShell 7, and so does a PowerShell 7 window on anyone's computer. A
+ * stand-in module of that name, marked as needing PowerShell 7, recreates it
+ * here, so a script that leans on that module fails on this machine too.
+ */
+async function pwsh7ModulePath(root: string): Promise<Record<string, string>> {
+  // Laid out where PowerShell 7 keeps its own: ...\PowerShell\7\Modules.
+  const modules = join(root, "PowerShell", "7", "Modules");
+  const module = join(modules, "Microsoft.PowerShell.Security");
+  await Deno.mkdir(module, { recursive: true });
+  await Deno.writeTextFile(
+    join(module, "Microsoft.PowerShell.Security.psd1"),
+    [
+      "@{",
+      "    ModuleVersion = '7.4.0.0'",
+      "    GUID = 'a94c8c7e-9810-47c0-b8af-65089c13a35a'",
+      "    PowerShellVersion = '7.0'",
+      "    CompatiblePSEditions = @('Core')",
+      "    CmdletsToExport = @('Get-Acl', 'Set-Acl')",
+      "}",
+      "",
+    ].join("\r\n"),
+  );
+  return { PSModulePath: `${modules};${Deno.env.get("PSModulePath") ?? ""}` };
 }
 
 /** Is there a POSIX shell to run the other script with? */
@@ -130,25 +173,32 @@ async function haveSh(): Promise<boolean> {
   }
 }
 
-async function runSetup(
+async function runSylou(
   install: Install,
   args: string[],
   shell: "native" | "sh" = "native",
+  extraEnv: Record<string, string> = {},
 ): Promise<{ code: number; out: string }> {
   const command = WINDOWS && shell === "native"
     ? new Deno.Command("cmd.exe", {
-      args: ["/c", join(install.dir, "sylou.cmd"), "setup", ...args],
+      args: ["/c", join(install.dir, "sylou.cmd"), ...args],
       cwd: install.dir,
-      env: { PATH: `${install.binDir};${Deno.env.get("PATH")}`, FAKE_DOCKER_LOG: install.log },
+      env: {
+        PATH: `${install.binDir};${Deno.env.get("PATH")}`,
+        FAKE_DOCKER_LOG: install.log,
+        FAKE_DOCKER_FACTS: install.facts,
+        ...extraEnv,
+      },
       stdout: "piped",
       stderr: "piped",
     })
     : new Deno.Command("sh", {
-      args: [posix(join(install.dir, "sylou")), "setup", ...args],
+      args: [posix(join(install.dir, "sylou")), ...args],
       cwd: install.dir,
       env: {
         PATH: `${WINDOWS ? posix(install.binDir) : install.binDir}:${Deno.env.get("PATH")}`,
         FAKE_DOCKER_LOG: WINDOWS ? posix(install.log) : install.log,
+        FAKE_DOCKER_FACTS: WINDOWS ? posix(install.facts) : install.facts,
         HOME: Deno.env.get("HOME") ?? "",
       },
       stdout: "piped",
@@ -158,6 +208,9 @@ async function runSetup(
   const decoder = new TextDecoder();
   return { code: result.code, out: decoder.decode(result.stdout) + decoder.decode(result.stderr) };
 }
+
+const runSetup = (install: Install, args: string[], shell: "native" | "sh" = "native") =>
+  runSylou(install, ["setup", ...args], shell);
 
 Deno.test("setup makes the install, and its secrets stay readable by their owner", async () => {
   const install = await stagedInstall();
@@ -258,6 +311,266 @@ Deno.test("setup stops when something else is already on the port", async () => 
     assert(!log.includes("up -d"), "setup started Sylou on a port that was taken");
   } finally {
     taken.close();
+    await Deno.remove(join(install.dir, ".."), { recursive: true });
+  }
+});
+
+// Compose reads config/settings.env itself (`--env-file`), and the commands
+// read it too: a value in quotes, or one with a comment after it, has to mean
+// the same thing to both, or setup checks one port while Compose publishes
+// another.
+Deno.test("a setting in quotes, or with a comment after it, reads as Compose reads it", async () => {
+  for (const shell of WINDOWS && !(await haveSh()) ? ["native"] as const : ["native", "sh"] as const) {
+    const install = await stagedInstall();
+    try {
+      await Deno.writeTextFile(
+        join(install.dir, "config", "settings.env"),
+        [
+          `SYLOU_PORT="${install.port}"   # the port this install answers on`,
+          "SYLOU_IMAGE_TAG='dev'",
+          "SYLOU_INSTANCE_LABEL=local # shown in the app",
+          "",
+        ].join("\n"),
+      );
+      const { code, out } = await runSetup(install, ["you@example.com"], shell);
+      assertEquals(code, 0, `${shell}: ${out}`);
+      assertStringIncludes(out, `127.0.0.1:${install.port} is free.`);
+      // The tag reads as dev, so setup builds the images from this checkout.
+      assertStringIncludes(await Deno.readTextFile(install.log), " build", `${shell} did not build`);
+    } finally {
+      await Deno.remove(join(install.dir, ".."), { recursive: true });
+    }
+  }
+});
+
+// `doctor` is two halves: the script gathers what only this computer can see
+// and the tools image decides what it means. This is the first half - that
+// the facts arrive at all, that they are about this install, and that nothing
+// secret travels with them.
+Deno.test("doctor hands the computer's own facts to the tools image", async () => {
+  const install = await stagedInstall();
+  try {
+    const setup = await runSetup(install, ["you@example.com"]);
+    assertEquals(setup.code, 0, setup.out);
+    // On Windows, as the CI runner and a PowerShell 7 window both run it.
+    const extra = WINDOWS ? await pwsh7ModulePath(join(install.dir, "..")) : {};
+    const { code, out } = await runSylou(install, ["doctor"], "native", extra);
+    assertEquals(code, 0, out);
+
+    // Tolerated on the way in, refused on the way out: the tools image drops
+    // a byte-order mark if one arrives, and the script must not send one -
+    // PowerShell writes one into a pipe on some computers and not others,
+    // which is how a green suite here failed on a Windows CI runner with
+    // nothing but "Unexpected token" to go on.
+    const raw = await Deno.readTextFile(install.facts);
+    assert(!raw.startsWith("\uFEFF"), "the script put a byte-order mark at the head of the facts");
+    const facts = JSON.parse(raw.replace(/^\uFEFF/, ""));
+    assertEquals(facts.platform, WINDOWS ? "windows" : Deno.build.os === "darwin" ? "macos" : "linux");
+    assertEquals(facts.port, install.port);
+    assertEquals(typeof facts.docker, "object");
+    assertEquals(facts.docker.engine, "28.3.3");
+    assert(Array.isArray(facts.listeners), "the listening addresses were not gathered");
+    // When the two disagree, both accounts of it: who doctor found, and what
+    // setup said while it locked the folder.
+    assertEquals(
+      facts.secrets.ownerOnly,
+      true,
+      `setup locked the folder, and doctor should see that\ndoctor: ${JSON.stringify(facts.secrets)}\nsetup:\n${setup.out}`,
+    );
+    assertEquals(facts.secrets.syncedTo, null);
+    assertEquals(facts.packageVersion, "dev");
+
+    // The facts travel past the secrets without picking any up.
+    const asText = JSON.stringify(facts);
+    assert(!asText.includes(SECRET_VALUE), "a secret travelled with doctor's facts");
+  } finally {
+    await Deno.remove(join(install.dir, ".."), { recursive: true });
+  }
+});
+
+// The condition a GitHub Windows runner showed: the folder already lets SYSTEM
+// and Administrators in, through entries that icacls's /inheritance:r leaves
+// in place while reporting success. Setup has to lock it all the same.
+Deno.test({
+  name: "setup locks a folder that already lets SYSTEM and Administrators in",
+  ignore: !WINDOWS,
+  fn: async () => {
+    const install = await stagedInstall();
+    try {
+      const grant = await new Deno.Command("cmd.exe", {
+        args: ["/c", "icacls", join(install.dir, "config"), "/grant", "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F"],
+        stdout: "piped",
+        stderr: "piped",
+      }).output();
+      assert(grant.success, new TextDecoder().decode(grant.stderr));
+
+      const setup = await runSetup(install, ["you@example.com"]);
+      assertEquals(setup.code, 0, setup.out);
+      assertStringIncludes(setup.out, "readable by your account only");
+      const { code, out } = await runSylou(install, ["doctor"]);
+      assertEquals(code, 0, out);
+      const secrets = JSON.parse((await Deno.readTextFile(install.facts)).replace(/^\uFEFF/, "")).secrets;
+      assertEquals(secrets.ownerOnly, true, JSON.stringify(secrets));
+      assertEquals(secrets.others, []);
+    } finally {
+      await Deno.remove(join(install.dir, ".."), { recursive: true });
+    }
+  },
+});
+
+// What doctor tells someone whose secrets another account can open, and that
+// its advice - run setup again - takes the folder back.
+Deno.test({
+  name: "doctor names another account that can open the secrets, and setup takes the folder back",
+  ignore: !WINDOWS,
+  fn: async () => {
+    const install = await stagedInstall();
+    const secrets = join(install.dir, "config", "secrets");
+    const doctorSees = async () => {
+      const { code, out } = await runSylou(install, ["doctor"]);
+      assertEquals(code, 0, out);
+      return JSON.parse((await Deno.readTextFile(install.facts)).replace(/^\uFEFF/, "")).secrets;
+    };
+    try {
+      assertEquals((await runSetup(install, ["you@example.com"])).code, 0);
+
+      // Everyone (S-1-1-0, whatever Windows calls it in its own language)
+      // may now read the folder.
+      const grant = await new Deno.Command("cmd.exe", {
+        args: ["/c", "icacls", secrets, "/grant", "*S-1-1-0:R"],
+        stdout: "piped",
+        stderr: "piped",
+      }).output();
+      assert(grant.success, new TextDecoder().decode(grant.stderr));
+
+      const open = await doctorSees();
+      assertEquals(open.ownerOnly, false, JSON.stringify(open));
+      assertEquals(open.others.length, 1, JSON.stringify(open));
+
+      const again = await runSetup(install, ["you@example.com"]);
+      assertEquals(again.code, 0, again.out);
+      assertStringIncludes(again.out, "readable by your account only");
+      const closed = await doctorSees();
+      assertEquals(closed.ownerOnly, true, JSON.stringify(closed));
+      assertEquals(closed.others, []);
+    } finally {
+      await Deno.remove(join(install.dir, ".."), { recursive: true });
+    }
+  },
+});
+
+Deno.test("backup makes a folder of its own, and leaves a note of when", async () => {
+  const install = await stagedInstall();
+  const into = await Deno.makeTempDir({ prefix: "sylou-backups-" });
+  try {
+    assertEquals((await runSetup(install, ["you@example.com"])).code, 0);
+    const { code, out } = await runSylou(install, ["backup", into]);
+    assertEquals(code, 0, out);
+
+    // One folder per backup, named for the day and the minute.
+    const made = [...Deno.readDirSync(into)].map((entry) => entry.name);
+    assertEquals(made.length, 1);
+    assert(/^sylou-\d{4}-\d{2}-\d{2}-\d{4}$/.test(made[0]), `odd folder name: ${made[0]}`);
+
+    // It ran the one-shot that holds pg_dump, with that folder mounted.
+    const log = await Deno.readTextFile(install.log);
+    assertStringIncludes(log, "run --rm -v");
+    assertStringIncludes(log, "dump");
+
+    // And doctor can now say how long ago the last backup was.
+    const note = JSON.parse(await Deno.readTextFile(join(install.dir, "config", "last-backup.json")));
+    assert(Date.now() - Date.parse(note.at) < 120_000, `the note says ${note.at}`);
+    assertStringIncludes(note.path, made[0]);
+
+    // And it says what a backup does not hold.
+    assertStringIncludes(out, "secrets are not in it");
+  } finally {
+    await Deno.remove(into, { recursive: true });
+    await Deno.remove(join(install.dir, ".."), { recursive: true });
+  }
+});
+
+Deno.test("restore refuses a folder that is not a backup, and changes nothing", async () => {
+  const install = await stagedInstall();
+  const empty = await Deno.makeTempDir({ prefix: "sylou-not-a-backup-" });
+  try {
+    assertEquals((await runSetup(install, ["you@example.com"])).code, 0);
+    await Deno.truncate(install.log, 0);
+
+    const { code, out } = await runSylou(install, ["restore", empty, "--yes"]);
+    assertEquals(code, 1, out);
+    assertStringIncludes(out, "data.sql");
+
+    const log = await Deno.readTextFile(install.log);
+    assert(!log.includes("load"), "it started the restore anyway");
+  } finally {
+    await Deno.remove(empty, { recursive: true });
+    await Deno.remove(join(install.dir, ".."), { recursive: true });
+  }
+});
+
+Deno.test("local-only on and off write the setting and start again with it", async () => {
+  const install = await stagedInstall();
+  const settingsFile = join(install.dir, "config", "settings.env");
+  try {
+    assertEquals((await runSetup(install, ["you@example.com"])).code, 0);
+    await Deno.truncate(install.log, 0);
+
+    const on = await runSylou(install, ["local-only", "on"]);
+    assertEquals(on.code, 0, on.out);
+    assertStringIncludes(await Deno.readTextFile(settingsFile), "SYLOU_LOCAL_ONLY=true");
+    assertStringIncludes(on.out, "Ollama on this computer");
+    // Started again with the file that takes the functions' way out away,
+    // and with the relay the mode needs.
+    const afterOn = await Deno.readTextFile(install.log);
+    assertStringIncludes(afterOn, "compose.local-only.yaml");
+    assertStringIncludes(afterOn, "--profile local-only");
+    assertStringIncludes(afterOn, "--remove-orphans");
+
+    await Deno.truncate(install.log, 0);
+    const off = await runSylou(install, ["local-only", "off"]);
+    assertEquals(off.code, 0, off.out);
+    assertStringIncludes(await Deno.readTextFile(settingsFile), "SYLOU_LOCAL_ONLY=");
+    assert(!/SYLOU_LOCAL_ONLY=true/.test(await Deno.readTextFile(settingsFile)));
+    const afterOff = await Deno.readTextFile(install.log);
+    // A service kept behind a profile is not an orphan, so the relay has to
+    // be taken away by name - found by running it, where --remove-orphans
+    // left it going.
+    assertStringIncludes(afterOff, "rm -s -f relay");
+    // And the install itself starts again without the local-only file.
+    const started = afterOff.trim().split("\n").filter((line) => line.includes("up -d --wait")).pop() ?? "";
+    assert(!started.includes("compose.local-only.yaml"), `it stayed in local-only mode: ${started}`);
+    assertStringIncludes(started, "--remove-orphans");
+  } finally {
+    await Deno.remove(join(install.dir, ".."), { recursive: true });
+  }
+});
+
+Deno.test("local-only says which, rather than guessing", async () => {
+  const install = await stagedInstall();
+  try {
+    assertEquals((await runSetup(install, ["you@example.com"])).code, 0);
+    const { code, out } = await runSylou(install, ["local-only"]);
+    assertEquals(code, 1, out);
+    assertStringIncludes(out, "local-only on");
+  } finally {
+    await Deno.remove(join(install.dir, ".."), { recursive: true });
+  }
+});
+
+Deno.test("remove takes the volumes, and only when it is answered", async () => {
+  const install = await stagedInstall();
+  try {
+    assertEquals((await runSetup(install, ["you@example.com"])).code, 0);
+    await Deno.truncate(install.log, 0);
+
+    const { code, out } = await runSylou(install, ["remove", "--yes"]);
+    assertEquals(code, 0, out);
+    const log = await Deno.readTextFile(install.log);
+    assertStringIncludes(log, "down -v --remove-orphans");
+    // The settings and the secrets are not its business.
+    assert(await Deno.stat(join(install.dir, "config", "secrets", "jwt_secret")).then(() => true).catch(() => false));
+  } finally {
     await Deno.remove(join(install.dir, ".."), { recursive: true });
   }
 });

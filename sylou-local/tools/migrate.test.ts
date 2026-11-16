@@ -21,6 +21,12 @@ Deno.test("a fresh database gets every migration, in name order", () => {
   assertEquals(toApply.map((f) => f.version), ["20260101", "20260102", "20260103"]);
 });
 
+Deno.test("name order is by character, as the Supabase CLI and the database tests apply them", () => {
+  // A language's collation would put "_" before "-"; neither of those does.
+  const { toApply } = plan([file("20260101000000_a_b", "b"), file("20260101000000_a-b", "a")], []);
+  assertEquals(toApply.map((f) => f.version), ["20260101000000_a-b", "20260101000000_a_b"]);
+});
+
 Deno.test("what the database already has is left alone", () => {
   const { toApply } = plan(
     [file("20260101", "a"), file("20260102", "b")],

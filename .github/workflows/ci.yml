@@ -153,6 +153,13 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@127.0.0.1:54331/postgres
 
+      # The functions image is built from sylou-local/functions/deno.lock, and
+      # its first stage stops when the functions load anything that file does
+      # not name. Building that stage here means a change to the functions'
+      # imports fails on its own pull request, not at the next release.
+      - name: Functions lockfile
+        run: docker build --target locked --file sylou-local/functions/Dockerfile .
+
   sylou-local-windows:
     name: Sylou Local commands (Windows)
     runs-on: windows-latest

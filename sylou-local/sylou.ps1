@@ -27,11 +27,22 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Started from a PowerShell 7 window - the default in Windows Terminal on many
+# computers, and the shell of every step on a GitHub Windows runner - this
+# Windows PowerShell inherits PowerShell 7's module folders first in its search
+# path, and then cannot load modules both versions ship, such as the one
+# behind Get-Acl. Dropping those folders for this one process lets it find its
+# own. (A "\PowerShell\" folder is PowerShell 7's; "\WindowsPowerShell\" ones
+# stay.)
+$env:PSModulePath = (($env:PSModulePath -split ";") | Where-Object { $_ -and $_ -notmatch '\\PowerShell\\' }) -join ";"
+
 $PackageDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ConfigDir = Join-Path $PackageDir "config"
 $SecretsDir = Join-Path $ConfigDir "secrets"
 $SettingsFile = Join-Path $ConfigDir "settings.env"
 $ExampleSettings = Join-Path $PackageDir "settings.example.env"
+# What a person types to run this, for the messages below.
+$ScriptName = ".\sylou.cmd"
 
 function Write-Step([string]$Text) { Write-Host "==> $Text" }
 function Write-Note([string]$Text) { Write-Host "    $Text" }
@@ -42,6 +53,18 @@ function Fail([string]$Text) { Write-Host "    $Text" -ForegroundColor Red; exit
 # Settings
 # ---------------------------------------------------------------------------
 
+# A value as `docker compose --env-file` reads it, so the commands and the
+# recipe never disagree about a setting: a value in quotes is what stands
+# between them, and an unquoted one ends where a comment begins.
+function ConvertFrom-SettingValue([string]$Value) {
+    $text = $Value.Trim()
+    if ($text.Length -ge 1 -and ($text[0] -eq [char]'"' -or $text[0] -eq [char]"'")) {
+        $close = $text.IndexOf($text[0], 1)
+        if ($close -gt 0) { return $text.Substring(1, $close - 1) }
+    }
+    return ($text -replace '\s+#.*$', '')
+}
+
 function Get-Settings {
     $settings = @{ SYLOU_PORT = "8080"; SYLOU_IMAGE_TAG = "dev"; SYLOU_LOCAL_ONLY = "" }
     if (Test-Path $SettingsFile) {
@@ -49,7 +72,7 @@ function Get-Settings {
             $trimmed = $line.Trim()
             if ($trimmed -eq "" -or $trimmed.StartsWith("#")) { continue }
             $parts = $trimmed.Split("=", 2)
-            if ($parts.Count -eq 2) { $settings[$parts[0].Trim()] = $parts[1].Trim() }
+            if ($parts.Count -eq 2) { $settings[$parts[0].Trim()] = ConvertFrom-SettingValue $parts[1] }
         }
     }
     return $settings
@@ -132,17 +155,251 @@ function Get-SyncedFolderName([string]$Path) {
     return $null
 }
 
+# The accounts other than yours that a folder lets in, by name where Windows
+# can give one and as a SID where it cannot. Read through .NET rather than
+# Get-Acl: it needs no PowerShell module at all, and the comparison is by SID,
+# the same on every computer whatever language Windows speaks. A rule that
+# refuses an account lets nobody in, so only the ones that allow count.
+function Get-OtherAccess([string]$Path) {
+    $me = ([Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+    $acl = (New-Object System.IO.DirectoryInfo $Path).GetAccessControl()
+    $others = @()
+    foreach ($rule in $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])) {
+        if ($rule.AccessControlType -ne "Allow" -or $rule.IdentityReference.Value -eq $me) { continue }
+        $name = $rule.IdentityReference.Value
+        try { $name = $rule.IdentityReference.Translate([System.Security.Principal.NTAccount]).Value } catch { }
+        if ($others -notcontains $name) { $others += $name }
+    }
+    return ,$others
+}
+
 # Your account alone may read this folder.
 #
-# The trap A0 hit: `icacls <folder> /inheritance:r /grant:r "*<SID>:(OI)(CI)F" /T`
-# leaves every file inside with an empty access list - readable by nobody,
-# not even its owner. The grant goes on the folder alone, and the files are
-# then let inherit it.
+# The folder's access list is replaced whole - one rule, yours, handed down
+# to everything inside - rather than trimmed. A GitHub Windows runner showed
+# why: its folders arrive with SYSTEM and Administrators in entries that
+# `icacls /inheritance:r` leaves in place while reporting success.
+#
+# The trap A0 hit: the same rule applied to every file with icacls's /T
+# leaves each one with an empty access list - readable by nobody, not even
+# its owner. So the rule goes on the folder alone, and what is inside is then
+# reset to inherit it.
+#
+# It then reads the folders back, as doctor will, and names whoever is still
+# let in. It returns whether the lock held.
 function Protect-ConfigFolder([string]$Path) {
-    $sid = ([Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
-    & icacls $Path /inheritance:r /grant:r "*${sid}:(OI)(CI)F" | Out-Null
-    if ($LASTEXITCODE -ne 0) { Write-Warn "Could not lock $Path to your account alone (icacls said $LASTEXITCODE)." ; return }
+    $me = ([Security.Principal.WindowsIdentity]::GetCurrent()).User
+    $list = New-Object System.Security.AccessControl.DirectorySecurity
+    $list.SetAccessRuleProtection($true, $false)
+    $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+        $me,
+        [System.Security.AccessControl.FileSystemRights]::FullControl,
+        [System.Security.AccessControl.InheritanceFlags]"ContainerInherit, ObjectInherit",
+        [System.Security.AccessControl.PropagationFlags]::None,
+        [System.Security.AccessControl.AccessControlType]::Allow)
+    $list.AddAccessRule($rule)
+    $locked = "done"
+    try { (New-Object System.IO.DirectoryInfo $Path).SetAccessControl($list) } catch { $locked = $_.Exception.Message }
     & icacls (Join-Path $Path "*") /reset /T /C /Q | Out-Null
+    $reset = $LASTEXITCODE
+    $others = @()
+    try {
+        foreach ($folder in @($Path, $SecretsDir)) {
+            if (-not (Test-Path $folder)) { continue }
+            foreach ($name in (Get-OtherAccess $folder)) { if ($others -notcontains $name) { $others += $name } }
+        }
+    } catch {
+        Write-Warn "Could not read back who may open $Path (the lock: $locked; icacls /reset said $reset)."
+        return $false
+    }
+    if ($others.Count -eq 0) { return $true }
+    Write-Warn "$Path can still be opened by: $($others -join ', ') (the lock: $locked; icacls /reset said $reset)."
+    Write-Warn "The folder's Properties, Security tab, lists them. `"$ScriptName doctor`" checks it again."
+    return $false
+}
+
+# ---------------------------------------------------------------------------
+# The facts only this computer can tell us, for `doctor`
+#
+# Each one is wrapped on its own: a fact that cannot be read becomes nothing,
+# and doctor says it could not look rather than guessing. Nothing here decides
+# anything - the rules all live in the tools image (D4).
+# ---------------------------------------------------------------------------
+
+function Get-PackageRelease {
+    $file = Join-Path $PackageDir "VERSION"
+    $release = @{ version = $null; date = $null }
+    if (Test-Path $file) {
+        foreach ($line in Get-Content $file) {
+            $parts = $line.Split("=", 2)
+            if ($parts.Count -eq 2) {
+                if ($parts[0].Trim() -eq "version") { $release.version = $parts[1].Trim() }
+                if ($parts[0].Trim() -eq "date") { $release.date = $parts[1].Trim() }
+            }
+        }
+    }
+    return $release
+}
+
+function Get-Listeners([int[]]$Ports) {
+    $found = @()
+    try {
+        foreach ($connection in (Get-NetTCPConnection -State Listen -ErrorAction Stop)) {
+            if ($Ports -notcontains $connection.LocalPort) { continue }
+            $name = $null
+            try { $name = (Get-Process -Id $connection.OwningProcess -ErrorAction Stop).ProcessName } catch { }
+            $found += @{ address = $connection.LocalAddress; port = $connection.LocalPort; process = $name }
+        }
+    } catch { }
+    # The comma matters: a function that returns an empty array in PowerShell
+    # returns nothing at all, and "nothing" would read as "could not look".
+    return ,$found
+}
+
+# Docker Desktop keeps its settings in a file this account can read. The name
+# of the port-binding setting has changed between versions, so this looks for
+# one that mentions binding rather than assuming today's spelling.
+function Get-PortBinding {
+    $file = Join-Path $env:APPDATA "Docker\settings-store.json"
+    if (-not (Test-Path $file)) { return $null }
+    try {
+        $settings = Get-Content $file -Raw | ConvertFrom-Json
+        foreach ($property in $settings.PSObject.Properties) {
+            if ($property.Name -match "Bind" -and $property.Name -match "(Port|Ip|Address)") {
+                return "$($property.Name): $($property.Value)"
+            }
+        }
+    } catch { }
+    return $null
+}
+
+function Get-FirewallFacts {
+    try {
+        $programs = Get-NetFirewallApplicationFilter -All -ErrorAction Stop |
+            Where-Object { $_.Program -and $_.Program -match "docker|ollama|wsl" }
+        $count = 0
+        foreach ($filter in $programs) {
+            $rule = $null
+            try { $rule = $filter | Get-NetFirewallRule -ErrorAction Stop } catch { }
+            if ($null -ne $rule -and $rule.Enabled -eq "True" -and $rule.Direction -eq "Inbound" -and $rule.Action -eq "Allow") {
+                $count++
+            }
+        }
+        return @{ inboundAllowForDocker = $count }
+    } catch {
+        return $null
+    }
+}
+
+# Without administrator rights the usual commands refuse, and this property
+# does not: 1 means protected, 7 means encrypted with the protection off -
+# two very different things (A0).
+function Get-BitLockerProtection {
+    try {
+        $drive = (Get-Item $PackageDir).PSDrive.Root
+        $shell = New-Object -ComObject Shell.Application
+        $value = $shell.NameSpace($drive).Self.ExtendedProperty("System.Volume.BitLockerProtection")
+        if ($null -ne $value) { return [int]$value }
+    } catch { }
+    return $null
+}
+
+function Get-SecretsFacts {
+    $facts = @{ path = $SecretsDir; ownerOnly = $null; others = $null; syncedTo = (Get-SyncedFolderName $PackageDir) }
+    if (-not (Test-Path $SecretsDir)) { return $facts }
+    try {
+        $others = Get-OtherAccess $SecretsDir
+        $facts.ownerOnly = ($others.Count -eq 0)
+        $facts.others = $others
+    } catch { }
+    return $facts
+}
+
+function Get-LastBackup {
+    $file = Join-Path $ConfigDir "last-backup.json"
+    if (-not (Test-Path $file)) { return $null }
+    try { return (Get-Content $file -Raw | ConvertFrom-Json) } catch { return $null }
+}
+
+function Get-OllamaFacts($Settings) {
+    $url = ""
+    if ($Settings.ContainsKey("OLLAMA_URL")) { $url = "$($Settings.OLLAMA_URL)".Trim() }
+    $names = @()
+    if ($Settings.ContainsKey("OLLAMA_MODELS") -and "$($Settings.OLLAMA_MODELS)".Trim() -ne "") {
+        $names = "$($Settings.OLLAMA_MODELS)".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
+    }
+    if ($url -eq "" -and $names.Count -eq 0) { return $null }
+
+    # Docker reaches Ollama by a name of its own; from here it is this computer.
+    $here = "http://127.0.0.1:11434"
+    $facts = @{ reachable = $false; address = $url; noCloud = ($env:OLLAMA_NO_CLOUD -eq "1"); models = @(); listeners = (Get-Listeners @(11434)) }
+    try {
+        $version = Invoke-RestMethod -Uri "$here/api/version" -TimeoutSec 3 -ErrorAction Stop
+        $facts.reachable = $true
+        $facts.version = $version.version
+    } catch {
+        return $facts
+    }
+    foreach ($name in $names) {
+        $model = @{ name = $name }
+        try {
+            $shown = Invoke-RestMethod -Uri "$here/api/show" -Method Post -TimeoutSec 10 -ErrorAction Stop `
+                -Body (ConvertTo-Json @{ model = $name }) -ContentType "application/json"
+            foreach ($property in $shown.model_info.PSObject.Properties) {
+                if ($property.Name -match "context_length$") { $model.contextLength = [int]$property.Value }
+            }
+            if ($shown.details.family -eq "cloud" -or "$($shown.capabilities)" -match "cloud") { $model.cloud = $true }
+        } catch { }
+        $facts.models += $model
+    }
+    return $facts
+}
+
+function Get-HostFacts($Settings) {
+    $release = Get-PackageRelease
+    $port = 8080
+    if ($Settings.ContainsKey("SYLOU_PORT")) { $port = [int]$Settings.SYLOU_PORT }
+
+    $engine = $null
+    $compose = $null
+    try { $engine = (& docker version --format "{{.Server.Version}}") | Select-Object -First 1 } catch { }
+    try { $compose = (& docker compose version --short) | Select-Object -First 1 } catch { }
+
+    $backup = Get-LastBackup
+    return @{
+        platform = "windows"
+        packageVersion = $release.version
+        packageDate = $release.date
+        port = $port
+        docker = @{ engine = $engine; compose = $compose }
+        portBinding = (Get-PortBinding)
+        listeners = (Get-Listeners @($port))
+        firewall = (Get-FirewallFacts)
+        bitLockerProtection = (Get-BitLockerProtection)
+        secrets = (Get-SecretsFacts)
+        lastBackup = $(if ($null -eq $backup) { $null } else { @{ at = $backup.at; path = $backup.path } })
+        ollama = (Get-OllamaFacts $Settings)
+    }
+}
+
+function Invoke-Doctor($Settings) {
+    Test-DockerReady
+    $facts = Get-HostFacts $Settings | ConvertTo-Json -Depth 8 -Compress
+
+    # The facts travel as a file, not down a pipe. What PowerShell puts at the
+    # head of a pipe depends on the computer - a byte-order mark on some, none
+    # on others - and JSON may not begin with one. Written like this the bytes
+    # are the same everywhere: UTF-8, no mark, whatever the console is set to.
+    $file = Join-Path $ConfigDir "doctor-facts.json"
+    [System.IO.File]::WriteAllText($file, $facts, (New-Object System.Text.UTF8Encoding $false))
+    try {
+        $all = (Get-ComposeArgs $Settings) + @("run", "--rm", "-v", "${file}:/facts.json:ro", "tools", "doctor")
+        & docker @all | Out-Host
+        $code = $LASTEXITCODE
+    } finally {
+        Remove-Item $file -ErrorAction SilentlyContinue
+    }
+    exit $code
 }
 
 # ---------------------------------------------------------------------------
@@ -182,8 +439,7 @@ function Invoke-Setup([string[]]$Arguments) {
     Write-Note "127.0.0.1:$port is free."
 
     Write-Step "Locking this install's folder to your account"
-    Protect-ConfigFolder $ConfigDir
-    Write-Note "config\ is readable by your account only."
+    if (Protect-ConfigFolder $ConfigDir) { Write-Note "config\ is readable by your account only." }
 
     if ($settings.SYLOU_IMAGE_TAG -eq "dev") {
         Write-Step "Building Sylou's own images (first time: several minutes)"
@@ -198,7 +454,7 @@ function Invoke-Setup([string[]]$Arguments) {
         $image = "ghcr.io/benjahardy/sylou-tools:$($settings.SYLOU_IMAGE_TAG)"
         & docker run --rm -v "${SecretsDir}:/out" $image secrets
         if ($LASTEXITCODE -ne 0) { Fail "The secrets could not be made." }
-        Protect-ConfigFolder $ConfigDir
+        $null = Protect-ConfigFolder $ConfigDir
     }
 
     Write-Step "Starting Sylou"
@@ -217,6 +473,187 @@ function Invoke-Setup([string[]]$Arguments) {
     Write-Step "Sylou is running at http://localhost:$port"
     Write-Note "A tip worth taking: set OLLAMA_NO_CLOUD=1 in Ollama's settings, so a model name you mistype"
     Write-Note "is never answered by Ollama's cloud instead of your computer."
+}
+
+function Confirm-Step([string]$Question, [string[]]$Arguments) {
+    if ($Arguments -contains "--yes") { return $true }
+    $answer = Read-Host "$Question Type yes to continue"
+    return ($answer -eq "yes")
+}
+
+function Invoke-Backup($Settings, [string[]]$Arguments) {
+    Test-DockerReady
+    if ($Arguments.Count -lt 1 -or $Arguments[0].StartsWith("--")) {
+        Fail "Give the folder to back up into, for example: backup D:\sylou-backups"
+    }
+    $folder = [System.IO.Path]::GetFullPath($Arguments[0])
+    if (-not (Test-Path $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
+    $target = Join-Path $folder ("sylou-" + (Get-Date -Format "yyyy-MM-dd-HHmm"))
+    New-Item -ItemType Directory -Path $target -Force | Out-Null
+
+    Write-Step "Backing up"
+    $all = (Get-ComposeArgs $Settings) + @("run", "--rm", "-v", "${target}:/backup", "dump")
+    & docker @all | Out-Host
+    if ($LASTEXITCODE -ne 0) { Fail "The backup did not finish. Nothing was written to $target." }
+
+    # Doctor reads this to say how long ago the last backup was.
+    $record = @{ at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"); path = $target }
+    $record | ConvertTo-Json -Compress | Set-Content -Path (Join-Path $ConfigDir "last-backup.json") -Encoding ascii
+    Write-Step "Backed up to $target"
+    Write-Note "This install's secrets are not in it. Keep config\secrets\ too, or the backup opens nothing."
+}
+
+function Invoke-Restore($Settings, [string[]]$Arguments) {
+    Test-DockerReady
+    if ($Arguments.Count -lt 1 -or $Arguments[0].StartsWith("--")) {
+        Fail "Give the backup folder to restore from, for example: restore D:\sylou-backups\sylou-2026-11-16-1830"
+    }
+    $folder = [System.IO.Path]::GetFullPath($Arguments[0])
+    if (-not (Test-Path (Join-Path $folder "data.sql"))) {
+        Fail "There is no data.sql in $folder, so that is not a backup this can read."
+    }
+
+    Write-Warn "Restoring replaces what this install holds now with what the backup holds."
+    Write-Note "Everyone signs in again afterwards: sessions are not part of a backup."
+    if (-not (Confirm-Step "Restore from ${folder}?" $Arguments)) { Fail "Nothing was changed." }
+
+    Write-Step "Making sure the install is running and migrated"
+    if ((Invoke-Compose $Settings @("up", "-d", "--wait")) -ne 0) { Fail "The install did not start." }
+
+    Write-Step "Restoring"
+    $all = (Get-ComposeArgs $Settings) + @("run", "--rm", "-v", "${folder}:/backup", "load")
+    & docker @all | Out-Host
+    if ($LASTEXITCODE -ne 0) { Fail "The restore stopped. The install is as it was before it started." }
+    Write-Step "Restored. Sign in again at http://localhost:$($Settings.SYLOU_PORT)"
+}
+
+function Invoke-Update($Settings, [string[]]$Arguments) {
+    Test-DockerReady
+    if ($Arguments.Count -lt 1 -or $Arguments[0].StartsWith("--")) {
+        Fail "Give a folder to back up into first: update D:\sylou-backups"
+    }
+    Invoke-Backup $Settings $Arguments
+
+    $tag = "$($Settings.SYLOU_IMAGE_TAG)"
+    if ($tag -eq "dev") {
+        Write-Step "Building the images again"
+        if ((Invoke-Compose $Settings @("build")) -ne 0) { Fail "The images could not be built." }
+    } else {
+        Write-Step "Downloading the images this release names"
+        if ((Invoke-Compose $Settings @("pull")) -ne 0) { Fail "The images could not be downloaded." }
+    }
+
+    Write-Step "Starting the new version (the migrations run on the way up)"
+    if ((Invoke-Compose $Settings @("up", "-d", "--wait")) -ne 0) {
+        Fail "The new version did not start. Your backup is in the folder above."
+    }
+    Write-Step "Updated. Checking the install"
+    Invoke-Doctor $Settings
+}
+
+function Set-Setting([string]$Name, [string]$Value) {
+    if (-not (Test-Path $SettingsFile)) { Copy-Item $ExampleSettings $SettingsFile }
+    $lines = @()
+    $replaced = $false
+    foreach ($line in Get-Content $SettingsFile) {
+        if ($line -match "^\s*$Name\s*=") {
+            $lines += "$Name=$Value"
+            $replaced = $true
+        } else {
+            $lines += $line
+        }
+    }
+    if (-not $replaced) { $lines += "$Name=$Value" }
+    Set-Content -Path $SettingsFile -Value $lines -Encoding ascii
+}
+
+function Invoke-Models($Settings, [string[]]$Arguments) {
+    Test-DockerReady
+    if ($Arguments.Count -lt 1 -or $Arguments[0].StartsWith("--")) {
+        Fail "Name the model to make a window for, for example: models mistral-nemo"
+    }
+    Write-Step "Looking for the largest window that runs on the graphics card"
+    Write-Note "This makes a copy per size and loads it, so it takes a few minutes."
+    Invoke-Compose $Settings @("run", "--rm", "models", "window", $Arguments[0]) | Out-Null
+}
+
+function Invoke-Rotate($Settings, [string[]]$Arguments) {
+    Test-DockerReady
+    Write-Warn "New secrets for this install."
+    Write-Note "Everyone signs in again afterwards. Your writing, your projects and your documents are untouched."
+    if (-not (Confirm-Step "Make new secrets?" $Arguments)) { Fail "Nothing was changed." }
+
+    $staging = Join-Path $ConfigDir "secrets-new"
+    if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
+    New-Item -ItemType Directory -Path $staging -Force | Out-Null
+
+    Write-Step "Making the new secrets"
+    & docker run --rm -v "${staging}:/out" "ghcr.io/benjahardy/sylou-tools:$($Settings.SYLOU_IMAGE_TAG)" secrets | Out-Host
+    if ($LASTEXITCODE -ne 0) { Fail "The new secrets could not be made. Nothing was changed." }
+
+    # Your API keys are yours, not this install's: they carry over.
+    foreach ($name in @("anthropic_api_key", "mistral_api_key", "deepseek_api_key", "brave_search_api_key")) {
+        $from = Join-Path $SecretsDir $name
+        if (Test-Path $from) { Copy-Item $from (Join-Path $staging $name) -Force }
+    }
+
+    Write-Step "Making sure the install is running"
+    if ((Invoke-Compose $Settings @("up", "-d", "--wait")) -ne 0) { Fail "The install did not start. Nothing was changed." }
+
+    Write-Step "Telling the database about the new passwords"
+    $all = (Get-ComposeArgs $Settings) + @("run", "--rm", "-v", "${staging}:/new", "rotate")
+    & docker @all | Out-Host
+    if ($LASTEXITCODE -ne 0) { Fail "The database kept its old passwords. Nothing was changed." }
+
+    Write-Step "Putting the new secrets in place"
+    $old = Join-Path $ConfigDir ("secrets-old-" + (Get-Date -Format "yyyy-MM-dd-HHmm"))
+    Move-Item $SecretsDir $old
+    Move-Item $staging $SecretsDir
+    $null = Protect-ConfigFolder $ConfigDir
+
+    Write-Step "Starting again with them"
+    Invoke-Compose $Settings @("down") | Out-Null
+    if ((Invoke-Compose $Settings @("up", "-d", "--wait")) -ne 0) {
+        Fail "Sylou did not start with the new secrets. The old ones are in $old."
+    }
+    Write-Step "Done. Sign in again at http://localhost:$($Settings.SYLOU_PORT)"
+    Write-Note "The old secrets are in $old. Delete that folder once you are sure."
+}
+
+function Invoke-LocalOnly($Settings, [string[]]$Arguments) {
+    Test-DockerReady
+    $state = ""
+    if ($Arguments.Count -gt 0) { $state = "$($Arguments[0])".ToLower() }
+    if ($state -ne "on" -and $state -ne "off") { Fail "Say which: local-only on, or local-only off" }
+
+    if ($state -eq "on") {
+        Set-Setting "SYLOU_LOCAL_ONLY" "true"
+        Write-Step "Local-only mode on"
+        Write-Note "No service that holds or reads your writing has a way out now. The one route left goes to"
+        Write-Note "Ollama on this computer; cloud models and web search say they are unavailable."
+    } else {
+        Set-Setting "SYLOU_LOCAL_ONLY" ""
+        # A service kept behind a profile is not an orphan, so the restart
+        # would leave the relay running: it has to be taken away by name.
+        Invoke-Compose $Settings @("--profile", "local-only", "rm", "-s", "-f", "relay") | Out-Null
+        Write-Step "Local-only mode off"
+        Write-Note "The functions may reach the AI providers you have keys for again."
+    }
+
+    $updated = Get-Settings
+    Write-Step "Starting again"
+    if ((Invoke-Compose $updated @("up", "-d", "--wait", "--remove-orphans")) -ne 0) {
+        Fail "Sylou did not start again. `"$ScriptName logs`" shows what each part said."
+    }
+}
+
+function Invoke-RemoveInstall($Settings, [string[]]$Arguments) {
+    Test-DockerReady
+    Write-Warn "This deletes everything this install holds: your writing, the projects, the documents, the accounts."
+    Write-Note "The settings and secrets in config\ stay where they are. A backup is the only way back."
+    if (-not (Confirm-Step "Delete this install's data?" $Arguments)) { Fail "Nothing was deleted." }
+    Invoke-Compose $Settings @("down", "-v", "--remove-orphans") | Out-Null
+    Write-Step "Deleted. `"$ScriptName setup`" makes a fresh install in this folder."
 }
 
 function Invoke-Start($Settings) {
@@ -240,6 +677,14 @@ Sylou Local
   start                    start it again
   stop                     stop it (nothing is deleted)
   status                   what is running
+  doctor                   check this install and the computer around it
+  backup <folder>          everything you have written, into a folder you pick
+  restore <folder>         a backup, back into this install
+  update <folder>          back up, then start the new version
+  models <model>           the largest window that runs on your graphics card
+  rotate                   new secrets for this install
+  local-only on|off        this computer and nothing else
+  remove                   delete this install's data (not its settings)
   logs [service]           what the parts are saying
   add-user <email>         make another account
   reset-password <email>   a one-time link to set a new password
@@ -257,6 +702,14 @@ switch ($Command.ToLower()) {
     "start" { Invoke-Start $settings }
     "stop" { Invoke-Stop $settings }
     "status" { Test-DockerReady; Invoke-Compose $settings @("ps") | Out-Null }
+    "doctor" { Invoke-Doctor $settings }
+    "backup" { Invoke-Backup $settings $Rest }
+    "restore" { Invoke-Restore $settings $Rest }
+    "update" { Invoke-Update $settings $Rest }
+    "models" { Invoke-Models $settings $Rest }
+    "rotate" { Invoke-Rotate $settings $Rest }
+    "local-only" { Invoke-LocalOnly $settings $Rest }
+    "remove" { Invoke-RemoveInstall $settings $Rest }
     "logs" {
         Test-DockerReady
         $logArgs = @("logs", "--tail", "200")

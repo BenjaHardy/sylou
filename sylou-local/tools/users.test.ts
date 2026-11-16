@@ -88,11 +88,27 @@ Deno.test("adding an account makes it, then prints one link and no password", as
 
 Deno.test("an account that already exists gets a link rather than an error", async () => {
   const { asked, fetcher } = fakeAuth({
-    "/admin/users": { status: 422, body: { msg: "already registered" } },
+    "/admin/users": {
+      status: 422,
+      body: { code: 422, error_code: "email_exists", msg: "A user with this email address has already been registered" },
+    },
     "/admin/generate_link": { status: 200, body: { action_link: LINK } },
   });
   assertEquals(await quiet(() => addUser("you@example.com", { fetcher, key: KEY })), 0);
   assertEquals(asked.length, 2);
+});
+
+Deno.test("a 422 for any other reason is a refusal, not an account that exists", async () => {
+  const { asked, fetcher } = fakeAuth({
+    "/admin/users": {
+      status: 422,
+      body: { code: 422, error_code: "validation_failed", msg: "Unable to validate email address: invalid format" },
+    },
+    "/admin/generate_link": { status: 200, body: { action_link: LINK } },
+  });
+  assertEquals(await quiet(() => addUser("you@example.com", { fetcher, key: KEY })), 1);
+  // No link is made for an account that was never created.
+  assertEquals(asked.length, 1);
 });
 
 Deno.test("a refusal from the sign-in service is reported, not papered over", async () => {
