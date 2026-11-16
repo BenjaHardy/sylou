@@ -22,13 +22,14 @@ COPY sylou-local/tools /app/tools
 
 # Every library this image uses, downloaded now and checked against the
 # committed lockfile, so a run fetches nothing (D12) — it could not, on a
-# network with no way out.
+# network with no way out. `--frozen` stops the build when the tools need a
+# library the lockfile does not name, rather than fetching it unpinned.
 #
 # The cache stays where the image puts it (DENO_DIR, /deno-dir) and is made
 # readable by everyone: the container runs as nobody on a read-only
 # filesystem, so it can read the cache but write nowhere outside /tmp. Deno
 # does not type-check at run time, so it needs no cache of its own.
-RUN deno cache --lock=/app/deno.lock /app/tools/main.ts \
+RUN deno cache --frozen --lock=/app/deno.lock /app/tools/main.ts \
     && find /app /migrations "$DENO_DIR" -type d -exec chmod 755 {} + \
     && find /app /migrations "$DENO_DIR" -type f -exec chmod 644 {} +
 

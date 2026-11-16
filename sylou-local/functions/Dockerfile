@@ -10,7 +10,25 @@
 # its environment and the keys from the files Docker mounts at /run/secrets.
 
 # ---------------------------------------------------------------------------
-# Stage 1: turn each function into one bundle
+# Stage 1: the functions' libraries, held to the committed lockfile
+#
+# sylou-local/functions/deno.lock names every module and package the eight
+# functions load, each with its hash (D12); hosted deploys never read it.
+# `--frozen` stops the build when the functions need anything it does not
+# name, so a new import cannot come in unpinned. After a change to the
+# functions' imports, write it afresh: `deno task lock:functions` in
+# sylou-local/.
+# ---------------------------------------------------------------------------
+FROM denoland/deno:alpine-2.9.8@sha256:75749604f68aea01d39bead15fd1c86343639e44eb8c58ab051da8a924799d01 AS locked
+
+COPY supabase/functions /src
+COPY sylou-local/functions/deno.lock /src/deno.lock
+RUN cd /src \
+    && deno cache --frozen --node-modules-dir=none --lock=/src/deno.lock /src/*/index.ts \
+    || { echo "sylou-local/functions/deno.lock is out of date: run 'deno task lock:functions' in sylou-local/" >&2; exit 1; }
+
+# ---------------------------------------------------------------------------
+# Stage 2: turn each function into one bundle
 # ---------------------------------------------------------------------------
 FROM supabase/edge-runtime:v1.77.9@sha256:6b850a2ccf0bf50ecac9accff8098095cd191c389c2a53c59b857aa0f53a8343 AS bundle
 
@@ -21,7 +39,11 @@ COPY supabase/functions /src
 # use, and the Node packages they install for themselves.
 RUN find /src -name '*.test.ts' -delete \
     && rm -f /src/_shared/_test_support.ts \
-    && rm -rf /src/node_modules /src/deno.lock
+    && rm -rf /src/node_modules
+
+# The lockfile stage 1 checked. The bundler finds it beside deno.json and
+# refuses any module or package whose hash differs from it.
+COPY --from=locked /src/deno.lock /src/deno.lock
 
 # One eszip per function, from the entrypoint the router asks for later.
 # A checksum is recorded in each bundle, so a changed file is noticed.
@@ -34,7 +56,7 @@ RUN mkdir -p /out \
        done
 
 # ---------------------------------------------------------------------------
-# Stage 2: the runtime, with the bundles and our router
+# Stage 3: the runtime, with the bundles and our router
 # ---------------------------------------------------------------------------
 FROM supabase/edge-runtime:v1.77.9@sha256:6b850a2ccf0bf50ecac9accff8098095cd191c389c2a53c59b857aa0f53a8343
 

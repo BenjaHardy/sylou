@@ -12,7 +12,12 @@
     "test": "deno test --allow-read --allow-write --allow-run=docker,cmd.exe,sh,deno --allow-env --allow-net tests/ tools/",
     // The Windows runner's share: the commands, as a release is used. It
     // leaves the recipe test out, which wants the docker command.
-    "test:scripts": "deno test --allow-read --allow-write --allow-run=docker,cmd.exe,sh,deno --allow-env --allow-net tests/scripts.test.ts"
+    "test:scripts": "deno test --allow-read --allow-write --allow-run=docker,cmd.exe,sh,deno --allow-env --allow-net tests/scripts.test.ts",
+    // The functions image is built from functions/deno.lock (D12), and its
+    // build stops when the functions load anything that file does not name.
+    // After a change to the functions' imports, this writes it afresh from
+    // the eight entrypoints.
+    "lock:functions": "rm -f functions/deno.lock && deno cache --node-modules-dir=none --lock=functions/deno.lock ../supabase/functions/*/index.ts"
   },
   "lint": {
     "rules": {
