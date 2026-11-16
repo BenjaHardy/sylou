@@ -177,7 +177,20 @@ Deno.serve(async (req: Request) => {
       maybeEszip: await bundleOf(name),
       maybeEntrypoint: `file:///src/${name}/index.ts`,
       envVars: workerEnv,
-      permissions: { allow_net: allowNet },
+      // What a worker may do at all. An empty list means "no limit on this
+      // one", a filled one means exactly those, and anything left out is
+      // refused — so a worker can never run a program, load a native
+      // library or import a module from the network.
+      //
+      // Reading its own environment has no limit because its environment is
+      // only what we just handed it; writing is the container's tmpfs.
+      permissions: {
+        allow_net: allowNet,
+        allow_env: [],
+        allow_read: [],
+        allow_write: ["/tmp"],
+        allow_sys: [],
+      },
       ...WORKER,
     });
     // The incoming request object itself: a rebuilt one fails inside the

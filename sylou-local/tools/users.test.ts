@@ -77,6 +77,9 @@ Deno.test("adding an account makes it, then prints one link and no password", as
   assertEquals(asked.map((call) => call.path), ["/admin/users", "/admin/generate_link"]);
   assertEquals((asked[0].body as Record<string, unknown>).email_confirm, true);
   assertEquals((asked[1].body as Record<string, unknown>).type, "recovery");
+  // The link lands on the page that asks for the new password, not on the
+  // front page already signed in.
+  assertEquals((asked[1].body as Record<string, unknown>).redirect_to, "http://localhost:8080/auth/set-password");
   const output = printed.join("\n");
   assert(output.includes(LINK));
   assert(output.includes("15 characters"));

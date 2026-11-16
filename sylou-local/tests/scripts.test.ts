@@ -66,10 +66,19 @@ interface Install {
   dir: string;
   log: string;
   binDir: string;
+  port: number;
+}
+
+/** A port nothing is listening on, so these tests do not mind what is. */
+function freePort(): number {
+  const listener = Deno.listen({ hostname: "127.0.0.1", port: 0 });
+  const { port } = listener.addr as Deno.NetAddr;
+  listener.close();
+  return port;
 }
 
 /** A copy of the package, with a fake docker to find on the path. */
-async function stagedInstall(folderName = "sylou-local"): Promise<Install> {
+async function stagedInstall(folderName = "sylou-local", port = freePort()): Promise<Install> {
   const root = await Deno.makeTempDir({ prefix: "sylou-scripts-" });
   const dir = join(root, folderName);
   await Deno.mkdir(dir, { recursive: true });
@@ -77,6 +86,14 @@ async function stagedInstall(folderName = "sylou-local"): Promise<Install> {
     await Deno.copyFile(join(PACKAGE_DIR, name), join(dir, name));
   }
   if (!WINDOWS) await Deno.chmod(join(dir, "sylou"), 0o755);
+
+  // The settings this install starts with, so the tests do not depend on
+  // what happens to be listening on the example file's port.
+  await Deno.mkdir(join(dir, "config"), { recursive: true });
+  await Deno.writeTextFile(
+    join(dir, "config", "settings.env"),
+    [`SYLOU_PORT=${port}`, "SYLOU_IMAGE_TAG=dev", "SYLOU_INSTANCE_LABEL=local", ""].join("\n"),
+  );
 
   const binDir = join(root, "bin");
   await Deno.mkdir(binDir);
@@ -89,7 +106,7 @@ async function stagedInstall(folderName = "sylou-local"): Promise<Install> {
     await Deno.chmod(join(binDir, "docker"), 0o755);
   }
 
-  return { dir, log: join(root, "docker.log"), binDir };
+  return { dir, log: join(root, "docker.log"), binDir, port };
 }
 
 async function runSetup(install: Install, args: string[]): Promise<{ code: number; out: string }> {
@@ -121,7 +138,7 @@ Deno.test("setup makes the install, and its secrets stay readable by their owner
 
     // The settings are the example file, copied for editing.
     const settings = await Deno.readTextFile(join(install.dir, "config", "settings.env"));
-    assertStringIncludes(settings, "SYLOU_PORT=8080");
+    assertStringIncludes(settings, `SYLOU_PORT=${install.port}`);
 
     // The A0 trap: after the folder is locked to one account, every file in
     // it must still be readable — the one-line icacls way leaves them
@@ -137,7 +154,7 @@ Deno.test("setup makes the install, and its secrets stay readable by their owner
     assertStringIncludes(log, "add-user you@example.com");
 
     // And said where Sylou is, without printing a single secret.
-    assertStringIncludes(out, "http://localhost:8080");
+    assertStringIncludes(out, `http://localhost:${install.port}`);
     assert(!out.includes(SECRET_VALUE), "setup printed a secret");
   } finally {
     await Deno.remove(join(install.dir, ".."), { recursive: true });
@@ -171,6 +188,23 @@ Deno.test("…unless you say you know better, and then it carries on", async () 
     assertStringIncludes(log, "up -d --wait");
   } finally {
     await Deno.remove(join(install.dir, "..", ".."), { recursive: true });
+  }
+});
+
+Deno.test("setup stops when something else is already on the port", async () => {
+  const port = freePort();
+  const taken = Deno.listen({ hostname: "127.0.0.1", port });
+  const install = await stagedInstall("sylou-local", port);
+  try {
+    const { code, out } = await runSetup(install, ["you@example.com"]);
+    assertEquals(code, 1, out);
+    assertStringIncludes(out, String(port));
+    assertStringIncludes(out, "settings.env");
+    const log = await Deno.readTextFile(install.log).catch(() => "");
+    assert(!log.includes("up -d"), "setup started Sylou on a port that was taken");
+  } finally {
+    taken.close();
+    await Deno.remove(join(install.dir, ".."), { recursive: true });
   }
 });
 

@@ -389,6 +389,10 @@ services:
     user: "65534:65534"
     read_only: true
     tmpfs: [/tmp]
+    environment:
+      # Where this install answers, so a one-time link lands on the page
+      # that asks for the new password.
+      SYLOU_PUBLIC_URL: http://localhost:${SYLOU_PORT:-8080}
     secrets: [pg_postgres_password, service_role_key]
     mem_limit: 512m
     pids_limit: 100

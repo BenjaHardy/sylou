@@ -72,7 +72,11 @@ function Get-ComposeArgs($Settings) {
 
 function Invoke-Compose($Settings, [string[]]$Arguments) {
     $all = (Get-ComposeArgs $Settings) + $Arguments
-    & docker @all
+    # Out-Host, not the pipeline: whatever a PowerShell function writes to
+    # the pipeline is part of what it returns, so without this the exit code
+    # below would come back with every line Docker printed in front of it,
+    # and "did it work?" would always be false.
+    & docker @all | Out-Host
     return $LASTEXITCODE
 }
 
@@ -199,14 +203,14 @@ function Invoke-Setup([string[]]$Arguments) {
 
     Write-Step "Starting Sylou"
     if ((Invoke-Compose $settings @("up", "-d", "--wait")) -ne 0) {
-        Fail "Sylou did not start. `"$($MyInvocation.MyCommand.Name) logs`" shows what each part said."
+        Fail "Sylou did not start. `".\sylou.cmd logs`" shows what each part said."
     }
 
     if ($email -ne "" -and -not $email.StartsWith("--")) {
         Write-Step "Making your account"
         Invoke-Compose $settings @("run", "--rm", "tools", "add-user", $email) | Out-Null
     } else {
-        Write-Note "No account yet: run `"$($MyInvocation.MyCommand.Name) add-user you@example.com`" to make one."
+        Write-Note "No account yet: run `".\sylou.cmd add-user you@example.com`" to make one."
     }
 
     Write-Host ""

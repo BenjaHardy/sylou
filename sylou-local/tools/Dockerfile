@@ -23,16 +23,17 @@ COPY sylou-local/tools /app/tools
 # Every library this image uses, downloaded now and checked against the
 # committed lockfile, so a run fetches nothing (D12) — it could not, on a
 # network with no way out.
+#
+# The cache stays where the image puts it (DENO_DIR, /deno-dir) and is made
+# readable by everyone: the container runs as nobody on a read-only
+# filesystem, so it can read the cache but write nowhere outside /tmp. Deno
+# does not type-check at run time, so it needs no cache of its own.
 RUN deno cache --lock=/app/deno.lock /app/tools/main.ts \
-    && find /app /migrations -type d -exec chmod 755 {} + \
-    && find /app /migrations -type f -exec chmod 644 {} +
+    && find /app /migrations "$DENO_DIR" -type d -exec chmod 755 {} + \
+    && find /app /migrations "$DENO_DIR" -type f -exec chmod 644 {} +
 
 # Nobody: these commands need no account of their own.
 USER 65534:65534
-
-# Deno writes its cache under this; the image's own copy is read-only at run
-# time, so point it at the tmpfs.
-ENV DENO_DIR=/tmp/deno
 
 ENTRYPOINT ["deno", "run", \
   "--cached-only", \

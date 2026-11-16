@@ -9,6 +9,11 @@
 /** Inside Docker; the admin API is never reachable through the front door. */
 const AUTH_URL = "http://auth:9999";
 
+/** Where the link should land: the app's own page for setting a password. */
+export function setPasswordUrl(publicUrl = Deno.env.get("SYLOU_PUBLIC_URL") ?? "http://localhost:8080"): string {
+  return `${publicUrl.replace(/\/+$/, "")}/auth/set-password`;
+}
+
 function serviceKey(): string {
   return Deno.readTextFileSync("/run/secrets/service_role_key").trim();
 }
@@ -94,7 +99,11 @@ export async function resetPassword(email: string, options: UserOptions = {}): P
 
 async function printLink(command: string, email: string, key: string, fetcher: Fetcher): Promise<number> {
   const generated = await call(
-    adminRequest("/admin/generate_link", key, { type: "recovery", email }),
+    adminRequest("/admin/generate_link", key, {
+      type: "recovery",
+      email,
+      redirect_to: setPasswordUrl(),
+    }),
     fetcher,
   );
   const link = linkFrom(generated.body);
