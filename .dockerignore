@@ -22,11 +22,28 @@
 !src
 !public
 
-# The image's own files. Letting one folder back in takes three lines: the
-# parent, everything in it out again, then the one folder that may be seen.
+# The images' own files. Letting one folder back in takes three lines: the
+# parent, everything in it out again, then the folders that may be seen.
 !sylou-local
 sylou-local/*
 !sylou-local/web
+!sylou-local/functions
+!sylou-local/tools
+# The tools image runs these as they are, against the lockfile beside them.
+!sylou-local/deno.json
+!sylou-local/deno.lock
+
+# The Sylou Local functions image (sylou-local/functions/Dockerfile): the same
+# eight functions hosted Sylou deploys, bundled at build time. The build
+# deletes the tests and their helper before bundling; this keeps the packages
+# the tests install for themselves out of the context altogether.
+!supabase
+supabase/*
+!supabase/functions
+supabase/functions/node_modules
+# The tools image carries the migrations, so an install can apply them with
+# no copy of the repository.
+!supabase/migrations
 
 # Hosted Sylou's header file for Cloudflare Pages and Netlify: a package
 # install would serve it as a plain file, and its own headers come from

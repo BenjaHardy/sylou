@@ -42,3 +42,7 @@ bun.lock
 
 # Claude Code local tooling (session state, launch configs, worktrees)
 .claude/
+
+# A Sylou Local install's own folder: its settings and, above all, its
+# secrets, made by `sylou setup`. An install is never part of the repository.
+sylou-local/config/

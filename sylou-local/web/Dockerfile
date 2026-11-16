@@ -31,6 +31,9 @@ USER 101
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY sylou-local/web/nginx.conf /etc/nginx/nginx.conf
 COPY sylou-local/web/headers.conf /etc/nginx/sylou/headers.conf
+# The same image serves as the gateway inside Docker, started with this config
+# instead of the door's: `nginx -c /etc/nginx/sylou/gateway.conf`.
+COPY sylou-local/web/gateway.conf /etc/nginx/sylou/gateway.conf
 COPY --chmod=555 sylou-local/web/docker-entrypoint.d/40-sylou-runtime.sh /docker-entrypoint.d/40-sylou-runtime.sh
 
 EXPOSE 8080

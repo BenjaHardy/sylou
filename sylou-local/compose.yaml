@@ -1,0 +1,469 @@
+# Sylou Local: the whole of Sylou on one computer.
+#
+# Supabase's self-hosting recipe (self-hosted/v0.8.4) trimmed to the four
+# services Sylou uses — database, sign-in, data API, file storage — plus our
+# own gateway, front door, letter box and functions runtime. Studio, pg-meta,
+# Realtime, imgproxy, Supavisor, the analytics service and the connection
+# pooler are not installed.
+#
+# Three rules this file keeps, each checked by tests/recipe.test.ts:
+#
+#   1. One published port, 127.0.0.1 only, and it belongs to the letter box.
+#      Nothing else is reachable from outside Docker.
+#   2. Every secret is a file. No password, key or connection string is an
+#      environment variable, so none shows in `docker inspect` or in
+#      `docker compose config`.
+#   3. Only the letter box and the functions have a network with a way out.
+#      Everything that holds or reads your writing sits on `backend`, which
+#      has no route to the internet at all.
+#
+# The scripts run this with the settings file:
+#   docker compose --env-file config/settings.env up -d
+name: sylou
+
+# ---------------------------------------------------------------------------
+# Shared settings
+# ---------------------------------------------------------------------------
+
+# Every long-running service. `unless-stopped` brings the install back when
+# Docker starts; a package you stopped stays stopped.
+x-service: &service
+  restart: unless-stopped
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  logging:
+    driver: local
+    options: { max-size: "10m", max-file: "3" }
+
+# One-shots (migrations, tools): the same hardening, but they are meant to
+# finish, so Docker must not start them again.
+x-one-shot: &one-shot
+  restart: "no"
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  logging:
+    driver: local
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  # -------------------------------------------------------------------------
+  # The letter box: the only container with a published port (D25).
+  #
+  # It speaks no HTTP. nginx in stream mode copies bytes to the front door and
+  # keeps the site name in the request untouched, so the door's own name check
+  # still decides who gets an answer. Because Docker cannot publish a port
+  # from a container that is only on an internal network, this one keeps a
+  # network with a way out — and it is the one container that reads nothing.
+  # -------------------------------------------------------------------------
+  entry:
+    <<: *service
+    image: nginx/nginx-unprivileged:stable-alpine@sha256:c3fc8fa482be50ef709c6438eb1bc98d50dbfe5a9b48be90711b8814f4dfd701
+    read_only: true
+    tmpfs: [/tmp]
+    depends_on:
+      web: { condition: service_started }
+    # Straight to nginx: the image's start-up scripts have nothing to do here.
+    entrypoint: ["nginx", "-c", "/etc/nginx/sylou/entry.conf", "-g", "daemon off;"]
+    volumes:
+      - ./entry.conf:/etc/nginx/sylou/entry.conf:ro
+    ports:
+      - "127.0.0.1:${SYLOU_PORT:-8080}:8080"
+    mem_limit: 64m
+    pids_limit: 50
+    networks: [frontdoor, backend]
+
+  # -------------------------------------------------------------------------
+  # The front door: the app's pages, the browser security headers, the site
+  # name check, and four API paths forwarded to the gateway. Its config lives
+  # in the image (sylou-local/web/nginx.conf, #247).
+  # -------------------------------------------------------------------------
+  web:
+    <<: *service
+    image: ghcr.io/benjahardy/sylou-web:${SYLOU_IMAGE_TAG:-dev}
+    # Also buildable from a clone of the repository, so nobody has to trust a
+    # published image: `docker compose build`.
+    build:
+      context: ..
+      dockerfile: sylou-local/web/Dockerfile
+    read_only: true
+    tmpfs: [/tmp]
+    depends_on:
+      gateway: { condition: service_started }
+    secrets: [publishable_key]
+    environment:
+      NGINX_ENTRYPOINT_QUIET_LOGS: "1"
+      # The minimum the set-password page asks for, which the sign-in service
+      # enforces as well (GOTRUE_PASSWORD_MIN_LENGTH below).
+      SYLOU_MIN_PASSWORD_LENGTH: "15"
+    mem_limit: 64m
+    pids_limit: 50
+    networks: [backend]
+
+  # -------------------------------------------------------------------------
+  # The gateway: four routes to the Supabase services, with the prefixes
+  # stripped as Supabase's own gateways do. Our web image again, started with
+  # the gateway config instead of the door's (D1) — no Envoy, no Kong, no CORS
+  # answer, no admin, Studio, pg-meta, GraphQL or Realtime route.
+  # -------------------------------------------------------------------------
+  gateway:
+    <<: *service
+    image: ghcr.io/benjahardy/sylou-web:${SYLOU_IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: sylou-local/web/Dockerfile
+    read_only: true
+    tmpfs: [/tmp]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    # Straight to nginx with the gateway config: the image's start-up script
+    # writes the app's run-time file, which this container does not serve.
+    entrypoint: ["nginx", "-c", "/etc/nginx/sylou/gateway.conf", "-g", "daemon off;"]
+    mem_limit: 64m
+    pids_limit: 50
+    networks: [backend]
+
+  # -------------------------------------------------------------------------
+  # The functions: the same eight edge functions hosted Sylou runs, bundled
+  # into the image at build time so nothing is fetched while it runs.
+  #
+  # This is the one service that may reach the internet, and only for the AI
+  # providers and web search. In local-only mode it loses that network and
+  # talks to the relay instead (compose.local-only.yaml).
+  # -------------------------------------------------------------------------
+  functions:
+    <<: *service
+    image: ghcr.io/benjahardy/sylou-functions:${SYLOU_IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: sylou-local/functions/Dockerfile
+    user: "65534:65534"
+    read_only: true
+    tmpfs: [/tmp]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    secrets:
+      - supabase_anon_key
+      - supabase_service_role_key
+      - anthropic_api_key
+      - mistral_api_key
+      - deepseek_api_key
+      - brave_search_api_key
+    environment:
+      SUPABASE_URL: http://gateway:8000
+      ALLOWED_ORIGIN: http://localhost:${SYLOU_PORT:-8080}
+      SYLOU_INSTANCE_LABEL: ${SYLOU_INSTANCE_LABEL:-local}
+      SYLOU_LOCAL_ONLY: ${SYLOU_LOCAL_ONLY:-}
+      # Off unless you are debugging this install: with it on, the functions
+      # log the text people write, and say so in their own logs.
+      SYLOU_DEBUG_LOG_CONTENT: ${SYLOU_DEBUG_LOG_CONTENT:-}
+      OLLAMA_URL: ${OLLAMA_URL:-}
+      OLLAMA_MODELS: ${OLLAMA_MODELS:-}
+    # A0 measured these on a laptop with no usable GPU: a local model can read
+    # a long prompt for minutes before its first word, so the worker's own
+    # clock has to outlast it (the runtime's defaults are 400 s and 1 s/2 s of
+    # CPU). The gateway and the door wait longer still.
+    mem_limit: 1g
+    # The runtime starts a fresh worker per request; 100 was not enough on a
+    # 24-core machine.
+    pids_limit: 512
+    networks: [backend, egress]
+
+  # -------------------------------------------------------------------------
+  # The database. Supabase's Postgres image, with its own start-up scripts
+  # plus two of ours: one password per role, read from the secret files.
+  # -------------------------------------------------------------------------
+  db:
+    <<: *service
+    image: supabase/postgres:17.6.1.136@sha256:f371b5f3f2ac0a05703f33d6e6134515fb2498cab708fb948a0aeb7481467c00
+    # The entrypoint prepares the data folder as root, then drops to postgres.
+    # These five are what that first start needs; everything else is dropped.
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID]
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      PGPORT: "5432"
+      POSTGRES_PORT: "5432"
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_supabase_admin_password
+      PGDATABASE: postgres
+      POSTGRES_DB: postgres
+      JWT_EXP: "3600"
+    secrets:
+      - pg_supabase_admin_password
+      - pg_postgres_password
+      - pg_authenticator_password
+      - pg_auth_admin_password
+      - pg_storage_admin_password
+    volumes:
+      - ./db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:ro
+      - ./db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:ro
+      - db-data:/var/lib/postgresql/data
+      - db-config:/etc/postgresql-custom
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "log_min_messages=fatal"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 1g
+    pids_limit: 200
+    networks: [backend]
+
+  # -------------------------------------------------------------------------
+  # Sign-in. Sign-ups are closed: accounts are made with `sylou add-user`.
+  # -------------------------------------------------------------------------
+  auth:
+    <<: *service
+    image: supabase/gotrue:v2.197.0@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b
+    read_only: true
+    tmpfs: [/tmp]
+    depends_on:
+      db: { condition: service_healthy }
+    secrets: [jwt_secret, pg_auth_admin_password]
+    # GoTrue reads no secret from a file, so four lines read them here and
+    # hand them to the service itself. Nothing lands in the container's
+    # environment as Docker records it.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        GOTRUE_JWT_SECRET="$$(cat /run/secrets/jwt_secret)"
+        GOTRUE_DB_DATABASE_URL="postgres://supabase_auth_admin:$$(cat /run/secrets/pg_auth_admin_password)@db:5432/postgres"
+        export GOTRUE_JWT_SECRET GOTRUE_DB_DATABASE_URL
+        exec auth
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      API_EXTERNAL_URL: http://localhost:${SYLOU_PORT:-8080}/auth/v1
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_SITE_URL: http://localhost:${SYLOU_PORT:-8080}
+      GOTRUE_URI_ALLOW_LIST: "http://localhost:${SYLOU_PORT:-8080}/**,http://127.0.0.1:${SYLOU_PORT:-8080}/**"
+      # Supabase's own example file opens sign-ups, turns phone sign-up on and
+      # auto-confirms it, and leaves the password minimum at GoTrue's floor of
+      # six characters. All four are set the other way here.
+      GOTRUE_DISABLE_SIGNUP: "true"
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
+      GOTRUE_SMS_AUTOCONFIRM: "false"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      GOTRUE_PASSWORD_MIN_LENGTH: "15"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_ISSUER: http://localhost:${SYLOU_PORT:-8080}/auth/v1
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "false"
+      GOTRUE_MAILER_OTP_EXP: "3600"
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 256m
+    pids_limit: 100
+    networks: [backend]
+
+  # -------------------------------------------------------------------------
+  # The data API. `public` only: Supabase's recipe also exposes
+  # `graphql_public`, which puts pg_graphql on the API.
+  # -------------------------------------------------------------------------
+  rest:
+    <<: *service
+    image: postgrest/postgrest:v14.18@sha256:c7cd7e265a85b05248abf53f4473fcec7e327c282d0bd0cf60f1551996d09fcf
+    read_only: true
+    depends_on:
+      db: { condition: service_healthy }
+    secrets: [jwt_secret, pgrst_db_uri]
+    environment:
+      # PostgREST reads both of these from a file when the value starts with
+      # an @, so neither is ever an environment variable.
+      PGRST_DB_URI: "@/run/secrets/pgrst_db_uri"
+      PGRST_JWT_SECRET: "@/run/secrets/jwt_secret"
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_MAX_ROWS: "1000"
+      PGRST_DB_EXTRA_SEARCH_PATH: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_EXP: "3600"
+      PGRST_ADMIN_SERVER_PORT: "3001"
+      PGRST_ADMIN_SERVER_HOST: localhost
+    healthcheck:
+      test: ["CMD", "postgrest", "--ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 256m
+    # PostgREST starts one thread per processor core and the health check
+    # starts another runtime: A0 watched it fail at 100 on a 24-core laptop
+    # with "failed to create OS thread". Measured use is about 75.
+    pids_limit: 512
+    networks: [backend]
+
+  # -------------------------------------------------------------------------
+  # File storage: imported documents. The S3 endpoint is off (Supabase's
+  # recipe leaves it on with fixed keys in its example file, and S3 keys go
+  # round the database's own access rules), image transformation is off, and
+  # a file may not exceed 10 MB.
+  # -------------------------------------------------------------------------
+  storage:
+    <<: *service
+    image: supabase/storage-api:v1.89.12@sha256:8526956cb462e9f7d392e9848ec77133b2769982ed614e9753cc687e8e4339a6
+    read_only: true
+    tmpfs: [/tmp]
+    depends_on:
+      db: { condition: service_healthy }
+      rest: { condition: service_started }
+    secrets: [jwt_secret, anon_key, service_role_key, pg_storage_admin_password]
+    # Storage reads no secret from a file either.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        AUTH_JWT_SECRET="$$(cat /run/secrets/jwt_secret)"
+        ANON_KEY="$$(cat /run/secrets/anon_key)"
+        SERVICE_KEY="$$(cat /run/secrets/service_role_key)"
+        DATABASE_URL="postgres://supabase_storage_admin:$$(cat /run/secrets/pg_storage_admin_password)@db:5432/postgres"
+        export AUTH_JWT_SECRET ANON_KEY SERVICE_KEY DATABASE_URL
+        exec docker-entrypoint.sh node dist/start/server.js
+    environment:
+      POSTGREST_URL: http://rest:3000
+      STORAGE_PUBLIC_URL: http://localhost:${SYLOU_PORT:-8080}
+      REQUEST_ALLOW_X_FORWARDED_PATH: "true"
+      FILE_SIZE_LIMIT: "10485760"
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      GLOBAL_S3_BUCKET: stub
+      TENANT_ID: stub
+      REGION: local
+      ENABLE_IMAGE_TRANSFORMATION: "false"
+      S3_PROTOCOL_ENABLED: "false"
+    volumes:
+      - storage-data:/var/lib/storage
+    healthcheck:
+      # 127.0.0.1, not localhost: inside this image localhost resolves to ::1,
+      # where the service does not listen, and the check never passes (A0).
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5000/status"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    mem_limit: 512m
+    pids_limit: 200
+    networks: [backend]
+
+  # -------------------------------------------------------------------------
+  # The migrations, as a one-shot: it waits for sign-in and storage to be
+  # healthy (their own migrations done), applies Sylou's in name order as
+  # `postgres`, one transaction each, and tells the data API to re-read the
+  # schema. A second start applies nothing.
+  # -------------------------------------------------------------------------
+  migrate:
+    <<: *one-shot
+    image: ghcr.io/benjahardy/sylou-tools:${SYLOU_IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: sylou-local/tools/Dockerfile
+    user: "65534:65534"
+    read_only: true
+    tmpfs: [/tmp]
+    depends_on:
+      auth: { condition: service_healthy }
+      storage: { condition: service_healthy }
+    secrets: [pg_postgres_password]
+    command: ["migrate"]
+    mem_limit: 512m
+    pids_limit: 100
+    networks: [backend]
+
+  # -------------------------------------------------------------------------
+  # The tools container: run on demand by the scripts, never by `up`
+  # (`docker compose run --rm tools …`). It is the only part of the install
+  # that is given the database's own password.
+  # -------------------------------------------------------------------------
+  tools:
+    <<: *one-shot
+    image: ghcr.io/benjahardy/sylou-tools:${SYLOU_IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: sylou-local/tools/Dockerfile
+    profiles: [tools]
+    user: "65534:65534"
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      # Where this install answers, so a one-time link lands on the page
+      # that asks for the new password.
+      SYLOU_PUBLIC_URL: http://localhost:${SYLOU_PORT:-8080}
+    secrets: [pg_postgres_password, service_role_key]
+    mem_limit: 512m
+    pids_limit: 100
+    networks: [backend]
+
+  # -------------------------------------------------------------------------
+  # The relay: only in local-only mode (compose.local-only.yaml), and only
+  # ever a fixed route to Ollama on this computer. The functions lose their
+  # way out and reach it here, as ollama.internal:11434.
+  # -------------------------------------------------------------------------
+  relay:
+    <<: *service
+    image: nginx/nginx-unprivileged:stable-alpine@sha256:c3fc8fa482be50ef709c6438eb1bc98d50dbfe5a9b48be90711b8814f4dfd701
+    profiles: [local-only]
+    read_only: true
+    tmpfs: [/tmp]
+    entrypoint: ["nginx", "-c", "/etc/nginx/sylou/relay.conf", "-g", "daemon off;"]
+    volumes:
+      - ./relay.conf:/etc/nginx/sylou/relay.conf:ro
+    # Docker Desktop gives every container this name. A Linux engine needs the
+    # line below; local AI on Linux is not part of this release (D5).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    mem_limit: 64m
+    pids_limit: 50
+    networks:
+      backend:
+        aliases: [ollama.internal]
+      egress: {}
+
+networks:
+  # No route to the internet, and — in isolated mode — no address on the
+  # computer either, so nothing here can be reached from the computer or
+  # reach it (A0 confirmed Docker Desktop honours this).
+  backend:
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: isolated
+  # The letter box's network: it exists because Docker cannot publish a port
+  # from a container that has none. Nothing on it reads a request.
+  frontdoor:
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+  # The functions' way out, for AI providers and web search.
+  egress: {}
+
+volumes:
+  db-data:
+  db-config:
+  storage-data:
+
+# Every one of these is a file under config/secrets/, made by `sylou setup`
+# and readable by your account only. The provider key files are created
+# empty: an empty file means "not configured", and the function says so.
+secrets:
+  jwt_secret: { file: ./config/secrets/jwt_secret }
+  anon_key: { file: ./config/secrets/anon_key }
+  service_role_key: { file: ./config/secrets/service_role_key }
+  publishable_key: { file: ./config/secrets/anon_key }
+  supabase_anon_key: { file: ./config/secrets/anon_key }
+  supabase_service_role_key: { file: ./config/secrets/service_role_key }
+  pg_supabase_admin_password: { file: ./config/secrets/pg_supabase_admin_password }
+  pg_postgres_password: { file: ./config/secrets/pg_postgres_password }
+  pg_authenticator_password: { file: ./config/secrets/pg_authenticator_password }
+  pg_auth_admin_password: { file: ./config/secrets/pg_auth_admin_password }
+  pg_storage_admin_password: { file: ./config/secrets/pg_storage_admin_password }
+  pgrst_db_uri: { file: ./config/secrets/pgrst_db_uri }
+  anthropic_api_key: { file: ./config/secrets/anthropic_api_key }
+  mistral_api_key: { file: ./config/secrets/mistral_api_key }
+  deepseek_api_key: { file: ./config/secrets/deepseek_api_key }
+  brave_search_api_key: { file: ./config/secrets/brave_search_api_key }

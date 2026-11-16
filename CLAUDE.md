@@ -77,10 +77,20 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 - Edge functions (8): `chat`, `analysis`, `editor-action`, `context-prompt`,
   `extract-text`, `share-report`, `config`, `delete-account`.
 - `sylou-local/` — the Sylou Local package: Docker images and the recipe for
-  running the whole of Sylou on one computer. `web/` is its front door (the
-  app's pages, the security headers, a Host check and four API paths); the
-  repository-root `.dockerignore` is an allow-list deciding what any image
-  build may see, and `.gitattributes` keeps the package's files at LF.
+  running the whole of Sylou on one computer. `compose.yaml` is the recipe
+  (eight services; only `entry`, the letter box, publishes a port, and only
+  on 127.0.0.1; every secret a file; `backend` is internal and isolated),
+  with `compose.local-only.yaml` beside it for local-only mode and its
+  relay. `web/` is both the front door (the app's pages, the security
+  headers, a Host check and four API paths) and, through `gateway.conf` in
+  the same image, the gateway inside Docker; `functions/` bundles the eight
+  edge functions into their runtime image and routes to them; `tools/` is
+  the Deno image behind `secrets`, `migrate` and the account commands;
+  `sylou.ps1` / `sylou.cmd` / `sylou` are the commands themselves, which
+  only gather facts and call Docker. `tests/` holds the recipe and script
+  tests (`deno task test` from that folder). The repository-root
+  `.dockerignore` is an allow-list deciding what any image build may see,
+  and `.gitattributes` keeps the package's files at LF.
 
 ## 4. Conventions (mirror these; don't drift)
 - **Layout**: root is `h-screen overflow-hidden`; flex parents get
@@ -350,6 +360,13 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   must be added there, or they silently never run. A handler test run by
   hand needs the task's `--allow-env` list (`ALLOWED_ORIGIN`, plus the
   names mammoth's bluebird reads when extract-text's tests parse a .docx).
+- Sylou Local package: `cd sylou-local && deno task test` (recipe, tools and
+  the `sylou setup` script tests; `deno task check` and `deno task lint`
+  beside them). The recipe test needs the `docker` command but no daemon —
+  it reads back what `docker compose config` resolves. The migration
+  runner's own test applies the real migrations to the server at
+  `DATABASE_URL` when one is set, behind the same stand-in the database
+  tests use, and skips itself when it is not.
 - Database tests: start a throwaway server with Docker
   (`docker run --rm -d --name sylou-rls-db -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:54329:5432 postgres:17.6`),
   then `cd supabase/tests && deno task test:db`. Each run rebuilds the
@@ -448,6 +465,11 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   `'unsafe-eval'` in `script-src`.
 - No new `public` table without `ENABLE RLS` + per-op policies (add a
   `GRANT` only if a non-default role like `anon` needs access).
+- A new edge function is unreachable in a Sylou Local install until its name
+  is in both route lists — `sylou-local/web/nginx.conf` (the door) and
+  `sylou-local/web/gateway.conf` (the gateway) — and in the bundle loop of
+  `sylou-local/functions/Dockerfile`. Both lists are pinned against the
+  repository's function folders by tests.
 - No role checks anywhere — there is no role system; don't add ad-hoc ones
   against profile rows or client storage `(not yet implemented)`.
 - No new backend server code — Edge Functions only.

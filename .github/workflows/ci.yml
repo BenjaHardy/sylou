@@ -98,6 +98,83 @@ jobs:
         run: deno task test
         working-directory: supabase/functions
 
+  sylou-local:
+    name: Sylou Local recipe and tools
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # The migration runner's own test applies Sylou's migrations to a real
+    # server, behind the same Supabase stand-in the database tests use.
+    services:
+      postgres:
+        image: postgres:17.6@sha256:00bc86618629af00d2937fdc5a5d63db3ff8450acf52f0636ec813c7f4902929
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 54331:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.x
+
+      - name: Cache Deno dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/deno
+          key: deno-sylou-local-${{ runner.os }}-${{ hashFiles('sylou-local/deno.lock') }}
+          restore-keys: |
+            deno-sylou-local-${{ runner.os }}-
+
+      - name: deno check
+        run: deno task check
+        working-directory: sylou-local
+
+      - name: deno lint
+        run: deno task lint
+        working-directory: sylou-local
+
+      # The recipe test reads back what `docker compose config` resolves (the
+      # client alone, no daemon); the tools tests cover the secrets, the
+      # migration runner and the account commands; the script tests run
+      # `sylou setup` against a fake docker.
+      - name: deno test
+        run: deno task test
+        working-directory: sylou-local
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:54331/postgres
+
+  sylou-local-windows:
+    name: Sylou Local commands (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.x
+
+      # `sylou setup` run through sylou.cmd by Windows PowerShell 5.1, which
+      # is what a release is used with: the access list it sets, the synced
+      # folder it refuses, and that neither leaves a secret unreadable or
+      # printed.
+      - name: deno task test:scripts
+        run: deno task test:scripts
+        working-directory: sylou-local
+
   database:
     name: Database access rules (postgres)
     runs-on: ubuntu-latest
