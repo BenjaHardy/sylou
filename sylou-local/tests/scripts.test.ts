@@ -315,6 +315,34 @@ Deno.test("setup stops when something else is already on the port", async () => 
   }
 });
 
+// Compose reads config/settings.env itself (`--env-file`), and the commands
+// read it too: a value in quotes, or one with a comment after it, has to mean
+// the same thing to both, or setup checks one port while Compose publishes
+// another.
+Deno.test("a setting in quotes, or with a comment after it, reads as Compose reads it", async () => {
+  for (const shell of WINDOWS && !(await haveSh()) ? ["native"] as const : ["native", "sh"] as const) {
+    const install = await stagedInstall();
+    try {
+      await Deno.writeTextFile(
+        join(install.dir, "config", "settings.env"),
+        [
+          `SYLOU_PORT="${install.port}"   # the port this install answers on`,
+          "SYLOU_IMAGE_TAG='dev'",
+          "SYLOU_INSTANCE_LABEL=local # shown in the app",
+          "",
+        ].join("\n"),
+      );
+      const { code, out } = await runSetup(install, ["you@example.com"], shell);
+      assertEquals(code, 0, `${shell}: ${out}`);
+      assertStringIncludes(out, `127.0.0.1:${install.port} is free.`);
+      // The tag reads as dev, so setup builds the images from this checkout.
+      assertStringIncludes(await Deno.readTextFile(install.log), " build", `${shell} did not build`);
+    } finally {
+      await Deno.remove(join(install.dir, ".."), { recursive: true });
+    }
+  }
+});
+
 // `doctor` is two halves: the script gathers what only this computer can see
 // and the tools image decides what it means. This is the first half - that
 // the facts arrive at all, that they are about this install, and that nothing

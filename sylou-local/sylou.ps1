@@ -53,6 +53,18 @@ function Fail([string]$Text) { Write-Host "    $Text" -ForegroundColor Red; exit
 # Settings
 # ---------------------------------------------------------------------------
 
+# A value as `docker compose --env-file` reads it, so the commands and the
+# recipe never disagree about a setting: a value in quotes is what stands
+# between them, and an unquoted one ends where a comment begins.
+function ConvertFrom-SettingValue([string]$Value) {
+    $text = $Value.Trim()
+    if ($text.Length -ge 1 -and ($text[0] -eq [char]'"' -or $text[0] -eq [char]"'")) {
+        $close = $text.IndexOf($text[0], 1)
+        if ($close -gt 0) { return $text.Substring(1, $close - 1) }
+    }
+    return ($text -replace '\s+#.*$', '')
+}
+
 function Get-Settings {
     $settings = @{ SYLOU_PORT = "8080"; SYLOU_IMAGE_TAG = "dev"; SYLOU_LOCAL_ONLY = "" }
     if (Test-Path $SettingsFile) {
@@ -60,7 +72,7 @@ function Get-Settings {
             $trimmed = $line.Trim()
             if ($trimmed -eq "" -or $trimmed.StartsWith("#")) { continue }
             $parts = $trimmed.Split("=", 2)
-            if ($parts.Count -eq 2) { $settings[$parts[0].Trim()] = $parts[1].Trim() }
+            if ($parts.Count -eq 2) { $settings[$parts[0].Trim()] = ConvertFrom-SettingValue $parts[1] }
         }
     }
     return $settings

@@ -31,7 +31,14 @@ setting() {
   name=$1
   fallback=$2
   if [ -f "$SETTINGS_FILE" ]; then
-    value=$(sed -n "s/^[[:space:]]*$name[[:space:]]*=[[:space:]]*//p" "$SETTINGS_FILE" | tail -n 1)
+    value=$(sed -n "s/^[[:space:]]*$name[[:space:]]*=[[:space:]]*//p" "$SETTINGS_FILE" | tail -n 1 | tr -d '\r')
+    # As `docker compose --env-file` reads it: a value in quotes is what
+    # stands between them, and an unquoted one ends where a comment begins.
+    case "$value" in
+      \"*) value=${value#\"}; value=${value%%\"*} ;;
+      \'*) value=${value#\'}; value=${value%%\'*} ;;
+      *) value=$(printf '%s' "$value" | sed 's/[[:space:]][[:space:]]*#.*$//; s/[[:space:]]*$//') ;;
+    esac
     if [ -n "${value:-}" ]; then printf '%s' "$value"; return; fi
   fi
   printf '%s' "$fallback"
