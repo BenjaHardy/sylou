@@ -64,7 +64,10 @@ RUN mkdir -p /out \
 FROM supabase/edge-runtime:v1.77.9@sha256:6b850a2ccf0bf50ecac9accff8098095cd191c389c2a53c59b857aa0f53a8343
 
 COPY --from=bundle /out /home/deno/eszip
-COPY sylou-local/functions/main.ts /home/deno/main/index.ts
+# The router keeps its place in the repository, beside the one shared file
+# it reads - the functions' own reading of the local-only switch.
+COPY sylou-local/functions/main.ts /home/deno/sylou-local/functions/index.ts
+COPY supabase/functions/_shared/_local_only.ts /home/deno/supabase/functions/_shared/_local_only.ts
 
 # Nobody: the runtime needs no account of its own, and the filesystem is
 # read-only at run time with a tmpfs at /tmp.
@@ -75,4 +78,4 @@ EXPOSE 9000
 # The idle timeout has to outlast a model on this computer taking its time
 # before the first word: the functions themselves wait 300 s for one (#247),
 # and the worker's own clock is 600 s.
-CMD ["start", "--main-service", "/home/deno/main", "--user-worker-request-idle-timeout", "600000"]
+CMD ["start", "--main-service", "/home/deno/sylou-local/functions", "--user-worker-request-idle-timeout", "600000"]

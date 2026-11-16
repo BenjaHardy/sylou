@@ -227,6 +227,20 @@ describe("what a Sylou Local install repeats from hosted Sylou", () => {
     expect(listOf("NAMES")).toEqual(functionNames());
   });
 
+  it("the router reads the local-only switch the way the functions do", () => {
+    // One reading, so the router never hands out a cloud key the functions
+    // would refuse to use, or the reverse.
+    expect(router).toContain('import { localOnly } from "../../supabase/functions/_shared/_local_only.ts";');
+    expect(router).not.toMatch(/env\.get\(\s*"SYLOU_LOCAL_ONLY"/);
+    // And the image keeps that file where the import looks for it.
+    const dockerfile = read("sylou-local", "functions", "Dockerfile");
+    expect(dockerfile).toContain("COPY sylou-local/functions/main.ts /home/deno/sylou-local/functions/index.ts");
+    expect(dockerfile).toContain(
+      "COPY supabase/functions/_shared/_local_only.ts /home/deno/supabase/functions/_shared/_local_only.ts",
+    );
+    expect(dockerfile).toContain('"--main-service", "/home/deno/sylou-local/functions"');
+  });
+
   it("every setting the functions read is one a local install passes them", () => {
     // Every string an edge function asks the environment for, including the
     // names kept in a constant (SYLOU_LOCAL_ONLY, the provider keys).
