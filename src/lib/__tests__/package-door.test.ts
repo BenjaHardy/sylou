@@ -34,17 +34,33 @@ const forwarding = () => blocks().filter((b) => b.body.includes("proxy_pass"));
 describe("the Sylou Local door", () => {
   it("listens on one port, and publishes none: the entry container holds the port", () => {
     const listens = [...config.matchAll(/^\s*listen\s+(.+);$/gm)].map((m) => m[1]);
-    expect(listens).toEqual(["8080 default_server", "8080"]);
+    expect(listens).toEqual(["8080 default_server", "8080", "8080"]);
   });
 
   it("answers only to this computer's own names; any other Host gets the connection closed", () => {
     const names = [...config.matchAll(/^\s*server_name\s+(.+);$/gm)].map((m) => m[1]);
-    expect(names).toEqual(["_", "localhost 127.0.0.1"]);
+    expect(names).toEqual(["_", "127.0.0.1", "localhost"]);
     // The catch-all server answers nothing at all, not even a status.
     const catchAll = config.slice(config.indexOf("server_name _;"), config.indexOf("server_name localhost"));
     expect(catchAll).toContain("return 444;");
     expect(catchAll).not.toContain("proxy_pass");
     expect(catchAll).not.toContain("root");
+  });
+
+  it("sends 127.0.0.1 on to localhost, so the app has one origin and the sign-in links land in it", () => {
+    // The links, the functions' allowed origin and the sign-in service's own
+    // address all say localhost; a page left at 127.0.0.1 would keep a
+    // separate session that every link leads away from.
+    const redirect = config.slice(config.indexOf("server_name 127.0.0.1;"), config.indexOf("server_name localhost;"));
+    expect(redirect).toContain("return 308 http://localhost:$sylou_port$request_uri;");
+    expect(redirect).not.toContain("proxy_pass");
+    expect(redirect).not.toContain("root");
+    // The port is the one the browser asked for, digits only.
+    expect(config).toMatch(/map \$http_host \$sylou_port \{\s*~:\(\[0-9\]\+\)\$ \$1;\s*default 80;\s*\}/);
+    const compose = readFileSync(join(process.cwd(), "sylou-local", "compose.yaml"), "utf8");
+    for (const name of ["API_EXTERNAL_URL", "GOTRUE_SITE_URL", "ALLOWED_ORIGIN"]) {
+      expect(compose).toMatch(new RegExp(`${name}: http://localhost:`));
+    }
   });
 
   it("forwards four paths and nothing else, each to the gateway", () => {
