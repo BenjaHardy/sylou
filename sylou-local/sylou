@@ -240,6 +240,78 @@ cmd_doctor() {
   host_facts | run_compose run --rm -T tools doctor
 }
 
+confirm_step() {
+  question=$1
+  shift
+  for argument in "$@"; do
+    if [ "$argument" = "--yes" ]; then return 0; fi
+  done
+  printf '%s Type yes to continue: ' "$question"
+  read -r answer
+  [ "$answer" = "yes" ]
+}
+
+absolute() {
+  case "$1" in
+    /*) printf '%s' "$1" ;;
+    *) printf '%s/%s' "$(pwd)" "$1" ;;
+  esac
+}
+
+cmd_backup() {
+  check_docker
+  case "${1:-}" in ""|--*) fail "Give the folder to back up into, for example: backup ~/sylou-backups" ;; esac
+  folder=$(absolute "$1")
+  mkdir -p "$folder"
+  target="$folder/sylou-$(date +%Y-%m-%d-%H%M)"
+  mkdir -p "$target"
+
+  step "Backing up"
+  run_compose run --rm -v "$target:/backup" dump || fail "The backup did not finish. Nothing was written to $target."
+
+  # Doctor reads this to say how long ago the last backup was.
+  printf '{"at":"%s","path":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$target" > "$CONFIG_DIR/last-backup.json"
+  step "Backed up to $target"
+  note "This install's secrets are not in it. Keep config/secrets/ too, or the backup opens nothing."
+}
+
+cmd_restore() {
+  check_docker
+  case "${1:-}" in ""|--*) fail "Give the backup folder to restore from, for example: restore ~/sylou-backups/sylou-2026-11-16-1830" ;; esac
+  folder=$(absolute "$1")
+  [ -f "$folder/data.sql" ] || fail "There is no data.sql in $folder, so that is not a backup this can read."
+
+  warn "Restoring replaces what this install holds now with what the backup holds."
+  note "Everyone signs in again afterwards: sessions are not part of a backup."
+  confirm_step "Restore from $folder?" "$@" || fail "Nothing was changed."
+
+  step "Making sure the install is running and migrated"
+  run_compose up -d --wait || fail "The install did not start."
+
+  step "Restoring"
+  run_compose run --rm -v "$folder:/backup" load || fail "The restore stopped. The install is as it was before it started."
+  step "Restored. Sign in again at http://localhost:$(setting SYLOU_PORT 8080)"
+}
+
+cmd_update() {
+  check_docker
+  case "${1:-}" in ""|--*) fail "Give a folder to back up into first: update ~/sylou-backups" ;; esac
+  cmd_backup "$@"
+
+  if [ "$(setting SYLOU_IMAGE_TAG dev)" = "dev" ]; then
+    step "Building the images again"
+    run_compose build || fail "The images could not be built."
+  else
+    step "Downloading the images this release names"
+    run_compose pull || fail "The images could not be downloaded."
+  fi
+
+  step "Starting the new version (the migrations run on the way up)"
+  run_compose up -d --wait || fail "The new version did not start. Your backup is in the folder above."
+  step "Updated. Checking the install"
+  cmd_doctor
+}
+
 # --------------------------------------------------------------------------
 # Commands
 # --------------------------------------------------------------------------
@@ -323,6 +395,9 @@ Sylou Local
   stop                     stop it (nothing is deleted)
   status                   what is running
   doctor                   check this install and the computer around it
+  backup <folder>          everything you have written, into a folder you pick
+  restore <folder>         a backup, back into this install
+  update <folder>          back up, then start the new version
   logs [service]           what the parts are saying
   add-user <email>         make another account
   reset-password <email>   a one-time link to set a new password
@@ -350,6 +425,9 @@ case "$command" in
     ;;
   status) check_docker; run_compose ps ;;
   doctor) cmd_doctor ;;
+  backup) cmd_backup "$@" ;;
+  restore) cmd_restore "$@" ;;
+  update) cmd_update "$@" ;;
   logs) check_docker; run_compose logs --tail 200 "$@" ;;
   add-user)
     check_docker

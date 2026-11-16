@@ -396,6 +396,82 @@ function Invoke-Setup([string[]]$Arguments) {
     Write-Note "is never answered by Ollama's cloud instead of your computer."
 }
 
+function Confirm-Step([string]$Question, [string[]]$Arguments) {
+    if ($Arguments -contains "--yes") { return $true }
+    $answer = Read-Host "$Question Type yes to continue"
+    return ($answer -eq "yes")
+}
+
+function Invoke-Backup($Settings, [string[]]$Arguments) {
+    Test-DockerReady
+    if ($Arguments.Count -lt 1 -or $Arguments[0].StartsWith("--")) {
+        Fail "Give the folder to back up into, for example: backup D:\sylou-backups"
+    }
+    $folder = [System.IO.Path]::GetFullPath($Arguments[0])
+    if (-not (Test-Path $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
+    $target = Join-Path $folder ("sylou-" + (Get-Date -Format "yyyy-MM-dd-HHmm"))
+    New-Item -ItemType Directory -Path $target -Force | Out-Null
+
+    Write-Step "Backing up"
+    $all = (Get-ComposeArgs $Settings) + @("run", "--rm", "-v", "${target}:/backup", "dump")
+    & docker @all | Out-Host
+    if ($LASTEXITCODE -ne 0) { Fail "The backup did not finish. Nothing was written to $target." }
+
+    # Doctor reads this to say how long ago the last backup was.
+    $record = @{ at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"); path = $target }
+    $record | ConvertTo-Json -Compress | Set-Content -Path (Join-Path $ConfigDir "last-backup.json") -Encoding ascii
+    Write-Step "Backed up to $target"
+    Write-Note "This install's secrets are not in it. Keep config\secrets\ too, or the backup opens nothing."
+}
+
+function Invoke-Restore($Settings, [string[]]$Arguments) {
+    Test-DockerReady
+    if ($Arguments.Count -lt 1 -or $Arguments[0].StartsWith("--")) {
+        Fail "Give the backup folder to restore from, for example: restore D:\sylou-backups\sylou-2026-11-16-1830"
+    }
+    $folder = [System.IO.Path]::GetFullPath($Arguments[0])
+    if (-not (Test-Path (Join-Path $folder "data.sql"))) {
+        Fail "There is no data.sql in $folder, so that is not a backup this can read."
+    }
+
+    Write-Warn "Restoring replaces what this install holds now with what the backup holds."
+    Write-Note "Everyone signs in again afterwards: sessions are not part of a backup."
+    if (-not (Confirm-Step "Restore from $folder?" $Arguments)) { Fail "Nothing was changed." }
+
+    Write-Step "Making sure the install is running and migrated"
+    if ((Invoke-Compose $Settings @("up", "-d", "--wait")) -ne 0) { Fail "The install did not start." }
+
+    Write-Step "Restoring"
+    $all = (Get-ComposeArgs $Settings) + @("run", "--rm", "-v", "${folder}:/backup", "load")
+    & docker @all | Out-Host
+    if ($LASTEXITCODE -ne 0) { Fail "The restore stopped. The install is as it was before it started." }
+    Write-Step "Restored. Sign in again at http://localhost:$($Settings.SYLOU_PORT)"
+}
+
+function Invoke-Update($Settings, [string[]]$Arguments) {
+    Test-DockerReady
+    if ($Arguments.Count -lt 1 -or $Arguments[0].StartsWith("--")) {
+        Fail "Give a folder to back up into first: update D:\sylou-backups"
+    }
+    Invoke-Backup $Settings $Arguments
+
+    $tag = "$($Settings.SYLOU_IMAGE_TAG)"
+    if ($tag -eq "dev") {
+        Write-Step "Building the images again"
+        if ((Invoke-Compose $Settings @("build")) -ne 0) { Fail "The images could not be built." }
+    } else {
+        Write-Step "Downloading the images this release names"
+        if ((Invoke-Compose $Settings @("pull")) -ne 0) { Fail "The images could not be downloaded." }
+    }
+
+    Write-Step "Starting the new version (the migrations run on the way up)"
+    if ((Invoke-Compose $Settings @("up", "-d", "--wait")) -ne 0) {
+        Fail "The new version did not start. Your backup is in the folder above."
+    }
+    Write-Step "Updated. Checking the install"
+    Invoke-Doctor $Settings
+}
+
 function Invoke-Start($Settings) {
     Test-DockerReady
     if ((Invoke-Compose $Settings @("up", "-d", "--wait")) -ne 0) { Fail "Sylou did not start." }
@@ -418,6 +494,9 @@ Sylou Local
   stop                     stop it (nothing is deleted)
   status                   what is running
   doctor                   check this install and the computer around it
+  backup <folder>          everything you have written, into a folder you pick
+  restore <folder>         a backup, back into this install
+  update <folder>          back up, then start the new version
   logs [service]           what the parts are saying
   add-user <email>         make another account
   reset-password <email>   a one-time link to set a new password
@@ -436,6 +515,9 @@ switch ($Command.ToLower()) {
     "stop" { Invoke-Stop $settings }
     "status" { Test-DockerReady; Invoke-Compose $settings @("ps") | Out-Null }
     "doctor" { Invoke-Doctor $settings }
+    "backup" { Invoke-Backup $settings $Rest }
+    "restore" { Invoke-Restore $settings $Rest }
+    "update" { Invoke-Update $settings $Rest }
     "logs" {
         Test-DockerReady
         $logArgs = @("logs", "--tail", "200")

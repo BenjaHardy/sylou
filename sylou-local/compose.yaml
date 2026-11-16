@@ -402,6 +402,46 @@ services:
     networks: [backend]
 
   # -------------------------------------------------------------------------
+  # Backups and restores run in the database's own image, because that is
+  # where pg_dump and psql live. The folder you choose is mounted at /backup
+  # by the command itself; nothing of it is written down here.
+  # -------------------------------------------------------------------------
+  dump:
+    <<: *one-shot
+    image: supabase/postgres:17.6.1.136@sha256:f371b5f3f2ac0a05703f33d6e6134515fb2498cab708fb948a0aeb7481467c00
+    profiles: [tools]
+    user: postgres
+    read_only: true
+    tmpfs: [/tmp]
+    secrets: [pg_postgres_password]
+    entrypoint: ["bash", "/sylou/backup.sh"]
+    environment:
+      SYLOU_VERSION: ${SYLOU_IMAGE_TAG:-dev}
+    volumes:
+      - ./db/backup.sh:/sylou/backup.sh:ro
+      # The documents people imported, read-only: a backup only reads.
+      - storage-data:/storage:ro
+    mem_limit: 512m
+    pids_limit: 100
+    networks: [backend]
+
+  load:
+    <<: *one-shot
+    image: supabase/postgres:17.6.1.136@sha256:f371b5f3f2ac0a05703f33d6e6134515fb2498cab708fb948a0aeb7481467c00
+    profiles: [tools]
+    user: postgres
+    read_only: true
+    tmpfs: [/tmp]
+    secrets: [pg_postgres_password]
+    entrypoint: ["bash", "/sylou/restore.sh"]
+    volumes:
+      - ./db/restore.sh:/sylou/restore.sh:ro
+      - storage-data:/storage
+    mem_limit: 512m
+    pids_limit: 100
+    networks: [backend]
+
+  # -------------------------------------------------------------------------
   # The relay: only in local-only mode (compose.local-only.yaml), and only
   # ever a fixed route to Ollama on this computer. The functions lose their
   # way out and reach it here, as ollama.internal:11434.

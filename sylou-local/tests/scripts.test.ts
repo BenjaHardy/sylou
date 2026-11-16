@@ -314,6 +314,56 @@ Deno.test("doctor hands the computer's own facts to the tools image", async () =
   }
 });
 
+Deno.test("backup makes a folder of its own, and leaves a note of when", async () => {
+  const install = await stagedInstall();
+  const into = await Deno.makeTempDir({ prefix: "sylou-backups-" });
+  try {
+    assertEquals((await runSetup(install, ["you@example.com"])).code, 0);
+    const { code, out } = await runSylou(install, ["backup", into]);
+    assertEquals(code, 0, out);
+
+    // One folder per backup, named for the day and the minute.
+    const made = [...Deno.readDirSync(into)].map((entry) => entry.name);
+    assertEquals(made.length, 1);
+    assert(/^sylou-\d{4}-\d{2}-\d{2}-\d{4}$/.test(made[0]), `odd folder name: ${made[0]}`);
+
+    // It ran the one-shot that holds pg_dump, with that folder mounted.
+    const log = await Deno.readTextFile(install.log);
+    assertStringIncludes(log, "run --rm -v");
+    assertStringIncludes(log, "dump");
+
+    // And doctor can now say how long ago the last backup was.
+    const note = JSON.parse(await Deno.readTextFile(join(install.dir, "config", "last-backup.json")));
+    assert(Date.now() - Date.parse(note.at) < 120_000, `the note says ${note.at}`);
+    assertStringIncludes(note.path, made[0]);
+
+    // And it says what a backup does not hold.
+    assertStringIncludes(out, "secrets are not in it");
+  } finally {
+    await Deno.remove(into, { recursive: true });
+    await Deno.remove(join(install.dir, ".."), { recursive: true });
+  }
+});
+
+Deno.test("restore refuses a folder that is not a backup, and changes nothing", async () => {
+  const install = await stagedInstall();
+  const empty = await Deno.makeTempDir({ prefix: "sylou-not-a-backup-" });
+  try {
+    assertEquals((await runSetup(install, ["you@example.com"])).code, 0);
+    await Deno.truncate(install.log, 0);
+
+    const { code, out } = await runSylou(install, ["restore", empty, "--yes"]);
+    assertEquals(code, 1, out);
+    assertStringIncludes(out, "data.sql");
+
+    const log = await Deno.readTextFile(install.log);
+    assert(!log.includes("load"), "it started the restore anyway");
+  } finally {
+    await Deno.remove(empty, { recursive: true });
+    await Deno.remove(join(install.dir, ".."), { recursive: true });
+  }
+});
+
 Deno.test("the Windows scripts hold no character Windows PowerShell would misread", async () => {
   // Windows PowerShell 5.1 reads a .ps1 without a byte-order mark in the
   // computer's own code page, not as UTF-8. An em dash then arrives as three
