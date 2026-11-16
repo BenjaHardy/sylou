@@ -4,7 +4,7 @@
 // (a saved one it no longer lists stays selected, never swapped), the
 // Preferences tab saves the display name and the concise default, and
 // account deletion is armed only by typing DELETE.
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalModel } from "@/lib/models";
 
@@ -21,7 +21,12 @@ const { update, settings, instance, site } = vi.hoisted(() => ({
     tokens_used_this_period: 1234,
     monthly_token_budget: null as number | null,
   },
-  instance: { webSearchEnabled: true, localModels: [] as LocalModel[] | null, loading: false },
+  instance: {
+    webSearchEnabled: true,
+    localOnly: false,
+    localModels: [] as LocalModel[] | null,
+    loading: false,
+  },
   site: { servedHere: true },
 }));
 
@@ -56,6 +61,7 @@ beforeEach(() => {
   settings.preferred_chat_reasoning = {};
   settings.monthly_token_budget = null;
   instance.localModels = [];
+  instance.localOnly = false;
   instance.loading = false;
   site.servedHere = true;
 });
@@ -195,6 +201,19 @@ describe("SettingsDialog: local models", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Your saved FLOW model, sylou-nemo-16k, is a local model, and FLOW runs on cloud models only.",
     );
+  });
+
+  it("local-only mode: one line above the pickers; no other Sylou shows it", () => {
+    const line = /Local-only mode is on\./;
+    instance.localModels = [NEMO];
+    renderDialog();
+    expect(screen.queryByText(line)).not.toBeInTheDocument();
+
+    instance.localOnly = true;
+    cleanup();
+    renderDialog();
+    expect(screen.getByText(line)).toBeInTheDocument();
+    expect(screen.getByText(/the cloud models and web search are off/)).toBeInTheDocument();
   });
 
   it("a Sylou served from another computer: the group says the models run on its own server", () => {

@@ -83,7 +83,7 @@ const modelConfigLink = (
 
 export function SettingsDialog({ open, onOpenChange }: Props) {
   const { settings, loading, update } = useUserSettings();
-  const { localModels, loading: configLoading } = useInstanceConfig();
+  const { localModels, localOnly, loading: configLoading } = useInstanceConfig();
   const { signOut } = useAuth();
 
   // Local models run where this Sylou runs: on this computer when the app
@@ -149,6 +149,13 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
 
           {/* MODELS TAB */}
           <TabsContent value="models" className="space-y-5 mt-4">
+            {localOnly && (
+              <p className="text-xs text-foreground bg-secondary rounded-md p-3 leading-relaxed">
+                <span className="font-medium">Local-only mode is on.</span> This Sylou uses models on this
+                computer only: the cloud models and web search are off, and FLOW analyses, which need a
+                cloud model, are unavailable until you turn the mode off.
+              </p>
+            )}
             <div>
               <Label className="text-sm font-semibold text-primary">Chat model</Label>
               <p className="text-xs text-muted-foreground mb-2">

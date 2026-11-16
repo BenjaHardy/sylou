@@ -5,6 +5,10 @@ import { publishableKey, supabaseUrl } from "@/lib/runtime-config";
 
 export interface InstanceConfig {
   webSearchEnabled: boolean;
+  /** Whether this Sylou runs models on this computer only: a Sylou Local
+   *  install with local-only mode on, where the cloud models and web search
+   *  are off. */
+  localOnly: boolean;
   /** The local models this instance lists, as their server reported them
    *  when the page loaded: empty when it lists none, null when the config
    *  endpoint could not be read. */
@@ -41,6 +45,7 @@ async function fetchInstanceConfig(): Promise<{ config: InstanceConfig; signedIn
   return {
     config: {
       webSearchEnabled: data?.web_search_enabled !== false,
+      localOnly: data?.local_only === true,
       localModels: parseLocalModels(data?.local_models),
     },
     signedIn: !!token,
@@ -97,7 +102,7 @@ export function useInstanceConfig(): InstanceConfig & { loading: boolean } {
             "[useInstanceConfig] failed to fetch /config — defaulting capabilities to enabled:",
             err,
           );
-          const fallback: InstanceConfig = { webSearchEnabled: true, localModels: null };
+          const fallback: InstanceConfig = { webSearchEnabled: true, localOnly: false, localModels: null };
           cachedConfig = fallback;
           return fallback;
         })
@@ -117,6 +122,7 @@ export function useInstanceConfig(): InstanceConfig & { loading: boolean } {
 
   return {
     webSearchEnabled: config?.webSearchEnabled ?? true,
+    localOnly: config?.localOnly ?? false,
     localModels: config?.localModels ?? null,
     loading,
   };

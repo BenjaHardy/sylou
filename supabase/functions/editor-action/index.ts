@@ -7,6 +7,7 @@ import { makeSSEHelpers, readProviderStream } from "../_shared/_sse.ts";
 import { EDITOR_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { DEFAULT_CHAT_MODEL, INPUT_LIMITS, OUTPUT_BUDGETS, resolveModel } from "../_shared/_models.ts";
 import { fetchLocalModelInfo, isOllamaModel } from "../_shared/_ollama.ts";
+import { providerUnavailableMessage } from "../_shared/_local_only.ts";
 import { estimatePromptTokens, fitWindow, roomLeft } from "../_shared/_fit.ts";
 import {
   buildSummarizedFavBlock, type FavouriteDoc, favouriteEntry, splitFavourites,
@@ -174,7 +175,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     const mistralEffort = resolveMistralEffort(EDITOR_MISTRAL_EFFORT, chatModel);
     let editorMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.EDITOR_ACTION, chatModel, thinking, mistralEffort !== undefined);
     if (!providerConfigured(provider, deps.env)) {
-      return jsonResponse({ error: `${provider} API key not configured` }, 500);
+      return jsonResponse({ error: providerUnavailableMessage(provider, deps.env) }, 500);
     }
 
     const messagesWith = (system: string) => [

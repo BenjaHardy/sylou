@@ -8,6 +8,7 @@ import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.t
 import { DEFAULT_CHAT_MODEL, INPUT_LIMITS } from "../_shared/_models.ts";
 import { estimatePromptTokens } from "../_shared/_fit.ts";
 import { RESULT_CUT_NOTE } from "../_shared/_tool_loop.ts";
+import { LOCAL_ONLY_MODEL_MESSAGE } from "../_shared/_local_only.ts";
 import { CLASSIC_MODE_SYSTEM_PROMPT, TEMPLATE_PROMPTS, WEB_SEARCH_PROMPT } from "../_shared/_prompts.ts";
 import { buildDocIndex, buildFavBlock } from "./context.ts";
 import {
@@ -240,6 +241,13 @@ Deno.test("the model's provider key is not configured: 500 before any provider c
   const { res, provider } = await send(post(ASK), { env: { MISTRAL_API_KEY: undefined } });
   assertEquals(res.status, 500);
   assertEquals(await res.json(), { error: "mistral API key not configured" });
+  assertEquals(provider.calls.length, 0);
+});
+
+Deno.test("local-only mode: a saved cloud model is refused with the mode's sentence, before any provider call", async () => {
+  const { res, provider } = await send(post(ASK), { env: { SYLOU_LOCAL_ONLY: "true" } });
+  assertEquals(res.status, 500);
+  assertEquals(await res.json(), { error: LOCAL_ONLY_MODEL_MESSAGE });
   assertEquals(provider.calls.length, 0);
 });
 
@@ -541,6 +549,18 @@ Deno.test("local model that cannot call tools: no tool and no web search; the in
   const system = String(provider.calls[0].messages[0].content);
   assert(system.includes("their full text is not available in this chat"), system);
   assert(!system.includes("read_imported_document") && !system.includes("# WEB SEARCH"), system);
+});
+
+Deno.test("local-only mode: a local model keeps its document tool, but web search is never offered", async () => {
+  const { res, provider } = await send(post({ ...ASK, web_search_enabled: true }), {
+    world: { ...LOCAL, docs: DOCS },
+    env: { ...LOCAL_ENV, BRAVE_SEARCH_API_KEY: "brave-key", SYLOU_LOCAL_ONLY: "true" },
+    localModels: fakeLocalModels({ [LOCAL_MODEL]: 16_384 }),
+    replies: [jsonReply({ content: "From your notes." })],
+  });
+  assertEquals((await readEvents(res)).at(-1)?.done, true);
+  assertEquals(provider.calls[0].tools?.map((t) => t.function.name), ["read_imported_document"]);
+  assert(!String(provider.calls[0].messages[0].content).includes("# WEB SEARCH"));
 });
 
 Deno.test("local model: a document read by the tool is cut to the room the window leaves, and the answer fits", async () => {

@@ -10,6 +10,7 @@ import { finalCall, promptChars, runToolLoop } from "../_shared/_tool_loop.ts";
 import { CONTEXT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { DEFAULT_CHAT_MODEL, INPUT_LIMITS, OUTPUT_BUDGETS, resolveModel } from "../_shared/_models.ts";
 import { fetchLocalModelInfo, isOllamaModel } from "../_shared/_ollama.ts";
+import { providerUnavailableMessage, webSearchConfigured } from "../_shared/_local_only.ts";
 import { sliceSafe } from "../_shared/_text.ts";
 import {
   CONTEXT_THINKING, CONTEXT_EFFORT, CONTEXT_MISTRAL_EFFORT, SUMMARY_TABLES,
@@ -132,7 +133,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     const summary = resolveReasoning(chatModel, undefined, SUMMARY_TABLES);
     const summaryMaxTokens = resolveMaxTokens(OUTPUT_BUDGETS.CONTEXT_SUMMARY, chatModel, summary.thinking, summary.mistralEffort !== undefined);
     if (!providerConfigured(provider, deps.env)) {
-      return jsonResponse({ error: `${provider} API key not configured` }, 500);
+      return jsonResponse({ error: providerUnavailableMessage(provider, deps.env) }, 500);
     }
 
     // --- Parse body ---
@@ -325,8 +326,8 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     // Gate web search on both the user toggle AND BRAVE_SEARCH_API_KEY presence
     // (mirrors chat/). Without a server-side key the tool can't work, so don't
     // register it or advertise it to the model. Nor to a local model that
-    // cannot call tools.
-    const braveConfigured = !!deps.env.get("BRAVE_SEARCH_API_KEY");
+    // cannot call tools, nor in local-only mode.
+    const braveConfigured = webSearchConfigured(deps.env);
     const webSearchActive = webSearchEnabled && braveConfigured && canUseTools;
     if (webSearchEnabled && braveConfigured && !canUseTools) {
       console.log(`[context-prompt] web search off: ${chatModel} cannot call tools`);
