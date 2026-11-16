@@ -58,7 +58,10 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 - `src/lib/` — pure utilities: `provenance-tracker.ts`, `flowBands.ts`,
   `flow-work-profiles.ts`, `flow-profile-paintings.ts`, `export-docx.ts`,
   `export-json.ts`, `markdown-to-pm.ts`, `tiptap-font-size.ts`,
-  `editor-extensions/pagination.ts`, `sse-stream.ts`, `estimateTokens.ts`.
+  `editor-extensions/pagination.ts`, `sse-stream.ts`, `estimateTokens.ts`,
+  `runtime-config.ts` (where this Sylou's services are and the key its pages
+  are served: the build-time `VITE_*` values on hosted Sylou, the page's own
+  origin plus `/sylou-runtime.js` in a Sylou Local install).
 - `supabase/functions/_shared/` — `_llm.ts` (provider router), `_repair.ts`,
   `_temperatures.ts`, `_thinking.ts`, `_models.ts` (model allowlist,
   input caps, per-model context limits), `_provenance.ts`, `_similarity.ts`,
@@ -68,9 +71,16 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   `_test_support.ts` (fakes for the handler tests), `_ollama.ts` (the
   local Ollama provider: its settings, request body and model lookup),
   `_fit.ts` (sizing a call to a local model's context window),
-  `_favourites.ts` (favourite documents beside a local model's window).
+  `_favourites.ts` (favourite documents beside a local model's window),
+  `_local_only.ts` (the `SYLOU_LOCAL_ONLY` switch and the sentences the
+  functions answer with while it is on).
 - Edge functions (8): `chat`, `analysis`, `editor-action`, `context-prompt`,
   `extract-text`, `share-report`, `config`, `delete-account`.
+- `sylou-local/` — the Sylou Local package: Docker images and the recipe for
+  running the whole of Sylou on one computer. `web/` is its front door (the
+  app's pages, the security headers, a Host check and four API paths); the
+  repository-root `.dockerignore` is an allow-list deciding what any image
+  build may see, and `.gitattributes` keeps the package's files at LF.
 
 ## 4. Conventions (mirror these; don't drift)
 - **Layout**: root is `h-screen overflow-hidden`; flex parents get
@@ -227,7 +237,15 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   (`groupModelsForFlow`: recommended / alternatives / not recommended, the
   last two topped by a notice; Anthropic first inside each group, then the
   Mistral API, mirroring the chat order). A new model lands in the right
-  group by itself; the tier is the flag, never note wording.
+  group by itself; the tier is the flag, never note wording. Local models are
+  not in the registry: the `config` function lists them (`local_models`, to
+  signed-in callers only, each with the window and tools Ollama reports) and
+  the chat picker shows them first, in their own Beta group
+  (`localModelInfos`); a saved one the instance no longer lists stays
+  selected with a warning, never swapped. The FLOW picker never lists them
+  (FLOW's buttons are greyed while a local model is saved as the FLOW model),
+  and the chat's web-search toggle is greyed for a local model without
+  tools.
 - Users pick two models in Settings: `preferred_chat_model` and
   `preferred_flow_model` on `profiles`. Editor-action and context-prompt
   reuse `preferred_chat_model` — there is no separate per-function picker.
@@ -286,6 +304,19 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   drops the conversation entry), Mistral `prompt_cache_key` = thread id,
   DeepSeek nothing. `[usage]` log lines carry the providers' cache fields.
   See `docs/model-configuration.md` § Prompt caching.
+- **Local-only mode** (`SYLOU_LOCAL_ONLY`, set only by a Sylou Local install;
+  `_shared/_local_only.ts`): `providerConfigured` is false for every cloud
+  provider whatever keys are set, so each function refuses at the check it
+  already makes with one sentence (FLOW's says it needs a cloud model, which
+  the mode turns off); web search never runs; `config` answers
+  `local_only: true` with `web_search_enabled: false`, and Settings shows one
+  line. Nothing about a cloud call changes while the switch is unset.
+- **First-byte limits** (`defaultTimeoutFor` in `_llm.ts`): 120 s for the
+  cloud providers, 300 s for `ollama/*` — a local model reads the whole
+  prompt before its first token and sends nothing meanwhile (106 s measured
+  for a 34,000-character selection on a computer with no usable GPU). The
+  conversation-memory refresh keeps its own 60 s on both, because it runs
+  after the reply, is never fatal, and retries at the next boundary.
 - **No router bypasses**: every LLM call goes through `_llm.ts`.
   (`extract-text`'s former hardcoded Mistral call was removed in #10 — it
   now summarizes with the user's `preferred_chat_model` and silently falls
@@ -411,7 +442,9 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 - No `<img>` from model output: markdown renderers map `img` to
   `MarkdownImageLink`, so a reply never makes the browser load a URL by itself.
 - No new outside origin (script, image, font, API) without its CSP entry in
-  both `vercel.json` and `public/_headers`; never `'unsafe-inline'` or
+  both `vercel.json` and `public/_headers` — and in
+  `sylou-local/web/headers.conf`, the same set with `connect-src 'self'`,
+  since a local install serves its own pages; never `'unsafe-inline'` or
   `'unsafe-eval'` in `script-src`.
 - No new `public` table without `ENABLE RLS` + per-op policies (add a
   `GRANT` only if a non-default role like `anon` needs access).
