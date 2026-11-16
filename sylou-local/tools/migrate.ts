@@ -30,6 +30,13 @@ export interface Plan {
  * What to do, given the files in this release and what the database says it
  * has already applied. Pure, so the awkward cases are easy to test.
  */
+/** Name order as the Supabase CLI and the database tests apply migrations:
+ *  by character code, the same on every computer. `localeCompare` follows a
+ *  language's own rules instead, which put "_" before "-". */
+function inNameOrder(a: MigrationFile, b: MigrationFile): number {
+  return a.version < b.version ? -1 : a.version > b.version ? 1 : 0;
+}
+
 export function plan(files: MigrationFile[], recorded: RecordedMigration[]): Plan {
   const byVersion = new Map(files.map((file) => [file.version, file]));
   const known = new Map(recorded.map((row) => [row.version, row.checksum]));
@@ -53,7 +60,7 @@ export function plan(files: MigrationFile[], recorded: RecordedMigration[]): Pla
   }
 
   const toApply = [...files]
-    .sort((a, b) => a.version.localeCompare(b.version))
+    .sort(inNameOrder)
     .filter((file) => !known.has(file.version));
   return { toApply };
 }
@@ -75,7 +82,7 @@ export async function readMigrations(dir: string): Promise<MigrationFile[]> {
       path,
     });
   }
-  return files.sort((a, b) => a.version.localeCompare(b.version));
+  return files.sort(inNameOrder);
 }
 
 const RECORD_TABLE = `
