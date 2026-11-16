@@ -1,0 +1,47 @@
+Sylou Local
+Copyright (c) Sylou contributors
+
+This package runs Sylou (AGPL-3.0-or-later; see the LICENSE file at the root
+of this repository) together with parts of Supabase.
+
+----------------------------------------------------------------------------
+Supabase
+----------------------------------------------------------------------------
+
+The Docker images this package pins — supabase/postgres, supabase/gotrue,
+supabase/storage-api and supabase/edge-runtime — are published by Supabase and
+carry their own licences. They are referenced by digest in compose.yaml and
+are not redistributed here.
+
+The database start-up scripts in sylou-local/db/ began as the corresponding
+files in Supabase's self-hosting recipe (github.com/supabase/supabase, the
+docker/volumes/db folder, tag self-hosted/v0.8.4), which is licensed under the
+Apache License, Version 2.0:
+
+    Copyright (c) Supabase, Inc.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may
+    not use these files except in compliance with the License. You may obtain
+    a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+    License for the specific language governing permissions and limitations
+    under the License.
+
+They have been changed for Sylou: each database role is given its own random
+password, read from a file instead of an environment variable, and the signing
+secret is no longer written into the database. The scripts Sylou does not use
+(webhooks.sql, _supabase.sql, logs.sql, pooler.sql, realtime.sql) are not
+included.
+
+----------------------------------------------------------------------------
+PostgREST, nginx, Deno
+----------------------------------------------------------------------------
+
+The postgrest/postgrest, nginx/nginx-unprivileged and denoland/deno images are
+published by their own projects under their own licences, and are referenced
+by digest rather than redistributed.

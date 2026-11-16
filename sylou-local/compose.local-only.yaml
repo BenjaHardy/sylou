@@ -1,0 +1,23 @@
+# Local-only mode: this computer and nothing else.
+#
+# Used beside the main file, it takes the functions' way out away and starts
+# the relay in its place:
+#   docker compose -f compose.yaml -f compose.local-only.yaml \
+#     --profile local-only --env-file config/settings.env up -d
+#
+# With this in force, no service that holds or reads your writing has a route
+# off the computer. The functions keep exactly one destination — Ollama here,
+# through the relay — and the edge functions themselves refuse every cloud
+# provider, because SYLOU_LOCAL_ONLY is set (#247).
+#
+# The letter box still has the network its published port needs, and still
+# reads nothing.
+
+services:
+  functions:
+    environment:
+      SYLOU_LOCAL_ONLY: "true"
+      # The relay's name on the internal network.
+      OLLAMA_URL: http://ollama.internal:11434
+    # `egress` is gone: backend has no route to the internet at all.
+    networks: [backend]

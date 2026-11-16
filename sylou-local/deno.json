@@ -1,0 +1,19 @@
+{
+  "exclude": ["config", "node_modules"],
+  "tasks": {
+    "check": "deno check tests/*.ts tools/*.ts",
+    "lint": "deno lint",
+    // The recipe test asks the docker command to resolve compose.yaml (no
+    // daemon needed) and writes its stand-in secret files to a temp folder.
+    // The tools tests reach a database when DATABASE_URL is set, and skip
+    // themselves when it is not.
+    "test": "deno test --allow-read --allow-write --allow-run=docker --allow-env --allow-net tests/ tools/"
+  },
+  "lint": {
+    "rules": {
+      // Inline https: imports are the style the edge functions use; the
+      // tools share it so the two stacks read alike.
+      "exclude": ["no-import-prefix"]
+    }
+  }
+}
