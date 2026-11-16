@@ -43,7 +43,9 @@ if (Deno.args[0] === "version") {
 // docker run --rm -v <folder>:/out <image> secrets
 if (Deno.args[0] === "run" && Deno.args.includes("secrets")) {
   const mount = Deno.args[Deno.args.indexOf("-v") + 1] ?? "";
-  const folder = mount.slice(0, mount.lastIndexOf(":"));
+  // "<folder>:/out", except under a POSIX shell on Windows, which rewrites
+  // it to "<folder>;C:/out" on its way through.
+  const folder = mount.includes(";") ? mount.slice(0, mount.indexOf(";")) : mount.slice(0, mount.lastIndexOf(":"));
   const names = ${JSON.stringify(SECRET_FILES)};
   for (const name of names) Deno.writeTextFileSync(folder + "/" + name, ${JSON.stringify(SECRET_VALUE)} + "-" + name);
   for (const name of ["anthropic_api_key", "mistral_api_key", "deepseek_api_key", "brave_search_api_key"]) {
@@ -78,7 +80,10 @@ function freePort(): number {
 }
 
 /** A copy of the package, with a fake docker to find on the path. */
-async function stagedInstall(folderName = "sylou-local", port = freePort()): Promise<Install> {
+// The folder's name has a space in it on purpose: an install may sit in
+// "My Writing", and a path that is not quoted somewhere would break there
+// and nowhere else.
+async function stagedInstall(folderName = "sylou local", port = freePort()): Promise<Install> {
   const root = await Deno.makeTempDir({ prefix: "sylou-scripts-" });
   const dir = join(root, folderName);
   await Deno.mkdir(dir, { recursive: true });
@@ -99,18 +104,38 @@ async function stagedInstall(folderName = "sylou-local", port = freePort()): Pro
   await Deno.mkdir(binDir);
   const fake = join(binDir, "fake-docker.ts");
   await Deno.writeTextFile(fake, FAKE_DOCKER);
-  if (WINDOWS) {
-    await Deno.writeTextFile(join(binDir, "docker.cmd"), `@echo off\r\ndeno run --allow-all "${fake}" %*\r\n`);
-  } else {
-    await Deno.writeTextFile(join(binDir, "docker"), `#!/bin/sh\nexec deno run --allow-all "${fake}" "$@"\n`);
-    await Deno.chmod(join(binDir, "docker"), 0o755);
-  }
+  // Both, always: on Windows the shell script is run as well when a POSIX
+  // shell is there, and it needs a docker it can run too.
+  await Deno.writeTextFile(join(binDir, "docker.cmd"), `@echo off\r\ndeno run --allow-all "${fake}" %*\r\n`);
+  await Deno.writeTextFile(join(binDir, "docker"), `#!/bin/sh\nexec deno run --allow-all "${posix(fake)}" "$@"\n`);
+  if (!WINDOWS) await Deno.chmod(join(binDir, "docker"), 0o755);
 
   return { dir, log: join(root, "docker.log"), binDir, port };
 }
 
-async function runSetup(install: Install, args: string[]): Promise<{ code: number; out: string }> {
-  const command = WINDOWS
+/** C:\a\b as a POSIX shell on Windows wants it: /c/a/b. */
+function posix(path: string): string {
+  const drive = path.match(/^([A-Za-z]):[\\/]/);
+  if (!drive) return path;
+  return `/${drive[1].toLowerCase()}/${path.slice(3).replace(/\\/g, "/")}`;
+}
+
+/** Is there a POSIX shell to run the other script with? */
+async function haveSh(): Promise<boolean> {
+  try {
+    const result = await new Deno.Command("sh", { args: ["-c", "exit 0"], stdout: "null", stderr: "null" }).output();
+    return result.success;
+  } catch {
+    return false;
+  }
+}
+
+async function runSetup(
+  install: Install,
+  args: string[],
+  shell: "native" | "sh" = "native",
+): Promise<{ code: number; out: string }> {
+  const command = WINDOWS && shell === "native"
     ? new Deno.Command("cmd.exe", {
       args: ["/c", join(install.dir, "sylou.cmd"), "setup", ...args],
       cwd: install.dir,
@@ -119,9 +144,13 @@ async function runSetup(install: Install, args: string[]): Promise<{ code: numbe
       stderr: "piped",
     })
     : new Deno.Command("sh", {
-      args: [join(install.dir, "sylou"), "setup", ...args],
+      args: [posix(join(install.dir, "sylou")), "setup", ...args],
       cwd: install.dir,
-      env: { PATH: `${install.binDir}:${Deno.env.get("PATH")}`, FAKE_DOCKER_LOG: install.log, HOME: Deno.env.get("HOME") ?? "" },
+      env: {
+        PATH: `${WINDOWS ? posix(install.binDir) : install.binDir}:${Deno.env.get("PATH")}`,
+        FAKE_DOCKER_LOG: WINDOWS ? posix(install.log) : install.log,
+        HOME: Deno.env.get("HOME") ?? "",
+      },
       stdout: "piped",
       stderr: "piped",
     });
@@ -189,6 +218,31 @@ Deno.test("…unless you say you know better, and then it carries on", async () 
   } finally {
     await Deno.remove(join(install.dir, "..", ".."), { recursive: true });
   }
+});
+
+// The shell script is what macOS and Linux run, and only a Linux runner
+// would otherwise ever run it: a Windows machine with a POSIX shell (Git for
+// Windows has one) runs it here too, so a mistake in it is found where it is
+// written rather than on CI.
+Deno.test({
+  name: "the shell script sets an install up in the same way",
+  ignore: !(await haveSh()),
+  fn: async () => {
+    const install = await stagedInstall();
+    try {
+      const { code, out } = await runSetup(install, ["you@example.com"], "sh");
+      assertEquals(code, 0, out);
+      for (const name of SECRET_FILES) {
+        assertStringIncludes(await Deno.readTextFile(join(install.dir, "config", "secrets", name)), "-" + name);
+      }
+      const log = await Deno.readTextFile(install.log);
+      assertStringIncludes(log, "up -d --wait");
+      assertStringIncludes(log, "add-user you@example.com");
+      assert(!out.includes(SECRET_VALUE), "setup printed a secret");
+    } finally {
+      await Deno.remove(join(install.dir, ".."), { recursive: true });
+    }
+  },
 });
 
 Deno.test("setup stops when something else is already on the port", async () => {

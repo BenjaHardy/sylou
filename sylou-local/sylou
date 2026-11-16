@@ -37,18 +37,24 @@ setting() {
   printf '%s' "$fallback"
 }
 
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
 # Every Docker call goes through here, so local-only mode adds its file in
 # one place.
+#
+# The options are built by putting each one in front of what the caller
+# asked for, so every path stays one argument however many spaces are in it
+# - an install can sit in a folder called "My Writing", and does.
 run_compose() {
-  local_only=$(setting SYLOU_LOCAL_ONLY "")
-  case $(printf '%s' "$local_only" | tr '[:upper:]' '[:lower:]') in
-    true|1|yes|on) extra="-f $PACKAGE_DIR/compose.local-only.yaml --profile local-only" ;;
-    *) extra="" ;;
+  case $(lower "$(setting SYLOU_LOCAL_ONLY "")") in
+    true|1|yes|on)
+      set -- -f "$PACKAGE_DIR/compose.local-only.yaml" --profile local-only "$@" ;;
   esac
-  env_file=""
-  if [ -f "$SETTINGS_FILE" ]; then env_file="--env-file $SETTINGS_FILE"; fi
-  # shellcheck disable=SC2086
-  docker compose $args -f "$PACKAGE_DIR/compose.yaml" $extra $env_file "$@"
+  if [ -f "$SETTINGS_FILE" ]; then
+    set -- --env-file "$SETTINGS_FILE" "$@"
+  fi
+  set -- --project-directory "$PACKAGE_DIR" -f "$PACKAGE_DIR/compose.yaml" "$@"
+  docker compose "$@"
 }
 
 # --------------------------------------------------------------------------
