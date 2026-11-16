@@ -1,7 +1,7 @@
 {
   "exclude": ["config", "node_modules"],
   "tasks": {
-    "check": "deno check tests/*.ts tools/*.ts",
+    "check": "deno check functions/main.ts tests/*.ts tools/*.ts",
     "lint": "deno lint",
     // The recipe test asks the docker command to resolve compose.yaml (no
     // daemon needed) and writes its stand-in secret files to a temp folder.
