@@ -8,6 +8,7 @@
 // Run with: deno task test  (from supabase/functions/)
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { DEFAULT_FLOW_MODEL } from "../_shared/_models.ts";
+import { LOCAL_ONLY_FLOW_MESSAGE } from "../_shared/_local_only.ts";
 import {
   type DbCall,
   type DbResult,
@@ -216,6 +217,13 @@ Deno.test("the model's provider key is not configured: 500 before any provider c
   const { res, provider } = await send(post(ANALYSE), { env: { MISTRAL_API_KEY: undefined } });
   assertEquals(res.status, 500);
   assertEquals(await res.json(), { error: "mistral API key not configured" });
+  assertEquals(provider.calls.length, 0);
+});
+
+Deno.test("local-only mode: FLOW says it needs a cloud model, which the mode turns off, before any provider call", async () => {
+  const { res, provider } = await send(post(ANALYSE), { env: { SYLOU_LOCAL_ONLY: "true" } });
+  assertEquals(res.status, 500);
+  assertEquals(await res.json(), { error: LOCAL_ONLY_FLOW_MESSAGE });
   assertEquals(provider.calls.length, 0);
 });
 

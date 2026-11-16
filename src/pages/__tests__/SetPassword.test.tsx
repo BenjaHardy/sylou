@@ -24,7 +24,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 import SetPassword from "@/pages/SetPassword";
-import { MIN_PASSWORD_LENGTH } from "@/lib/auth-links";
+import { DEFAULT_MIN_PASSWORD_LENGTH } from "@/lib/runtime-config";
 
 function renderPage(search = "") {
   return render(
@@ -44,6 +44,10 @@ const save = () => screen.getByRole("button", { name: "Save password and continu
 let replaceState: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
+  // A build that carries its address and key: hosted Sylou, whose floor is
+  // the default one (src/lib/runtime-config.ts).
+  vi.stubEnv("VITE_SUPABASE_URL", "https://project.supabase.co");
+  vi.stubEnv("VITE_SUPABASE_PUBLISHABLE_KEY", "test-key");
   h.verifyOtp.mockReset();
   h.getSession.mockReset().mockResolvedValue({ data: { session: null } });
   h.updateUser.mockReset();
@@ -52,6 +56,8 @@ beforeEach(() => {
 
 afterEach(() => {
   replaceState.mockRestore();
+  vi.unstubAllEnvs();
+  delete window.__SYLOU__;
 });
 
 describe("SetPassword page", () => {
@@ -107,7 +113,7 @@ describe("SetPassword page", () => {
     fireEvent.change(newPassword(), { target: { value: "short" } });
     fireEvent.change(confirmPassword(), { target: { value: "short" } });
     fireEvent.submit(save().closest("form")!);
-    expect(await screen.findByText(`Use at least ${MIN_PASSWORD_LENGTH} characters.`)).toBeInTheDocument();
+    expect(await screen.findByText(`Use at least ${DEFAULT_MIN_PASSWORD_LENGTH} characters.`)).toBeInTheDocument();
     expect(h.updateUser).not.toHaveBeenCalled();
 
     fireEvent.change(newPassword(), { target: { value: "long enough one" } });
@@ -120,6 +126,24 @@ describe("SetPassword page", () => {
     fireEvent.submit(save().closest("form")!);
     await waitFor(() => expect(h.updateUser).toHaveBeenCalledWith({ password: "long enough one" }));
     expect(await screen.findByText("Home")).toBeInTheDocument();
+  });
+
+  it("shows the floor its own install enforces, so the page cannot contradict the sign-in service", async () => {
+    vi.stubEnv("VITE_SUPABASE_URL", "");
+    vi.stubEnv("VITE_SUPABASE_PUBLISHABLE_KEY", "");
+    window.__SYLOU__ = { publishableKey: "page-key", minPasswordLength: 15 };
+    h.verifyOtp.mockResolvedValue({ data: { user: { email: "ben@example.com" }, session: null }, error: null });
+    renderPage("?token_hash=abc123&type=recovery");
+    await screen.findByText("Choose a new password.");
+
+    expect(screen.getByText(/At least 15 characters/)).toBeInTheDocument();
+    expect(newPassword()).toHaveAttribute("minLength", "15");
+
+    fireEvent.change(newPassword(), { target: { value: "fourteen chars" } });
+    fireEvent.change(confirmPassword(), { target: { value: "fourteen chars" } });
+    fireEvent.submit(save().closest("form")!);
+    expect(await screen.findByText("Use at least 15 characters.")).toBeInTheDocument();
+    expect(h.updateUser).not.toHaveBeenCalled();
   });
 
   it("a refused password change shows the provider's message and keeps the form", async () => {

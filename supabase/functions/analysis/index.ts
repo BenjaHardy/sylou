@@ -14,6 +14,7 @@ import {
   resolveModel,
 } from "../_shared/_models.ts";
 import { isOllamaModel } from "../_shared/_ollama.ts";
+import { LOCAL_ONLY_FLOW_MESSAGE, providerUnavailableMessage } from "../_shared/_local_only.ts";
 import { computeSimilarityPct } from "../_shared/_similarity.ts";
 import {
   FLOW_PROMPT_TEMPLATE,
@@ -156,7 +157,10 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
 
     const provider = providerFor(flowModel);
     if (!providerConfigured(provider, deps.env)) {
-      return jsonResponse({ error: `${provider} API key not configured` }, 500);
+      return jsonResponse(
+        { error: providerUnavailableMessage(provider, deps.env, LOCAL_ONLY_FLOW_MESSAGE) },
+        500,
+      );
     }
 
     // Resolve per-model knobs ONCE per request and bake into baseLlmArgs.

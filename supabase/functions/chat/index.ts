@@ -7,6 +7,7 @@ import { makeSSEHelpers, relayProviderStream, replayTokenBurst } from "../_share
 import { CHAT_TEMPERATURE, resolveTemperature } from "../_shared/_temperatures.ts";
 import { DEFAULT_CHAT_MODEL, INPUT_LIMITS, OUTPUT_BUDGETS, resolveModel } from "../_shared/_models.ts";
 import { fetchLocalModelInfo, isOllamaModel } from "../_shared/_ollama.ts";
+import { providerUnavailableMessage, webSearchConfigured } from "../_shared/_local_only.ts";
 import {
   CHAT_THINKING, CHAT_EFFORT, CHAT_MISTRAL_EFFORT,
   resolveReasoning, resolveMaxTokens,
@@ -188,8 +189,8 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     // Gate web search on both user toggle AND BRAVE_SEARCH_API_KEY presence.
     // If unconfigured, never advertise the capability to the LLM — an empty
     // result set reads as "the web has nothing" rather than "not configured".
-    // Nor to a local model that cannot call tools.
-    const braveConfigured = !!deps.env.get("BRAVE_SEARCH_API_KEY");
+    // Nor to a local model that cannot call tools, nor in local-only mode.
+    const braveConfigured = webSearchConfigured(deps.env);
     const webSearchActive = webSearchEnabled && braveConfigured && canUseTools;
     if (webSearchEnabled && braveConfigured && !canUseTools) {
       console.log(`[chat] web search off: ${chatModel} cannot call tools`);
@@ -245,7 +246,7 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
     // API key check happens inside callLLM; surface a clean error if missing.
     const provider = providerFor(chatModel);
     if (!providerConfigured(provider, deps.env)) {
-      return jsonResponse({ error: `${provider} API key not configured` }, 500);
+      return jsonResponse({ error: providerUnavailableMessage(provider, deps.env) }, 500);
     }
 
     // Track total token usage across all calls in the chain

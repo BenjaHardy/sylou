@@ -10,6 +10,7 @@
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { fallbackReplyText } from "../_shared/_llm.ts";
 import { DEFAULT_CHAT_MODEL, INPUT_LIMITS } from "../_shared/_models.ts";
+import { LOCAL_ONLY_MODEL_MESSAGE } from "../_shared/_local_only.ts";
 import {
   anthropicStreamedReply,
   type DbCall,
@@ -224,6 +225,13 @@ Deno.test("the model's provider key is not configured: 500 before any provider c
   const { res, provider } = await send(post(REWRITE), { env: { MISTRAL_API_KEY: undefined } });
   assertEquals(res.status, 500);
   assertEquals(await res.json(), { error: "mistral API key not configured" });
+  assertEquals(provider.calls.length, 0);
+});
+
+Deno.test("local-only mode: a saved cloud model is refused with the mode's sentence, before any provider call", async () => {
+  const { res, provider } = await send(post(REWRITE), { env: { SYLOU_LOCAL_ONLY: "true" } });
+  assertEquals(res.status, 500);
+  assertEquals(await res.json(), { error: LOCAL_ONLY_MODEL_MESSAGE });
   assertEquals(provider.calls.length, 0);
 });
 

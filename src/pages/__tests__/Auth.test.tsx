@@ -3,7 +3,7 @@
 // password-reset request with its neutral confirmation.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   auth: { user: null as { id: string } | null, loading: false },
@@ -43,6 +43,15 @@ beforeEach(() => {
   h.auth.loading = false;
   h.signInWithPassword.mockReset();
   h.resetPasswordForEmail.mockReset();
+  // A build that carries its address and key: hosted Sylou, which can send
+  // email (src/lib/runtime-config.ts).
+  vi.stubEnv("VITE_SUPABASE_URL", "https://project.supabase.co");
+  vi.stubEnv("VITE_SUPABASE_PUBLISHABLE_KEY", "test-key");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  delete window.__SYLOU__;
 });
 
 describe("Auth page", () => {
@@ -111,6 +120,18 @@ describe("Auth page", () => {
     fireEvent.click(button("Forgot password?"));
     expect(screen.queryByText(/If an account exists/)).not.toBeInTheDocument();
     expect(button("Send reset link")).toBeInTheDocument();
+  });
+
+  it("a Sylou Local install explains its own reset command instead of offering an email", async () => {
+    vi.stubEnv("VITE_SUPABASE_URL", "");
+    vi.stubEnv("VITE_SUPABASE_PUBLISHABLE_KEY", "");
+    window.__SYLOU__ = { publishableKey: "page-key" };
+    renderAuth();
+
+    expect(screen.queryByRole("button", { name: "Forgot password?" })).not.toBeInTheDocument();
+    expect(screen.getByText(/sylou reset-password/)).toBeInTheDocument();
+    expect(screen.getByText(/cannot send email/)).toBeInTheDocument();
+    expect(h.resetPasswordForEmail).not.toHaveBeenCalled();
   });
 
   it("a failed reset request shows the message and keeps the button", async () => {

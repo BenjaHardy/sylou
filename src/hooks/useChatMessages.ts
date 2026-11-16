@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { consumeSSEStream, SSEServerError, STREAM_CUT_OFF_MESSAGE } from "@/lib/sse-stream";
+import { publishableKey, supabaseUrl } from "@/lib/runtime-config";
 
 export interface ChatMessage {
   id: string;
@@ -132,14 +133,14 @@ export function useChatMessages(threadId: string | null) {
           return;
         }
 
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
+        const url = `${supabaseUrl()}/functions/v1/chat`;
 
         const res = await fetch(url, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            apikey: publishableKey(),
           },
           body: JSON.stringify({
             thread_id: sendThreadId,

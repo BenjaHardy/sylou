@@ -35,6 +35,6 @@ export function setPasswordRedirectUrl(origin: string): string {
   return `${origin}/auth/set-password`;
 }
 
-/** Floor for passwords chosen through the set-password page. Supabase's own
- *  minimum (Authentication → Providers → Email) applies on top of it. */
-export const MIN_PASSWORD_LENGTH = 8;
+// The floor for a password chosen on that page is minPasswordLength() in
+// src/lib/runtime-config.ts — Sylou Local serves its own number — and the
+// sign-in service's own minimum applies on top of it.

@@ -1,7 +1,12 @@
-// The browser security headers live in two host files: vercel.json (Vercel)
-// and public/_headers (Cloudflare Pages, Netlify). Nothing in the build reads
-// them, so only this test notices when the two drift apart or when the
-// Content-Security-Policy loses one of its strict parts.
+// The browser security headers live in three host files: vercel.json
+// (Vercel), public/_headers (Cloudflare Pages, Netlify) and, for a Sylou
+// Local install, sylou-local/web/headers.conf with its nginx.conf. Nothing in
+// the build reads them, so only this test notices when they drift apart or
+// when the Content-Security-Policy loses one of its strict parts.
+//
+// What this test cannot see is a header a running nginx drops again: the
+// package tests check /report/x on a real request, because an internal
+// redirect there once replaced two headers with another block's.
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -55,6 +60,34 @@ function directives(policy: string): Map<string, string[]> {
   );
 }
 
+// Every `add_header name "value" always;` of an nginx config file, by name.
+function nginxHeaders(...parts: string[]): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const match of read(...parts).matchAll(/^\s*add_header\s+(\S+)\s+"([^"]*)"\s+always;/gm)) {
+    headers[match[1]] = match[2];
+  }
+  return headers;
+}
+
+/** The `location` blocks of the package's door, each with its own body. */
+function doorBlocks(): { path: string; body: string }[] {
+  const config = read("sylou-local", "web", "nginx.conf");
+  const blocks: { path: string; body: string }[] = [];
+  const opening = /^\s*location\s+(.+?)\s*\{$/gm;
+  for (const match of config.matchAll(opening)) {
+    const from = match.index! + match[0].length;
+    let depth = 1;
+    let i = from;
+    while (i < config.length && depth > 0) {
+      if (config[i] === "{") depth++;
+      if (config[i] === "}") depth--;
+      i++;
+    }
+    blocks.push({ path: match[1], body: config.slice(from, i - 1) });
+  }
+  return blocks;
+}
+
 describe("security headers", () => {
   const vercel = vercelRules();
 
@@ -95,6 +128,48 @@ describe("security headers", () => {
     it("never allows every host of a scheme", () => {
       for (const [name, sources] of policy) {
         expect(sources.filter((s) => /^(\*|https?:|wss?:)$/.test(s)), name).toEqual([]);
+      }
+    });
+  });
+
+  // A Sylou Local install serves its own pages, so its headers come from
+  // nginx rather than from a host's configuration file.
+  describe("the Sylou Local door (sylou-local/web)", () => {
+    const shared = nginxHeaders("sylou-local", "web", "headers.conf");
+
+    it("sends the hosted headers, with Supabase dropped from connect-src: everything is its own address", () => {
+      const hosted = directives(vercel["/*"][CSP_HEADER]);
+      const local = directives(shared[CSP_HEADER]);
+      expect([...local.keys()]).toEqual([...hosted.keys()]);
+      for (const [name, sources] of hosted) {
+        const expected = name === "connect-src" ? sources.filter((s) => s === "'self'") : sources;
+        expect(local.get(name), name).toEqual(expected);
+      }
+      expect(local.get("connect-src")).toEqual(["'self'"]);
+      expect(shared["X-Content-Type-Options"]).toBe(vercel["/*"]["X-Content-Type-Options"]);
+      expect(shared["X-Frame-Options"]).toBe(vercel["/*"]["X-Frame-Options"]);
+    });
+
+    it("keeps a shared report out of search engines and sends no referrer, as hosted does", () => {
+      const report = doorBlocks().find((block) => block.path === "/report/");
+      expect(report).toBeDefined();
+      const headers = Object.fromEntries(
+        [...report!.body.matchAll(/add_header\s+(\S+)\s+"([^"]*)"\s+always;/g)].map((m) => [m[1], m[2]]),
+      );
+      expect(headers["X-Robots-Tag"]).toBe(vercel["/report/*"]["X-Robots-Tag"]);
+      expect(headers["Referrer-Policy"]).toBe(vercel["/report/*"]["Referrer-Policy"]);
+    });
+
+    it("serves the report page inside its own block: try_files would drop the two headers above", () => {
+      const report = doorBlocks().find((block) => block.path === "/report/")!;
+      expect(report.body).toContain("rewrite ^ /index.html break;");
+      expect(report.body).not.toContain("try_files");
+    });
+
+    it("every block that adds a header of its own includes the shared set, which nginx would otherwise drop", () => {
+      for (const block of doorBlocks()) {
+        if (!block.body.includes("add_header")) continue;
+        expect(block.body, block.path).toContain("include /etc/nginx/sylou/headers.conf;");
       }
     });
   });

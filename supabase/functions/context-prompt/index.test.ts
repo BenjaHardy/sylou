@@ -12,6 +12,7 @@ import { fallbackReplyText } from "../_shared/_llm.ts";
 import { DEFAULT_CHAT_MODEL, INPUT_LIMITS } from "../_shared/_models.ts";
 import { estimatePromptTokens } from "../_shared/_fit.ts";
 import { RESULT_CUT_NOTE } from "../_shared/_tool_loop.ts";
+import { LOCAL_ONLY_MODEL_MESSAGE } from "../_shared/_local_only.ts";
 import {
   anthropicStreamedReply,
   type DbCall,
@@ -300,6 +301,13 @@ Deno.test("the model's provider key is not configured: 500 before any provider c
   const { res, provider } = await send(post(ASK), { env: { MISTRAL_API_KEY: undefined } });
   assertEquals(res.status, 500);
   assertEquals(await res.json(), { error: "mistral API key not configured" });
+  assertEquals(provider.calls.length, 0);
+});
+
+Deno.test("local-only mode: a saved cloud model is refused with the mode's sentence, before any provider call", async () => {
+  const { res, provider } = await send(post(ASK), { env: { SYLOU_LOCAL_ONLY: "true" } });
+  assertEquals(res.status, 500);
+  assertEquals(await res.json(), { error: LOCAL_ONLY_MODEL_MESSAGE });
   assertEquals(provider.calls.length, 0);
 });
 
@@ -821,6 +829,19 @@ Deno.test("local model: a summary that leaves the reply no room: 400 after the s
   assert(String((await res.json()).error).startsWith("Too long for sylou-nemo-16k: this request needs"));
   assertEquals(provider.calls.length, 1);
   assertEquals(writes(backend.calls), []);
+});
+
+Deno.test("local-only mode: a local model keeps its document tool, but web search is never offered", async () => {
+  const { res, provider } = await send(post({ ...ASK, web_search_enabled: true }), {
+    ...LOCAL,
+    env: { ...LOCAL_ENV, BRAVE_SEARCH_API_KEY: "brave-key", SYLOU_LOCAL_ONLY: "true" },
+    docs: [NOTES_DOC],
+    localModels: fakeLocalModels({ [LOCAL_MODEL]: 16_384 }),
+    replies: [summaryReply(), jsonReply({ content: REPLY })],
+  });
+  await readEvents(res);
+  assertEquals(provider.calls[1].tools?.map((t) => t.function.name), ["read_imported_document"]);
+  assert(!systemOf(provider.calls[1]).includes("# WEB SEARCH"));
 });
 
 Deno.test("local model that cannot call tools: no tool and no web search; the index names no tool", async () => {

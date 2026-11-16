@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Mail, Lock } from "lucide-react";
 import { SiteFooter } from "@/components/SiteFooter";
 import { setPasswordRedirectUrl } from "@/lib/auth-links";
+import { isPackaged } from "@/lib/runtime-config";
 
 const inputClass =
   "w-full h-10 pl-10 pr-3 bg-background border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:border-primary focus:ring-1 focus:ring-primary transition-colors";
@@ -153,9 +154,19 @@ export default function Auth() {
                 {submitting ? "Please wait…" : "Sign In"}
               </button>
 
-              <button type="button" onClick={() => switchMode("reset")} className={linkButtonClass}>
-                Forgot password?
-              </button>
+              {/* A Sylou Local install has no email of its own: the reset
+                  link is printed by a command instead (docs/local guide). */}
+              {isPackaged() ? (
+                <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                  Forgot your password? This Sylou runs on your computer and cannot send email. Run{" "}
+                  <code className="font-mono">sylou reset-password</code> in the install folder for a
+                  one-time link.
+                </p>
+              ) : (
+                <button type="button" onClick={() => switchMode("reset")} className={linkButtonClass}>
+                  Forgot password?
+                </button>
+              )}
             </form>
           ) : (
             <form onSubmit={handleReset} className="p-8 space-y-4">

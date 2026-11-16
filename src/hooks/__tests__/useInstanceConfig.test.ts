@@ -38,6 +38,8 @@ const authorizationOf = (init: RequestInit | undefined) => new Headers(init?.hea
 describe("useInstanceConfig", () => {
   beforeEach(() => {
     auth.token = "user-token";
+    vi.stubEnv("VITE_SUPABASE_URL", "https://project.supabase.co");
+    vi.stubEnv("VITE_SUPABASE_PUBLISHABLE_KEY", "test-key");
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
   afterEach(() => {
@@ -45,6 +47,7 @@ describe("useInstanceConfig", () => {
     cleanup = null;
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it("sends the session's token, and reads the flag and each local model with its window and tools", async () => {
@@ -100,12 +103,30 @@ describe("useInstanceConfig", () => {
     expect(authorizationOf(fetchMock.mock.calls[1][1])).toBe("Bearer user-token");
   });
 
+  it("local-only mode: the flag is read, and every other Sylou reads as not local-only", async () => {
+    answering({ web_search_enabled: false, local_only: true });
+    const first = await load();
+    const onlyLocal = first.renderHook(() => first.useInstanceConfig());
+    await first.waitFor(() => expect(onlyLocal.result.current.loading).toBe(false));
+    expect(onlyLocal.result.current.localOnly).toBe(true);
+    expect(onlyLocal.result.current.webSearchEnabled).toBe(false);
+
+    for (const body of [{ web_search_enabled: true }, { web_search_enabled: true, local_only: "true" }]) {
+      answering(body);
+      const next = await load();
+      const { result } = next.renderHook(() => next.useInstanceConfig());
+      await next.waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.localOnly, JSON.stringify(body)).toBe(false);
+    }
+  });
+
   it("a failed read: web search stays on, and the local models are unknown (null), not an empty list", async () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("nope", { status: 503 }))));
     const { renderHook, waitFor, useInstanceConfig } = await load();
     const { result } = renderHook(() => useInstanceConfig());
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.webSearchEnabled).toBe(true);
+    expect(result.current.localOnly).toBe(false);
     expect(result.current.localModels).toBeNull();
   });
 });

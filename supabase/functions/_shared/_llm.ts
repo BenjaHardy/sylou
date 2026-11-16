@@ -18,6 +18,7 @@
 import { sliceSafe } from "./_text.ts";
 import { CLAUDE_THINKING_OFF_BETWEEN_TOOLS, type ClaudeEffort, type MistralEffort } from "./_models.ts";
 import { isOllamaModel, ollamaBaseUrl, ollamaBody } from "./_ollama.ts";
+import { localOnly } from "./_local_only.ts";
 
 export type ProviderId = "mistral" | "anthropic" | "deepseek" | "ollama";
 /** The providers reached over the internet with the operator's API key. */
@@ -75,6 +76,9 @@ export function envKeyFor(provider: KeyedProvider): string {
  *  first call, to answer with a clear error. */
 export function providerConfigured(provider: ProviderId, env: Pick<Deno.Env, "get">): boolean {
   if (provider === "ollama") return ollamaBaseUrl(env) !== null;
+  // Local-only mode turns the cloud providers off whatever keys are set, so
+  // each function refuses at the check it already makes (_local_only.ts).
+  if (localOnly(env)) return false;
   return !!env.get(envKeyFor(provider));
 }
 
@@ -935,7 +939,7 @@ export async function callLLM(opts: {
     method: "POST",
     headers,
     body: JSON.stringify(body),
-  }, opts.timeoutMs ?? DEFAULT_LLM_TIMEOUT_MS);
+  }, opts.timeoutMs ?? defaultTimeoutFor(provider));
 }
 
 /** Where callLLM sends a provider's requests, and their headers. The local
@@ -953,6 +957,17 @@ function connectionFor(provider: ProviderId): { url: string; headers: Record<str
 
 /** Default outbound-request timeout for provider calls (see callLLM.timeoutMs). */
 const DEFAULT_LLM_TIMEOUT_MS = 120_000;
+
+/** A local model reads the whole prompt before its first token and sends
+ *  nothing meanwhile: 106 s for a 34,000-character selection on a computer
+ *  with no usable GPU (measured 2026-11), against the 120 s above. */
+const OLLAMA_LLM_TIMEOUT_MS = 300_000;
+
+/** How long a provider has to start answering when the caller names no
+ *  limit of its own. Cloud providers are unchanged. */
+export function defaultTimeoutFor(provider: ProviderId): number {
+  return provider === "ollama" ? OLLAMA_LLM_TIMEOUT_MS : DEFAULT_LLM_TIMEOUT_MS;
+}
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 

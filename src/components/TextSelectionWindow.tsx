@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import type { ProvenanceTracker } from "@/lib/provenance-tracker";
 import { consumeSSEStream, SSEServerError, STREAM_CUT_OFF_MESSAGE } from "@/lib/sse-stream";
 import { assessSelectionSize } from "@/lib/editor-limits";
+import { publishableKey, supabaseUrl } from "@/lib/runtime-config";
 import { LargeSelectionNotice } from "@/components/text-selection/LargeSelectionNotice";
 import { TruncatedAcceptDialog } from "@/components/text-selection/TruncatedAcceptDialog";
 import { ThinkingIndicator } from "@/components/ThinkingIndicator";
@@ -87,7 +88,7 @@ async function getAuthHeaders(): Promise<Record<string, string> | null> {
   return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${token}`,
-    apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    apikey: publishableKey(),
   };
 }
 
@@ -303,7 +304,7 @@ export function TextSelectionWindow({
 
       try {
         const selected_text_source = getSourceBreakdown();
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/editor-action`;
+        const url = `${supabaseUrl()}/functions/v1/editor-action`;
 
         const res = await fetch(url, {
           method: "POST",
@@ -396,7 +397,7 @@ export function TextSelectionWindow({
 
       try {
         const selected_text_source = getSourceBreakdown();
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/context-prompt`;
+        const url = `${supabaseUrl()}/functions/v1/context-prompt`;
 
         const res = await fetch(url, {
           method: "POST",

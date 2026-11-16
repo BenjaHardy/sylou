@@ -349,6 +349,16 @@ Deno.test("no key for the summary's provider: the text's first 500 characters, n
   assertEquals(backend.calls.some((c) => c.target === "rpc:increment_tokens_used"), false);
 });
 
+Deno.test("local-only mode: the text's first 500 characters, and the document never reaches a cloud model", async () => {
+  const { res, backend, provider } = await send(post(IMPORT), { env: { SYLOU_LOCAL_ONLY: "true" } });
+  assertEquals(res.status, 200);
+  assertEquals(provider.calls.length, 0);
+  assertEquals(writes(backend.calls), [
+    ["admin", "imported_documents", { extracted_text: NOTES, summary: FALLBACK_SUMMARY }],
+  ]);
+  assertEquals(backend.calls.some((c) => c.target === "rpc:increment_tokens_used"), false);
+});
+
 Deno.test("a provider error: the text's first 500 characters, nothing billed", async () => {
   const { res, backend } = await send(post(IMPORT), {
     replies: [Response.json({ message: "Overloaded" }, { status: 503 })],

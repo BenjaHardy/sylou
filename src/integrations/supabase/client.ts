@@ -1,10 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
+import { publishableKey, supabaseUrl } from '@/lib/runtime-config';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+export const supabase = createClient<Database>(supabaseUrl(), publishableKey(), {
   auth: {
     storage: localStorage,
     persistSession: true,

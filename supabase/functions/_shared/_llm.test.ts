@@ -14,6 +14,7 @@ import {
   isRefusalStop,
   isThinkingDelta,
   isTruncatedStop,
+  defaultTimeoutFor,
   fetchWithTimeout,
   normaliseResponse,
   providerConfigured,
@@ -674,6 +675,23 @@ Deno.test("ollama/ ids: routed to the local server, which needs OLLAMA_URL rathe
   const env = (values: Record<string, string>) => ({ get: (name: string) => values[name] });
   assert(providerConfigured("ollama", env({ OLLAMA_URL: "http://host.docker.internal:11434" })));
   assert(!providerConfigured("ollama", env({ MISTRAL_API_KEY: "k" })));
+});
+
+Deno.test("local-only mode: every cloud provider counts as not configured, the local server still does", () => {
+  const env = (values: Record<string, string>) => ({ get: (name: string) => values[name] });
+  const keys = { MISTRAL_API_KEY: "k", ANTHROPIC_API_KEY: "k", DEEPSEEK_API_KEY: "k" };
+  for (const provider of ["mistral", "anthropic", "deepseek"] as const) {
+    assert(providerConfigured(provider, env(keys)));
+    assert(!providerConfigured(provider, env({ ...keys, SYLOU_LOCAL_ONLY: "true" })));
+  }
+  assert(providerConfigured("ollama", env({ OLLAMA_URL: "http://ollama.test:11434", SYLOU_LOCAL_ONLY: "true" })));
+});
+
+Deno.test("a local model gets longer to start answering than a cloud one", () => {
+  assertEquals(defaultTimeoutFor("ollama"), 300_000);
+  for (const provider of ["mistral", "anthropic", "deepseek"] as const) {
+    assertEquals(defaultTimeoutFor(provider), 120_000);
+  }
 });
 
 Deno.test("Ollama: its streamed reasoning is a thinking signal, and its errors are labelled Ollama", () => {

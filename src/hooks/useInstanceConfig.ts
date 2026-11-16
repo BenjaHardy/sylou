@@ -1,9 +1,14 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { isLocalModel, type LocalModel } from "@/lib/models";
+import { publishableKey, supabaseUrl } from "@/lib/runtime-config";
 
 export interface InstanceConfig {
   webSearchEnabled: boolean;
+  /** Whether this Sylou runs models on this computer only: a Sylou Local
+   *  install with local-only mode on, where the cloud models and web search
+   *  are off. */
+  localOnly: boolean;
   /** The local models this instance lists, as their server reported them
    *  when the page loaded: empty when it lists none, null when the config
    *  endpoint could not be read. */
@@ -24,14 +29,14 @@ async function fetchInstanceConfig(): Promise<{ config: InstanceConfig; signedIn
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
   // Mirrors the chat call pattern (see src/hooks/useChatMessages.ts):
-  // construct the URL from VITE_SUPABASE_URL and send the publishable apikey
+  // construct the URL from this Sylou's address and send the publishable apikey
   // header — required by the Supabase Functions gateway even for endpoints
   // with verify_jwt = false.
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/config`;
+  const url = `${supabaseUrl()}/functions/v1/config`;
   const res = await fetch(url, {
     method: "GET",
     headers: {
-      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      apikey: publishableKey(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
@@ -40,6 +45,7 @@ async function fetchInstanceConfig(): Promise<{ config: InstanceConfig; signedIn
   return {
     config: {
       webSearchEnabled: data?.web_search_enabled !== false,
+      localOnly: data?.local_only === true,
       localModels: parseLocalModels(data?.local_models),
     },
     signedIn: !!token,
@@ -96,7 +102,7 @@ export function useInstanceConfig(): InstanceConfig & { loading: boolean } {
             "[useInstanceConfig] failed to fetch /config — defaulting capabilities to enabled:",
             err,
           );
-          const fallback: InstanceConfig = { webSearchEnabled: true, localModels: null };
+          const fallback: InstanceConfig = { webSearchEnabled: true, localOnly: false, localModels: null };
           cachedConfig = fallback;
           return fallback;
         })
@@ -116,6 +122,7 @@ export function useInstanceConfig(): InstanceConfig & { loading: boolean } {
 
   return {
     webSearchEnabled: config?.webSearchEnabled ?? true,
+    localOnly: config?.localOnly ?? false,
     localModels: config?.localModels ?? null,
     loading,
   };

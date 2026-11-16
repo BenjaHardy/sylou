@@ -76,6 +76,22 @@ Deno.test("with the operator's search key: the answer is exactly the flag, on �
   assertEquals(await res.json(), { web_search_enabled: true });
 });
 
+Deno.test("local-only mode: the answer says so and web search is off, even with the operator's key", async () => {
+  const { res } = await send(request("GET"), {
+    env: { BRAVE_SEARCH_API_KEY: "brave-key", SYLOU_LOCAL_ONLY: "true" },
+  });
+  assertEquals(res.status, 200);
+  assertEquals(await res.json(), { web_search_enabled: false, local_only: true });
+});
+
+Deno.test("every other Sylou: the answer never carries the local-only flag", async () => {
+  for (const env of [{}, { SYLOU_LOCAL_ONLY: "false" }, { BRAVE_SEARCH_API_KEY: "brave-key" }]) {
+    const { res } = await send(request("GET"), { env });
+    const body = await res.json() as Record<string, unknown>;
+    assertEquals("local_only" in body, false, JSON.stringify(env));
+  }
+});
+
 // ── Local models (_ollama.ts) ────────────────────────────────────────────
 
 Deno.test("no local models listed: a signed-in caller gets the same answer, and no sign-in check or model lookup runs", async () => {

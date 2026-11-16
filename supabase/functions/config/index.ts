@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import { makeCorsHeadersFor } from "../_shared/_cors.ts";
 import type { ConfigDeps } from "../_shared/_handler.ts";
 import { fetchLocalModelInfo, listedOllamaModels, NOT_ANSWERING_ERROR, ollamaName } from "../_shared/_ollama.ts";
+import { localOnly, webSearchConfigured } from "../_shared/_local_only.ts";
 
 const corsHeadersFor = makeCorsHeadersFor("GET, OPTIONS");
 
@@ -35,8 +36,11 @@ export const handler = async (req: Request, deps = defaultDeps): Promise<Respons
   }
 
   const body: Record<string, unknown> = {
-    web_search_enabled: !!deps.env.get("BRAVE_SEARCH_API_KEY"),
+    web_search_enabled: webSearchConfigured(deps.env),
   };
+  // Only a Sylou Local install in local-only mode says so; every other
+  // deployment's answer is unchanged.
+  if (localOnly(deps.env)) body.local_only = true;
 
   const localModels = listedOllamaModels(deps.env);
   if (localModels.length > 0 && await isSignedIn(req, deps)) {

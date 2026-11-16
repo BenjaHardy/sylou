@@ -49,11 +49,14 @@ async function sendAgainst(res: Response) {
 
 describe("useChatMessages failure paths", () => {
   beforeEach(() => {
+    vi.stubEnv("VITE_SUPABASE_URL", "https://project.supabase.co");
+    vi.stubEnv("VITE_SUPABASE_PUBLISHABLE_KEY", "test-key");
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it("a server-reported error becomes a bubble with the server's text, the question kept", async () => {

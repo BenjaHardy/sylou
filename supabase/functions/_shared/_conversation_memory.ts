@@ -43,6 +43,8 @@ export const MEMORY_MSG_CHAR_CAP = 4_000; // per-message cap inside the slab
 // summarizer output budget: OUTPUT_BUDGETS.MEMORY (_models.ts), plain / reasoning
 export const MEMORY_STORED_CHAR_CAP = 12_000; // stored summary hard cap (~3k tokens)
 export const MEMORY_TIMEOUT_MS = 60_000; // stream-tail call must stay far under the isolate ceiling
+// A local model gets the same 60 s: a slow computer may skip a refresh,
+// which is never fatal and retries at the next boundary (see the invariants).
 export const VERBATIM_TAIL = 20; // covered messages kept verbatim ahead of the watermark
 export const VERBATIM_CAP = 100; // uncovered messages at most (a thread whose refreshes keep failing)
 

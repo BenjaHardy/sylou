@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { publishableKey, supabaseUrl } from "@/lib/runtime-config";
 
 export interface ImportedDocument {
   id: string;
@@ -141,13 +142,13 @@ export function useImportedDocuments(projectId: string | null) {
         } = await supabase.auth.getSession();
 
         const extractRes = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-text`,
+          `${supabaseUrl()}/functions/v1/extract-text`,
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${session?.access_token}`,
-              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              apikey: publishableKey(),
             },
             body: JSON.stringify({
               file_path: storagePath,
