@@ -36,8 +36,11 @@ case "$KEY" in
   *) echo "sylou-web: the publishable key is not in a shape Supabase issues" >&2; exit 1 ;;
 esac
 
+# Written plainly, from 1 up: the number lands in a script, where a leading
+# zero would make the browser read 015 as 13, and the page treats 0 as no
+# floor and falls back to its own.
 case "$MIN_PASSWORD_LENGTH" in
-  "" | *[!0-9]*) echo "sylou-web: SYLOU_MIN_PASSWORD_LENGTH must be a whole number" >&2; exit 1 ;;
+  "" | *[!0-9]* | 0*) echo "sylou-web: SYLOU_MIN_PASSWORD_LENGTH must be a whole number from 1 up, with no leading zero" >&2; exit 1 ;;
 esac
 
 printf 'window.__SYLOU__ = { publishableKey: "%s", minPasswordLength: %s };\n' \
