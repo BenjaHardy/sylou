@@ -27,6 +27,15 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Started from a PowerShell 7 window - the default in Windows Terminal on many
+# computers, and the shell of every step on a GitHub Windows runner - this
+# Windows PowerShell inherits PowerShell 7's module folders first in its search
+# path, and then cannot load modules both versions ship, such as the one
+# behind Get-Acl. Dropping those folders for this one process lets it find its
+# own. (A "\PowerShell\" folder is PowerShell 7's; "\WindowsPowerShell\" ones
+# stay.)
+$env:PSModulePath = (($env:PSModulePath -split ";") | Where-Object { $_ -and $_ -notmatch '\\PowerShell\\' }) -join ";"
+
 $PackageDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ConfigDir = Join-Path $PackageDir "config"
 $SecretsDir = Join-Path $ConfigDir "secrets"
@@ -237,12 +246,14 @@ function Get-SecretsFacts {
     $facts = @{ path = $SecretsDir; ownerOnly = $null; syncedTo = (Get-SyncedFolderName $PackageDir) }
     if (-not (Test-Path $SecretsDir)) { return $facts }
     try {
+        # Read through .NET rather than Get-Acl: it needs no PowerShell module
+        # at all, and it hands back each account as a SID, the same on every
+        # computer whatever language Windows speaks.
         $me = ([Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+        $acl = (New-Object System.IO.DirectoryInfo $SecretsDir).GetAccessControl()
         $others = @()
-        foreach ($rule in (Get-Acl $SecretsDir).Access) {
-            $sid = $rule.IdentityReference
-            try { $sid = $rule.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { $sid = "$($rule.IdentityReference)" }
-            if ($sid -ne $me) { $others += $sid }
+        foreach ($rule in $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])) {
+            if ($rule.IdentityReference.Value -ne $me) { $others += $rule.IdentityReference.Value }
         }
         $facts.ownerOnly = ($others.Count -eq 0)
     } catch { }

@@ -134,6 +134,35 @@ function posix(path: string): string {
   return `/${drive[1].toLowerCase()}/${path.slice(3).replace(/\\/g, "/")}`;
 }
 
+/**
+ * What a Windows PowerShell 5.1 started from PowerShell 7 inherits: PowerShell
+ * 7's module folders first in PSModulePath, holding a Microsoft.PowerShell.
+ * Security that 5.1 cannot load. Every step on a GitHub Windows runner runs in
+ * PowerShell 7, and so does a PowerShell 7 window on anyone's computer. A
+ * stand-in module of that name, marked as needing PowerShell 7, recreates it
+ * here, so a script that leans on that module fails on this machine too.
+ */
+async function pwsh7ModulePath(root: string): Promise<Record<string, string>> {
+  // Laid out where PowerShell 7 keeps its own: ...\PowerShell\7\Modules.
+  const modules = join(root, "PowerShell", "7", "Modules");
+  const module = join(modules, "Microsoft.PowerShell.Security");
+  await Deno.mkdir(module, { recursive: true });
+  await Deno.writeTextFile(
+    join(module, "Microsoft.PowerShell.Security.psd1"),
+    [
+      "@{",
+      "    ModuleVersion = '7.4.0.0'",
+      "    GUID = 'a94c8c7e-9810-47c0-b8af-65089c13a35a'",
+      "    PowerShellVersion = '7.0'",
+      "    CompatiblePSEditions = @('Core')",
+      "    CmdletsToExport = @('Get-Acl', 'Set-Acl')",
+      "}",
+      "",
+    ].join("\r\n"),
+  );
+  return { PSModulePath: `${modules};${Deno.env.get("PSModulePath") ?? ""}` };
+}
+
 /** Is there a POSIX shell to run the other script with? */
 async function haveSh(): Promise<boolean> {
   try {
@@ -148,6 +177,7 @@ async function runSylou(
   install: Install,
   args: string[],
   shell: "native" | "sh" = "native",
+  extraEnv: Record<string, string> = {},
 ): Promise<{ code: number; out: string }> {
   const command = WINDOWS && shell === "native"
     ? new Deno.Command("cmd.exe", {
@@ -157,6 +187,7 @@ async function runSylou(
         PATH: `${install.binDir};${Deno.env.get("PATH")}`,
         FAKE_DOCKER_LOG: install.log,
         FAKE_DOCKER_FACTS: install.facts,
+        ...extraEnv,
       },
       stdout: "piped",
       stderr: "piped",
@@ -292,7 +323,9 @@ Deno.test("doctor hands the computer's own facts to the tools image", async () =
   const install = await stagedInstall();
   try {
     assertEquals((await runSetup(install, ["you@example.com"])).code, 0);
-    const { code, out } = await runSylou(install, ["doctor"]);
+    // On Windows, as the CI runner and a PowerShell 7 window both run it.
+    const extra = WINDOWS ? await pwsh7ModulePath(join(install.dir, "..")) : {};
+    const { code, out } = await runSylou(install, ["doctor"], "native", extra);
     assertEquals(code, 0, out);
 
     // Tolerated on the way in, refused on the way out: the tools image drops
