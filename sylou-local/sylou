@@ -305,6 +305,14 @@ set_setting() {
   fi
 }
 
+cmd_models() {
+  check_docker
+  case "${1:-}" in ""|--*) fail "Name the model to make a window for, for example: models mistral-nemo" ;; esac
+  step "Looking for the largest window that runs on the graphics card"
+  note "This makes a copy per size and loads it, so it takes a few minutes."
+  run_compose run --rm models window "$1"
+}
+
 cmd_rotate() {
   check_docker
   warn "New secrets for this install."
@@ -477,6 +485,7 @@ Sylou Local
   backup <folder>          everything you have written, into a folder you pick
   restore <folder>         a backup, back into this install
   update <folder>          back up, then start the new version
+  models <model>           the largest window that runs on your graphics card
   rotate                   new secrets for this install
   local-only on|off        this computer and nothing else
   remove                   delete this install's data (not its settings)
@@ -510,6 +519,7 @@ case "$command" in
   backup) cmd_backup "$@" ;;
   restore) cmd_restore "$@" ;;
   update) cmd_update "$@" ;;
+  models) cmd_models "$@" ;;
   rotate) cmd_rotate "$@" ;;
   local-only) cmd_local_only "$@" ;;
   remove) cmd_remove "$@" ;;

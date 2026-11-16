@@ -127,7 +127,7 @@ const ONE_SHOTS = ["migrate", "tools", "dump", "load", "rotate"];
 Deno.test("the recipe holds the services Sylou needs, and nothing else", () => {
   assertEquals(
     Object.keys(services).sort(),
-    ["auth", "db", "dump", "entry", "functions", "gateway", "load", "migrate", "relay", "rest", "rotate", "storage", "tools", "web"],
+    ["auth", "db", "dump", "entry", "functions", "gateway", "load", "migrate", "models", "relay", "rest", "rotate", "storage", "tools", "web"],
   );
 });
 
@@ -165,6 +165,9 @@ Deno.test("only the letter box and the functions have a network with a way out",
       functions: ["backend", "egress"],
       // Only started in local-only mode, and only to reach Ollama here.
       relay: ["backend", "egress"],
+      // The window finder talks to Ollama on this computer and to nothing
+      // else; it is given no secret, and never sees the inside network.
+      models: ["egress"],
     };
     assertEquals(networks, allowed[name] ?? ["backend"], `${name}'s networks`);
   }

@@ -12,6 +12,7 @@ import { makeSecrets } from "./secrets.ts";
 import { migrate } from "./migrate.ts";
 import { addUser, resetPassword } from "./users.ts";
 import { doctor } from "./doctor.ts";
+import { models } from "./models.ts";
 
 const USAGE = `Sylou Local tools
 
@@ -20,6 +21,7 @@ const USAGE = `Sylou Local tools
   add-user <email>         make an account and print a one-time link
   reset-password <email>   print a one-time link to set a new password
   doctor                   read the facts on standard input and report
+  window <model>           find the largest window that runs on the card
 `;
 
 async function main(args: string[]): Promise<number> {
@@ -35,6 +37,8 @@ async function main(args: string[]): Promise<number> {
       return await resetPassword(rest[0] ?? "");
     case "doctor":
       return await doctor();
+    case "window":
+      return await models(rest);
     case undefined:
     case "help":
     case "--help":

@@ -490,6 +490,16 @@ function Set-Setting([string]$Name, [string]$Value) {
     Set-Content -Path $SettingsFile -Value $lines -Encoding ascii
 }
 
+function Invoke-Models($Settings, [string[]]$Arguments) {
+    Test-DockerReady
+    if ($Arguments.Count -lt 1 -or $Arguments[0].StartsWith("--")) {
+        Fail "Name the model to make a window for, for example: models mistral-nemo"
+    }
+    Write-Step "Looking for the largest window that runs on the graphics card"
+    Write-Note "This makes a copy per size and loads it, so it takes a few minutes."
+    Invoke-Compose $Settings @("run", "--rm", "models", "window", $Arguments[0]) | Out-Null
+}
+
 function Invoke-Rotate($Settings, [string[]]$Arguments) {
     Test-DockerReady
     Write-Warn "New secrets for this install."
@@ -591,6 +601,7 @@ Sylou Local
   backup <folder>          everything you have written, into a folder you pick
   restore <folder>         a backup, back into this install
   update <folder>          back up, then start the new version
+  models <model>           the largest window that runs on your graphics card
   rotate                   new secrets for this install
   local-only on|off        this computer and nothing else
   remove                   delete this install's data (not its settings)
@@ -615,6 +626,7 @@ switch ($Command.ToLower()) {
     "backup" { Invoke-Backup $settings $Rest }
     "restore" { Invoke-Restore $settings $Rest }
     "update" { Invoke-Update $settings $Rest }
+    "models" { Invoke-Models $settings $Rest }
     "rotate" { Invoke-Rotate $settings $Rest }
     "local-only" { Invoke-LocalOnly $settings $Rest }
     "remove" { Invoke-RemoveInstall $settings $Rest }

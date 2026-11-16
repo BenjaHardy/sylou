@@ -459,6 +459,28 @@ services:
     pids_limit: 100
     networks: [backend]
 
+  # The window finder (`sylou models`). The only part of the package that
+  # talks to Ollama directly, so it is the only one on a network that can
+  # reach this computer - and it is given no secret at all, because it needs
+  # none.
+  models:
+    <<: *one-shot
+    image: ghcr.io/benjahardy/sylou-tools:${SYLOU_IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: sylou-local/tools/Dockerfile
+    profiles: [tools]
+    user: "65534:65534"
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    mem_limit: 256m
+    pids_limit: 100
+    networks: [egress]
+
   # -------------------------------------------------------------------------
   # The relay: only in local-only mode (compose.local-only.yaml), and only
   # ever a fixed route to Ollama on this computer. The functions lose their
