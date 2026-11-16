@@ -153,6 +153,9 @@ services:
       ALLOWED_ORIGIN: http://localhost:${SYLOU_PORT:-8080}
       SYLOU_INSTANCE_LABEL: ${SYLOU_INSTANCE_LABEL:-local}
       SYLOU_LOCAL_ONLY: ${SYLOU_LOCAL_ONLY:-}
+      # Off unless you are debugging this install: with it on, the functions
+      # log the text people write, and say so in their own logs.
+      SYLOU_DEBUG_LOG_CONTENT: ${SYLOU_DEBUG_LOG_CONTENT:-}
       OLLAMA_URL: ${OLLAMA_URL:-}
       OLLAMA_MODELS: ${OLLAMA_MODELS:-}
     # A0 measured these on a laptop with no usable GPU: a local model can read

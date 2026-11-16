@@ -43,6 +43,9 @@ const PLAIN = [
   "OLLAMA_URL",
   "OLLAMA_MODELS",
   "SYLOU_LOCAL_ONLY",
+  // Off unless an operator debugging their own install turns it on; the
+  // functions warn in their logs while it is.
+  "SYLOU_DEBUG_LOG_CONTENT",
   "SYLOU_INSTANCE_LABEL",
   "SYLOU_INSTANCE_DOMAIN",
   "SYLOU_VERSION",
