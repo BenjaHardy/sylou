@@ -1,0 +1,220 @@
+#!/usr/bin/env sh
+# Sylou Local on macOS and Linux.
+#
+#   ./sylou setup you@example.com   set the install up and make an account
+#   ./sylou start | stop | status
+#   ./sylou logs [service]
+#   ./sylou add-user you@example.com
+#   ./sylou reset-password you@example.com
+#
+# This script only gathers facts about your computer and calls Docker (D4):
+# the secrets, the migrations and the accounts are made inside the tools
+# image, so there is one implementation of each and one place to test it.
+set -eu
+
+PACKAGE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+CONFIG_DIR="$PACKAGE_DIR/config"
+SECRETS_DIR="$CONFIG_DIR/secrets"
+SETTINGS_FILE="$CONFIG_DIR/settings.env"
+EXAMPLE_SETTINGS="$PACKAGE_DIR/settings.example.env"
+
+step() { printf '==> %s\n' "$1"; }
+note() { printf '    %s\n' "$1"; }
+warn() { printf '/!\\ %s\n' "$1"; }
+fail() { printf '    %s\n' "$1" >&2; exit 1; }
+
+# --------------------------------------------------------------------------
+# Settings
+# --------------------------------------------------------------------------
+
+setting() {
+  name=$1
+  fallback=$2
+  if [ -f "$SETTINGS_FILE" ]; then
+    value=$(sed -n "s/^[[:space:]]*$name[[:space:]]*=[[:space:]]*//p" "$SETTINGS_FILE" | tail -n 1)
+    if [ -n "${value:-}" ]; then printf '%s' "$value"; return; fi
+  fi
+  printf '%s' "$fallback"
+}
+
+# Every Docker call goes through here, so local-only mode adds its file in
+# one place.
+run_compose() {
+  local_only=$(setting SYLOU_LOCAL_ONLY "")
+  case $(printf '%s' "$local_only" | tr '[:upper:]' '[:lower:]') in
+    true|1|yes|on) extra="-f $PACKAGE_DIR/compose.local-only.yaml --profile local-only" ;;
+    *) extra="" ;;
+  esac
+  env_file=""
+  if [ -f "$SETTINGS_FILE" ]; then env_file="--env-file $SETTINGS_FILE"; fi
+  # shellcheck disable=SC2086
+  docker compose $args -f "$PACKAGE_DIR/compose.yaml" $extra $env_file "$@"
+}
+
+# --------------------------------------------------------------------------
+# What this computer can tell us
+# --------------------------------------------------------------------------
+
+check_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    fail "Docker is not installed, or not on this account's PATH. Install Docker, then run setup again."
+  fi
+  if ! docker version --format '{{.Server.Version}}' >/dev/null 2>&1; then
+    fail "Docker is installed but not running. Start it, then try again."
+  fi
+}
+
+port_free() {
+  port=$1
+  if command -v lsof >/dev/null 2>&1; then
+    ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+  elif command -v ss >/dev/null 2>&1; then
+    ! ss -ltn "sport = :$port" 2>/dev/null | grep -q LISTEN
+  else
+    # Nothing to ask: let Docker say so when it binds the port.
+    true
+  fi
+}
+
+# iCloud, Dropbox, Google Drive and OneDrive copy whatever is in them to
+# somebody else's computer. An install's secrets and database belong on this
+# one only.
+synced_folder() {
+  case "$PACKAGE_DIR" in
+    *"/Library/Mobile Documents"*|*iCloud*) printf 'iCloud Drive' ;;
+    *Dropbox*) printf 'Dropbox' ;;
+    *"Google Drive"*|*GoogleDrive*) printf 'Google Drive' ;;
+    *OneDrive*) printf 'OneDrive' ;;
+    *) printf '' ;;
+  esac
+}
+
+protect_config() {
+  chmod 700 "$CONFIG_DIR" 2>/dev/null || true
+  if [ -d "$SECRETS_DIR" ]; then
+    chmod 700 "$SECRETS_DIR" 2>/dev/null || true
+    find "$SECRETS_DIR" -type f -exec chmod 600 {} + 2>/dev/null || true
+  fi
+}
+
+# --------------------------------------------------------------------------
+# Commands
+# --------------------------------------------------------------------------
+
+cmd_setup() {
+  email=${1:-}
+  allow_synced=no
+  for argument in "$@"; do
+    if [ "$argument" = "--allow-synced-folder" ]; then allow_synced=yes; fi
+  done
+  case "$email" in --*) email="" ;; esac
+
+  step "Checking Docker"
+  check_docker
+  note "Docker is running."
+
+  synced=$(synced_folder)
+  if [ -n "$synced" ]; then
+    warn "This folder looks like it is inside $synced."
+    note "Everything here - your writing, the database, this install's secrets - would be copied to"
+    note "another computer and kept there. Move the folder somewhere that is not synced, then run setup again."
+    note "If you know better than this check, run setup again with --allow-synced-folder."
+    if [ "$allow_synced" = "no" ]; then exit 1; fi
+  fi
+
+  mkdir -p "$SECRETS_DIR"
+  if [ ! -f "$SETTINGS_FILE" ]; then
+    cp "$EXAMPLE_SETTINGS" "$SETTINGS_FILE"
+    note "Settings written to config/settings.env - open it to add your API keys' files later."
+  fi
+
+  port=$(setting SYLOU_PORT 8080)
+  step "Checking the port"
+  if ! port_free "$port"; then
+    fail "Something is already listening on 127.0.0.1:$port. Stop it, or set SYLOU_PORT in config/settings.env to a free port."
+  fi
+  note "127.0.0.1:$port is free."
+
+  step "Locking this install's folder to your account"
+  protect_config
+  note "config/ is yours alone (700/600)."
+
+  tag=$(setting SYLOU_IMAGE_TAG dev)
+  if [ "$tag" = "dev" ]; then
+    step "Building Sylou's own images (first time: several minutes)"
+    run_compose build || fail "The images could not be built."
+  fi
+
+  step "Making this install's secrets"
+  if [ -n "$(find "$SECRETS_DIR" -type f -size +0c 2>/dev/null | head -n 1)" ]; then
+    note "This install already has its secrets; keeping them."
+  else
+    docker run --rm -v "$SECRETS_DIR:/out" "ghcr.io/benjahardy/sylou-tools:$tag" secrets \
+      || fail "The secrets could not be made."
+    protect_config
+  fi
+
+  step "Starting Sylou"
+  run_compose up -d --wait || fail "Sylou did not start. \"./sylou logs\" shows what each part said."
+
+  if [ -n "$email" ]; then
+    step "Making your account"
+    run_compose run --rm tools add-user "$email"
+  else
+    note "No account yet: run \"./sylou add-user you@example.com\" to make one."
+  fi
+
+  printf '\n'
+  step "Sylou is running at http://localhost:$port"
+  note "A tip worth taking: set OLLAMA_NO_CLOUD=1 in Ollama's settings, so a model name you mistype"
+  note "is never answered by Ollama's cloud instead of your computer."
+}
+
+usage() {
+  cat <<'USAGE'
+Sylou Local
+
+  setup <email>            check this computer, make the secrets, start Sylou
+                           and make your account
+  start                    start it again
+  stop                     stop it (nothing is deleted)
+  status                   what is running
+  logs [service]           what the parts are saying
+  add-user <email>         make another account
+  reset-password <email>   a one-time link to set a new password
+
+Settings are in config/settings.env; your API keys are files in
+config/secrets/. Sylou answers on http://localhost:8080 unless you change the
+port there.
+USAGE
+}
+
+command=${1:-help}
+if [ $# -gt 0 ]; then shift; fi
+
+case "$command" in
+  setup) cmd_setup "$@" ;;
+  start)
+    check_docker
+    run_compose up -d --wait || fail "Sylou did not start."
+    step "Sylou is running at http://localhost:$(setting SYLOU_PORT 8080)"
+    ;;
+  stop)
+    check_docker
+    run_compose down
+    step "Sylou is stopped. Your writing and settings stay where they are."
+    ;;
+  status) check_docker; run_compose ps ;;
+  logs) check_docker; run_compose logs --tail 200 "$@" ;;
+  add-user)
+    check_docker
+    [ $# -ge 1 ] || fail "Give the email address for the new account: add-user you@example.com"
+    run_compose run --rm tools add-user "$1"
+    ;;
+  reset-password)
+    check_docker
+    [ $# -ge 1 ] || fail "Give the account's email address: reset-password you@example.com"
+    run_compose run --rm tools reset-password "$1"
+    ;;
+  *) usage ;;
+esac

@@ -5,9 +5,11 @@
     "lint": "deno lint",
     // The recipe test asks the docker command to resolve compose.yaml (no
     // daemon needed) and writes its stand-in secret files to a temp folder.
+    // The script tests run `sylou setup` for real, through cmd.exe on
+    // Windows and sh elsewhere, with a fake docker that is a deno script.
     // The tools tests reach a database when DATABASE_URL is set, and skip
     // themselves when it is not.
-    "test": "deno test --allow-read --allow-write --allow-run=docker --allow-env --allow-net tests/ tools/"
+    "test": "deno test --allow-read --allow-write --allow-run=docker,cmd.exe,sh,deno --allow-env --allow-net tests/ tools/"
   },
   "lint": {
     "rules": {
