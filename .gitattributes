@@ -1,0 +1,9 @@
+# The Sylou Local package is copied into Linux images exactly as it sits in a
+# checkout, so these files keep LF line endings on every platform. A /bin/sh
+# script checked out with CRLF fails at its first line ("bad interpreter"),
+# which would stop the container with nothing to explain it.
+sylou-local/** text eol=lf
+
+# The build context's allow-list, for the same reason: a line Docker read
+# with a stray carriage return could let into an image what it keeps out.
+.dockerignore text eol=lf

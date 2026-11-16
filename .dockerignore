@@ -1,0 +1,40 @@
+# What an image build of this repository may see — written as an allow-list:
+# everything is kept out, then the few paths a build needs are let back in.
+# A path that is not named here never reaches a build context, so nothing a
+# build cannot see can be copied into a published image: no .env file, no
+# .claude/ session state, no edge-function secrets. (Images are published by
+# CI from a clean checkout; this is what makes a local build match it.)
+#
+# The images are in sylou-local/; each adds only the paths it needs.
+
+*
+
+# The Sylou Local web image (sylou-local/web/Dockerfile): the app as Vite
+# builds it, from the committed lockfile.
+!.npmrc
+!package.json
+!package-lock.json
+!index.html
+!vite.config.ts
+!tsconfig.json
+!tsconfig.app.json
+!tsconfig.node.json
+!src
+!public
+
+# The image's own files. Letting one folder back in takes three lines: the
+# parent, everything in it out again, then the one folder that may be seen.
+!sylou-local
+sylou-local/*
+!sylou-local/web
+
+# Hosted Sylou's header file for Cloudflare Pages and Netlify: a package
+# install would serve it as a plain file, and its own headers come from
+# sylou-local/web/nginx.conf.
+public/_headers
+
+# Kept out whatever a line above re-included, because these must never reach
+# a build: the last matching pattern wins.
+**/.env
+**/.env.*
+.claude
