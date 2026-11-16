@@ -32,6 +32,8 @@ $ConfigDir = Join-Path $PackageDir "config"
 $SecretsDir = Join-Path $ConfigDir "secrets"
 $SettingsFile = Join-Path $ConfigDir "settings.env"
 $ExampleSettings = Join-Path $PackageDir "settings.example.env"
+# What a person types to run this, for the messages below.
+$ScriptName = ".\sylou.cmd"
 
 function Write-Step([string]$Text) { Write-Host "==> $Text" }
 function Write-Note([string]$Text) { Write-Host "    $Text" }
@@ -472,6 +474,98 @@ function Invoke-Update($Settings, [string[]]$Arguments) {
     Invoke-Doctor $Settings
 }
 
+function Set-Setting([string]$Name, [string]$Value) {
+    if (-not (Test-Path $SettingsFile)) { Copy-Item $ExampleSettings $SettingsFile }
+    $lines = @()
+    $replaced = $false
+    foreach ($line in Get-Content $SettingsFile) {
+        if ($line -match "^\s*$Name\s*=") {
+            $lines += "$Name=$Value"
+            $replaced = $true
+        } else {
+            $lines += $line
+        }
+    }
+    if (-not $replaced) { $lines += "$Name=$Value" }
+    Set-Content -Path $SettingsFile -Value $lines -Encoding ascii
+}
+
+function Invoke-Rotate($Settings, [string[]]$Arguments) {
+    Test-DockerReady
+    Write-Warn "New secrets for this install."
+    Write-Note "Everyone signs in again afterwards. Your writing, your projects and your documents are untouched."
+    if (-not (Confirm-Step "Make new secrets?" $Arguments)) { Fail "Nothing was changed." }
+
+    $staging = Join-Path $ConfigDir "secrets-new"
+    if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
+    New-Item -ItemType Directory -Path $staging -Force | Out-Null
+
+    Write-Step "Making the new secrets"
+    & docker run --rm -v "${staging}:/out" "ghcr.io/benjahardy/sylou-tools:$($Settings.SYLOU_IMAGE_TAG)" secrets | Out-Host
+    if ($LASTEXITCODE -ne 0) { Fail "The new secrets could not be made. Nothing was changed." }
+
+    # Your API keys are yours, not this install's: they carry over.
+    foreach ($name in @("anthropic_api_key", "mistral_api_key", "deepseek_api_key", "brave_search_api_key")) {
+        $from = Join-Path $SecretsDir $name
+        if (Test-Path $from) { Copy-Item $from (Join-Path $staging $name) -Force }
+    }
+
+    Write-Step "Making sure the install is running"
+    if ((Invoke-Compose $Settings @("up", "-d", "--wait")) -ne 0) { Fail "The install did not start. Nothing was changed." }
+
+    Write-Step "Telling the database about the new passwords"
+    $all = (Get-ComposeArgs $Settings) + @("run", "--rm", "-v", "${staging}:/new", "rotate")
+    & docker @all | Out-Host
+    if ($LASTEXITCODE -ne 0) { Fail "The database kept its old passwords. Nothing was changed." }
+
+    Write-Step "Putting the new secrets in place"
+    $old = Join-Path $ConfigDir ("secrets-old-" + (Get-Date -Format "yyyy-MM-dd-HHmm"))
+    Move-Item $SecretsDir $old
+    Move-Item $staging $SecretsDir
+    Protect-ConfigFolder $ConfigDir
+
+    Write-Step "Starting again with them"
+    Invoke-Compose $Settings @("down") | Out-Null
+    if ((Invoke-Compose $Settings @("up", "-d", "--wait")) -ne 0) {
+        Fail "Sylou did not start with the new secrets. The old ones are in $old."
+    }
+    Write-Step "Done. Sign in again at http://localhost:$($Settings.SYLOU_PORT)"
+    Write-Note "The old secrets are in $old. Delete that folder once you are sure."
+}
+
+function Invoke-LocalOnly($Settings, [string[]]$Arguments) {
+    Test-DockerReady
+    $state = ""
+    if ($Arguments.Count -gt 0) { $state = "$($Arguments[0])".ToLower() }
+    if ($state -ne "on" -and $state -ne "off") { Fail "Say which: local-only on, or local-only off" }
+
+    if ($state -eq "on") {
+        Set-Setting "SYLOU_LOCAL_ONLY" "true"
+        Write-Step "Local-only mode on"
+        Write-Note "No service that holds or reads your writing has a way out now. The one route left goes to"
+        Write-Note "Ollama on this computer; cloud models and web search say they are unavailable."
+    } else {
+        Set-Setting "SYLOU_LOCAL_ONLY" ""
+        Write-Step "Local-only mode off"
+        Write-Note "The functions may reach the AI providers you have keys for again."
+    }
+
+    $updated = Get-Settings
+    Write-Step "Starting again"
+    if ((Invoke-Compose $updated @("up", "-d", "--wait", "--remove-orphans")) -ne 0) {
+        Fail "Sylou did not start again. `"$ScriptName logs`" shows what each part said."
+    }
+}
+
+function Invoke-RemoveInstall($Settings, [string[]]$Arguments) {
+    Test-DockerReady
+    Write-Warn "This deletes everything this install holds: your writing, the projects, the documents, the accounts."
+    Write-Note "The settings and secrets in config\ stay where they are. A backup is the only way back."
+    if (-not (Confirm-Step "Delete this install's data?" $Arguments)) { Fail "Nothing was deleted." }
+    Invoke-Compose $Settings @("down", "-v", "--remove-orphans") | Out-Null
+    Write-Step "Deleted. `"$ScriptName setup`" makes a fresh install in this folder."
+}
+
 function Invoke-Start($Settings) {
     Test-DockerReady
     if ((Invoke-Compose $Settings @("up", "-d", "--wait")) -ne 0) { Fail "Sylou did not start." }
@@ -497,6 +591,9 @@ Sylou Local
   backup <folder>          everything you have written, into a folder you pick
   restore <folder>         a backup, back into this install
   update <folder>          back up, then start the new version
+  rotate                   new secrets for this install
+  local-only on|off        this computer and nothing else
+  remove                   delete this install's data (not its settings)
   logs [service]           what the parts are saying
   add-user <email>         make another account
   reset-password <email>   a one-time link to set a new password
@@ -518,6 +615,9 @@ switch ($Command.ToLower()) {
     "backup" { Invoke-Backup $settings $Rest }
     "restore" { Invoke-Restore $settings $Rest }
     "update" { Invoke-Update $settings $Rest }
+    "rotate" { Invoke-Rotate $settings $Rest }
+    "local-only" { Invoke-LocalOnly $settings $Rest }
+    "remove" { Invoke-RemoveInstall $settings $Rest }
     "logs" {
         Test-DockerReady
         $logArgs = @("logs", "--tail", "200")

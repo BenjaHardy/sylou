@@ -293,6 +293,85 @@ cmd_restore() {
   step "Restored. Sign in again at http://localhost:$(setting SYLOU_PORT 8080)"
 }
 
+set_setting() {
+  name=$1
+  value=$2
+  [ -f "$SETTINGS_FILE" ] || cp "$EXAMPLE_SETTINGS" "$SETTINGS_FILE"
+  if grep -q "^[[:space:]]*$name[[:space:]]*=" "$SETTINGS_FILE"; then
+    sed "s|^[[:space:]]*$name[[:space:]]*=.*|$name=$value|" "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp"
+    mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+  else
+    printf '%s=%s\n' "$name" "$value" >> "$SETTINGS_FILE"
+  fi
+}
+
+cmd_rotate() {
+  check_docker
+  warn "New secrets for this install."
+  note "Everyone signs in again afterwards. Your writing, your projects and your documents are untouched."
+  confirm_step "Make new secrets?" "$@" || fail "Nothing was changed."
+
+  staging="$CONFIG_DIR/secrets-new"
+  rm -rf "$staging"
+  mkdir -p "$staging"
+
+  step "Making the new secrets"
+  docker run --rm -v "$staging:/out" "ghcr.io/benjahardy/sylou-tools:$(setting SYLOU_IMAGE_TAG dev)" secrets \
+    || fail "The new secrets could not be made. Nothing was changed."
+
+  # Your API keys are yours, not this install's: they carry over.
+  for name in anthropic_api_key mistral_api_key deepseek_api_key brave_search_api_key; do
+    if [ -f "$SECRETS_DIR/$name" ]; then cp "$SECRETS_DIR/$name" "$staging/$name"; fi
+  done
+
+  step "Making sure the install is running"
+  run_compose up -d --wait || fail "The install did not start. Nothing was changed."
+
+  step "Telling the database about the new passwords"
+  run_compose run --rm -v "$staging:/new" rotate || fail "The database kept its old passwords. Nothing was changed."
+
+  step "Putting the new secrets in place"
+  old="$CONFIG_DIR/secrets-old-$(date +%Y-%m-%d-%H%M)"
+  mv "$SECRETS_DIR" "$old"
+  mv "$staging" "$SECRETS_DIR"
+  protect_config
+
+  step "Starting again with them"
+  run_compose down >/dev/null 2>&1 || true
+  run_compose up -d --wait || fail "Sylou did not start with the new secrets. The old ones are in $old."
+  step "Done. Sign in again at http://localhost:$(setting SYLOU_PORT 8080)"
+  note "The old secrets are in $old. Delete that folder once you are sure."
+}
+
+cmd_local_only() {
+  check_docker
+  case "$(lower "${1:-}")" in
+    on)
+      set_setting SYLOU_LOCAL_ONLY true
+      step "Local-only mode on"
+      note "No service that holds or reads your writing has a way out now. The one route left goes to"
+      note "Ollama on this computer; cloud models and web search say they are unavailable."
+      ;;
+    off)
+      set_setting SYLOU_LOCAL_ONLY ""
+      step "Local-only mode off"
+      note "The functions may reach the AI providers you have keys for again."
+      ;;
+    *) fail "Say which: local-only on, or local-only off" ;;
+  esac
+  step "Starting again"
+  run_compose up -d --wait --remove-orphans || fail "Sylou did not start again. \"./sylou logs\" shows what each part said."
+}
+
+cmd_remove() {
+  check_docker
+  warn "This deletes everything this install holds: your writing, the projects, the documents, the accounts."
+  note "The settings and secrets in config/ stay where they are. A backup is the only way back."
+  confirm_step "Delete this install's data?" "$@" || fail "Nothing was deleted."
+  run_compose down -v --remove-orphans
+  step "Deleted. \"./sylou setup\" makes a fresh install in this folder."
+}
+
 cmd_update() {
   check_docker
   case "${1:-}" in ""|--*) fail "Give a folder to back up into first: update ~/sylou-backups" ;; esac
@@ -398,6 +477,9 @@ Sylou Local
   backup <folder>          everything you have written, into a folder you pick
   restore <folder>         a backup, back into this install
   update <folder>          back up, then start the new version
+  rotate                   new secrets for this install
+  local-only on|off        this computer and nothing else
+  remove                   delete this install's data (not its settings)
   logs [service]           what the parts are saying
   add-user <email>         make another account
   reset-password <email>   a one-time link to set a new password
@@ -428,6 +510,9 @@ case "$command" in
   backup) cmd_backup "$@" ;;
   restore) cmd_restore "$@" ;;
   update) cmd_update "$@" ;;
+  rotate) cmd_rotate "$@" ;;
+  local-only) cmd_local_only "$@" ;;
+  remove) cmd_remove "$@" ;;
   logs) check_docker; run_compose logs --tail 200 "$@" ;;
   add-user)
     check_docker

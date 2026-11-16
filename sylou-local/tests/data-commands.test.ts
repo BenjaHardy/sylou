@@ -1,4 +1,5 @@
-// What a backup leaves out, and what a restore refuses to do.
+// The commands that touch an install's data: what a backup leaves out, what
+// a restore refuses to do, and what rotating the secrets changes.
 //
 // The two shell files run inside the database's own image, where pg_dump and
 // psql live, so nothing here can run them. What this pins is the list they
@@ -13,6 +14,7 @@ const PACKAGE_DIR = fromFileUrl(new URL("../", import.meta.url));
 const read = (...parts: string[]) => Deno.readTextFileSync(join(PACKAGE_DIR, ...parts));
 const backup = read("db", "backup.sh");
 const restore = read("db", "restore.sh");
+const rotate = read("db", "rotate.sh");
 const compose = read("compose.yaml");
 
 /** The rows a new install writes for itself, or must not be given. */
@@ -88,4 +90,36 @@ Deno.test("both run in the database's own image, on the inside, with one secret"
   // A backup only reads the documents; a restore writes them.
   assertStringIncludes(compose, "- storage-data:/storage:ro");
   assertStringIncludes(compose, "- storage-data:/storage\n");
+});
+
+Deno.test("rotating the secrets changes every role's password, and nothing else", () => {
+  for (const role of ["supabase_admin", "postgres", "authenticator", "supabase_auth_admin", "supabase_storage_admin"]) {
+    assertStringIncludes(rotate, `ALTER USER ${role} WITH PASSWORD`);
+  }
+  // It signs in with the password the install has now, and reads the new
+  // ones from the folder the command mounted.
+  assertStringIncludes(rotate, "/run/secrets/pg_postgres_password");
+  assertStringIncludes(rotate, "/new/pg_postgres_password");
+  // Each new password is read from its own file by psql, so none of them is
+  // ever an argument, a line of SQL, or anything a log could keep.
+  for (const name of ["pg_supabase_admin_password", "pg_authenticator_password", "pg_auth_admin_password", "pg_storage_admin_password"]) {
+    assertStringIncludes(rotate, `cat /new/${name}`);
+  }
+  // Nothing is dropped or emptied: the writing is untouched.
+  for (const dangerous of ["DROP ", "DELETE ", "TRUNCATE "]) {
+    assert(!rotate.toUpperCase().includes(dangerous), `rotate.sh holds ${dangerous.trim()}`);
+  }
+});
+
+Deno.test("rotating refuses to start when the new secrets are not all there", () => {
+  assertStringIncludes(rotate, "is missing or empty; nothing was changed");
+  assertStringIncludes(rotate, "set -euo pipefail");
+});
+
+Deno.test("the rotate one-shot runs where the others do, with the old password only", () => {
+  const body = compose.slice(compose.indexOf("  rotate:")).slice(0, 1200);
+  assertStringIncludes(body, "supabase/postgres:17.6.1.136@sha256:");
+  assertStringIncludes(body, "secrets: [pg_postgres_password]");
+  assertStringIncludes(body, "profiles: [tools]");
+  assertStringIncludes(body, "networks: [backend]");
 });

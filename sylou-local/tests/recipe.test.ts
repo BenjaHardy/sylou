@@ -122,12 +122,12 @@ const named = (name: string): Service => {
 
 /** The services that stay up, as opposed to the one-shots. */
 const LONG_RUNNING = ["entry", "web", "gateway", "functions", "db", "auth", "rest", "storage"];
-const ONE_SHOTS = ["migrate", "tools", "dump", "load"];
+const ONE_SHOTS = ["migrate", "tools", "dump", "load", "rotate"];
 
 Deno.test("the recipe holds the services Sylou needs, and nothing else", () => {
   assertEquals(
     Object.keys(services).sort(),
-    ["auth", "db", "dump", "entry", "functions", "gateway", "load", "migrate", "relay", "rest", "storage", "tools", "web"],
+    ["auth", "db", "dump", "entry", "functions", "gateway", "load", "migrate", "relay", "rest", "rotate", "storage", "tools", "web"],
   );
 });
 

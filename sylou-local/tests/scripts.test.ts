@@ -364,6 +364,67 @@ Deno.test("restore refuses a folder that is not a backup, and changes nothing", 
   }
 });
 
+Deno.test("local-only on and off write the setting and start again with it", async () => {
+  const install = await stagedInstall();
+  const settingsFile = join(install.dir, "config", "settings.env");
+  try {
+    assertEquals((await runSetup(install, ["you@example.com"])).code, 0);
+    await Deno.truncate(install.log, 0);
+
+    const on = await runSylou(install, ["local-only", "on"]);
+    assertEquals(on.code, 0, on.out);
+    assertStringIncludes(await Deno.readTextFile(settingsFile), "SYLOU_LOCAL_ONLY=true");
+    assertStringIncludes(on.out, "Ollama on this computer");
+    // Started again with the file that takes the functions' way out away,
+    // and with the relay the mode needs.
+    const afterOn = await Deno.readTextFile(install.log);
+    assertStringIncludes(afterOn, "compose.local-only.yaml");
+    assertStringIncludes(afterOn, "--profile local-only");
+    assertStringIncludes(afterOn, "--remove-orphans");
+
+    await Deno.truncate(install.log, 0);
+    const off = await runSylou(install, ["local-only", "off"]);
+    assertEquals(off.code, 0, off.out);
+    assertStringIncludes(await Deno.readTextFile(settingsFile), "SYLOU_LOCAL_ONLY=");
+    assert(!/SYLOU_LOCAL_ONLY=true/.test(await Deno.readTextFile(settingsFile)));
+    const afterOff = await Deno.readTextFile(install.log);
+    assert(!afterOff.includes("compose.local-only.yaml"), "it stayed in local-only mode");
+    // The relay is left behind unless the restart is told to clear it.
+    assertStringIncludes(afterOff, "--remove-orphans");
+  } finally {
+    await Deno.remove(join(install.dir, ".."), { recursive: true });
+  }
+});
+
+Deno.test("local-only says which, rather than guessing", async () => {
+  const install = await stagedInstall();
+  try {
+    assertEquals((await runSetup(install, ["you@example.com"])).code, 0);
+    const { code, out } = await runSylou(install, ["local-only"]);
+    assertEquals(code, 1, out);
+    assertStringIncludes(out, "local-only on");
+  } finally {
+    await Deno.remove(join(install.dir, ".."), { recursive: true });
+  }
+});
+
+Deno.test("remove takes the volumes, and only when it is answered", async () => {
+  const install = await stagedInstall();
+  try {
+    assertEquals((await runSetup(install, ["you@example.com"])).code, 0);
+    await Deno.truncate(install.log, 0);
+
+    const { code, out } = await runSylou(install, ["remove", "--yes"]);
+    assertEquals(code, 0, out);
+    const log = await Deno.readTextFile(install.log);
+    assertStringIncludes(log, "down -v --remove-orphans");
+    // The settings and the secrets are not its business.
+    assert(await Deno.stat(join(install.dir, "config", "secrets", "jwt_secret")).then(() => true).catch(() => false));
+  } finally {
+    await Deno.remove(join(install.dir, ".."), { recursive: true });
+  }
+});
+
 Deno.test("the Windows scripts hold no character Windows PowerShell would misread", async () => {
   // Windows PowerShell 5.1 reads a .ps1 without a byte-order mark in the
   // computer's own code page, not as UTF-8. An em dash then arrives as three

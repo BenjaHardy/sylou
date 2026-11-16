@@ -441,6 +441,24 @@ services:
     pids_limit: 100
     networks: [backend]
 
+  # New secrets for an install that already exists: it signs in with the old
+  # password and sets the new ones, which `sylou rotate` has already written
+  # into a folder it mounts at /new.
+  rotate:
+    <<: *one-shot
+    image: supabase/postgres:17.6.1.136@sha256:f371b5f3f2ac0a05703f33d6e6134515fb2498cab708fb948a0aeb7481467c00
+    profiles: [tools]
+    user: postgres
+    read_only: true
+    tmpfs: [/tmp]
+    secrets: [pg_postgres_password]
+    entrypoint: ["bash", "/sylou/rotate.sh"]
+    volumes:
+      - ./db/rotate.sh:/sylou/rotate.sh:ro
+    mem_limit: 512m
+    pids_limit: 100
+    networks: [backend]
+
   # -------------------------------------------------------------------------
   # The relay: only in local-only mode (compose.local-only.yaml), and only
   # ever a fixed route to Ollama on this computer. The functions lose their
