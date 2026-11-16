@@ -1,0 +1,14 @@
+{
+  // The functions image's own Deno settings: the build puts this file and
+  // the lockfile beside it in place of supabase/functions' own, so hosted
+  // deploys never read either.
+  //
+  // supabase-js comes from npm here rather than esm.sh: the same release, but
+  // npm never changes a package once it is published, so the lockfile can pin
+  // it by its hash. esm.sh cannot be pinned that way - on 2026-11-16 one of
+  // its "immutable" URLs served different bytes in Amsterdam and on a GitHub
+  // runner. tests/functions-image.test.ts keeps this list complete.
+  "imports": {
+    "https://esm.sh/@supabase/supabase-js@2.110.5": "npm:@supabase/supabase-js@2.110.5"
+  }
+}

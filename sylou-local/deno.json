@@ -17,7 +17,7 @@
     // build stops when the functions load anything that file does not name.
     // After a change to the functions' imports, this writes it afresh from
     // the eight entrypoints.
-    "lock:functions": "rm -f functions/deno.lock && deno cache --node-modules-dir=none --lock=functions/deno.lock ../supabase/functions/*/index.ts"
+    "lock:functions": "rm -f functions/deno.lock && deno cache --config=functions/deno.json --node-modules-dir=none --lock=functions/deno.lock ../supabase/functions/*/index.ts"
   },
   "lint": {
     "rules": {
