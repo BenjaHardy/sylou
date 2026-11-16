@@ -320,7 +320,21 @@ function Invoke-Doctor($Settings) {
     Test-DockerReady
     $facts = Get-HostFacts $Settings | ConvertTo-Json -Depth 8 -Compress
     $all = (Get-ComposeArgs $Settings) + @("run", "--rm", "-T", "tools", "doctor")
-    $facts | & docker @all
+
+    # UTF-8, and no byte-order mark. On some computers PowerShell writes one
+    # at the head of a pipe and on others it does not; JSON cannot begin with
+    # it, and the reader at the other end would see nothing but a parse
+    # error. (The tools image drops one too, for the same reason.)
+    $previousOutput = [Console]::OutputEncoding
+    $previousPipe = $OutputEncoding
+    try {
+        [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+        $OutputEncoding = New-Object System.Text.UTF8Encoding $false
+        $facts | & docker @all
+    } finally {
+        [Console]::OutputEncoding = $previousOutput
+        $OutputEncoding = $previousPipe
+    }
     exit $LASTEXITCODE
 }
 

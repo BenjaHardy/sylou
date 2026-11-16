@@ -445,6 +445,21 @@ function connectionString(): string {
   return `postgres://postgres:${encodeURIComponent(password)}@db:5432/postgres`;
 }
 
+/**
+ * The facts, from the text the script sent. A byte-order mark at the head is
+ * dropped first: PowerShell writes one into a pipe on some computers and not
+ * on others, and JSON cannot begin with it.
+ */
+export function parseFacts(text: string): HostFacts {
+  const clean = text.replace(/^﻿/, "").trim();
+  if (!clean) return {};
+  try {
+    return JSON.parse(clean) as HostFacts;
+  } catch {
+    return {};
+  }
+}
+
 /** Reads the facts the script gathered, on standard input. */
 async function readFacts(): Promise<HostFacts> {
   const chunks: Uint8Array[] = [];
@@ -455,13 +470,7 @@ async function readFacts(): Promise<HostFacts> {
     everything.set(chunk, offset);
     offset += chunk.length;
   }
-  const text = new TextDecoder().decode(everything).trim();
-  if (!text) return {};
-  try {
-    return JSON.parse(text) as HostFacts;
-  } catch {
-    return {};
-  }
+  return parseFacts(new TextDecoder().decode(everything));
 }
 
 export async function doctor(): Promise<number> {

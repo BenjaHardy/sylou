@@ -4,7 +4,16 @@
 //
 // Run with: deno task test  (from sylou-local/)
 import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { type Check, checks, compareVersions, daysSince, type HostFacts, redact, render } from "./doctor.ts";
+import {
+  type Check,
+  checks,
+  compareVersions,
+  daysSince,
+  type HostFacts,
+  parseFacts,
+  redact,
+  render,
+} from "./doctor.ts";
 
 const NOW = Date.parse("2026-11-16T12:00:00Z");
 
@@ -37,6 +46,19 @@ Deno.test("a date becomes an age, and an unusable one becomes nothing", () => {
   assertEquals(daysSince("2026-11-06", NOW), 10);
   assertEquals(daysSince(undefined, NOW), undefined);
   assertEquals(daysSince("not a date", NOW), undefined);
+});
+
+Deno.test("facts are read whatever the shell put at the head of them", () => {
+  // PowerShell writes a byte-order mark into a pipe on some computers and
+  // not on others: it passed here and failed on a Windows CI runner with
+  // "Unexpected token" and nothing else to go on.
+  const facts = '{"platform":"windows","port":8080}';
+  assertEquals(parseFacts(facts).port, 8080);
+  assertEquals(parseFacts(`﻿${facts}`).port, 8080);
+  assertEquals(parseFacts(`  ${facts}\n`).platform, "windows");
+  // Nothing readable at all is no facts, rather than a crash.
+  assertEquals(parseFacts(""), {});
+  assertEquals(parseFacts("not json"), {});
 });
 
 Deno.test("a healthy computer is told so, with nothing to do", () => {

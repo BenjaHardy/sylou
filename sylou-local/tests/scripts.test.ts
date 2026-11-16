@@ -296,7 +296,14 @@ Deno.test("doctor hands the computer's own facts to the tools image", async () =
     const { code, out } = await runSylou(install, ["doctor"]);
     assertEquals(code, 0, out);
 
-    const facts = JSON.parse(await Deno.readTextFile(install.facts));
+    // Tolerated on the way in, refused on the way out: the tools image drops
+    // a byte-order mark if one arrives, and the script must not send one -
+    // PowerShell writes one into a pipe on some computers and not others,
+    // which is how a green suite here failed on a Windows CI runner with
+    // nothing but "Unexpected token" to go on.
+    const raw = await Deno.readTextFile(install.facts);
+    assert(!raw.startsWith("﻿"), "the script put a byte-order mark at the head of the facts");
+    const facts = JSON.parse(raw.replace(/^﻿/, ""));
     assertEquals(facts.platform, WINDOWS ? "windows" : Deno.build.os === "darwin" ? "macos" : "linux");
     assertEquals(facts.port, install.port);
     assertEquals(typeof facts.docker, "object");
