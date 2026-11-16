@@ -482,7 +482,10 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   repository's function folders by tests.
 - No role checks anywhere — there is no role system; don't add ad-hoc ones
   against profile rows or client storage `(not yet implemented)`.
-- No new backend server code — Edge Functions only.
+- No new backend server code — Edge Functions only. The one exception is the
+  Sylou Local package (`sylou-local/`): its router, tools image and nginx
+  configs exist to run those same functions on one computer, and nothing in
+  it is deployed with hosted Sylou.
 - Keep components small; extract hooks rather than growing components.
   (Known oversized offender flagged for the refactor audit:
   `ProjectContentArea.tsx`. `context-prompt/`, `analysis/` and `chat/`
