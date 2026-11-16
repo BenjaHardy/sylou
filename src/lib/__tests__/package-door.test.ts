@@ -123,3 +123,75 @@ describe("the Sylou Local door", () => {
     expect(workers).toBeLessThanOrEqual(4);
   });
 });
+
+// Behind the door, in the same image: the gateway that reaches the four
+// Supabase services. A function has to be named in both files and in the
+// image's bundle loop, or a local install cannot reach it.
+describe("the gateway inside a Sylou Local install", () => {
+  const gateway = readFileSync(join(process.cwd(), "sylou-local", "web", "gateway.conf"), "utf8");
+  const dockerfile = readFileSync(join(process.cwd(), "sylou-local", "functions", "Dockerfile"), "utf8");
+
+  /** The eight function folders this repository has. */
+  const functionNames = (): string[] => {
+    const functions = join(process.cwd(), "supabase", "functions");
+    return readdirSync(functions, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("_"))
+      .map((entry) => entry.name)
+      .filter((name) => existsSync(join(functions, name, "index.ts")))
+      .sort();
+  };
+
+  it("forwards the four service paths and nothing else", () => {
+    const paths = [...gateway.matchAll(/location\s+([^{\n]+?)\s*\{/g)].map((match) => match[1]);
+    expect(paths).toEqual([
+      "/auth/v1/",
+      "/rest/v1/",
+      "/storage/v1/",
+      "~ ^/functions/v1/(?:analysis|chat|config|context-prompt|delete-account|editor-action|extract-text|share-report)(?:/|$)",
+      "/",
+    ]);
+    // Everything that is not one of the four is refused here too.
+    expect(gateway).toMatch(/location\s+\/\s*\{\s*return 404;\s*\}/);
+    // What the comments explain does not count; only what nginx reads.
+    const directives = gateway
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("#"))
+      .join("\n")
+      .toLowerCase();
+    for (const absent of ["studio", "pg-meta", "graphql", "realtime", "/auth/v1/admin"]) {
+      expect(directives, absent).not.toContain(absent);
+    }
+  });
+
+  it("knows exactly the functions this repository has, in the config and in the image", () => {
+    const listed = gateway
+      .match(/\^\/functions\/v1\/\(\?:([a-z-|]+)\)/)![1]
+      .split("|")
+      .sort();
+    expect(listed).toEqual(functionNames());
+
+    // The image bundles the same set: one eszip per name, built at build time.
+    const bundled = dockerfile.match(/for name in ([a-z0-9 -]+); do/)![1].trim().split(/\s+/).sort();
+    expect(bundled).toEqual(functionNames());
+  });
+
+  it("answers no cross-site request either, and lets a function's answer stream", () => {
+    const hidden = [...gateway.matchAll(/proxy_hide_header\s+(Access-Control-\S+);/g)].map((m) => m[1]);
+    expect(hidden.length).toBe(7);
+    expect(gateway).not.toMatch(/add_header\s+Access-Control/);
+
+    const functionsBlock = gateway.slice(gateway.indexOf("location ~ ^/functions/v1/"));
+    expect(functionsBlock).toContain("proxy_buffering off;");
+    // The worker's own clock is 600 s: it must end a long answer, not this.
+    for (const match of functionsBlock.matchAll(/proxy_(?:read|send)_timeout\s+(\d+)s;/g)) {
+      expect(Number(match[1])).toBeGreaterThanOrEqual(620);
+    }
+  });
+
+  it("writes only where the read-only filesystem allows", () => {
+    for (const match of gateway.matchAll(/^\s*\w+_temp_path\s+(\S+);$/gm)) {
+      expect(match[1].startsWith("/tmp/"), match[0].trim()).toBe(true);
+    }
+    expect(gateway).toContain("pid /tmp/nginx.pid;");
+  });
+});

@@ -6,6 +6,8 @@
 //
 // Run with: deno task test  (from sylou-local/)
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { fromFileUrl } from "https://deno.land/std@0.224.0/path/mod.ts";
+import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { checksumOf, migrate, plan, readMigrations } from "./migrate.ts";
 
 const file = (version: string, checksum: string) => ({ version, checksum, path: `/migrations/${version}.sql` });
@@ -82,8 +84,21 @@ Deno.test({
   name: "Sylou's own migrations apply to a real database, and a second run applies none",
   ignore: !DATABASE_URL,
   fn: async () => {
-    const migrationsDir = new URL("../../supabase/migrations", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+    const here = (path: string) => fromFileUrl(new URL(path, import.meta.url));
+    const migrationsDir = here("../../supabase/migrations");
     const options = { migrationsDir, connection: DATABASE_URL!, waitForOthers: false };
+
+    // The migrations expect the parts of Supabase they were written for: the
+    // three API roles, auth.users and the storage tables. The database tests
+    // already keep a stand-in for exactly that, so this uses the same one
+    // rather than a second copy that could drift from it.
+    const standIn = new Client(DATABASE_URL!);
+    await standIn.connect();
+    try {
+      await standIn.queryArray(await Deno.readTextFile(here("../../supabase/tests/rls/supabase.sql")));
+    } finally {
+      await standIn.end();
+    }
 
     const printed: string[] = [];
     const log = console.log;
