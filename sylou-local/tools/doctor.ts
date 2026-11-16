@@ -420,8 +420,17 @@ function wrap(text: string, width: number): string[] {
 
 /** The checks doctor can make itself, from inside Docker. */
 async function look(connection?: string): Promise<InsideFacts> {
+  // Doctor is what people run when something is wrong, so a missing secret
+  // or an unreadable one is a line in the report, never the end of it.
+  let address: string;
+  try {
+    address = connection ?? connectionString();
+  } catch {
+    return { databaseReachable: false };
+  }
+
   const { Client } = await import("https://deno.land/x/postgres@v0.19.3/mod.ts");
-  const client = new Client(connection ?? connectionString());
+  const client = new Client(address);
   try {
     await client.connect();
     const applied = await client.queryObject<{ count: bigint; latest: string | null }>(
@@ -451,7 +460,7 @@ function connectionString(): string {
  * on others, and JSON cannot begin with it.
  */
 export function parseFacts(text: string): HostFacts {
-  const clean = text.replace(/^﻿/, "").trim();
+  const clean = text.replace(/^\uFEFF/, "").trim();
   if (!clean) return {};
   try {
     return JSON.parse(clean) as HostFacts;
@@ -460,8 +469,21 @@ export function parseFacts(text: string): HostFacts {
   }
 }
 
-/** Reads the facts the script gathered, on standard input. */
+/**
+ * The facts the script gathered: a file it mounted, or standard input when
+ * there is none. The file is the usual way - the bytes are then the same
+ * whatever shell wrote them.
+ */
 async function readFacts(): Promise<HostFacts> {
+  try {
+    return parseFacts(await Deno.readTextFile("/facts.json"));
+  } catch {
+    // No file: read what was sent instead.
+  }
+  return await readFactsFromInput();
+}
+
+async function readFactsFromInput(): Promise<HostFacts> {
   const chunks: Uint8Array[] = [];
   for await (const chunk of Deno.stdin.readable) chunks.push(chunk);
   const everything = new Uint8Array(chunks.reduce((length, chunk) => length + chunk.length, 0));

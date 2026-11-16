@@ -237,7 +237,14 @@ host_facts() {
 
 cmd_doctor() {
   check_docker
-  host_facts | run_compose run --rm -T tools doctor
+  # The facts travel as a file rather than down a pipe, so the bytes are the
+  # same whatever shell wrote them (the Windows side had this both ways).
+  file="$CONFIG_DIR/doctor-facts.json"
+  host_facts > "$file"
+  run_compose run --rm -v "$file:/facts.json:ro" tools doctor
+  code=$?
+  rm -f "$file"
+  return $code
 }
 
 confirm_step() {

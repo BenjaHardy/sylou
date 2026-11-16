@@ -319,23 +319,21 @@ function Get-HostFacts($Settings) {
 function Invoke-Doctor($Settings) {
     Test-DockerReady
     $facts = Get-HostFacts $Settings | ConvertTo-Json -Depth 8 -Compress
-    $all = (Get-ComposeArgs $Settings) + @("run", "--rm", "-T", "tools", "doctor")
 
-    # UTF-8, and no byte-order mark. On some computers PowerShell writes one
-    # at the head of a pipe and on others it does not; JSON cannot begin with
-    # it, and the reader at the other end would see nothing but a parse
-    # error. (The tools image drops one too, for the same reason.)
-    $previousOutput = [Console]::OutputEncoding
-    $previousPipe = $OutputEncoding
+    # The facts travel as a file, not down a pipe. What PowerShell puts at the
+    # head of a pipe depends on the computer - a byte-order mark on some, none
+    # on others - and JSON may not begin with one. Written like this the bytes
+    # are the same everywhere: UTF-8, no mark, whatever the console is set to.
+    $file = Join-Path $ConfigDir "doctor-facts.json"
+    [System.IO.File]::WriteAllText($file, $facts, (New-Object System.Text.UTF8Encoding $false))
     try {
-        [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
-        $OutputEncoding = New-Object System.Text.UTF8Encoding $false
-        $facts | & docker @all
+        $all = (Get-ComposeArgs $Settings) + @("run", "--rm", "-v", "${file}:/facts.json:ro", "tools", "doctor")
+        & docker @all | Out-Host
+        $code = $LASTEXITCODE
     } finally {
-        [Console]::OutputEncoding = $previousOutput
-        $OutputEncoding = $previousPipe
+        Remove-Item $file -ErrorAction SilentlyContinue
     }
-    exit $LASTEXITCODE
+    exit $code
 }
 
 # ---------------------------------------------------------------------------

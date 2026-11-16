@@ -54,7 +54,7 @@ Deno.test("facts are read whatever the shell put at the head of them", () => {
   // "Unexpected token" and nothing else to go on.
   const facts = '{"platform":"windows","port":8080}';
   assertEquals(parseFacts(facts).port, 8080);
-  assertEquals(parseFacts(`﻿${facts}`).port, 8080);
+  assertEquals(parseFacts(`\uFEFF${facts}`).port, 8080);
   assertEquals(parseFacts(`  ${facts}\n`).platform, "windows");
   // Nothing readable at all is no facts, rather than a crash.
   assertEquals(parseFacts(""), {});

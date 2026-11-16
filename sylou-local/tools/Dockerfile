@@ -37,7 +37,7 @@ USER 65534:65534
 
 ENTRYPOINT ["deno", "run", \
   "--cached-only", \
-  "--allow-read=/run/secrets,/migrations,/out,/app", \
+  "--allow-read=/run/secrets,/migrations,/out,/app,/facts.json", \
   "--allow-write=/out", \
   "--allow-net", \
   "--allow-env", \

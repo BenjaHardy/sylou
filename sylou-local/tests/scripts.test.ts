@@ -55,15 +55,14 @@ if (Deno.args[0] === "run" && Deno.args.includes("secrets")) {
   Deno.exit(0);
 }
 
-// docker compose run --rm -T tools doctor: the facts arrive on stdin.
+// docker compose run --rm -v <file>:/facts.json:ro tools doctor
 if (Deno.args.includes("doctor")) {
-  const chunks = [];
-  for await (const chunk of Deno.stdin.readable) chunks.push(chunk);
-  const everything = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
-  let at = 0;
-  for (const chunk of chunks) { everything.set(chunk, at); at += chunk.length; }
+  // "<host file>:/facts.json:ro" - and the host side carries a drive letter
+  // with a colon of its own, so the read-only suffix comes off first.
+  const mount = (Deno.args[Deno.args.indexOf("-v") + 1] ?? "").replace(/:(ro|rw)$/, "");
+  const from = mount.includes(";") ? mount.slice(0, mount.indexOf(";")) : mount.slice(0, mount.lastIndexOf(":"));
   const facts = Deno.env.get("FAKE_DOCKER_FACTS");
-  if (facts) Deno.writeFileSync(facts, everything);
+  if (facts && from) Deno.copyFileSync(from, facts);
   console.log("doctor: the facts were read");
   Deno.exit(0);
 }
@@ -302,8 +301,8 @@ Deno.test("doctor hands the computer's own facts to the tools image", async () =
     // which is how a green suite here failed on a Windows CI runner with
     // nothing but "Unexpected token" to go on.
     const raw = await Deno.readTextFile(install.facts);
-    assert(!raw.startsWith("﻿"), "the script put a byte-order mark at the head of the facts");
-    const facts = JSON.parse(raw.replace(/^﻿/, ""));
+    assert(!raw.startsWith("\uFEFF"), "the script put a byte-order mark at the head of the facts");
+    const facts = JSON.parse(raw.replace(/^\uFEFF/, ""));
     assertEquals(facts.platform, WINDOWS ? "windows" : Deno.build.os === "darwin" ? "macos" : "linux");
     assertEquals(facts.port, install.port);
     assertEquals(typeof facts.docker, "object");
