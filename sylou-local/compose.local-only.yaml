@@ -12,6 +12,10 @@
 #
 # The letter box still has the network its published port needs, and still
 # reads nothing.
+#
+# `!override` matters below: Compose adds a list in a second file to the one
+# in the first, so a plain list here would keep everything compose.yaml gives
+# the functions. tests/recipe.test.ts resolves the two files together.
 
 services:
   functions:
@@ -20,4 +24,8 @@ services:
       # The relay's name on the internal network.
       OLLAMA_URL: http://ollama.internal:11434
     # `egress` is gone: backend has no route to the internet at all.
-    networks: [backend]
+    networks: !override [backend]
+    # Only the two keys a function needs to reach its own database. The AI
+    # providers' and web search's keys are never mounted while this mode is
+    # on, so nothing in the container could use them.
+    secrets: !override [supabase_anon_key, supabase_service_role_key]

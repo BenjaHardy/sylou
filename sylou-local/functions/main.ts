@@ -117,6 +117,10 @@ for (const name of PLAIN) {
 }
 const configured: string[] = [];
 for (const name of SECRETS) {
+  // In local-only mode no cloud key reaches a worker, even when its file is
+  // there: the mode's compose file mounts none, and this holds as well when
+  // the switch is set without that file.
+  if (localOnly && name in PROVIDER_HOSTS) continue;
   const value = readSecret(name);
   if (!value) continue;
   workerEnv.push([name, value]);
@@ -139,11 +143,11 @@ if (gateway) {
 }
 const ollama = ollamaAddress();
 if (ollama) allowNet.push(ollama);
-if (!localOnly) {
-  for (const name of configured) {
-    const host = PROVIDER_HOSTS[name];
-    if (host) allowNet.push(host);
-  }
+// Only providers whose key was handed over above, which local-only mode never
+// does.
+for (const name of configured) {
+  const host = PROVIDER_HOSTS[name];
+  if (host) allowNet.push(host);
 }
 
 console.log(

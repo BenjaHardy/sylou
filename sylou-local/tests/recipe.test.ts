@@ -12,6 +12,7 @@ import { fromFileUrl, join } from "https://deno.land/std@0.224.0/path/mod.ts";
 
 const PACKAGE_DIR = fromFileUrl(new URL("../", import.meta.url));
 const COMPOSE = join(PACKAGE_DIR, "compose.yaml");
+const LOCAL_ONLY_COMPOSE = join(PACKAGE_DIR, "compose.local-only.yaml");
 
 /** Every secret file the recipe names, as `sylou setup` creates them. */
 const SECRET_FILES = [
@@ -42,7 +43,7 @@ const SUPABASE_DEMO_VALUES = [
 ];
 
 /** A stand-in install folder: the secret files, and nothing else. */
-function stagedInstall(): string {
+function stagedInstall(settings: string[] = []): string {
   const dir = Deno.makeTempDirSync({ prefix: "sylou-recipe-" });
   Deno.mkdirSync(join(dir, "config", "secrets"), { recursive: true });
   for (const name of SECRET_FILES) {
@@ -50,7 +51,7 @@ function stagedInstall(): string {
   }
   Deno.writeTextFileSync(
     join(dir, "settings.env"),
-    ["SYLOU_PORT=8080", "SYLOU_IMAGE_TAG=dev", "SYLOU_INSTANCE_LABEL=local", ""].join("\n"),
+    ["SYLOU_PORT=8080", "SYLOU_IMAGE_TAG=dev", "SYLOU_INSTANCE_LABEL=local", ...settings, ""].join("\n"),
   );
   return dir;
 }
@@ -78,9 +79,16 @@ interface Service {
   healthcheck?: Record<string, unknown>;
 }
 
-/** The recipe as Docker resolves it, both profiles included. */
-function resolved(): { raw: string; services: Record<string, Service>; networks: Record<string, Record<string, unknown>> } {
-  const dir = stagedInstall();
+/**
+ * The recipe as Docker resolves it, both profiles included — or, for
+ * "local-only", as the commands start that mode: the second file beside the
+ * first, and the switch on in the settings.
+ */
+function resolved(
+  mode: "normal" | "local-only" = "normal",
+): { raw: string; services: Record<string, Service>; networks: Record<string, Record<string, unknown>> } {
+  const localOnly = mode === "local-only";
+  const dir = stagedInstall(localOnly ? ["SYLOU_LOCAL_ONLY=true"] : []);
   try {
     const run = new Deno.Command("docker", {
       args: [
@@ -89,6 +97,7 @@ function resolved(): { raw: string; services: Record<string, Service>; networks:
         dir,
         "-f",
         COMPOSE,
+        ...(localOnly ? ["-f", LOCAL_ONLY_COMPOSE] : []),
         "--env-file",
         join(dir, "settings.env"),
         "--profile",
@@ -154,25 +163,45 @@ Deno.test("one published port: 127.0.0.1 only, and it belongs to the letter box"
   assertEquals(ports[0].target, 8080);
 });
 
+/** The services on a network other than `backend`, and which; every other
+ *  service is on `backend` alone. */
+const WAY_OUT: Record<string, string[]> = {
+  // The one container with a published port, because Docker cannot publish
+  // one from a container that has no such network (D25).
+  entry: ["backend", "frontdoor"],
+  // AI providers and web search; local-only mode takes this away.
+  functions: ["backend", "egress"],
+  // Only started in local-only mode, and only to reach Ollama here.
+  relay: ["backend", "egress"],
+  // The window finder talks to Ollama on this computer and to nothing else;
+  // it is given no secret, and never sees the inside network.
+  models: ["egress"],
+};
+
 Deno.test("only the letter box and the functions have a network with a way out", () => {
   for (const [name, service] of Object.entries(services)) {
     const networks = Object.keys(service.networks ?? {}).sort();
-    const allowed: Record<string, string[]> = {
-      // The one container with a published port, because Docker cannot
-      // publish one from a container that has no such network (D25).
-      entry: ["backend", "frontdoor"],
-      // AI providers and web search; local-only mode takes this away.
-      functions: ["backend", "egress"],
-      // Only started in local-only mode, and only to reach Ollama here.
-      relay: ["backend", "egress"],
-      // The window finder talks to Ollama on this computer and to nothing
-      // else; it is given no secret, and never sees the inside network.
-      models: ["egress"],
-    };
-    assertEquals(networks, allowed[name] ?? ["backend"], `${name}'s networks`);
+    assertEquals(networks, WAY_OUT[name] ?? ["backend"], `${name}'s networks`);
   }
   // The front door reads every request, so it is on the inside (D25).
   assertEquals(Object.keys(named("web").networks ?? {}), ["backend"]);
+});
+
+Deno.test("in local-only mode the functions have no way out and hold no cloud key", () => {
+  const local = resolved("local-only");
+  for (const [name, service] of Object.entries(local.services)) {
+    const networks = Object.keys(service.networks ?? {}).sort();
+    const expected = name === "functions" ? ["backend"] : WAY_OUT[name] ?? ["backend"];
+    assertEquals(networks, expected, `${name}'s networks in local-only mode`);
+  }
+  const functions = local.services.functions;
+  const secrets = (functions.secrets ?? []).map((secret) => typeof secret === "string" ? secret : secret.source);
+  // The two keys a function needs to reach its own database, and no other.
+  assertEquals(secrets.sort(), ["supabase_anon_key", "supabase_service_role_key"]);
+  assertEquals(functions.environment?.SYLOU_LOCAL_ONLY, "true");
+  // The relay's name on the inside network: the functions' one destination.
+  assertEquals(functions.environment?.OLLAMA_URL, "http://ollama.internal:11434");
+  assert(!local.raw.includes(SECRET_MARK), "a secret file's contents reached the resolved recipe");
 });
 
 Deno.test("the backend network has no route out and no address on the computer", () => {
