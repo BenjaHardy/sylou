@@ -163,18 +163,31 @@ function Get-OtherAccess([string]$Path) {
 
 # Your account alone may read this folder.
 #
-# The trap A0 hit: `icacls <folder> /inheritance:r /grant:r "*<SID>:(OI)(CI)F" /T`
-# leaves every file inside with an empty access list - readable by nobody,
-# not even its owner. The grant goes on the folder alone, and the files are
-# then let inherit it.
+# The folder's access list is replaced whole - one rule, yours, handed down
+# to everything inside - rather than trimmed. A GitHub Windows runner showed
+# why: its folders arrive with SYSTEM and Administrators in entries that
+# `icacls /inheritance:r` leaves in place while reporting success.
 #
-# It then reads the folders back, as doctor will, rather than trusting
-# icacls's exit codes, and names whoever is still let in. It returns whether
-# the lock held.
+# The trap A0 hit: the same rule applied to every file with icacls's /T
+# leaves each one with an empty access list - readable by nobody, not even
+# its owner. So the rule goes on the folder alone, and what is inside is then
+# reset to inherit it.
+#
+# It then reads the folders back, as doctor will, and names whoever is still
+# let in. It returns whether the lock held.
 function Protect-ConfigFolder([string]$Path) {
-    $sid = ([Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
-    & icacls $Path /inheritance:r /grant:r "*${sid}:(OI)(CI)F" | Out-Null
-    $locked = $LASTEXITCODE
+    $me = ([Security.Principal.WindowsIdentity]::GetCurrent()).User
+    $list = New-Object System.Security.AccessControl.DirectorySecurity
+    $list.SetAccessRuleProtection($true, $false)
+    $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+        $me,
+        [System.Security.AccessControl.FileSystemRights]::FullControl,
+        [System.Security.AccessControl.InheritanceFlags]"ContainerInherit, ObjectInherit",
+        [System.Security.AccessControl.PropagationFlags]::None,
+        [System.Security.AccessControl.AccessControlType]::Allow)
+    $list.AddAccessRule($rule)
+    $locked = "done"
+    try { (New-Object System.IO.DirectoryInfo $Path).SetAccessControl($list) } catch { $locked = $_.Exception.Message }
     & icacls (Join-Path $Path "*") /reset /T /C /Q | Out-Null
     $reset = $LASTEXITCODE
     $others = @()
@@ -184,11 +197,11 @@ function Protect-ConfigFolder([string]$Path) {
             foreach ($name in (Get-OtherAccess $folder)) { if ($others -notcontains $name) { $others += $name } }
         }
     } catch {
-        Write-Warn "Could not read back who may open $Path (icacls said $locked, then $reset)."
+        Write-Warn "Could not read back who may open $Path (the lock: $locked; icacls /reset said $reset)."
         return $false
     }
     if ($others.Count -eq 0) { return $true }
-    Write-Warn "$Path can still be opened by: $($others -join ', ') (icacls said $locked, then $reset)."
+    Write-Warn "$Path can still be opened by: $($others -join ', ') (the lock: $locked; icacls /reset said $reset)."
     Write-Warn "The folder's Properties, Security tab, lists them. `"$ScriptName doctor`" checks it again."
     return $false
 }

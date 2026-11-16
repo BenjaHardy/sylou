@@ -360,6 +360,36 @@ Deno.test("doctor hands the computer's own facts to the tools image", async () =
   }
 });
 
+// The condition a GitHub Windows runner showed: the folder already lets SYSTEM
+// and Administrators in, through entries that icacls's /inheritance:r leaves
+// in place while reporting success. Setup has to lock it all the same.
+Deno.test({
+  name: "setup locks a folder that already lets SYSTEM and Administrators in",
+  ignore: !WINDOWS,
+  fn: async () => {
+    const install = await stagedInstall();
+    try {
+      const grant = await new Deno.Command("cmd.exe", {
+        args: ["/c", "icacls", join(install.dir, "config"), "/grant", "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F"],
+        stdout: "piped",
+        stderr: "piped",
+      }).output();
+      assert(grant.success, new TextDecoder().decode(grant.stderr));
+
+      const setup = await runSetup(install, ["you@example.com"]);
+      assertEquals(setup.code, 0, setup.out);
+      assertStringIncludes(setup.out, "readable by your account only");
+      const { code, out } = await runSylou(install, ["doctor"]);
+      assertEquals(code, 0, out);
+      const secrets = JSON.parse((await Deno.readTextFile(install.facts)).replace(/^\uFEFF/, "")).secrets;
+      assertEquals(secrets.ownerOnly, true, JSON.stringify(secrets));
+      assertEquals(secrets.others, []);
+    } finally {
+      await Deno.remove(join(install.dir, ".."), { recursive: true });
+    }
+  },
+});
+
 // What doctor tells someone whose secrets another account can open, and that
 // its advice - run setup again - takes the folder back.
 Deno.test({
