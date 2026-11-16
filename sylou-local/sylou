@@ -362,6 +362,9 @@ cmd_local_only() {
       ;;
     off)
       set_setting SYLOU_LOCAL_ONLY ""
+      # A service kept behind a profile is not an orphan, so the restart
+      # would leave the relay running: it has to be taken away by name.
+      run_compose --profile local-only rm -s -f relay >/dev/null 2>&1 || true
       step "Local-only mode off"
       note "The functions may reach the AI providers you have keys for again."
       ;;

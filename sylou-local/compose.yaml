@@ -451,7 +451,7 @@ services:
     user: postgres
     read_only: true
     tmpfs: [/tmp]
-    secrets: [pg_postgres_password]
+    secrets: [pg_supabase_admin_password, pg_postgres_password]
     entrypoint: ["bash", "/sylou/rotate.sh"]
     volumes:
       - ./db/rotate.sh:/sylou/rotate.sh:ro

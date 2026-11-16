@@ -438,7 +438,7 @@ function Invoke-Restore($Settings, [string[]]$Arguments) {
 
     Write-Warn "Restoring replaces what this install holds now with what the backup holds."
     Write-Note "Everyone signs in again afterwards: sessions are not part of a backup."
-    if (-not (Confirm-Step "Restore from $folder?" $Arguments)) { Fail "Nothing was changed." }
+    if (-not (Confirm-Step "Restore from ${folder}?" $Arguments)) { Fail "Nothing was changed." }
 
     Write-Step "Making sure the install is running and migrated"
     if ((Invoke-Compose $Settings @("up", "-d", "--wait")) -ne 0) { Fail "The install did not start." }
@@ -556,6 +556,9 @@ function Invoke-LocalOnly($Settings, [string[]]$Arguments) {
         Write-Note "Ollama on this computer; cloud models and web search say they are unavailable."
     } else {
         Set-Setting "SYLOU_LOCAL_ONLY" ""
+        # A service kept behind a profile is not an orphan, so the restart
+        # would leave the relay running: it has to be taken away by name.
+        Invoke-Compose $Settings @("--profile", "local-only", "rm", "-s", "-f", "relay") | Out-Null
         Write-Step "Local-only mode off"
         Write-Note "The functions may reach the AI providers you have keys for again."
     }

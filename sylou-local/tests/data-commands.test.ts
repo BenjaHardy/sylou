@@ -96,9 +96,13 @@ Deno.test("rotating the secrets changes every role's password, and nothing else"
   for (const role of ["supabase_admin", "postgres", "authenticator", "supabase_auth_admin", "supabase_storage_admin"]) {
     assertStringIncludes(rotate, `ALTER USER ${role} WITH PASSWORD`);
   }
-  // It signs in with the password the install has now, and reads the new
-  // ones from the folder the command mounted.
-  assertStringIncludes(rotate, "/run/secrets/pg_postgres_password");
+  // It signs in as the role the image makes a superuser, with the password
+  // the install has now, and reads the new ones from the folder the command
+  // mounted. `postgres` is not a superuser here - the database answers
+  // "supabase_admin is a reserved role" when it tries, which is how this was
+  // found: by running it.
+  assertStringIncludes(rotate, "PGUSER=supabase_admin");
+  assertStringIncludes(rotate, "/run/secrets/pg_supabase_admin_password");
   assertStringIncludes(rotate, "/new/pg_postgres_password");
   // Each new password is read from its own file by psql, so none of them is
   // ever an argument, a line of SQL, or anything a log could keep.
@@ -119,7 +123,9 @@ Deno.test("rotating refuses to start when the new secrets are not all there", ()
 Deno.test("the rotate one-shot runs where the others do, with the old password only", () => {
   const body = compose.slice(compose.indexOf("  rotate:")).slice(0, 1200);
   assertStringIncludes(body, "supabase/postgres:17.6.1.136@sha256:");
-  assertStringIncludes(body, "secrets: [pg_postgres_password]");
+  // The superuser's password, because only a superuser may change that role,
+  // and the install's current `postgres` password beside it.
+  assertStringIncludes(body, "secrets: [pg_supabase_admin_password, pg_postgres_password]");
   assertStringIncludes(body, "profiles: [tools]");
   assertStringIncludes(body, "networks: [backend]");
 });

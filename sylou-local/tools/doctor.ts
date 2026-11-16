@@ -98,8 +98,12 @@ export function redact(text: string): string {
     // provider's prefix.
     .replace(/\b(sb_[a-z]+|sk|pk|rk)_[A-Za-z0-9_-]{6,}\b/g, "[hidden]")
     // A long run of random-looking characters: our own 32- and 64-character
-    // secrets, and most provider keys.
-    .replace(/\b(?=[A-Za-z0-9_-]*[0-9])(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{24,}\b/g, "[hidden]")
+    // secrets, and most provider keys. A migration's own name is just as
+    // long and says something worth reading, so it is left as it is.
+    .replace(
+      /\b(?=[A-Za-z0-9_-]*[0-9])(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{24,}\b/g,
+      (match) => (/^\d{14}_[a-z0-9-]+$/i.test(match) ? match : "[hidden]"),
+    )
     // A connection string with a password in it.
     .replace(/(postgres(?:ql)?:\/\/[^:\s]+:)[^@\s]+@/g, "$1[hidden]@");
 }

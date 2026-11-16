@@ -183,9 +183,12 @@ Deno.test("nothing that looks like a secret survives the report", () => {
     assert(!hidden.includes(secret), `redact let this through: ${secret}`);
     assertStringIncludes(hidden, "[hidden]");
   }
-  // Ordinary words, versions and paths are left alone.
+  // Ordinary words, versions and paths are left alone - and so is a
+  // migration's own name, which is as long as a secret and worth reading.
   const plain = "engine 28.3.3, 127.0.0.1:8080, C:\\sylou-local\\config, 58 migrations applied";
   assertEquals(redact(plain), plain);
+  const version = "20261106130000_project-stats-read-only-for-users";
+  assertEquals(redact(`latest ${version}`), `latest ${version}`);
 });
 
 Deno.test("a secret that reached the facts is still not printed", () => {

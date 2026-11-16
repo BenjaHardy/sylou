@@ -10,8 +10,11 @@
 # secret is new and every session was signed with the old one.
 set -euo pipefail
 
-export PGHOST=db PGPORT=5432 PGUSER=postgres PGDATABASE=postgres
-PGPASSWORD="$(cat /run/secrets/pg_postgres_password)"
+# As supabase_admin, the role the image makes a superuser: `postgres` is not
+# one here, and "supabase_admin is a reserved role, only superusers can
+# modify it" is what the database answers when it tries.
+export PGHOST=db PGPORT=5432 PGUSER=supabase_admin PGDATABASE=postgres
+PGPASSWORD="$(cat /run/secrets/pg_supabase_admin_password)"
 export PGPASSWORD
 
 new=/new

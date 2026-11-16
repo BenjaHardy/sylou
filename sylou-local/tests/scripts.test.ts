@@ -388,9 +388,14 @@ Deno.test("local-only on and off write the setting and start again with it", asy
     assertStringIncludes(await Deno.readTextFile(settingsFile), "SYLOU_LOCAL_ONLY=");
     assert(!/SYLOU_LOCAL_ONLY=true/.test(await Deno.readTextFile(settingsFile)));
     const afterOff = await Deno.readTextFile(install.log);
-    assert(!afterOff.includes("compose.local-only.yaml"), "it stayed in local-only mode");
-    // The relay is left behind unless the restart is told to clear it.
-    assertStringIncludes(afterOff, "--remove-orphans");
+    // A service kept behind a profile is not an orphan, so the relay has to
+    // be taken away by name - found by running it, where --remove-orphans
+    // left it going.
+    assertStringIncludes(afterOff, "rm -s -f relay");
+    // And the install itself starts again without the local-only file.
+    const started = afterOff.trim().split("\n").filter((line) => line.includes("up -d --wait")).pop() ?? "";
+    assert(!started.includes("compose.local-only.yaml"), `it stayed in local-only mode: ${started}`);
+    assertStringIncludes(started, "--remove-orphans");
   } finally {
     await Deno.remove(join(install.dir, ".."), { recursive: true });
   }
