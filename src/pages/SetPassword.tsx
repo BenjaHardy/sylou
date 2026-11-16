@@ -4,11 +4,8 @@ import { Lock } from "lucide-react";
 import sylouLogo from "@/assets/sylou-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteFooter } from "@/components/SiteFooter";
-import {
-  MIN_PASSWORD_LENGTH,
-  parseSetPasswordLink,
-  type SetPasswordLinkType,
-} from "@/lib/auth-links";
+import { parseSetPasswordLink, type SetPasswordLinkType } from "@/lib/auth-links";
+import { minPasswordLength } from "@/lib/runtime-config";
 
 type Phase = "verifying" | "form" | "invalid";
 
@@ -34,6 +31,9 @@ export default function SetPassword() {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Sylou Local's sign-in service refuses anything shorter than the number
+  // that install serves here, so the page cannot contradict it.
+  const minLength = minPasswordLength();
 
   useEffect(() => {
     let cancelled = false;
@@ -69,8 +69,8 @@ export default function SetPassword() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      setError(`Use at least ${MIN_PASSWORD_LENGTH} characters.`);
+    if (password.length < minLength) {
+      setError(`Use at least ${minLength} characters.`);
       return;
     }
     if (password !== confirm) {
@@ -127,7 +127,7 @@ export default function SetPassword() {
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  At least {MIN_PASSWORD_LENGTH} characters. You will use it with your email address to sign in.
+                  At least {minLength} characters. You will use it with your email address to sign in.
                 </p>
               </div>
               <div className="relative">
@@ -138,7 +138,7 @@ export default function SetPassword() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={MIN_PASSWORD_LENGTH}
+                  minLength={minLength}
                   autoComplete="new-password"
                   className={inputClass}
                 />
@@ -151,7 +151,7 @@ export default function SetPassword() {
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
                   required
-                  minLength={MIN_PASSWORD_LENGTH}
+                  minLength={minLength}
                   autoComplete="new-password"
                   className={inputClass}
                 />

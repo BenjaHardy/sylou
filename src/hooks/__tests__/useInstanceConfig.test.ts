@@ -38,6 +38,8 @@ const authorizationOf = (init: RequestInit | undefined) => new Headers(init?.hea
 describe("useInstanceConfig", () => {
   beforeEach(() => {
     auth.token = "user-token";
+    vi.stubEnv("VITE_SUPABASE_URL", "https://project.supabase.co");
+    vi.stubEnv("VITE_SUPABASE_PUBLISHABLE_KEY", "test-key");
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
   afterEach(() => {
@@ -45,6 +47,7 @@ describe("useInstanceConfig", () => {
     cleanup = null;
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it("sends the session's token, and reads the flag and each local model with its window and tools", async () => {

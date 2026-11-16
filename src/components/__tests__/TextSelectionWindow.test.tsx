@@ -101,6 +101,7 @@ beforeAll(() => {
   // jsdom has no layout: the window scrolls itself into view on open.
   Element.prototype.scrollIntoView = vi.fn();
   vi.stubEnv("VITE_SUPABASE_URL", "https://test.supabase.co");
+  vi.stubEnv("VITE_SUPABASE_PUBLISHABLE_KEY", "test-key");
   vi.stubGlobal("fetch", fetchMock);
 });
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { isLocalModel, type LocalModel } from "@/lib/models";
+import { publishableKey, supabaseUrl } from "@/lib/runtime-config";
 
 export interface InstanceConfig {
   webSearchEnabled: boolean;
@@ -24,14 +25,14 @@ async function fetchInstanceConfig(): Promise<{ config: InstanceConfig; signedIn
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
   // Mirrors the chat call pattern (see src/hooks/useChatMessages.ts):
-  // construct the URL from VITE_SUPABASE_URL and send the publishable apikey
+  // construct the URL from this Sylou's address and send the publishable apikey
   // header — required by the Supabase Functions gateway even for endpoints
   // with verify_jwt = false.
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/config`;
+  const url = `${supabaseUrl()}/functions/v1/config`;
   const res = await fetch(url, {
     method: "GET",
     headers: {
-      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      apikey: publishableKey(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
