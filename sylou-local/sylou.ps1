@@ -143,17 +143,54 @@ function Get-SyncedFolderName([string]$Path) {
     return $null
 }
 
+# The accounts other than yours that a folder lets in, by name where Windows
+# can give one and as a SID where it cannot. Read through .NET rather than
+# Get-Acl: it needs no PowerShell module at all, and the comparison is by SID,
+# the same on every computer whatever language Windows speaks. A rule that
+# refuses an account lets nobody in, so only the ones that allow count.
+function Get-OtherAccess([string]$Path) {
+    $me = ([Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+    $acl = (New-Object System.IO.DirectoryInfo $Path).GetAccessControl()
+    $others = @()
+    foreach ($rule in $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])) {
+        if ($rule.AccessControlType -ne "Allow" -or $rule.IdentityReference.Value -eq $me) { continue }
+        $name = $rule.IdentityReference.Value
+        try { $name = $rule.IdentityReference.Translate([System.Security.Principal.NTAccount]).Value } catch { }
+        if ($others -notcontains $name) { $others += $name }
+    }
+    return ,$others
+}
+
 # Your account alone may read this folder.
 #
 # The trap A0 hit: `icacls <folder> /inheritance:r /grant:r "*<SID>:(OI)(CI)F" /T`
 # leaves every file inside with an empty access list - readable by nobody,
 # not even its owner. The grant goes on the folder alone, and the files are
 # then let inherit it.
+#
+# It then reads the folders back, as doctor will, rather than trusting
+# icacls's exit codes, and names whoever is still let in. It returns whether
+# the lock held.
 function Protect-ConfigFolder([string]$Path) {
     $sid = ([Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
     & icacls $Path /inheritance:r /grant:r "*${sid}:(OI)(CI)F" | Out-Null
-    if ($LASTEXITCODE -ne 0) { Write-Warn "Could not lock $Path to your account alone (icacls said $LASTEXITCODE)." ; return }
+    $locked = $LASTEXITCODE
     & icacls (Join-Path $Path "*") /reset /T /C /Q | Out-Null
+    $reset = $LASTEXITCODE
+    $others = @()
+    try {
+        foreach ($folder in @($Path, $SecretsDir)) {
+            if (-not (Test-Path $folder)) { continue }
+            foreach ($name in (Get-OtherAccess $folder)) { if ($others -notcontains $name) { $others += $name } }
+        }
+    } catch {
+        Write-Warn "Could not read back who may open $Path (icacls said $locked, then $reset)."
+        return $false
+    }
+    if ($others.Count -eq 0) { return $true }
+    Write-Warn "$Path can still be opened by: $($others -join ', ') (icacls said $locked, then $reset)."
+    Write-Warn "The folder's Properties, Security tab, lists them. `"$ScriptName doctor`" checks it again."
+    return $false
 }
 
 # ---------------------------------------------------------------------------
@@ -243,19 +280,12 @@ function Get-BitLockerProtection {
 }
 
 function Get-SecretsFacts {
-    $facts = @{ path = $SecretsDir; ownerOnly = $null; syncedTo = (Get-SyncedFolderName $PackageDir) }
+    $facts = @{ path = $SecretsDir; ownerOnly = $null; others = $null; syncedTo = (Get-SyncedFolderName $PackageDir) }
     if (-not (Test-Path $SecretsDir)) { return $facts }
     try {
-        # Read through .NET rather than Get-Acl: it needs no PowerShell module
-        # at all, and it hands back each account as a SID, the same on every
-        # computer whatever language Windows speaks.
-        $me = ([Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
-        $acl = (New-Object System.IO.DirectoryInfo $SecretsDir).GetAccessControl()
-        $others = @()
-        foreach ($rule in $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])) {
-            if ($rule.IdentityReference.Value -ne $me) { $others += $rule.IdentityReference.Value }
-        }
+        $others = Get-OtherAccess $SecretsDir
         $facts.ownerOnly = ($others.Count -eq 0)
+        $facts.others = $others
     } catch { }
     return $facts
 }
@@ -384,8 +414,7 @@ function Invoke-Setup([string[]]$Arguments) {
     Write-Note "127.0.0.1:$port is free."
 
     Write-Step "Locking this install's folder to your account"
-    Protect-ConfigFolder $ConfigDir
-    Write-Note "config\ is readable by your account only."
+    if (Protect-ConfigFolder $ConfigDir) { Write-Note "config\ is readable by your account only." }
 
     if ($settings.SYLOU_IMAGE_TAG -eq "dev") {
         Write-Step "Building Sylou's own images (first time: several minutes)"
@@ -400,7 +429,7 @@ function Invoke-Setup([string[]]$Arguments) {
         $image = "ghcr.io/benjahardy/sylou-tools:$($settings.SYLOU_IMAGE_TAG)"
         & docker run --rm -v "${SecretsDir}:/out" $image secrets
         if ($LASTEXITCODE -ne 0) { Fail "The secrets could not be made." }
-        Protect-ConfigFolder $ConfigDir
+        $null = Protect-ConfigFolder $ConfigDir
     }
 
     Write-Step "Starting Sylou"
@@ -555,7 +584,7 @@ function Invoke-Rotate($Settings, [string[]]$Arguments) {
     $old = Join-Path $ConfigDir ("secrets-old-" + (Get-Date -Format "yyyy-MM-dd-HHmm"))
     Move-Item $SecretsDir $old
     Move-Item $staging $SecretsDir
-    Protect-ConfigFolder $ConfigDir
+    $null = Protect-ConfigFolder $ConfigDir
 
     Write-Step "Starting again with them"
     Invoke-Compose $Settings @("down") | Out-Null

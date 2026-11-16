@@ -322,7 +322,8 @@ Deno.test("setup stops when something else is already on the port", async () => 
 Deno.test("doctor hands the computer's own facts to the tools image", async () => {
   const install = await stagedInstall();
   try {
-    assertEquals((await runSetup(install, ["you@example.com"])).code, 0);
+    const setup = await runSetup(install, ["you@example.com"]);
+    assertEquals(setup.code, 0, setup.out);
     // On Windows, as the CI runner and a PowerShell 7 window both run it.
     const extra = WINDOWS ? await pwsh7ModulePath(join(install.dir, "..")) : {};
     const { code, out } = await runSylou(install, ["doctor"], "native", extra);
@@ -341,7 +342,13 @@ Deno.test("doctor hands the computer's own facts to the tools image", async () =
     assertEquals(typeof facts.docker, "object");
     assertEquals(facts.docker.engine, "28.3.3");
     assert(Array.isArray(facts.listeners), "the listening addresses were not gathered");
-    assertEquals(facts.secrets.ownerOnly, true, "setup locked the folder, and doctor should see that");
+    // When the two disagree, both accounts of it: who doctor found, and what
+    // setup said while it locked the folder.
+    assertEquals(
+      facts.secrets.ownerOnly,
+      true,
+      `setup locked the folder, and doctor should see that\ndoctor: ${JSON.stringify(facts.secrets)}\nsetup:\n${setup.out}`,
+    );
     assertEquals(facts.secrets.syncedTo, null);
     assertEquals(facts.packageVersion, "dev");
 
@@ -351,6 +358,47 @@ Deno.test("doctor hands the computer's own facts to the tools image", async () =
   } finally {
     await Deno.remove(join(install.dir, ".."), { recursive: true });
   }
+});
+
+// What doctor tells someone whose secrets another account can open, and that
+// its advice - run setup again - takes the folder back.
+Deno.test({
+  name: "doctor names another account that can open the secrets, and setup takes the folder back",
+  ignore: !WINDOWS,
+  fn: async () => {
+    const install = await stagedInstall();
+    const secrets = join(install.dir, "config", "secrets");
+    const doctorSees = async () => {
+      const { code, out } = await runSylou(install, ["doctor"]);
+      assertEquals(code, 0, out);
+      return JSON.parse((await Deno.readTextFile(install.facts)).replace(/^\uFEFF/, "")).secrets;
+    };
+    try {
+      assertEquals((await runSetup(install, ["you@example.com"])).code, 0);
+
+      // Everyone (S-1-1-0, whatever Windows calls it in its own language)
+      // may now read the folder.
+      const grant = await new Deno.Command("cmd.exe", {
+        args: ["/c", "icacls", secrets, "/grant", "*S-1-1-0:R"],
+        stdout: "piped",
+        stderr: "piped",
+      }).output();
+      assert(grant.success, new TextDecoder().decode(grant.stderr));
+
+      const open = await doctorSees();
+      assertEquals(open.ownerOnly, false, JSON.stringify(open));
+      assertEquals(open.others.length, 1, JSON.stringify(open));
+
+      const again = await runSetup(install, ["you@example.com"]);
+      assertEquals(again.code, 0, again.out);
+      assertStringIncludes(again.out, "readable by your account only");
+      const closed = await doctorSees();
+      assertEquals(closed.ownerOnly, true, JSON.stringify(closed));
+      assertEquals(closed.others, []);
+    } finally {
+      await Deno.remove(join(install.dir, ".."), { recursive: true });
+    }
+  },
 });
 
 Deno.test("backup makes a folder of its own, and leaves a note of when", async () => {

@@ -27,7 +27,9 @@ export interface HostFacts {
   /** 1 = protected, 7 = encrypted but protection off (A0, Windows). */
   bitLockerProtection?: number;
   diskEncryption?: "on" | "off" | "unknown";
-  secrets?: { path?: string; ownerOnly?: boolean; syncedTo?: string | null };
+  /** `others`: the accounts besides yours that the folder lets in, by name
+   *  (Windows; the other scripts leave it out). */
+  secrets?: { path?: string; ownerOnly?: boolean; others?: string[] | null; syncedTo?: string | null };
   lastBackup?: { at?: string; path?: string };
   ollama?: {
     reachable?: boolean;
@@ -330,6 +332,7 @@ export function checks(host: HostFacts, inside: InsideFacts = {}, now = Date.now
   // ---- This install's own files -------------------------------------------
   if (host.secrets) {
     const ownerOnly = host.secrets.ownerOnly;
+    const others = host.secrets.others?.length ? host.secrets.others.join(", ") : undefined;
     add({
       id: "secrets",
       title: "This install's secrets",
@@ -337,7 +340,7 @@ export function checks(host: HostFacts, inside: InsideFacts = {}, now = Date.now
       found: ownerOnly === true
         ? "readable by your account only"
         : ownerOnly === false
-        ? "readable by more than your account"
+        ? `readable by more than your account${others ? ` (also ${others})` : ""}`
         : "their permissions could not be read",
       todo: ownerOnly === true
         ? undefined

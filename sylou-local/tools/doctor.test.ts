@@ -179,10 +179,15 @@ Deno.test("the two kinds of BitLocker are told apart, as A0 had to learn", () =>
 Deno.test("secrets other accounts can read, and a folder that is synced away", () => {
   const found = checks({
     ...HEALTHY,
-    secrets: { ownerOnly: false, syncedTo: "OneDrive" },
+    secrets: { ownerOnly: false, others: ["BUILTIN\\Administrators", "Everyone"], syncedTo: "OneDrive" },
   }, {}, NOW);
   assertEquals(of(found, "secrets")!.verdict, "act");
+  // Who else, by name, so the fix does not start with a search.
+  assertStringIncludes(of(found, "secrets")!.found, "BUILTIN\\Administrators, Everyone");
   assertStringIncludes(of(found, "secrets")!.todo!, "sylou setup");
+  // The scripts that cannot name them still get the verdict.
+  const unnamed = checks({ ...HEALTHY, secrets: { ownerOnly: false, syncedTo: null } }, {}, NOW);
+  assertEquals(of(unnamed, "secrets")!.found, "readable by more than your account");
   assertEquals(of(found, "synced")!.verdict, "act");
   assertStringIncludes(of(found, "synced")!.todo!, "another computer");
 });
