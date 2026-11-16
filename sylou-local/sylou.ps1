@@ -146,6 +146,183 @@ function Protect-ConfigFolder([string]$Path) {
 }
 
 # ---------------------------------------------------------------------------
+# The facts only this computer can tell us, for `doctor`
+#
+# Each one is wrapped on its own: a fact that cannot be read becomes nothing,
+# and doctor says it could not look rather than guessing. Nothing here decides
+# anything - the rules all live in the tools image (D4).
+# ---------------------------------------------------------------------------
+
+function Get-PackageRelease {
+    $file = Join-Path $PackageDir "VERSION"
+    $release = @{ version = $null; date = $null }
+    if (Test-Path $file) {
+        foreach ($line in Get-Content $file) {
+            $parts = $line.Split("=", 2)
+            if ($parts.Count -eq 2) {
+                if ($parts[0].Trim() -eq "version") { $release.version = $parts[1].Trim() }
+                if ($parts[0].Trim() -eq "date") { $release.date = $parts[1].Trim() }
+            }
+        }
+    }
+    return $release
+}
+
+function Get-Listeners([int[]]$Ports) {
+    $found = @()
+    try {
+        foreach ($connection in (Get-NetTCPConnection -State Listen -ErrorAction Stop)) {
+            if ($Ports -notcontains $connection.LocalPort) { continue }
+            $name = $null
+            try { $name = (Get-Process -Id $connection.OwningProcess -ErrorAction Stop).ProcessName } catch { }
+            $found += @{ address = $connection.LocalAddress; port = $connection.LocalPort; process = $name }
+        }
+    } catch { }
+    # The comma matters: a function that returns an empty array in PowerShell
+    # returns nothing at all, and "nothing" would read as "could not look".
+    return ,$found
+}
+
+# Docker Desktop keeps its settings in a file this account can read. The name
+# of the port-binding setting has changed between versions, so this looks for
+# one that mentions binding rather than assuming today's spelling.
+function Get-PortBinding {
+    $file = Join-Path $env:APPDATA "Docker\settings-store.json"
+    if (-not (Test-Path $file)) { return $null }
+    try {
+        $settings = Get-Content $file -Raw | ConvertFrom-Json
+        foreach ($property in $settings.PSObject.Properties) {
+            if ($property.Name -match "Bind" -and $property.Name -match "(Port|Ip|Address)") {
+                return "$($property.Name): $($property.Value)"
+            }
+        }
+    } catch { }
+    return $null
+}
+
+function Get-FirewallFacts {
+    try {
+        $programs = Get-NetFirewallApplicationFilter -All -ErrorAction Stop |
+            Where-Object { $_.Program -and $_.Program -match "docker|ollama|wsl" }
+        $count = 0
+        foreach ($filter in $programs) {
+            $rule = $null
+            try { $rule = $filter | Get-NetFirewallRule -ErrorAction Stop } catch { }
+            if ($null -ne $rule -and $rule.Enabled -eq "True" -and $rule.Direction -eq "Inbound" -and $rule.Action -eq "Allow") {
+                $count++
+            }
+        }
+        return @{ inboundAllowForDocker = $count }
+    } catch {
+        return $null
+    }
+}
+
+# Without administrator rights the usual commands refuse, and this property
+# does not: 1 means protected, 7 means encrypted with the protection off -
+# two very different things (A0).
+function Get-BitLockerProtection {
+    try {
+        $drive = (Get-Item $PackageDir).PSDrive.Root
+        $shell = New-Object -ComObject Shell.Application
+        $value = $shell.NameSpace($drive).Self.ExtendedProperty("System.Volume.BitLockerProtection")
+        if ($null -ne $value) { return [int]$value }
+    } catch { }
+    return $null
+}
+
+function Get-SecretsFacts {
+    $facts = @{ path = $SecretsDir; ownerOnly = $null; syncedTo = (Get-SyncedFolderName $PackageDir) }
+    if (-not (Test-Path $SecretsDir)) { return $facts }
+    try {
+        $me = ([Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+        $others = @()
+        foreach ($rule in (Get-Acl $SecretsDir).Access) {
+            $sid = $rule.IdentityReference
+            try { $sid = $rule.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { $sid = "$($rule.IdentityReference)" }
+            if ($sid -ne $me) { $others += $sid }
+        }
+        $facts.ownerOnly = ($others.Count -eq 0)
+    } catch { }
+    return $facts
+}
+
+function Get-LastBackup {
+    $file = Join-Path $ConfigDir "last-backup.json"
+    if (-not (Test-Path $file)) { return $null }
+    try { return (Get-Content $file -Raw | ConvertFrom-Json) } catch { return $null }
+}
+
+function Get-OllamaFacts($Settings) {
+    $url = ""
+    if ($Settings.ContainsKey("OLLAMA_URL")) { $url = "$($Settings.OLLAMA_URL)".Trim() }
+    $names = @()
+    if ($Settings.ContainsKey("OLLAMA_MODELS") -and "$($Settings.OLLAMA_MODELS)".Trim() -ne "") {
+        $names = "$($Settings.OLLAMA_MODELS)".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
+    }
+    if ($url -eq "" -and $names.Count -eq 0) { return $null }
+
+    # Docker reaches Ollama by a name of its own; from here it is this computer.
+    $here = "http://127.0.0.1:11434"
+    $facts = @{ reachable = $false; address = $url; noCloud = ($env:OLLAMA_NO_CLOUD -eq "1"); models = @(); listeners = (Get-Listeners @(11434)) }
+    try {
+        $version = Invoke-RestMethod -Uri "$here/api/version" -TimeoutSec 3 -ErrorAction Stop
+        $facts.reachable = $true
+        $facts.version = $version.version
+    } catch {
+        return $facts
+    }
+    foreach ($name in $names) {
+        $model = @{ name = $name }
+        try {
+            $shown = Invoke-RestMethod -Uri "$here/api/show" -Method Post -TimeoutSec 10 -ErrorAction Stop `
+                -Body (ConvertTo-Json @{ model = $name }) -ContentType "application/json"
+            foreach ($property in $shown.model_info.PSObject.Properties) {
+                if ($property.Name -match "context_length$") { $model.contextLength = [int]$property.Value }
+            }
+            if ($shown.details.family -eq "cloud" -or "$($shown.capabilities)" -match "cloud") { $model.cloud = $true }
+        } catch { }
+        $facts.models += $model
+    }
+    return $facts
+}
+
+function Get-HostFacts($Settings) {
+    $release = Get-PackageRelease
+    $port = 8080
+    if ($Settings.ContainsKey("SYLOU_PORT")) { $port = [int]$Settings.SYLOU_PORT }
+
+    $engine = $null
+    $compose = $null
+    try { $engine = (& docker version --format "{{.Server.Version}}") | Select-Object -First 1 } catch { }
+    try { $compose = (& docker compose version --short) | Select-Object -First 1 } catch { }
+
+    $backup = Get-LastBackup
+    return @{
+        platform = "windows"
+        packageVersion = $release.version
+        packageDate = $release.date
+        port = $port
+        docker = @{ engine = $engine; compose = $compose }
+        portBinding = (Get-PortBinding)
+        listeners = (Get-Listeners @($port))
+        firewall = (Get-FirewallFacts)
+        bitLockerProtection = (Get-BitLockerProtection)
+        secrets = (Get-SecretsFacts)
+        lastBackup = $(if ($null -eq $backup) { $null } else { @{ at = $backup.at; path = $backup.path } })
+        ollama = (Get-OllamaFacts $Settings)
+    }
+}
+
+function Invoke-Doctor($Settings) {
+    Test-DockerReady
+    $facts = Get-HostFacts $Settings | ConvertTo-Json -Depth 8 -Compress
+    $all = (Get-ComposeArgs $Settings) + @("run", "--rm", "-T", "tools", "doctor")
+    $facts | & docker @all
+    exit $LASTEXITCODE
+}
+
+# ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
 
@@ -240,6 +417,7 @@ Sylou Local
   start                    start it again
   stop                     stop it (nothing is deleted)
   status                   what is running
+  doctor                   check this install and the computer around it
   logs [service]           what the parts are saying
   add-user <email>         make another account
   reset-password <email>   a one-time link to set a new password
@@ -257,6 +435,7 @@ switch ($Command.ToLower()) {
     "start" { Invoke-Start $settings }
     "stop" { Invoke-Stop $settings }
     "status" { Test-DockerReady; Invoke-Compose $settings @("ps") | Out-Null }
+    "doctor" { Invoke-Doctor $settings }
     "logs" {
         Test-DockerReady
         $logArgs = @("logs", "--tail", "200")

@@ -11,6 +11,7 @@
 import { makeSecrets } from "./secrets.ts";
 import { migrate } from "./migrate.ts";
 import { addUser, resetPassword } from "./users.ts";
+import { doctor } from "./doctor.ts";
 
 const USAGE = `Sylou Local tools
 
@@ -18,6 +19,7 @@ const USAGE = `Sylou Local tools
   migrate                  apply Sylou's migrations to the database
   add-user <email>         make an account and print a one-time link
   reset-password <email>   print a one-time link to set a new password
+  doctor                   read the facts on standard input and report
 `;
 
 async function main(args: string[]): Promise<number> {
@@ -31,6 +33,8 @@ async function main(args: string[]): Promise<number> {
       return await addUser(rest[0] ?? "");
     case "reset-password":
       return await resetPassword(rest[0] ?? "");
+    case "doctor":
+      return await doctor();
     case undefined:
     case "help":
     case "--help":

@@ -104,6 +104,143 @@ protect_config() {
 }
 
 # --------------------------------------------------------------------------
+# The facts only this computer can tell us, for `doctor`
+#
+# Each is read on its own and left out when it cannot be: doctor then says it
+# could not look, rather than guessing. Nothing here decides anything - the
+# rules all live in the tools image (D4).
+# --------------------------------------------------------------------------
+
+# A JSON string, with the few characters that would break one escaped.
+json_string() {
+  printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/ /g')"
+}
+
+release_field() {
+  file="$PACKAGE_DIR/VERSION"
+  if [ -f "$file" ]; then
+    sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$file" | tail -n 1
+  fi
+}
+
+# Everything listening on a port, as "address:port" lines.
+listeners_on() {
+  port=$1
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnH 2>/dev/null | awk -v p=":$port\$" '$4 ~ p { print $4 }'
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 { print $9 }'
+  fi
+}
+
+listeners_json() {
+  first=1
+  printf '['
+  listeners_on "$1" | while IFS= read -r entry; do
+    address=${entry%:*}
+    port=${entry##*:}
+    address=$(printf '%s' "$address" | tr -d '[]')
+    case "$address" in "*"|"") address="0.0.0.0" ;; esac
+    if [ "$first" = "0" ]; then printf ','; fi
+    first=0
+    printf '{"address":%s,"port":%s}' "$(json_string "$address")" "$port"
+  done
+  printf ']'
+}
+
+disk_encryption() {
+  if [ "$(uname -s)" = "Darwin" ] && command -v fdesetup >/dev/null 2>&1; then
+    case "$(fdesetup status 2>/dev/null)" in
+      *"FileVault is On"*) printf 'on' ; return ;;
+      *"FileVault is Off"*) printf 'off' ; return ;;
+    esac
+  fi
+  if command -v lsblk >/dev/null 2>&1 && lsblk -o TYPE 2>/dev/null | grep -q crypt; then
+    printf 'on'
+    return
+  fi
+  printf 'unknown'
+}
+
+secrets_owner_only() {
+  [ -d "$SECRETS_DIR" ] || { printf 'null'; return; }
+  mode=$(stat -c %a "$SECRETS_DIR" 2>/dev/null || stat -f %Lp "$SECRETS_DIR" 2>/dev/null || printf '')
+  case "$mode" in
+    700|0700) printf 'true' ;;
+    "") printf 'null' ;;
+    *) printf 'false' ;;
+  esac
+}
+
+last_backup_json() {
+  file="$CONFIG_DIR/last-backup.json"
+  if [ -f "$file" ]; then cat "$file"; else printf 'null'; fi
+}
+
+ollama_json() {
+  url=$(setting OLLAMA_URL "")
+  models=$(setting OLLAMA_MODELS "")
+  if [ -z "$url" ] && [ -z "$models" ]; then printf 'null'; return; fi
+  here="http://127.0.0.1:11434"
+  no_cloud=false
+  if [ "${OLLAMA_NO_CLOUD:-}" = "1" ]; then no_cloud=true; fi
+  version=""
+  reachable=false
+  if command -v curl >/dev/null 2>&1; then
+    version=$(curl -fsS --max-time 3 "$here/api/version" 2>/dev/null | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    if [ -n "$version" ]; then reachable=true; fi
+  fi
+  printf '{"reachable":%s,"address":%s,"version":%s,"noCloud":%s,"listeners":%s,"models":[' \
+    "$reachable" "$(json_string "$url")" "$(json_string "$version")" "$no_cloud" "$(listeners_json 11434)"
+  first=1
+  old_ifs=$IFS
+  IFS=,
+  for name in $models; do
+    name=$(printf '%s' "$name" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    [ -n "$name" ] || continue
+    if [ "$first" = "0" ]; then printf ','; fi
+    first=0
+    window=""
+    if [ "$reachable" = "true" ] && command -v curl >/dev/null 2>&1; then
+      window=$(curl -fsS --max-time 10 -X POST "$here/api/show" -H 'content-type: application/json' \
+        --data "{\"model\":\"$name\"}" 2>/dev/null |
+        sed -n 's/.*"[a-z0-9_.]*context_length"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p' | head -n 1)
+    fi
+    if [ -n "$window" ]; then
+      printf '{"name":%s,"contextLength":%s}' "$(json_string "$name")" "$window"
+    else
+      printf '{"name":%s}' "$(json_string "$name")"
+    fi
+  done
+  IFS=$old_ifs
+  printf ']}'
+}
+
+host_facts() {
+  port=$(setting SYLOU_PORT 8080)
+  platform=linux
+  if [ "$(uname -s)" = "Darwin" ]; then platform=macos; fi
+  engine=$(docker version --format '{{.Server.Version}}' 2>/dev/null || printf '')
+  compose=$(docker compose version --short 2>/dev/null || printf '')
+  printf '{"platform":%s,"packageVersion":%s,"packageDate":%s,"port":%s,' \
+    "$(json_string "$platform")" "$(json_string "$(release_field version)")" \
+    "$(json_string "$(release_field date)")" "$port"
+  printf '"docker":{"engine":%s,"compose":%s},' "$(json_string "$engine")" "$(json_string "$compose")"
+  printf '"listeners":%s,' "$(listeners_json "$port")"
+  printf '"diskEncryption":%s,' "$(json_string "$(disk_encryption)")"
+  printf '"secrets":{"path":%s,"ownerOnly":%s,"syncedTo":%s},' \
+    "$(json_string "$SECRETS_DIR")" "$(secrets_owner_only)" \
+    "$(if [ -n "$(synced_folder)" ]; then json_string "$(synced_folder)"; else printf 'null'; fi)"
+  printf '"lastBackup":%s,' "$(last_backup_json)"
+  printf '"ollama":%s}' "$(ollama_json)"
+}
+
+cmd_doctor() {
+  check_docker
+  host_facts | run_compose run --rm -T tools doctor
+}
+
+# --------------------------------------------------------------------------
 # Commands
 # --------------------------------------------------------------------------
 
@@ -185,6 +322,7 @@ Sylou Local
   start                    start it again
   stop                     stop it (nothing is deleted)
   status                   what is running
+  doctor                   check this install and the computer around it
   logs [service]           what the parts are saying
   add-user <email>         make another account
   reset-password <email>   a one-time link to set a new password
@@ -211,6 +349,7 @@ case "$command" in
     step "Sylou is stopped. Your writing and settings stay where they are."
     ;;
   status) check_docker; run_compose ps ;;
+  doctor) cmd_doctor ;;
   logs) check_docker; run_compose logs --tail 200 "$@" ;;
   add-user)
     check_docker

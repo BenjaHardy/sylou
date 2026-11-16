@@ -55,6 +55,19 @@ if (Deno.args[0] === "run" && Deno.args.includes("secrets")) {
   Deno.exit(0);
 }
 
+// docker compose run --rm -T tools doctor: the facts arrive on stdin.
+if (Deno.args.includes("doctor")) {
+  const chunks = [];
+  for await (const chunk of Deno.stdin.readable) chunks.push(chunk);
+  const everything = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  let at = 0;
+  for (const chunk of chunks) { everything.set(chunk, at); at += chunk.length; }
+  const facts = Deno.env.get("FAKE_DOCKER_FACTS");
+  if (facts) Deno.writeFileSync(facts, everything);
+  console.log("doctor: the facts were read");
+  Deno.exit(0);
+}
+
 if (Deno.args.includes("add-user")) {
   console.log("add-user: open this once, in your browser:");
   console.log("  http://localhost:8080/auth/v1/verify?token=fake&type=recovery");
@@ -67,6 +80,8 @@ Deno.exit(0);
 interface Install {
   dir: string;
   log: string;
+  /** Where the fake docker writes what `doctor` handed it on stdin. */
+  facts: string;
   binDir: string;
   port: number;
 }
@@ -87,7 +102,7 @@ async function stagedInstall(folderName = "sylou local", port = freePort()): Pro
   const root = await Deno.makeTempDir({ prefix: "sylou-scripts-" });
   const dir = join(root, folderName);
   await Deno.mkdir(dir, { recursive: true });
-  for (const name of ["sylou", "sylou.ps1", "sylou.cmd", "compose.yaml", "compose.local-only.yaml", "settings.example.env"]) {
+  for (const name of ["sylou", "sylou.ps1", "sylou.cmd", "compose.yaml", "compose.local-only.yaml", "settings.example.env", "VERSION"]) {
     await Deno.copyFile(join(PACKAGE_DIR, name), join(dir, name));
   }
   if (!WINDOWS) await Deno.chmod(join(dir, "sylou"), 0o755);
@@ -110,7 +125,7 @@ async function stagedInstall(folderName = "sylou local", port = freePort()): Pro
   await Deno.writeTextFile(join(binDir, "docker"), `#!/bin/sh\nexec deno run --allow-all "${posix(fake)}" "$@"\n`);
   if (!WINDOWS) await Deno.chmod(join(binDir, "docker"), 0o755);
 
-  return { dir, log: join(root, "docker.log"), binDir, port };
+  return { dir, log: join(root, "docker.log"), facts: join(root, "facts.json"), binDir, port };
 }
 
 /** C:\a\b as a POSIX shell on Windows wants it: /c/a/b. */
@@ -130,25 +145,30 @@ async function haveSh(): Promise<boolean> {
   }
 }
 
-async function runSetup(
+async function runSylou(
   install: Install,
   args: string[],
   shell: "native" | "sh" = "native",
 ): Promise<{ code: number; out: string }> {
   const command = WINDOWS && shell === "native"
     ? new Deno.Command("cmd.exe", {
-      args: ["/c", join(install.dir, "sylou.cmd"), "setup", ...args],
+      args: ["/c", join(install.dir, "sylou.cmd"), ...args],
       cwd: install.dir,
-      env: { PATH: `${install.binDir};${Deno.env.get("PATH")}`, FAKE_DOCKER_LOG: install.log },
+      env: {
+        PATH: `${install.binDir};${Deno.env.get("PATH")}`,
+        FAKE_DOCKER_LOG: install.log,
+        FAKE_DOCKER_FACTS: install.facts,
+      },
       stdout: "piped",
       stderr: "piped",
     })
     : new Deno.Command("sh", {
-      args: [posix(join(install.dir, "sylou")), "setup", ...args],
+      args: [posix(join(install.dir, "sylou")), ...args],
       cwd: install.dir,
       env: {
         PATH: `${WINDOWS ? posix(install.binDir) : install.binDir}:${Deno.env.get("PATH")}`,
         FAKE_DOCKER_LOG: WINDOWS ? posix(install.log) : install.log,
+        FAKE_DOCKER_FACTS: WINDOWS ? posix(install.facts) : install.facts,
         HOME: Deno.env.get("HOME") ?? "",
       },
       stdout: "piped",
@@ -158,6 +178,9 @@ async function runSetup(
   const decoder = new TextDecoder();
   return { code: result.code, out: decoder.decode(result.stdout) + decoder.decode(result.stderr) };
 }
+
+const runSetup = (install: Install, args: string[], shell: "native" | "sh" = "native") =>
+  runSylou(install, ["setup", ...args], shell);
 
 Deno.test("setup makes the install, and its secrets stay readable by their owner", async () => {
   const install = await stagedInstall();
@@ -258,6 +281,35 @@ Deno.test("setup stops when something else is already on the port", async () => 
     assert(!log.includes("up -d"), "setup started Sylou on a port that was taken");
   } finally {
     taken.close();
+    await Deno.remove(join(install.dir, ".."), { recursive: true });
+  }
+});
+
+// `doctor` is two halves: the script gathers what only this computer can see
+// and the tools image decides what it means. This is the first half - that
+// the facts arrive at all, that they are about this install, and that nothing
+// secret travels with them.
+Deno.test("doctor hands the computer's own facts to the tools image", async () => {
+  const install = await stagedInstall();
+  try {
+    assertEquals((await runSetup(install, ["you@example.com"])).code, 0);
+    const { code, out } = await runSylou(install, ["doctor"]);
+    assertEquals(code, 0, out);
+
+    const facts = JSON.parse(await Deno.readTextFile(install.facts));
+    assertEquals(facts.platform, WINDOWS ? "windows" : Deno.build.os === "darwin" ? "macos" : "linux");
+    assertEquals(facts.port, install.port);
+    assertEquals(typeof facts.docker, "object");
+    assertEquals(facts.docker.engine, "28.3.3");
+    assert(Array.isArray(facts.listeners), "the listening addresses were not gathered");
+    assertEquals(facts.secrets.ownerOnly, true, "setup locked the folder, and doctor should see that");
+    assertEquals(facts.secrets.syncedTo, null);
+    assertEquals(facts.packageVersion, "dev");
+
+    // The facts travel past the secrets without picking any up.
+    const asText = JSON.stringify(facts);
+    assert(!asText.includes(SECRET_VALUE), "a secret travelled with doctor's facts");
+  } finally {
     await Deno.remove(join(install.dir, ".."), { recursive: true });
   }
 });
