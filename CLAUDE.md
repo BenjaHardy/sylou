@@ -87,7 +87,12 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   edge functions into their runtime image and routes to them; `tools/` is
   the Deno image behind `secrets`, `migrate`, the account commands, `doctor`
   and the window finder; `db/backup.sh`, `restore.sh` and `rotate.sh` run in
-  the database's own image, where pg_dump and psql live. `sylou.ps1` /
+  the database's own image, where pg_dump and psql live. Each image carries
+  Sylou's licence files and `NOTICE` in `/licenses`: `licenses/collect.mjs`
+  copies every third-party package's own licence files there at build, and
+  `licenses/` keeps the texts of the parts that ship none (Deno, its standard
+  library and Postgres driver, the edge runtime, PDF.js), pinned by
+  `tests/licenses.test.ts`. `sylou.ps1` /
   `sylou.cmd` / `sylou` are the commands themselves (`setup`, `start`,
   `stop`, `status`, `doctor`, `backup`, `restore`, `update`, `models`,
   `rotate`, `local-only`, `remove`, `add-user`, `reset-password`), and they

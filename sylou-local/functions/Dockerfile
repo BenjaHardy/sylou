@@ -29,6 +29,12 @@ RUN cd /src \
     && deno cache --frozen --node-modules-dir=none --lock=/src/deno.lock /src/*/index.ts \
     || { echo "sylou-local/functions/deno.lock is out of date: run 'deno task lock:functions' in sylou-local/" >&2; exit 1; }
 
+# The licence files of every package that lockfile names, from the copies
+# just fetched and checked against it, for the image's /licenses.
+COPY sylou-local/licenses/collect.mjs /collect.mjs
+RUN deno run --allow-read --allow-write=/licenses /collect.mjs \
+      deno /src/deno.lock "$DENO_DIR/npm/registry.npmjs.org" /licenses/third-party
+
 # ---------------------------------------------------------------------------
 # Stage 2: turn each function into one bundle
 # ---------------------------------------------------------------------------
@@ -78,9 +84,28 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Sylou's licences, those of the packages the functions use, and two that
+# ship without one: the edge runtime's own, and PDF.js's, which unpdf bundles.
+# sylou-local/NOTICE says where the rest of this image's licences are.
+COPY LICENSE LICENSE-METHODOLOGY LICENSING.md sylou-local/NOTICE /licenses/
+COPY --from=locked /licenses/third-party /licenses/third-party
+COPY sylou-local/licenses/edge-runtime /licenses/third-party/edge-runtime
+COPY sylou-local/licenses/pdf.js /licenses/third-party/pdf.js
+
 # Nobody: the runtime needs no account of its own, and the filesystem is
 # read-only at run time with a tmpfs at /tmp.
 USER 65534:65534
+
+# What this image is. A release sets the version, revision and date.
+LABEL maintainer="" \
+      org.opencontainers.image.title="Sylou Local functions" \
+      org.opencontainers.image.description="Sylou's eight edge functions for Sylou Local, bundled into Supabase's edge runtime" \
+      org.opencontainers.image.source="https://github.com/BenjaHardy/sylou" \
+      org.opencontainers.image.url="https://github.com/BenjaHardy/sylou" \
+      org.opencontainers.image.licenses="AGPL-3.0-only AND CC-BY-SA-4.0" \
+      org.opencontainers.image.version="dev" \
+      org.opencontainers.image.revision="" \
+      org.opencontainers.image.created=""
 
 EXPOSE 9000
 

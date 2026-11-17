@@ -138,9 +138,32 @@ jobs:
         run: |
           check="deno run --allow-run=docker,sh --allow-read --allow-write --allow-env tests/image-check.ts"
           status=0
-          $check ghcr.io/benjahardy/sylou-web:ci /usr/share/nginx/html /etc/nginx/nginx.conf /etc/nginx/sylou || status=1
-          $check ghcr.io/benjahardy/sylou-functions:ci /home/deno || status=1
-          $check ghcr.io/benjahardy/sylou-tools:ci /app /migrations || status=1
+          $check ghcr.io/benjahardy/sylou-web:ci /usr/share/nginx/html /etc/nginx/nginx.conf /etc/nginx/sylou /licenses || status=1
+          $check ghcr.io/benjahardy/sylou-functions:ci /home/deno /licenses || status=1
+          $check ghcr.io/benjahardy/sylou-tools:ci /app /migrations /licenses || status=1
+          exit $status
+
+      # Each image carries Sylou's licences and those of the third-party
+      # parts it holds (sylou-local/NOTICE says where each one is).
+      - name: The licences in each image
+        run: |
+          status=0
+          carries() {
+            image=$1
+            shift
+            container=$(docker create "$image")
+            for file in "$@"; do
+              docker cp "$container:/licenses/$file" - > /dev/null 2>&1 ||
+                { echo "::error title=Licences::$image has no /licenses/$file"; status=1; }
+            done
+            docker rm "$container" > /dev/null
+          }
+          carries ghcr.io/benjahardy/sylou-web:ci LICENSE LICENSE-METHODOLOGY LICENSING.md NOTICE \
+            THIRD_PARTY_LICENSES.md third-party/index.txt
+          carries ghcr.io/benjahardy/sylou-functions:ci LICENSE LICENSE-METHODOLOGY LICENSING.md NOTICE \
+            third-party/index.txt third-party/edge-runtime/LICENSE third-party/pdf.js/LICENSE
+          carries ghcr.io/benjahardy/sylou-tools:ci LICENSE NOTICE \
+            third-party/deno/LICENSE.md third-party/deno-std/LICENSE third-party/deno-postgres/LICENSE
           exit $status
 
       - name: Pull the images Sylou does not build
