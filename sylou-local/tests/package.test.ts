@@ -1037,11 +1037,16 @@ live("the database: two users are kept apart through the door (T27)", async () =
   });
   assertEquals(made.status, 201, made.text);
   project = made.json().id;
-  const writing = await http("/rest/v1/writing_content", {
+  // The project's writing row is made with the project, by a trigger; the
+  // app saves into it, as here.
+  const writing = await http(`/rest/v1/writing_content?project_id=eq.${project}`, {
+    method: "PATCH",
     token: alice.access,
-    json: { project_id: project, content: `<p>Written before the backup: ${MARKER}</p>` },
+    headers: { prefer: "return=representation" },
+    json: { content: `<p>Written before the backup: ${MARKER}</p>` },
   });
-  assertEquals(writing.status, 201, writing.text);
+  assertEquals(writing.status, 200, writing.text);
+  assertEquals(writing.json().length, 1, writing.text);
   pdfBytes = pdf(`Sylou package test ${MARKER}`);
   pdfPath = (await importDocument(alice, project, "round-trip.pdf", pdfBytes, PDF_TYPE)).path;
 

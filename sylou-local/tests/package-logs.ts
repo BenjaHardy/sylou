@@ -32,10 +32,10 @@ export function redact(text: string, secrets: string[]): string {
   return out;
 }
 
-function annotate(title: string, text: string) {
+function annotate(title: string, text: string, level: "error" | "notice" = "error") {
   const data = text.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
   const property = title.replaceAll("%", "%25").replaceAll(":", "%3A").replaceAll(",", "%2C");
-  console.log(ci ? `::error title=${property}::${data}` : `${title}:\n${text}`);
+  console.log(ci ? `::${level} title=${property}::${data}` : `${title}:\n${text}`);
 }
 
 function tail(text: string, lines: number): string {
@@ -77,7 +77,7 @@ async function collect(outDir: string, installDir: string) {
   }
   await Deno.writeTextFile(join(outDir, "containers.txt"), `${summary.join("\n")}\n`);
   console.log(`package-logs: ${ids.length} container(s) written to ${outDir}`);
-  if (ids.length > 0) annotate("Containers when the run stopped", summary.join("\n"));
+  if (ids.length > 0) annotate("Containers when the run stopped", summary.join("\n"), "notice");
 }
 
 if (import.meta.main) {
