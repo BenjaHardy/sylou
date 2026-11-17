@@ -372,6 +372,16 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   runner's own test applies the real migrations to the server at
   `DATABASE_URL` when one is set, behind the same stand-in the database
   tests use, and skips itself when it is not.
+- Sylou Local live checks: `deno task test:package` (from `sylou-local/`)
+  asks a running install what the threat map promises — the door, sign-in,
+  the database, what each network reaches, the logs, a backup → remove →
+  setup → restore round trip, local-only on and off. They make accounts and
+  delete the install's data, so they run only against an install whose
+  `config/settings.env` says `SYLOU_INSTANCE_LABEL=package-test`, and skip
+  themselves anywhere else. CI's `package.yml` builds the three images on
+  amd64 and arm64, scans them (Grype), sets the package up with the real
+  `./sylou setup` beside a stand-in Ollama (`tests/fake-ollama.ts`) and runs
+  them; a failure's container logs are kept as an artifact, secrets taken out.
 - Database tests: start a throwaway server with Docker
   (`docker run --rm -d --name sylou-rls-db -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:54329:5432 postgres:17.6`),
   then `cd supabase/tests && deno task test:db`. Each run rebuilds the
@@ -480,6 +490,11 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   `sylou-local/web/gateway.conf` (the gateway) — and in the bundle loop of
   `sylou-local/functions/Dockerfile`. Both lists are pinned against the
   repository's function folders by tests.
+- An image bump — a base image in one of Sylou Local's Dockerfiles
+  (Dependabot's monthly group) or the Supabase snapshot in
+  `sylou-local/compose.yaml` (by hand, all of its images together) — merges
+  only with `package.yml` green on both chip families: it is the one check
+  that starts the package from those images.
 - No role checks anywhere — there is no role system; don't add ad-hoc ones
   against profile rows or client storage `(not yet implemented)`.
 - No new backend server code — Edge Functions only. The one exception is the

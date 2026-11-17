@@ -13,11 +13,18 @@
     // The Windows runner's share: the commands, as a release is used. It
     // leaves the recipe test out, which wants the docker command.
     "test:scripts": "deno test --allow-read --allow-write --allow-run=docker,cmd.exe,sh,deno --allow-env --allow-net tests/scripts.test.ts",
+    // The live checks, against a running install whose settings carry
+    // SYLOU_INSTANCE_LABEL=package-test; skipped where there is none. They
+    // make accounts, back up, remove and restore: see tests/package.test.ts.
+    "test:package": "deno test --allow-read --allow-write --allow-run=docker,sh,ss --allow-env --allow-net --allow-sys=networkInterfaces tests/package.test.ts",
     // The functions image is built from functions/deno.lock (D12), and its
     // build stops when the functions load anything that file does not name.
     // After a change to the functions' imports, this writes it afresh from
     // the eight entrypoints.
-    "lock:functions": "rm -f functions/deno.lock && deno cache --config=functions/deno.json --node-modules-dir=none --lock=functions/deno.lock ../supabase/functions/*/index.ts"
+    "lock:functions": "rm -f functions/deno.lock && deno cache --config=functions/deno.json --node-modules-dir=none --lock=functions/deno.lock ../supabase/functions/*/index.ts",
+    // The packages that lockfile names, as a CycloneDX SBOM on standard
+    // output, for the image scanner (D27).
+    "sbom:functions": "deno run --allow-read=functions/deno.lock tools/functions-sbom.ts functions/deno.lock"
   },
   "lint": {
     "rules": {

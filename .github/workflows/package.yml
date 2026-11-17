@@ -1,0 +1,275 @@
+name: Sylou Local package
+
+# Builds Sylou Local's three images for each chip family, scans them, starts
+# the package from them through the real ./sylou commands on a Linux runner,
+# and runs the live checks (sylou-local/tests/package.test.ts) against it.
+# Nothing is published from here.
+#
+# Every pull request and push to main runs it, unless only documents changed
+# (D29). Docker Desktop itself is never under test: GitHub's Windows runners
+# run Windows containers only and its macOS runners have no Docker, so the
+# Windows commands stay on their own tests in ci.yml (D28).
+on:
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE*"
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE*"
+
+permissions:
+  contents: read
+
+# A newer push to a pull request makes the run before it moot; on main every
+# run finishes.
+concurrency:
+  group: package-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Actions are pinned to commit SHAs, as in ci.yml; .github/dependabot.yml
+# keeps the pins and their version comments current.
+jobs:
+  package:
+    name: Package (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          # A Mac runs these images as arm64 inside Docker (D24).
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+
+    # The migrations replayed as the database tests replay them, for the
+    # catalog check: the package's grants and policies must equal these
+    # (T27). Same server and digest as ci.yml.
+    services:
+      postgres:
+        image: postgres:17.6@sha256:00bc86618629af00d2937fdc5a5d63db3ff8450acf52f0636ec813c7f4902929
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.x
+
+      # The images, Supabase's and the scanner's database take more room than
+      # a runner leaves free; the toolchains it carries for other languages
+      # are not needed here.
+      - name: Make room
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+
+      - name: Docker on this runner
+        run: |
+          echo "::notice title=Docker on ${{ matrix.arch }}::Engine $(docker version --format '{{.Server.Version}}'), Compose $(docker compose version --short)"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Each image is built on its own chip family's runner, no emulation
+      # (D24), and loaded under the tag the settings below name. Provenance
+      # and SBOMs are made at release (A2-3b), not here. PACKAGES_REFRESH is
+      # new on every run, so each image's system packages are upgraded afresh
+      # (T50) while the layers before that step come from the cache.
+      - name: Build the web image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: sylou-local/web/Dockerfile
+          tags: ghcr.io/benjahardy/sylou-web:ci
+          build-args: PACKAGES_REFRESH=${{ github.run_id }}.${{ github.run_attempt }}
+          load: true
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=web-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=web-${{ matrix.arch }}
+
+      - name: Build the functions image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: sylou-local/functions/Dockerfile
+          tags: ghcr.io/benjahardy/sylou-functions:ci
+          build-args: PACKAGES_REFRESH=${{ github.run_id }}.${{ github.run_attempt }}
+          load: true
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=functions-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=functions-${{ matrix.arch }}
+
+      - name: Build the tools image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: sylou-local/tools/Dockerfile
+          tags: ghcr.io/benjahardy/sylou-tools:ci
+          build-args: PACKAGES_REFRESH=${{ github.run_id }}.${{ github.run_attempt }}
+          load: true
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=tools-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=tools-${{ matrix.arch }}
+
+      # T62: no settings file, secret, checkout or tool's sign-in in any of
+      # them, and none runs as root.
+      - name: What the images carry (T62)
+        working-directory: sylou-local
+        run: |
+          check="deno run --allow-run=docker,sh --allow-read --allow-write --allow-env tests/image-check.ts"
+          status=0
+          $check ghcr.io/benjahardy/sylou-web:ci /usr/share/nginx/html /etc/nginx/nginx.conf /etc/nginx/sylou || status=1
+          $check ghcr.io/benjahardy/sylou-functions:ci /home/deno || status=1
+          $check ghcr.io/benjahardy/sylou-tools:ci /app /migrations || status=1
+          exit $status
+
+      - name: Pull the images Sylou does not build
+        working-directory: sylou-local
+        run: grep -oE 'image:[[:space:]]+[^[:space:]]+@sha256:[0-9a-f]{64}' compose.yaml | awk '{print $2}' | sort -u | xargs -n1 docker pull -q
+
+      - name: Install Grype
+        id: grype
+        uses: anchore/scan-action/download-grype@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          cache-db: true
+
+      # T50 and D22: ours fail on a HIGH or CRITICAL flaw that has a fix. The
+      # functions' libraries are bundled into their image where a scanner
+      # cannot see them, so their lockfile is scanned as an SBOM (D27).
+      # What it finds moves with the outside world, not with the change under
+      # test, so it does not stop the live checks: the job's last step fails
+      # on it, and one run reports both.
+      - name: Known flaws in our images and the functions' libraries (T50)
+        id: flaws
+        continue-on-error: true
+        working-directory: sylou-local
+        env:
+          GRYPE: ${{ steps.grype.outputs.cmd }}
+        run: |
+          deno task sbom:functions > "$RUNNER_TEMP/functions.cdx.json"
+          status=0
+          scan() {
+            "$GRYPE" "$1" -q -o json --file "$RUNNER_TEMP/scan.json" &&
+              deno run --allow-read --allow-env tests/scan-report.ts "$RUNNER_TEMP/scan.json" "$2" ours || status=1
+          }
+          scan docker:ghcr.io/benjahardy/sylou-web:ci "the web image (${{ matrix.arch }})"
+          scan docker:ghcr.io/benjahardy/sylou-functions:ci "the functions image (${{ matrix.arch }})"
+          scan docker:ghcr.io/benjahardy/sylou-tools:ci "the tools image (${{ matrix.arch }})"
+          scan "sbom:$RUNNER_TEMP/functions.cdx.json" "the functions' libraries"
+          exit $status
+
+      # Reported, not failed: Supabase's images move together, one tested
+      # snapshot at a time (D20), and the letter box and relay run nginx's
+      # own image as published.
+      - name: Known flaws in the images Sylou does not build (reported)
+        working-directory: sylou-local
+        env:
+          GRYPE: ${{ steps.grype.outputs.cmd }}
+        run: |
+          for image in $(grep -oE 'image:[[:space:]]+[^[:space:]]+@sha256:[0-9a-f]{64}' compose.yaml | awk '{print $2}' | sort -u); do
+            name="${image%@*} (${{ matrix.arch }})"
+            "$GRYPE" "docker:$image" -q -o json --file "$RUNNER_TEMP/scan.json" &&
+              deno run --allow-read --allow-env tests/scan-report.ts "$RUNNER_TEMP/scan.json" "$name" reported ||
+              echo "::warning title=Scan::$name could not be scanned"
+          done
+
+      # D30: the route to a model on this computer, with a stand-in for it.
+      - name: Start the stand-in Ollama
+        working-directory: sylou-local
+        run: |
+          nohup deno run --allow-net=0.0.0.0:11434 tests/fake-ollama.ts --hostname 0.0.0.0 --port 11434 \
+            > "$RUNNER_TEMP/fake-ollama.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:11434/api/version && exit 0
+            sleep 1
+          done
+          echo "::error title=Stand-in Ollama::it did not start"
+          exit 1
+
+      # The settings a person writes before setup: the images built above,
+      # the label the live checks look for, and the model. On Linux the
+      # functions reach this computer at Docker's own bridge address, where
+      # Docker Desktop gives them host.docker.internal instead.
+      - name: This install's settings
+        working-directory: sylou-local
+        run: |
+          mkdir -p config
+          bridge=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')
+          printf '%s\n' \
+            "SYLOU_PORT=8080" \
+            "SYLOU_IMAGE_TAG=ci" \
+            "SYLOU_INSTANCE_LABEL=package-test" \
+            "SYLOU_LOCAL_ONLY=" \
+            "OLLAMA_URL=http://$bridge:11434" \
+            "OLLAMA_MODELS=sylou-fake-16k" > config/settings.env
+          cat config/settings.env
+
+      - name: Replay the migrations as CI does (for the catalog check)
+        working-directory: supabase/tests
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:54329/postgres
+        run: deno run --allow-net=127.0.0.1 --allow-read=../migrations,rls '--allow-env=DATABASE_URL,PG*,USER,USERNAME,NODE_PG_FORCE_NATIVE' rls/setup.ts
+
+      # D28: exactly what a Linux user runs.
+      - name: ./sylou setup
+        working-directory: sylou-local
+        run: |
+          set -o pipefail
+          ./sylou setup ci@example.com 2>&1 | tee "$RUNNER_TEMP/setup.log" || {
+            deno run --allow-run=docker --allow-read --allow-write --allow-env tests/package-logs.ts \
+              --tail "$RUNNER_TEMP/setup.log" "./sylou setup failed" .
+            exit 1
+          }
+
+      - name: The live checks
+        working-directory: sylou-local
+        env:
+          SYLOU_REPLAY_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:54329/sylou_rls
+        run: deno task test:package
+
+      - name: Keep every container's log, secrets taken out
+        if: failure()
+        working-directory: sylou-local
+        run: |
+          deno run --allow-run=docker --allow-read --allow-write --allow-env tests/package-logs.ts "$RUNNER_TEMP/package-logs" .
+          cp "$RUNNER_TEMP/fake-ollama.log" "$RUNNER_TEMP/setup.log" "$RUNNER_TEMP/package-logs/" 2>/dev/null || true
+
+      - name: Upload the logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package-logs-${{ matrix.arch }}
+          path: ${{ runner.temp }}/package-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: ./sylou remove
+        if: always()
+        working-directory: sylou-local
+        run: ./sylou remove --yes || true
+
+      - name: The scan's verdict (T50)
+        if: steps.flaws.outcome == 'failure'
+        run: |
+          echo "::error title=T50::Our images or the functions' libraries carry a HIGH or CRITICAL flaw that has a fix: the scan step lists them."
+          exit 1

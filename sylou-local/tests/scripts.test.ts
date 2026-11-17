@@ -13,6 +13,7 @@
 // Run with: deno task test  (from sylou-local/)
 import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { fromFileUrl, join } from "https://deno.land/std@0.224.0/path/mod.ts";
+import { FAKE_MODEL, FAKE_VERSION, FAKE_WINDOW, fakeOllama } from "./fake-ollama.ts";
 
 const PACKAGE_DIR = fromFileUrl(new URL("../", import.meta.url));
 const WINDOWS = Deno.build.os === "windows";
@@ -298,6 +299,43 @@ Deno.test({
   },
 });
 
+// On a Linux engine a container's own user may not write into a folder of
+// yours, and Docker hands each secret file to its container as the file
+// itself: so the one-shots that write into your folders run as you, and the
+// files stay readable inside a folder only you may open.
+Deno.test({
+  name: "the shell script's one-shots write into your folders as you, behind a folder only you may open",
+  ignore: !(await haveSh()),
+  fn: async () => {
+    const install = await stagedInstall();
+    const into = await Deno.makeTempDir({ prefix: "sylou-backups-" });
+    try {
+      assertEquals((await runSetup(install, ["you@example.com"], "sh")).code, 0);
+      const backup = await runSylou(install, ["backup", WINDOWS ? posix(into) : into], "sh");
+      assertEquals(backup.code, 0, backup.out);
+
+      const id = await new Deno.Command("sh", { args: ["-c", 'printf "%s:%s" "$(id -u)" "$(id -g)"'], stdout: "piped" })
+        .output();
+      const you = new TextDecoder().decode(id.stdout);
+      const log = (await Deno.readTextFile(install.log)).split("\n");
+      const secrets = log.find((line) => line.startsWith("run ") && line.endsWith(" secrets")) ?? "";
+      const dump = log.find((line) => line.endsWith(" dump")) ?? "";
+      assertStringIncludes(secrets, `--user ${you}`);
+      assertStringIncludes(dump, `--user ${you}`);
+
+      if (!WINDOWS) {
+        const mode = (path: string) => (Deno.statSync(path).mode ?? 0) & 0o777;
+        assertEquals(mode(join(install.dir, "config")), 0o700);
+        assertEquals(mode(join(install.dir, "config", "secrets")), 0o700);
+        assertEquals(mode(join(install.dir, "config", "secrets", "jwt_secret")), 0o644);
+      }
+    } finally {
+      await Deno.remove(into, { recursive: true });
+      await Deno.remove(join(install.dir, ".."), { recursive: true });
+    }
+  },
+});
+
 Deno.test("setup stops when something else is already on the port", async () => {
   const port = freePort();
   const taken = Deno.listen({ hostname: "127.0.0.1", port });
@@ -384,6 +422,59 @@ Deno.test("doctor hands the computer's own facts to the tools image", async () =
     const asText = JSON.stringify(facts);
     assert(!asText.includes(SECRET_VALUE), "a secret travelled with doctor's facts");
   } finally {
+    await Deno.remove(join(install.dir, ".."), { recursive: true });
+  }
+});
+
+/** Whether nothing is listening on a port of this computer's loopback. */
+function portIsFree(port: number): boolean {
+  try {
+    Deno.listen({ hostname: "127.0.0.1", port }).close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** What a real Ollama on this computer says its version is, if one answers. */
+async function realOllamaVersion(): Promise<string | undefined> {
+  try {
+    const answer = await fetch("http://127.0.0.1:11434/api/version", { signal: AbortSignal.timeout(3000) });
+    return (await answer.json()).version;
+  } catch {
+    return undefined;
+  }
+}
+
+// Doctor's Ollama lines are made from what the script asks Ollama on this
+// computer, at the address Ollama itself uses: its version, and the window of
+// each listed model. A stand-in answers there - or, where a real Ollama
+// already holds the port, the facts must carry what that one says.
+Deno.test("doctor hands Ollama's version and the models' windows to the tools image", async () => {
+  const real = !portIsFree(11434);
+  const expected = real ? await realOllamaVersion() : FAKE_VERSION;
+  // Something that is not Ollama holds the port: there is nothing to compare.
+  if (!expected) return;
+  const ollama = real ? undefined : Deno.serve({ hostname: "127.0.0.1", port: 11434, onListen() {} }, fakeOllama());
+  const install = await stagedInstall();
+  try {
+    await Deno.writeTextFile(
+      join(install.dir, "config", "settings.env"),
+      `OLLAMA_URL=http://host.docker.internal:11434\nOLLAMA_MODELS=${FAKE_MODEL}\n`,
+      { append: true },
+    );
+    for (const shell of WINDOWS && !(await haveSh()) ? ["native"] as const : ["native", "sh"] as const) {
+      const { code, out } = await runSylou(install, ["doctor"], shell);
+      assertEquals(code, 0, `${shell}: ${out}`);
+      const facts = JSON.parse((await Deno.readTextFile(install.facts)).replace(/^\uFEFF/, ""));
+      assertEquals(facts.ollama?.reachable, true, `${shell}: ${JSON.stringify(facts.ollama)}`);
+      assertEquals(facts.ollama.version, expected, `${shell}: ${JSON.stringify(facts.ollama)}`);
+      assertEquals(facts.ollama.models?.[0]?.name, FAKE_MODEL, shell);
+      // Only the stand-in knows this model, and the window it was made with.
+      if (!real) assertEquals(facts.ollama.models[0].contextLength, FAKE_WINDOW, shell);
+    }
+  } finally {
+    await ollama?.shutdown();
     await Deno.remove(join(install.dir, ".."), { recursive: true });
   }
 });

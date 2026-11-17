@@ -13,3 +13,28 @@ updates:
     groups:
       actions-minor-and-patch:
         update-types: ["minor", "patch"]
+
+  # The base images of Sylou Local's three Dockerfiles, by tag and digest, in
+  # one pull request a month; package.yml must be green on it. Supabase's
+  # images are left out here and in compose.yaml: they move together, one
+  # tested snapshot at a time, by hand (D20). A new major of Node or Deno is
+  # a change to make on purpose, not a monthly bump.
+  - package-ecosystem: "docker"
+    directories:
+      - "/sylou-local/web"
+      - "/sylou-local/functions"
+      - "/sylou-local/tools"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      - dependency-name: "supabase/*"
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "denoland/deno"
+        update-types: ["version-update:semver-major"]
+    groups:
+      sylou-local-images:
+        patterns: ["*"]

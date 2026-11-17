@@ -215,6 +215,15 @@ export function checks(host: HostFacts, inside: InsideFacts = {}, now = Date.now
         found: "Ollama is not running, so Sylou uses cloud models only",
       });
     } else {
+      // Doctor cannot know the newest release without asking the internet,
+      // so it shows the version for the person reading the report to judge.
+      add({
+        id: "ollama-version",
+        title: "Ollama",
+        verdict: "ok",
+        found: ollama.version ? `version ${ollama.version}` : "running; its version could not be read",
+      });
+
       const stray = listenersOutside(ollama.listeners);
       add({
         id: "ollama-door",

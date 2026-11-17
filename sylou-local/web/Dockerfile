@@ -26,6 +26,11 @@ FROM nginx/nginx-unprivileged:stable-alpine@sha256:c3fc8fa482be50ef709c6438eb1bc
 # it keeps the start-up scripts from finding anything to edit.
 USER root
 RUN rm -f /etc/nginx/conf.d/default.conf
+# The system packages, brought up to the fixes Alpine has published since the
+# base image was made (T50). CI gives PACKAGES_REFRESH a new value on every
+# run, so this step is never taken from an earlier build's cache.
+ARG PACKAGES_REFRESH
+RUN apk upgrade --no-cache
 USER 101
 
 COPY --from=build /app/dist /usr/share/nginx/html

@@ -102,12 +102,24 @@ synced_folder() {
   esac
 }
 
+# The folders are yours alone (700): that is what keeps other accounts out.
+# The files inside stay readable (644), because Docker hands each one to its
+# container as the file itself, and the services read it as their own users -
+# a file only you may read would leave the database and sign-in without
+# their passwords on a Linux engine.
 protect_config() {
   chmod 700 "$CONFIG_DIR" 2>/dev/null || true
   if [ -d "$SECRETS_DIR" ]; then
     chmod 700 "$SECRETS_DIR" 2>/dev/null || true
-    find "$SECRETS_DIR" -type f -exec chmod 600 {} + 2>/dev/null || true
+    find "$SECRETS_DIR" -type f -exec chmod 644 {} + 2>/dev/null || true
   fi
+}
+
+# A one-shot that writes into a folder of yours runs as you: on a Linux
+# engine a container's own user may not write there, and what it wrote would
+# not be yours to change.
+as_you() {
+  printf '%s:%s' "$(id -u)" "$(id -g)"
 }
 
 # --------------------------------------------------------------------------
@@ -281,7 +293,7 @@ cmd_backup() {
   mkdir -p "$target"
 
   step "Backing up"
-  run_compose run --rm -v "$target:/backup" dump || fail "The backup did not finish. Nothing was written to $target."
+  run_compose run --rm -v "$target:/backup" --user "$(as_you)" dump || fail "The backup did not finish. Nothing was written to $target."
 
   # Doctor reads this to say how long ago the last backup was.
   printf '{"at":"%s","path":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$target" > "$CONFIG_DIR/last-backup.json"
@@ -338,7 +350,7 @@ cmd_rotate() {
   mkdir -p "$staging"
 
   step "Making the new secrets"
-  docker run --rm -v "$staging:/out" "ghcr.io/benjahardy/sylou-tools:$(setting SYLOU_IMAGE_TAG dev)" secrets \
+  docker run --rm -v "$staging:/out" --user "$(as_you)" "ghcr.io/benjahardy/sylou-tools:$(setting SYLOU_IMAGE_TAG dev)" secrets \
     || fail "The new secrets could not be made. Nothing was changed."
 
   # Your API keys are yours, not this install's: they carry over.
@@ -456,7 +468,7 @@ cmd_setup() {
 
   step "Locking this install's folder to your account"
   protect_config
-  note "config/ is yours alone (700/600)."
+  note "config/ is yours alone (700)."
 
   tag=$(setting SYLOU_IMAGE_TAG dev)
   if [ "$tag" = "dev" ]; then
@@ -468,7 +480,7 @@ cmd_setup() {
   if [ -n "$(find "$SECRETS_DIR" -type f -size +0c 2>/dev/null | head -n 1)" ]; then
     note "This install already has its secrets; keeping them."
   else
-    docker run --rm -v "$SECRETS_DIR:/out" "ghcr.io/benjahardy/sylou-tools:$tag" secrets \
+    docker run --rm -v "$SECRETS_DIR:/out" --user "$(as_you)" "ghcr.io/benjahardy/sylou-tools:$tag" secrets \
       || fail "The secrets could not be made."
     protect_config
   fi
