@@ -513,7 +513,7 @@ function Invoke-Restore($Settings, [string[]]$Arguments) {
         Fail "There is no data.sql in $folder, so that is not a backup this can read."
     }
 
-    Write-Warn "Restoring replaces what this install holds now with what the backup holds."
+    Write-Warn "A restore needs an install with no accounts yet, such as one set up without an email."
     Write-Note "Everyone signs in again afterwards: sessions are not part of a backup."
     if (-not (Confirm-Step "Restore from ${folder}?" $Arguments)) { Fail "Nothing was changed." }
 

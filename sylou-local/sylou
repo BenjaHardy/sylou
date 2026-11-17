@@ -307,7 +307,7 @@ cmd_restore() {
   folder=$(absolute "$1")
   [ -f "$folder/data.sql" ] || fail "There is no data.sql in $folder, so that is not a backup this can read."
 
-  warn "Restoring replaces what this install holds now with what the backup holds."
+  warn "A restore needs an install with no accounts yet, such as one set up without an email."
   note "Everyone signs in again afterwards: sessions are not part of a backup."
   confirm_step "Restore from $folder?" "$@" || fail "Nothing was changed."
 

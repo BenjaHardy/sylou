@@ -1139,7 +1139,7 @@ live("logs: no install secret, pasted key or written text in any container's log
 // Data (T28, T30, T33, T49)
 // ---------------------------------------------------------------------------
 
-live("data: backup, remove, a fresh setup and restore bring back the writing and an imported file, byte for byte (T30, T33, T49)", async () => {
+live("data: backup, remove, a fresh setup and restore bring back the writing and an imported file, byte for byte; a restore that cannot finish changes nothing (T30, T33, T49)", async () => {
   const folder = await Deno.makeTempDir({ prefix: "sylou-package-backup-" });
   const backup = await sylou("backup", folder);
   assertEquals(backup.code, 0, hide(backup.out + backup.err));
@@ -1153,6 +1153,15 @@ live("data: backup, remove, a fresh setup and restore bring back the writing and
   for (const [name, value] of Object.entries(secrets())) assert(!dump.includes(value), `${name} is in the backup`);
   assertStringIncludes(dump, MARKER);
 
+  // This install has accounts, so the backup cannot go back into it, and
+  // nothing is changed.
+  const refused = await sylou("restore", into, "--yes");
+  assertEquals(refused.code, 1, hide(refused.out + refused.err));
+  assertStringIncludes(refused.out + refused.err, "already has accounts");
+  assertStringIncludes(refused.out + refused.err, "setup without an email");
+  const kept = await http(`/rest/v1/writing_content?project_id=eq.${project}&select=content`, { token: alice.access });
+  assertEquals(kept.json(), [{ content: `<p>Written before the backup: ${MARKER}</p>` }]);
+
   const removed = await sylou("remove", "--yes");
   assertEquals(removed.code, 0, hide(removed.out + removed.err));
   assertEquals((await containers()).length, 0, "remove left containers behind");
@@ -1165,6 +1174,20 @@ live("data: backup, remove, a fresh setup and restore bring back the writing and
   await waitForFunctions();
   const empty = await http("/auth/v1/token?grant_type=password", { json: { email: alice.email, password: alice.password } });
   assertEquals(empty.status, 400, "an account was there before the restore");
+
+  // A restore that stops keeps nothing: the same dump, made to fail at its
+  // very end, after every table in it was read. The folder is readable by the
+  // restore's one-shot, as a backup's own folder is.
+  const broken = await Deno.makeTempDir({ prefix: "sylou-package-broken-" });
+  if (Deno.build.os !== "windows") Deno.chmodSync(broken, 0o755);
+  assertMatch(dump, /RESET ALL;\s*$/);
+  Deno.writeTextFileSync(join(broken, "data.sql"), dump.replace(/RESET ALL;\s*$/, "SELECT 1/0;\nRESET ALL;\n"));
+  const stopped = await sylou("restore", broken, "--yes");
+  Deno.removeSync(broken, { recursive: true });
+  assertEquals(stopped.code, 1, hide(stopped.out + stopped.err));
+  assertStringIncludes(stopped.out + stopped.err, "nothing of the dump was kept");
+  const none = await http("/auth/v1/token?grant_type=password", { json: { email: alice.email, password: alice.password } });
+  assertEquals(none.status, 400, "a restore that stopped kept the accounts it had loaded");
 
   const restored = await sylou("restore", into, "--yes");
   assertEquals(restored.code, 0, hide(restored.out + restored.err));
