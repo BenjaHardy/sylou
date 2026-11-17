@@ -13,6 +13,7 @@
 // Run with: deno task test  (from sylou-local/)
 import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { fromFileUrl, join } from "https://deno.land/std@0.224.0/path/mod.ts";
+import { FAKE_MODEL, FAKE_VERSION, FAKE_WINDOW, fakeOllama } from "./fake-ollama.ts";
 
 const PACKAGE_DIR = fromFileUrl(new URL("../", import.meta.url));
 const WINDOWS = Deno.build.os === "windows";
@@ -451,27 +452,15 @@ async function realOllamaVersion(): Promise<string | undefined> {
 // already holds the port, the facts must carry what that one says.
 Deno.test("doctor hands Ollama's version and the models' windows to the tools image", async () => {
   const real = !portIsFree(11434);
-  const expected = real ? await realOllamaVersion() : "0.13.1";
+  const expected = real ? await realOllamaVersion() : FAKE_VERSION;
   // Something that is not Ollama holds the port: there is nothing to compare.
   if (!expected) return;
-  const ollama = real ? undefined : Deno.serve({ hostname: "127.0.0.1", port: 11434, onListen() {} }, (request) => {
-    const path = new URL(request.url).pathname;
-    if (path === "/api/version") return Response.json({ version: "0.13.1" });
-    if (path === "/api/show" && request.method === "POST") {
-      return Response.json({
-        parameters: "num_ctx 16384",
-        details: { family: "llama" },
-        model_info: { "llama.context_length": 16384 },
-        capabilities: ["completion", "tools"],
-      });
-    }
-    return new Response("not found", { status: 404 });
-  });
+  const ollama = real ? undefined : Deno.serve({ hostname: "127.0.0.1", port: 11434, onListen() {} }, fakeOllama());
   const install = await stagedInstall();
   try {
     await Deno.writeTextFile(
       join(install.dir, "config", "settings.env"),
-      `OLLAMA_URL=http://host.docker.internal:11434\nOLLAMA_MODELS=sylou-test-16k\n`,
+      `OLLAMA_URL=http://host.docker.internal:11434\nOLLAMA_MODELS=${FAKE_MODEL}\n`,
       { append: true },
     );
     for (const shell of WINDOWS && !(await haveSh()) ? ["native"] as const : ["native", "sh"] as const) {
@@ -480,9 +469,9 @@ Deno.test("doctor hands Ollama's version and the models' windows to the tools im
       const facts = JSON.parse((await Deno.readTextFile(install.facts)).replace(/^\uFEFF/, ""));
       assertEquals(facts.ollama?.reachable, true, `${shell}: ${JSON.stringify(facts.ollama)}`);
       assertEquals(facts.ollama.version, expected, `${shell}: ${JSON.stringify(facts.ollama)}`);
-      assertEquals(facts.ollama.models?.[0]?.name, "sylou-test-16k", shell);
+      assertEquals(facts.ollama.models?.[0]?.name, FAKE_MODEL, shell);
       // Only the stand-in knows this model, and the window it was made with.
-      if (!real) assertEquals(facts.ollama.models[0].contextLength, 16384, shell);
+      if (!real) assertEquals(facts.ollama.models[0].contextLength, FAKE_WINDOW, shell);
     }
   } finally {
     await ollama?.shutdown();
