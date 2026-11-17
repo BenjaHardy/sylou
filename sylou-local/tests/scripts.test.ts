@@ -550,6 +550,26 @@ Deno.test({
   },
 });
 
+// The functions read the API keys once, as they start, and `up` leaves a
+// running container as it is when only a key's file changed. So `start` asks
+// for the functions afresh once the rest is up, and a key pasted while Sylou
+// runs is read: the live checks paste one and ask the functions.
+Deno.test("start brings Sylou up, then starts the functions afresh", async () => {
+  for (const shell of WINDOWS && !(await haveSh()) ? ["native"] as const : ["native", "sh"] as const) {
+    const install = await stagedInstall();
+    try {
+      const { code, out } = await runSylou(install, ["start"], shell);
+      assertEquals(code, 0, `${shell}: ${out}`);
+      const ups = (await Deno.readTextFile(install.log)).split("\n").filter((line) => line.includes(" up "));
+      assertEquals(ups.length, 2, `${shell}:\n${ups.join("\n")}`);
+      assert(ups[0].endsWith(" up -d --wait"), `${shell}: ${ups[0]}`);
+      assert(ups[1].endsWith(" up -d --wait --no-deps --force-recreate functions"), `${shell}: ${ups[1]}`);
+    } finally {
+      await Deno.remove(join(install.dir, ".."), { recursive: true });
+    }
+  }
+});
+
 Deno.test("backup makes a folder of its own, and leaves a note of when", async () => {
   const install = await stagedInstall();
   const into = await Deno.makeTempDir({ prefix: "sylou-backups-" });

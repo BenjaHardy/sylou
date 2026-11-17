@@ -895,12 +895,12 @@ live("settings: a key pasted into its file reaches the functions once they start
   // What settings.example.env says to do: paste it, then `sylou start` again.
   assertEquals((await sylou("start")).code, 0);
   await waitForFunctions();
-  const seen = (await http("/functions/v1/config")).json().web_search_enabled === true;
-  annotate("notice", "A key pasted while Sylou runs", seen ? "`start` alone applied it" : "`start` alone did not apply it; `stop` then `start` did");
+  assertEquals((await http("/functions/v1/config")).json().web_search_enabled, true, "`start` did not hand the functions the key");
+  // And from a stopped install, where `start` makes every container anew.
   assertEquals((await sylou("stop")).code, 0);
   assertEquals((await sylou("start")).code, 0);
   await waitForFunctions();
-  assertEquals((await http("/functions/v1/config")).json().web_search_enabled, true, "the functions do not have the key");
+  assertEquals((await http("/functions/v1/config")).json().web_search_enabled, true, "the functions lost the key after `stop` and `start`");
 }, { step: true });
 
 let alice: Account;

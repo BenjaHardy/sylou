@@ -659,6 +659,12 @@ function Invoke-RemoveInstall($Settings, [string[]]$Arguments) {
 function Invoke-Start($Settings) {
     Test-DockerReady
     if ((Invoke-Compose $Settings @("up", "-d", "--wait")) -ne 0) { Fail "Sylou did not start." }
+    # The functions read the API keys once, as they start, and `up` leaves a
+    # running container as it is when only a key's file changed: started
+    # afresh, they read a key pasted while Sylou runs.
+    if ((Invoke-Compose $Settings @("up", "-d", "--wait", "--no-deps", "--force-recreate", "functions")) -ne 0) {
+        Fail "Sylou did not start."
+    }
     Write-Step "Sylou is running at http://localhost:$($Settings.SYLOU_PORT)"
 }
 

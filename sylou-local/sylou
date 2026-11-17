@@ -536,6 +536,10 @@ case "$command" in
   start)
     check_docker
     run_compose up -d --wait || fail "Sylou did not start."
+    # The functions read the API keys once, as they start, and `up` leaves a
+    # running container as it is when only a key's file changed: started
+    # afresh, they read a key pasted while Sylou runs.
+    run_compose up -d --wait --no-deps --force-recreate functions || fail "Sylou did not start."
     step "Sylou is running at http://localhost:$(setting SYLOU_PORT 8080)"
     ;;
   stop)
