@@ -298,6 +298,43 @@ Deno.test({
   },
 });
 
+// On a Linux engine a container's own user may not write into a folder of
+// yours, and Docker hands each secret file to its container as the file
+// itself: so the one-shots that write into your folders run as you, and the
+// files stay readable inside a folder only you may open.
+Deno.test({
+  name: "the shell script's one-shots write into your folders as you, behind a folder only you may open",
+  ignore: !(await haveSh()),
+  fn: async () => {
+    const install = await stagedInstall();
+    const into = await Deno.makeTempDir({ prefix: "sylou-backups-" });
+    try {
+      assertEquals((await runSetup(install, ["you@example.com"], "sh")).code, 0);
+      const backup = await runSylou(install, ["backup", WINDOWS ? posix(into) : into], "sh");
+      assertEquals(backup.code, 0, backup.out);
+
+      const id = await new Deno.Command("sh", { args: ["-c", 'printf "%s:%s" "$(id -u)" "$(id -g)"'], stdout: "piped" })
+        .output();
+      const you = new TextDecoder().decode(id.stdout);
+      const log = (await Deno.readTextFile(install.log)).split("\n");
+      const secrets = log.find((line) => line.startsWith("run ") && line.endsWith(" secrets")) ?? "";
+      const dump = log.find((line) => line.endsWith(" dump")) ?? "";
+      assertStringIncludes(secrets, `--user ${you}`);
+      assertStringIncludes(dump, `--user ${you}`);
+
+      if (!WINDOWS) {
+        const mode = (path: string) => (Deno.statSync(path).mode ?? 0) & 0o777;
+        assertEquals(mode(join(install.dir, "config")), 0o700);
+        assertEquals(mode(join(install.dir, "config", "secrets")), 0o700);
+        assertEquals(mode(join(install.dir, "config", "secrets", "jwt_secret")), 0o644);
+      }
+    } finally {
+      await Deno.remove(into, { recursive: true });
+      await Deno.remove(join(install.dir, ".."), { recursive: true });
+    }
+  },
+});
+
 Deno.test("setup stops when something else is already on the port", async () => {
   const port = freePort();
   const taken = Deno.listen({ hostname: "127.0.0.1", port });

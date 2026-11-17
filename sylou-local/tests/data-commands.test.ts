@@ -92,6 +92,18 @@ Deno.test("both run in the database's own image, on the inside, with one secret"
   assertStringIncludes(compose, "- storage-data:/storage\n");
 });
 
+Deno.test("a restore can put the documents back where storage keeps them", () => {
+  // The storage service writes its folders as root. Restored as `postgres`,
+  // the documents could not go back in: "can't make dir ./stub/stub/:
+  // Permission denied" (found 2026-11-17, on a copy of storage's own folders).
+  const body = compose.slice(compose.indexOf("  load:")).slice(0, 900);
+  assertStringIncludes(body, 'user: "0:0"');
+  // Root here owns those folders and nothing more: every capability is
+  // dropped, as for every other container.
+  assertStringIncludes(compose.slice(compose.indexOf("x-one-shot:")).slice(0, 300), "cap_drop: [ALL]");
+  assertStringIncludes(body, "<<: *one-shot");
+});
+
 Deno.test("rotating the secrets changes every role's password, and nothing else", () => {
   for (const role of ["supabase_admin", "postgres", "authenticator", "supabase_auth_admin", "supabase_storage_admin"]) {
     assertStringIncludes(rotate, `ALTER USER ${role} WITH PASSWORD`);
