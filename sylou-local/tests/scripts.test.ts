@@ -388,6 +388,71 @@ Deno.test("doctor hands the computer's own facts to the tools image", async () =
   }
 });
 
+/** Whether nothing is listening on a port of this computer's loopback. */
+function portIsFree(port: number): boolean {
+  try {
+    Deno.listen({ hostname: "127.0.0.1", port }).close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** What a real Ollama on this computer says its version is, if one answers. */
+async function realOllamaVersion(): Promise<string | undefined> {
+  try {
+    const answer = await fetch("http://127.0.0.1:11434/api/version", { signal: AbortSignal.timeout(3000) });
+    return (await answer.json()).version;
+  } catch {
+    return undefined;
+  }
+}
+
+// Doctor's Ollama lines are made from what the script asks Ollama on this
+// computer, at the address Ollama itself uses: its version, and the window of
+// each listed model. A stand-in answers there - or, where a real Ollama
+// already holds the port, the facts must carry what that one says.
+Deno.test("doctor hands Ollama's version and the models' windows to the tools image", async () => {
+  const real = !portIsFree(11434);
+  const expected = real ? await realOllamaVersion() : "0.13.1";
+  // Something that is not Ollama holds the port: there is nothing to compare.
+  if (!expected) return;
+  const ollama = real ? undefined : Deno.serve({ hostname: "127.0.0.1", port: 11434, onListen() {} }, (request) => {
+    const path = new URL(request.url).pathname;
+    if (path === "/api/version") return Response.json({ version: "0.13.1" });
+    if (path === "/api/show" && request.method === "POST") {
+      return Response.json({
+        parameters: "num_ctx 16384",
+        details: { family: "llama" },
+        model_info: { "llama.context_length": 16384 },
+        capabilities: ["completion", "tools"],
+      });
+    }
+    return new Response("not found", { status: 404 });
+  });
+  const install = await stagedInstall();
+  try {
+    await Deno.writeTextFile(
+      join(install.dir, "config", "settings.env"),
+      `OLLAMA_URL=http://host.docker.internal:11434\nOLLAMA_MODELS=sylou-test-16k\n`,
+      { append: true },
+    );
+    for (const shell of WINDOWS && !(await haveSh()) ? ["native"] as const : ["native", "sh"] as const) {
+      const { code, out } = await runSylou(install, ["doctor"], shell);
+      assertEquals(code, 0, `${shell}: ${out}`);
+      const facts = JSON.parse((await Deno.readTextFile(install.facts)).replace(/^\uFEFF/, ""));
+      assertEquals(facts.ollama?.reachable, true, `${shell}: ${JSON.stringify(facts.ollama)}`);
+      assertEquals(facts.ollama.version, expected, `${shell}: ${JSON.stringify(facts.ollama)}`);
+      assertEquals(facts.ollama.models?.[0]?.name, "sylou-test-16k", shell);
+      // Only the stand-in knows this model, and the window it was made with.
+      if (!real) assertEquals(facts.ollama.models[0].contextLength, 16384, shell);
+    }
+  } finally {
+    await ollama?.shutdown();
+    await Deno.remove(join(install.dir, ".."), { recursive: true });
+  }
+});
+
 // The condition a GitHub Windows runner showed: the folder already lets SYSTEM
 // and Administrators in, through entries that icacls's /inheritance:r leaves
 // in place while reporting success. Setup has to lock it all the same.

@@ -125,6 +125,31 @@ Deno.test("Ollama: not running is fine; open to the network is not", () => {
   assertStringIncludes(of(open, "ollama-door")!.todo!, "no password");
 });
 
+Deno.test("a running Ollama is shown with its version, which the report keeps", () => {
+  const running = checks({
+    ...HEALTHY,
+    ollama: {
+      reachable: true,
+      version: "0.13.1",
+      noCloud: true,
+      listeners: [{ address: "127.0.0.1", port: 11434 }],
+      models: [{ name: "sylou-nemo-16k", contextLength: 16384, onGpu: true }],
+    },
+  }, {}, NOW);
+  const line = of(running, "ollama-version")!;
+  assertEquals(line.verdict, "ok");
+  assertEquals(line.found, "version 0.13.1");
+  // A version is not a secret, and the redaction must not take it for one.
+  assertStringIncludes(render(running), "version 0.13.1");
+
+  // Answering, but without a version it could read, is said as such.
+  const unread = checks({ ...HEALTHY, ollama: { reachable: true, noCloud: true, listeners: [] } }, {}, NOW);
+  assertStringIncludes(of(unread, "ollama-version")!.found, "could not be read");
+
+  // Not running: there is no version to show.
+  assertEquals(of(checks({ ...HEALTHY, ollama: { reachable: false } }, {}, NOW), "ollama-version"), undefined);
+});
+
 Deno.test("a model that does not fit the graphics card, or has no window, is worth a line", () => {
   const found = checks({
     ...HEALTHY,
