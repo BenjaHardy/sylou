@@ -89,13 +89,16 @@ jobs:
 
       # Each image is built on its own chip family's runner, no emulation
       # (D24), and loaded under the tag the settings below name. Provenance
-      # and SBOMs are made at release (A2-3b), not here.
+      # and SBOMs are made at release (A2-3b), not here. PACKAGES_REFRESH is
+      # new on every run, so each image's system packages are upgraded afresh
+      # (T50) while the layers before that step come from the cache.
       - name: Build the web image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: sylou-local/web/Dockerfile
           tags: ghcr.io/benjahardy/sylou-web:ci
+          build-args: PACKAGES_REFRESH=${{ github.run_id }}.${{ github.run_attempt }}
           load: true
           provenance: false
           sbom: false
@@ -108,6 +111,7 @@ jobs:
           context: .
           file: sylou-local/functions/Dockerfile
           tags: ghcr.io/benjahardy/sylou-functions:ci
+          build-args: PACKAGES_REFRESH=${{ github.run_id }}.${{ github.run_attempt }}
           load: true
           provenance: false
           sbom: false
@@ -120,6 +124,7 @@ jobs:
           context: .
           file: sylou-local/tools/Dockerfile
           tags: ghcr.io/benjahardy/sylou-tools:ci
+          build-args: PACKAGES_REFRESH=${{ github.run_id }}.${{ github.run_attempt }}
           load: true
           provenance: false
           sbom: false
@@ -151,7 +156,12 @@ jobs:
       # T50 and D22: ours fail on a HIGH or CRITICAL flaw that has a fix. The
       # functions' libraries are bundled into their image where a scanner
       # cannot see them, so their lockfile is scanned as an SBOM (D27).
+      # What it finds moves with the outside world, not with the change under
+      # test, so it does not stop the live checks: the job's last step fails
+      # on it, and one run reports both.
       - name: Known flaws in our images and the functions' libraries (T50)
+        id: flaws
+        continue-on-error: true
         working-directory: sylou-local
         env:
           GRYPE: ${{ steps.grype.outputs.cmd }}
@@ -257,3 +267,9 @@ jobs:
         if: always()
         working-directory: sylou-local
         run: ./sylou remove --yes || true
+
+      - name: The scan's verdict (T50)
+        if: steps.flaws.outcome == 'failure'
+        run: |
+          echo "::error title=T50::Our images or the functions' libraries carry a HIGH or CRITICAL flaw that has a fix: the scan step lists them."
+          exit 1

@@ -69,6 +69,15 @@ COPY --from=bundle /out /home/deno/eszip
 COPY sylou-local/functions/main.ts /home/deno/sylou-local/functions/index.ts
 COPY supabase/functions/_shared/_local_only.ts /home/deno/supabase/functions/_shared/_local_only.ts
 
+# The system packages, brought up to the fixes Debian has published since the
+# base image was made (T50). CI gives PACKAGES_REFRESH a new value on every
+# run, so this step is never taken from an earlier build's cache.
+ARG PACKAGES_REFRESH
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 # Nobody: the runtime needs no account of its own, and the filesystem is
 # read-only at run time with a tmpfs at /tmp.
 USER 65534:65534

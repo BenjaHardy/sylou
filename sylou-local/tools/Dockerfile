@@ -33,6 +33,12 @@ RUN deno cache --frozen --lock=/app/deno.lock /app/tools/main.ts \
     && find /app /migrations "$DENO_DIR" -type d -exec chmod 755 {} + \
     && find /app /migrations "$DENO_DIR" -type f -exec chmod 644 {} +
 
+# The system packages, brought up to the fixes Alpine has published since the
+# base image was made (T50). CI gives PACKAGES_REFRESH a new value on every
+# run, so this step is never taken from an earlier build's cache.
+ARG PACKAGES_REFRESH
+RUN apk upgrade --no-cache
+
 # Nobody: these commands need no account of their own.
 USER 65534:65534
 
