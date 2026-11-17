@@ -65,7 +65,8 @@ if (Deno.args.includes("doctor")) {
   const facts = Deno.env.get("FAKE_DOCKER_FACTS");
   if (facts && from) Deno.copyFileSync(from, facts);
   console.log("doctor: the facts were read");
-  Deno.exit(0);
+  // 1 is doctor's "something to do".
+  Deno.exit(Number(Deno.env.get("FAKE_DOCKER_DOCTOR_EXIT") ?? "0"));
 }
 
 if (Deno.args.includes("add-user")) {
@@ -201,6 +202,7 @@ async function runSylou(
         FAKE_DOCKER_LOG: WINDOWS ? posix(install.log) : install.log,
         FAKE_DOCKER_FACTS: WINDOWS ? posix(install.facts) : install.facts,
         HOME: Deno.env.get("HOME") ?? "",
+        ...extraEnv,
       },
       stdout: "piped",
       stderr: "piped",
@@ -423,6 +425,23 @@ Deno.test("doctor hands the computer's own facts to the tools image", async () =
     assert(!asText.includes(SECRET_VALUE), "a secret travelled with doctor's facts");
   } finally {
     await Deno.remove(join(install.dir, ".."), { recursive: true });
+  }
+});
+
+// Doctor exits 1 when it finds something to do. Under `set -e` that ended the
+// shell script before it took the facts away, and they stayed in config/.
+Deno.test("doctor takes its facts file away, whatever doctor finds", async () => {
+  for (const shell of WINDOWS && !(await haveSh()) ? ["native"] as const : ["native", "sh"] as const) {
+    const install = await stagedInstall();
+    try {
+      const { code, out } = await runSylou(install, ["doctor"], shell, { FAKE_DOCKER_DOCTOR_EXIT: "1" });
+      assertEquals(code, 1, `${shell}: ${out}`);
+      assertStringIncludes(out, "doctor: the facts were read", shell);
+      const left = await Deno.stat(join(install.dir, "config", "doctor-facts.json")).then(() => true, () => false);
+      assertEquals(left, false, `${shell} left config/doctor-facts.json behind`);
+    } finally {
+      await Deno.remove(join(install.dir, ".."), { recursive: true });
+    }
   }
 });
 
