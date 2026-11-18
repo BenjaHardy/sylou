@@ -513,7 +513,7 @@ function Invoke-Restore($Settings, [string[]]$Arguments) {
         Fail "There is no data.sql in $folder, so that is not a backup this can read."
     }
 
-    Write-Warn "Restoring replaces what this install holds now with what the backup holds."
+    Write-Warn "A restore needs an install with no accounts yet, such as one set up without an email."
     Write-Note "Everyone signs in again afterwards: sessions are not part of a backup."
     if (-not (Confirm-Step "Restore from ${folder}?" $Arguments)) { Fail "Nothing was changed." }
 
@@ -659,6 +659,12 @@ function Invoke-RemoveInstall($Settings, [string[]]$Arguments) {
 function Invoke-Start($Settings) {
     Test-DockerReady
     if ((Invoke-Compose $Settings @("up", "-d", "--wait")) -ne 0) { Fail "Sylou did not start." }
+    # The functions read the API keys once, as they start, and `up` leaves a
+    # running container as it is when only a key's file changed: started
+    # afresh, they read a key pasted while Sylou runs.
+    if ((Invoke-Compose $Settings @("up", "-d", "--wait", "--no-deps", "--force-recreate", "functions")) -ne 0) {
+        Fail "Sylou did not start."
+    }
     Write-Step "Sylou is running at http://localhost:$($Settings.SYLOU_PORT)"
 }
 

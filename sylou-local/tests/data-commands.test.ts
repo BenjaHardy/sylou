@@ -72,6 +72,28 @@ Deno.test("a restore stops when the folder is not the one the manifest describes
   assertStringIncludes(restore, "ON_ERROR_STOP=1");
 });
 
+Deno.test("a restore keeps all of the dump or none of it", () => {
+  // One transaction for the whole dump: without it, a stop part-way kept every
+  // table loaded before it, while the command said the install was as it was.
+  const load = restore.indexOf("psql -X -q -v ON_ERROR_STOP=1 --single-transaction -f /backup/data.sql");
+  assert(load > 0, "the dump is not loaded in one transaction");
+  // Nothing that can fail comes after it: the documents' files go back
+  // before, and the data API's reload is part of the same transaction.
+  assert(restore.indexOf("tar -C /storage -xf /backup/files.tar") < load, "the files go back after the data");
+  assert(restore.indexOf("notify pgrst") > load, "the reload is not part of the load");
+  assertEquals(restore.lastIndexOf("psql "), load, "something asks the database after the load");
+});
+
+Deno.test("a restore goes only into an install that has no accounts yet", () => {
+  // Restored onto `setup you@example.com`, a backup collided on the account's
+  // address part-way through the dump.
+  const count = restore.indexOf("select count(*) from auth.users");
+  assert(count > 0, "the accounts are not counted");
+  assert(count < restore.indexOf("tar -C /storage -xf"), "the accounts are counted after something changed");
+  assertStringIncludes(restore, "already has accounts");
+  assertStringIncludes(restore, "setup without an email");
+});
+
 Deno.test("a restore runs as postgres, the role allowed to switch triggers off", () => {
   assertStringIncludes(restore, "PGUSER=postgres");
   assertStringIncludes(backup, "SET session_replication_role = replica;");

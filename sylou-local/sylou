@@ -258,12 +258,16 @@ cmd_doctor() {
   check_docker
   # The facts travel as a file rather than down a pipe, so the bytes are the
   # same whatever shell wrote them (the Windows side had this both ways).
-  file="$CONFIG_DIR/doctor-facts.json"
-  host_facts > "$file"
-  run_compose run --rm -v "$file:/facts.json:ro" tools doctor
-  code=$?
-  rm -f "$file"
-  return $code
+  #
+  # The file goes however this ends, and doctor finding something to do ends
+  # the script itself: its exit 1, under `set -e`. Ctrl-C becomes an exit
+  # too, because some shells skip the EXIT trap when a signal stops them.
+  doctor_facts="$CONFIG_DIR/doctor-facts.json"
+  trap 'rm -f "$doctor_facts"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  host_facts > "$doctor_facts"
+  run_compose run --rm -v "$doctor_facts:/facts.json:ro" tools doctor
 }
 
 confirm_step() {
@@ -307,7 +311,7 @@ cmd_restore() {
   folder=$(absolute "$1")
   [ -f "$folder/data.sql" ] || fail "There is no data.sql in $folder, so that is not a backup this can read."
 
-  warn "Restoring replaces what this install holds now with what the backup holds."
+  warn "A restore needs an install with no accounts yet, such as one set up without an email."
   note "Everyone signs in again afterwards: sessions are not part of a backup."
   confirm_step "Restore from $folder?" "$@" || fail "Nothing was changed."
 
@@ -536,6 +540,10 @@ case "$command" in
   start)
     check_docker
     run_compose up -d --wait || fail "Sylou did not start."
+    # The functions read the API keys once, as they start, and `up` leaves a
+    # running container as it is when only a key's file changed: started
+    # afresh, they read a key pasted while Sylou runs.
+    run_compose up -d --wait --no-deps --force-recreate functions || fail "Sylou did not start."
     step "Sylou is running at http://localhost:$(setting SYLOU_PORT 8080)"
     ;;
   stop)
