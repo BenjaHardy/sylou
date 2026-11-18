@@ -1,5 +1,6 @@
 # Which release this package is, and when it was made. `sylou doctor` reads
 # the date to say how old an install is, so it needs no call to GitHub (D10).
-# The release PR fills both lines in; a copy built from a clone says "dev".
+# A release fills both lines in (release/package.ts); a copy from a clone
+# says "dev".
 version=dev
 date=

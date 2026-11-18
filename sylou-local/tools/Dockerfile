@@ -39,8 +39,28 @@ RUN deno cache --frozen --lock=/app/deno.lock /app/tools/main.ts \
 ARG PACKAGES_REFRESH
 RUN apk upgrade --no-cache
 
+# Sylou's licence, and the three this image carries without their own:
+# Deno's, and those of the standard library and Postgres driver the tools
+# load from deno.land. sylou-local/NOTICE says where the rest are.
+COPY LICENSE sylou-local/NOTICE /licenses/
+COPY sylou-local/licenses/deno /licenses/third-party/deno
+COPY sylou-local/licenses/deno-std /licenses/third-party/deno-std
+COPY sylou-local/licenses/deno-postgres /licenses/third-party/deno-postgres
+
 # Nobody: these commands need no account of their own.
 USER 65534:65534
+
+# What this image is. Without these it would carry Deno's own labels, and
+# describe Deno. A release sets the version, revision and date.
+LABEL maintainer="" \
+      org.opencontainers.image.title="Sylou Local tools" \
+      org.opencontainers.image.description="Sylou Local's setup, migration and account commands" \
+      org.opencontainers.image.source="https://github.com/BenjaHardy/sylou" \
+      org.opencontainers.image.url="https://github.com/BenjaHardy/sylou" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
+      org.opencontainers.image.version="dev" \
+      org.opencontainers.image.revision="" \
+      org.opencontainers.image.created=""
 
 ENTRYPOINT ["deno", "run", \
   "--cached-only", \

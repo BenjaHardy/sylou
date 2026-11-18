@@ -1,0 +1,153 @@
+name: Sylou Local weekly rescan
+
+# Once a week, the images the newest release names, scanned again with that
+# day's list of known flaws (T50): a flaw published after a release, in an
+# image people are running. Sylou's own fail on a HIGH or CRITICAL flaw that
+# has a fix (D22), and the answer is a new release, whose build takes the
+# fixed packages. Supabase's and nginx's images are reported only (D20).
+# Nothing runs: Grype reads each image from the registry, for each chip
+# family.
+#
+# GitHub turns a public repository's scheduled workflows off after 60 days
+# without a commit; the monthly Dependabot updates keep this one on. A
+# scheduled run that fails is mailed to whoever last changed the schedule.
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: A release to rescan instead of the newest one (vX.Y.Z or vX.Y.Z-rc.N)
+        required: false
+        type: string
+
+permissions: {}
+
+# Actions are pinned to commit SHAs, as in ci.yml; .github/dependabot.yml
+# keeps the pins and their version comments current.
+jobs:
+  rescan:
+    name: Rescan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      # Sylou's images, for as long as GHCR keeps them private.
+      packages: read
+    steps:
+      # The newest release, pre-releases included, that carries the package.
+      - name: The release to rescan
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ASKED: ${{ inputs.tag }}
+        run: |
+          tag=$ASKED
+          if [ -z "$tag" ]; then
+            for candidate in $(gh release list --exclude-drafts --limit 30 --json tagName --jq '.[].tagName'); do
+              if gh release view "$candidate" --json assets --jq '.assets[].name' | grep -qx "sylou-local-$candidate.zip"; then
+                tag=$candidate
+                break
+              fi
+            done
+          fi
+          if [ -z "$tag" ]; then
+            echo "::notice title=Rescan::no release carries the Sylou Local package yet"
+            exit 0
+          fi
+          if ! printf '%s\n' "$tag" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?'; then
+            echo "::error title=Rescan::$tag is not a release tag"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      # The release's own scripts and lockfiles, as the release was made.
+      - name: Check out the release
+        if: steps.release.outputs.tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ steps.release.outputs.tag }}
+          persist-credentials: false
+
+      - name: The release's package
+        if: steps.release.outputs.tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          cd "$RUNNER_TEMP/release"
+          gh release download "$TAG" --pattern "sylou-local-$TAG.zip" --pattern SHA256SUMS
+          sha256sum -c SHA256SUMS
+          unzip -q "sylou-local-$TAG.zip"
+          grep -oE 'image:[[:space:]]+[^[:space:]]+@sha256:[0-9a-f]{64}' sylou-local/compose.yaml | awk '{print $2}' | sort -u > images.txt
+          cat images.txt
+
+      - name: Set up Deno
+        if: steps.release.outputs.tag
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.x
+
+      - name: Install Grype
+        if: steps.release.outputs.tag
+        id: grype
+        uses: anchore/scan-action/download-grype@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          cache-db: true
+
+      - name: Sign in to GHCR
+        if: steps.release.outputs.tag
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # T50 and D22, as package.yml applies them at every build.
+      - name: Known flaws in Sylou's images and the functions' libraries (T50)
+        if: steps.release.outputs.tag
+        id: flaws
+        continue-on-error: true
+        working-directory: sylou-local
+        env:
+          GRYPE: ${{ steps.grype.outputs.cmd }}
+        run: |
+          deno task sbom:functions > "$RUNNER_TEMP/functions.cdx.json"
+          status=0
+          scan() {
+            "$GRYPE" "$1" "${@:3}" -q -o json --file "$RUNNER_TEMP/scan.json" &&
+              deno run --allow-read --allow-env tests/scan-report.ts "$RUNNER_TEMP/scan.json" "$2" ours || status=1
+          }
+          for image in $(grep '^ghcr\.io/benjahardy/' "$RUNNER_TEMP/release/images.txt"); do
+            for arch in amd64 arm64; do
+              scan "registry:$image" "${image%@*} ($arch)" --platform "linux/$arch"
+            done
+          done
+          scan "sbom:$RUNNER_TEMP/functions.cdx.json" "the functions' libraries"
+          exit $status
+
+      - name: Known flaws in the images Sylou does not build (reported)
+        if: steps.release.outputs.tag
+        working-directory: sylou-local
+        env:
+          GRYPE: ${{ steps.grype.outputs.cmd }}
+        run: |
+          for image in $(grep -v '^ghcr\.io/benjahardy/' "$RUNNER_TEMP/release/images.txt"); do
+            for arch in amd64 arm64; do
+              name="${image%@*} ($arch)"
+              "$GRYPE" "registry:$image" --platform "linux/$arch" -q -o json --file "$RUNNER_TEMP/scan.json" &&
+                deno run --allow-read --allow-env tests/scan-report.ts "$RUNNER_TEMP/scan.json" "$name" reported ||
+                echo "::warning title=Scan::$name could not be scanned"
+            done
+          done
+
+      - name: The scan's verdict (T50)
+        if: steps.flaws.outcome == 'failure'
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          echo "::error title=T50::$TAG's images or the functions' libraries now carry a HIGH or CRITICAL flaw that has a fix: a new release takes it. The scan step lists them."
+          exit 1

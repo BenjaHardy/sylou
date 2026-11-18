@@ -64,6 +64,12 @@ run_compose() {
   docker compose "$@"
 }
 
+# The tools image as the recipe names it: by digest in a release, by the tag
+# it was built under in a clone. The secrets are made with this image.
+tools_image() {
+  run_compose config --images tools
+}
+
 # --------------------------------------------------------------------------
 # What this computer can tell us
 # --------------------------------------------------------------------------
@@ -354,7 +360,8 @@ cmd_rotate() {
   mkdir -p "$staging"
 
   step "Making the new secrets"
-  docker run --rm -v "$staging:/out" --user "$(as_you)" "ghcr.io/benjahardy/sylou-tools:$(setting SYLOU_IMAGE_TAG dev)" secrets \
+  tools_ref=$(tools_image) && [ -n "$tools_ref" ] || fail "The recipe could not be read. Nothing was changed."
+  docker run --rm -v "$staging:/out" --user "$(as_you)" "$tools_ref" secrets \
     || fail "The new secrets could not be made. Nothing was changed."
 
   # Your API keys are yours, not this install's: they carry over.
@@ -484,7 +491,8 @@ cmd_setup() {
   if [ -n "$(find "$SECRETS_DIR" -type f -size +0c 2>/dev/null | head -n 1)" ]; then
     note "This install already has its secrets; keeping them."
   else
-    docker run --rm -v "$SECRETS_DIR:/out" --user "$(as_you)" "ghcr.io/benjahardy/sylou-tools:$tag" secrets \
+    tools_ref=$(tools_image) && [ -n "$tools_ref" ] || fail "The recipe could not be read."
+    docker run --rm -v "$SECRETS_DIR:/out" --user "$(as_you)" "$tools_ref" secrets \
       || fail "The secrets could not be made."
     protect_config
   fi

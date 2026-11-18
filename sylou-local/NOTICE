@@ -1,17 +1,47 @@
 Sylou Local
 Copyright (c) Sylou contributors
 
-This package runs Sylou (AGPL-3.0-or-later; see the LICENSE file at the root
-of this repository) together with parts of Supabase.
+This package runs Sylou together with parts of Supabase. Sylou's code is
+licensed under the GNU Affero General Public License, version 3 only
+(AGPL-3.0-only; see LICENSE, beside this file in the images and the release,
+at the root of the repository in a clone). The FLOW methodology text that the
+web app and the functions carry is licensed under CC BY-SA 4.0 (see
+LICENSE-METHODOLOGY); LICENSING.md says which parts those are.
+
+----------------------------------------------------------------------------
+Sylou's own images
+----------------------------------------------------------------------------
+
+Each of Sylou's three images keeps Sylou's licence files and this NOTICE in
+/licenses, and in /licenses/third-party the licence of every third-party part
+it carries that does not keep its own elsewhere in the image:
+
+  sylou-web        Built on nginx's nginx-unprivileged image (Alpine), whose
+                   licence is in /usr/share/licenses/nginx. The packages the
+                   app is built from: each one's own licence files, listed in
+                   index.txt, and THIRD_PARTY_LICENSES.md beside them.
+
+  sylou-functions  Built on Supabase's edge-runtime image (Debian 12), whose
+                   packages keep their licences in /usr/share/doc. The edge
+                   runtime's own MIT licence; the packages the functions use,
+                   each with its own licence files, listed in index.txt; and
+                   the Apache 2.0 licence of PDF.js, which unpdf bundles.
+
+  sylou-tools      Built on Deno's Alpine image. Deno's MIT licence, and those
+                   of the Deno standard library and the Postgres driver the
+                   tools load from deno.land.
+
+The system packages of each base image keep the licence records their
+publishers ship with them; each released image's SBOM lists them.
 
 ----------------------------------------------------------------------------
 Supabase
 ----------------------------------------------------------------------------
 
-The Docker images this package pins — supabase/postgres, supabase/gotrue,
-supabase/storage-api and supabase/edge-runtime — are published by Supabase and
-carry their own licences. They are referenced by digest in compose.yaml and
-are not redistributed here.
+supabase/postgres, supabase/gotrue and supabase/storage-api are published by
+Supabase and carry their own licences. They are referenced by digest in
+compose.yaml and are not redistributed here. supabase/edge-runtime is the base
+of sylou-functions, above.
 
 The database start-up scripts in sylou-local/db/ began as the corresponding
 files in Supabase's self-hosting recipe (github.com/supabase/supabase, the
@@ -39,9 +69,10 @@ secret is no longer written into the database. The scripts Sylou does not use
 included.
 
 ----------------------------------------------------------------------------
-PostgREST, nginx, Deno
+PostgREST, nginx
 ----------------------------------------------------------------------------
 
-The postgrest/postgrest, nginx/nginx-unprivileged and denoland/deno images are
-published by their own projects under their own licences, and are referenced
-by digest rather than redistributed.
+The postgrest/postgrest image, and nginx's nginx-unprivileged image as the
+letter box and the local-only relay run it, are published by their own
+projects under their own licences, and are referenced by digest rather than
+redistributed.

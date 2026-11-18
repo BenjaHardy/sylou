@@ -41,6 +41,12 @@ if (Deno.args[0] === "version") {
   Deno.exit(0);
 }
 
+// docker compose ... config --images tools: the tools image the recipe names
+if (Deno.args.includes("config") && Deno.args.includes("--images")) {
+  console.log(Deno.env.get("FAKE_DOCKER_TOOLS_IMAGE") ?? "ghcr.io/benjahardy/sylou-tools:dev");
+  Deno.exit(0);
+}
+
 // docker run --rm -v <folder>:/out <image> secrets
 if (Deno.args[0] === "run" && Deno.args.includes("secrets")) {
   const mount = Deno.args[Deno.args.indexOf("-v") + 1] ?? "";
@@ -243,6 +249,30 @@ Deno.test("setup makes the install, and its secrets stay readable by their owner
     assert(!out.includes(SECRET_VALUE), "setup printed a secret");
   } finally {
     await Deno.remove(join(install.dir, ".."), { recursive: true });
+  }
+});
+
+// A release's recipe names its images by digest: the secrets are made with
+// the tools image it names, never one fetched by its tag alone.
+Deno.test("setup and rotate make the secrets with the tools image the recipe names", async () => {
+  const named = `ghcr.io/benjahardy/sylou-tools:v0.8.0@sha256:${"c".repeat(64)}`;
+  const shells: ("native" | "sh")[] = WINDOWS && (await haveSh()) ? ["native", "sh"] : ["native"];
+  for (const shell of shells) {
+    const install = await stagedInstall();
+    try {
+      const env = { FAKE_DOCKER_TOOLS_IMAGE: named };
+      const setup = await runSylou(install, ["setup", "you@example.com"], shell, env);
+      assertEquals(setup.code, 0, setup.out);
+      const rotate = await runSylou(install, ["rotate", "--yes"], shell, env);
+      assertEquals(rotate.code, 0, rotate.out);
+
+      const made = (await Deno.readTextFile(install.log)).split("\n")
+        .filter((line) => line.startsWith("run ") && line.endsWith(" secrets"));
+      assertEquals(made.length, 2, `${shell}:\n${made.join("\n")}`);
+      for (const line of made) assertStringIncludes(line, ` ${named} secrets`, shell);
+    } finally {
+      await Deno.remove(join(install.dir, ".."), { recursive: true });
+    }
   }
 });
 

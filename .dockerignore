@@ -22,6 +22,12 @@
 !src
 !public
 
+# Sylou's licence files, which every image carries in /licenses.
+!LICENSE
+!LICENSE-METHODOLOGY
+!LICENSING.md
+!THIRD_PARTY_LICENSES.md
+
 # The images' own files. Letting one folder back in takes three lines: the
 # parent, everything in it out again, then the folders that may be seen.
 !sylou-local
@@ -29,6 +35,10 @@ sylou-local/*
 !sylou-local/web
 !sylou-local/functions
 !sylou-local/tools
+# The licence collector, the licences of the parts that ship none, and the
+# package's NOTICE: every image's /licenses.
+!sylou-local/licenses
+!sylou-local/NOTICE
 # The tools image runs these as they are, against the lockfile beside them.
 !sylou-local/deno.json
 !sylou-local/deno.lock

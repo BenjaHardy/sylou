@@ -1,7 +1,7 @@
 {
   "exclude": ["config", "node_modules"],
   "tasks": {
-    "check": "deno check functions/main.ts tests/*.ts tools/*.ts",
+    "check": "deno check functions/main.ts release/*.ts tests/*.ts tools/*.ts",
     "lint": "deno lint",
     // The recipe test asks the docker command to resolve compose.yaml (no
     // daemon needed) and writes its stand-in secret files to a temp folder.
@@ -9,7 +9,7 @@
     // Windows and sh elsewhere, with a fake docker that is a deno script.
     // The tools tests reach a database when DATABASE_URL is set, and skip
     // themselves when it is not.
-    "test": "deno test --allow-read --allow-write --allow-run=docker,cmd.exe,sh,deno --allow-env --allow-net tests/ tools/",
+    "test": "deno test --allow-read --allow-write --allow-run=docker,cmd.exe,sh,deno --allow-env --allow-net tests/ tools/ release/",
     // The Windows runner's share: the commands, as a release is used. It
     // leaves the recipe test out, which wants the docker command.
     "test:scripts": "deno test --allow-read --allow-write --allow-run=docker,cmd.exe,sh,deno --allow-env --allow-net tests/scripts.test.ts",

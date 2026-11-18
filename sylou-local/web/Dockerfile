@@ -20,6 +20,8 @@ COPY package.json package-lock.json .npmrc ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY . .
 RUN npx vite build --mode package
+# The licence files of the packages the app is built from, for /licenses.
+RUN node sylou-local/licenses/collect.mjs npm package-lock.json /app /licenses/third-party
 
 FROM nginx/nginx-unprivileged:stable-alpine@sha256:c3fc8fa482be50ef709c6438eb1bc98d50dbfe5a9b48be90711b8814f4dfd701
 # The image's own example server is not included by our nginx.conf; removing
@@ -40,5 +42,22 @@ COPY sylou-local/web/headers.conf /etc/nginx/sylou/headers.conf
 # instead of the door's: `nginx -c /etc/nginx/sylou/gateway.conf`.
 COPY sylou-local/web/gateway.conf /etc/nginx/sylou/gateway.conf
 COPY --chmod=555 sylou-local/web/docker-entrypoint.d/40-sylou-runtime.sh /docker-entrypoint.d/40-sylou-runtime.sh
+
+# Sylou's licences, and those of the packages the app is built from;
+# sylou-local/NOTICE says where the rest of this image's licences are.
+COPY LICENSE LICENSE-METHODOLOGY LICENSING.md THIRD_PARTY_LICENSES.md sylou-local/NOTICE /licenses/
+COPY --from=build /licenses/third-party /licenses/third-party
+
+# What this image is. Without these it would carry nginx's own labels, and
+# describe nginx. A release sets the version, revision and date.
+LABEL maintainer="" \
+      org.opencontainers.image.title="Sylou Local web" \
+      org.opencontainers.image.description="Sylou's pages, front door and gateway for Sylou Local, served by nginx" \
+      org.opencontainers.image.source="https://github.com/BenjaHardy/sylou" \
+      org.opencontainers.image.url="https://github.com/BenjaHardy/sylou" \
+      org.opencontainers.image.licenses="AGPL-3.0-only AND CC-BY-SA-4.0" \
+      org.opencontainers.image.version="dev" \
+      org.opencontainers.image.revision="" \
+      org.opencontainers.image.created=""
 
 EXPOSE 8080
