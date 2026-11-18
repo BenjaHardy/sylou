@@ -103,6 +103,15 @@ function Invoke-Compose($Settings, [string[]]$Arguments) {
     return $LASTEXITCODE
 }
 
+# The tools image as the recipe names it: by digest in a release, by the tag
+# it was built under in a clone. The secrets are made with this image.
+function Get-ToolsImage($Settings) {
+    $all = (Get-ComposeArgs $Settings) + @("config", "--images", "tools")
+    $lines = @(& docker @all)
+    if ($LASTEXITCODE -ne 0 -or $lines.Count -eq 0 -or [string]::IsNullOrWhiteSpace("$($lines[0])")) { return $null }
+    return "$($lines[0])".Trim()
+}
+
 # ---------------------------------------------------------------------------
 # What this computer can tell us
 # ---------------------------------------------------------------------------
@@ -451,7 +460,8 @@ function Invoke-Setup([string[]]$Arguments) {
     if ($existing.Count -gt 0) {
         Write-Note "This install already has its secrets; keeping them."
     } else {
-        $image = "ghcr.io/benjahardy/sylou-tools:$($settings.SYLOU_IMAGE_TAG)"
+        $image = Get-ToolsImage $settings
+        if ($null -eq $image) { Fail "The recipe could not be read." }
         & docker run --rm -v "${SecretsDir}:/out" $image secrets
         if ($LASTEXITCODE -ne 0) { Fail "The secrets could not be made." }
         $null = Protect-ConfigFolder $ConfigDir
@@ -588,7 +598,9 @@ function Invoke-Rotate($Settings, [string[]]$Arguments) {
     New-Item -ItemType Directory -Path $staging -Force | Out-Null
 
     Write-Step "Making the new secrets"
-    & docker run --rm -v "${staging}:/out" "ghcr.io/benjahardy/sylou-tools:$($Settings.SYLOU_IMAGE_TAG)" secrets | Out-Host
+    $image = Get-ToolsImage $Settings
+    if ($null -eq $image) { Fail "The recipe could not be read. Nothing was changed." }
+    & docker run --rm -v "${staging}:/out" $image secrets | Out-Host
     if ($LASTEXITCODE -ne 0) { Fail "The new secrets could not be made. Nothing was changed." }
 
     # Your API keys are yours, not this install's: they carry over.
