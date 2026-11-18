@@ -9,6 +9,11 @@ name: Sylou Local package
 # (D29). Docker Desktop itself is never under test: GitHub's Windows runners
 # run Windows containers only and its macOS runners have no Docker, so the
 # Windows commands stay on their own tests in ci.yml (D28).
+#
+# A version tag runs it too, from release.yml, which then publishes the very
+# images these checks ran against: in that run the job also keeps its build
+# cache and a record of what it checked, for release.yml to build from and
+# compare with.
 on:
   pull_request:
     branches: [main]
@@ -22,6 +27,16 @@ on:
       - "**.md"
       - "docs/**"
       - "LICENSE*"
+  workflow_call:
+    inputs:
+      release:
+        description: Keep the build cache and a record of the checked images for release.yml
+        type: boolean
+        default: false
+    outputs:
+      packages-refresh:
+        description: The PACKAGES_REFRESH value the checked images were built with
+        value: ${{ jobs.package.outputs.packages-refresh }}
 
 permissions:
   contents: read
@@ -48,6 +63,12 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    outputs:
+      packages-refresh: ${{ steps.refresh.outputs.value }}
+    env:
+      # For a release, a build cache of this run's own: the publishing job
+      # builds from it, so every layer it pushes is one checked here.
+      CACHE_SCOPE: ${{ inputs.release && format('release-{0}-', github.run_id) || '' }}
 
     # The migrations replayed as the database tests replay them, for the
     # catalog check: the package's grants and policies must equal these
@@ -87,23 +108,27 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
+      # New on every run, so each image's system packages are upgraded afresh
+      # (T50) while the layers before that step come from the cache.
+      - name: This run's package refresh
+        id: refresh
+        run: echo "value=${{ github.run_id }}.${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+
       # Each image is built on its own chip family's runner, no emulation
       # (D24), and loaded under the tag the settings below name. Provenance
-      # and SBOMs are made at release (A2-3b), not here. PACKAGES_REFRESH is
-      # new on every run, so each image's system packages are upgraded afresh
-      # (T50) while the layers before that step come from the cache.
+      # and SBOMs are made when release.yml publishes, not here.
       - name: Build the web image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: sylou-local/web/Dockerfile
           tags: ghcr.io/benjahardy/sylou-web:ci
-          build-args: PACKAGES_REFRESH=${{ github.run_id }}.${{ github.run_attempt }}
+          build-args: PACKAGES_REFRESH=${{ steps.refresh.outputs.value }}
           load: true
           provenance: false
           sbom: false
           cache-from: type=gha,scope=web-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=web-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ env.CACHE_SCOPE }}web-${{ matrix.arch }}
 
       - name: Build the functions image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -111,12 +136,12 @@ jobs:
           context: .
           file: sylou-local/functions/Dockerfile
           tags: ghcr.io/benjahardy/sylou-functions:ci
-          build-args: PACKAGES_REFRESH=${{ github.run_id }}.${{ github.run_attempt }}
+          build-args: PACKAGES_REFRESH=${{ steps.refresh.outputs.value }}
           load: true
           provenance: false
           sbom: false
           cache-from: type=gha,scope=functions-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=functions-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ env.CACHE_SCOPE }}functions-${{ matrix.arch }}
 
       - name: Build the tools image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -124,12 +149,12 @@ jobs:
           context: .
           file: sylou-local/tools/Dockerfile
           tags: ghcr.io/benjahardy/sylou-tools:ci
-          build-args: PACKAGES_REFRESH=${{ github.run_id }}.${{ github.run_attempt }}
+          build-args: PACKAGES_REFRESH=${{ steps.refresh.outputs.value }}
           load: true
           provenance: false
           sbom: false
           cache-from: type=gha,scope=tools-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=tools-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ env.CACHE_SCOPE }}tools-${{ matrix.arch }}
 
       # T62: no settings file, secret, checkout or tool's sign-in in any of
       # them, and none runs as root.
@@ -269,6 +294,30 @@ jobs:
         env:
           SYLOU_REPLAY_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:54329/sylou_rls
         run: deno task test:package
+
+      # For a release: each checked image's layers and the settings it runs
+      # with, which release.yml compares with what it pushes, and the
+      # functions' libraries, which it signs as the functions image's SBOM.
+      - name: What was checked (release)
+        if: inputs.release
+        run: |
+          mkdir -p "$RUNNER_TEMP/checked"
+          for image in web functions tools; do
+            docker image inspect "ghcr.io/benjahardy/sylou-$image:ci" --format \
+              '{"layers":{{json .RootFS.Layers}},"user":{{json .Config.User}},"entrypoint":{{json .Config.Entrypoint}},"cmd":{{json .Config.Cmd}},"env":{{json .Config.Env}},"workdir":{{json .Config.WorkingDir}},"ports":{{json .Config.ExposedPorts}}}' \
+              > "$RUNNER_TEMP/checked/$image.json"
+          done
+          cp "$RUNNER_TEMP/functions.cdx.json" "$RUNNER_TEMP/checked/functions-libraries.cdx.json"
+
+      - name: Keep what was checked (release)
+        if: inputs.release
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: checked-${{ matrix.arch }}
+          path: ${{ runner.temp }}/checked
+          retention-days: 1
+          overwrite: true
+          if-no-files-found: error
 
       - name: Keep every container's log, secrets taken out
         if: failure()

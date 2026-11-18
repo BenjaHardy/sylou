@@ -11,8 +11,12 @@ import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.t
 import { fromFileUrl, join } from "https://deno.land/std@0.224.0/path/mod.ts";
 
 const PACKAGE_DIR = fromFileUrl(new URL("../", import.meta.url));
-const COMPOSE = join(PACKAGE_DIR, "compose.yaml");
-const LOCAL_ONLY_COMPOSE = join(PACKAGE_DIR, "compose.local-only.yaml");
+// A release's package instead, when SYLOU_RECIPE_DIR names one (release.yml):
+// the same rules, with Sylou's own images published rather than built.
+const RECIPE_DIR = Deno.env.get("SYLOU_RECIPE_DIR") ?? PACKAGE_DIR;
+const RELEASE = RECIPE_DIR !== PACKAGE_DIR;
+const COMPOSE = join(RECIPE_DIR, "compose.yaml");
+const LOCAL_ONLY_COMPOSE = join(RECIPE_DIR, "compose.local-only.yaml");
 
 /** Every secret file the recipe names, as `sylou setup` creates them. */
 const SECRET_FILES = [
@@ -216,8 +220,17 @@ Deno.test("every image Sylou does not build is pinned to one exact build", () =>
   for (const [name, service] of Object.entries(services)) {
     const image = service.image ?? "";
     if (image.startsWith("ghcr.io/benjahardy/")) {
-      // Ours: pinned by the release tag, and buildable from a clone instead.
-      assert(service.build, `${name} has no build entry, so it cannot be built from source`);
+      if (RELEASE) {
+        // A release's: the published image by digest, never built here.
+        assert(!service.build, `${name} has a build entry in a release`);
+        assert(
+          /^ghcr\.io\/benjahardy\/sylou-(web|functions|tools):v\d[^@]*@sha256:[0-9a-f]{64}$/.test(image),
+          `${name} is not pinned by digest in a release (${image})`,
+        );
+      } else {
+        // Ours: pinned by the release tag, and buildable from a clone instead.
+        assert(service.build, `${name} has no build entry, so it cannot be built from source`);
+      }
       continue;
     }
     assert(image.includes("@sha256:"), `${name} is not pinned by digest (${image})`);

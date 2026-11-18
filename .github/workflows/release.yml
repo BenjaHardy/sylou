@@ -1,0 +1,533 @@
+name: Sylou Local release
+
+# A version tag publishes Sylou Local: the images the package checks ran
+# against, pushed to GHCR with BuildKit's SBOM and provenance and signed
+# attestations of both, and a draft GitHub Release holding the package that
+# names those images by digest (T51, T52).
+#
+# The jobs, in order:
+#   version  the tag is vX.Y.Z or vX.Y.Z-rc.N, on a commit of main
+#   check    package.yml, read-only: build, scan, live checks
+#   publish  per chip family: the same build from check's own cache, pushed
+#            by digest, and refused unless it is the image check ran against
+#   merge    one image for both chip families per name, under the version
+#   attest   per image: the signed provenance and SBOMs, then verified
+#   bundle   the package and its recipe rules, the zip and SHA256SUMS
+#   release  the zip's own signature, and a draft release for you to publish
+#
+# Each job holds only the rights its own steps need (T53): the long job that
+# runs the package, the scanner and the live checks holds none.
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Actions are pinned to commit SHAs, as in ci.yml; .github/dependabot.yml
+# keeps the pins and their version comments current.
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    cache-mode: none
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+      created: ${{ steps.tag.outputs.created }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: The tag names a release of main
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! printf '%s\n' "$TAG" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?'; then
+            echo "::error title=Tag::$TAG is not a release tag (vX.Y.Z, or vX.Y.Z-rc.N for a pre-release)"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error title=Tag::$TAG is on a commit that is not on main"
+            exit 1
+          fi
+          {
+            echo "tag=$TAG"
+            case "$TAG" in *-*) echo "prerelease=true" ;; *) echo "prerelease=false" ;; esac
+            echo "created=$(git log -1 --format=%cI "$GITHUB_SHA")"
+          } >> "$GITHUB_OUTPUT"
+
+  check:
+    name: Check
+    needs: version
+    # It writes the build cache publish builds from; nothing else does.
+    cache-mode: write
+    permissions:
+      contents: read
+    uses: ./.github/workflows/package.yml
+    with:
+      release: true
+
+  publish:
+    name: Publish (${{ matrix.arch }})
+    needs: [version, check]
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    cache-mode: read
+    permissions:
+      contents: read
+      packages: write
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: What the checks ran against
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: checked-${{ matrix.arch }}
+          path: ${{ runner.temp }}/checked
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Sign in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The check's build again, with the same package refresh and only the
+      # cache it left, so every step is taken from there. Pushed by digest
+      # alone; merge gives the version's tag once both chip families are in.
+      # BuildKit's own SBOM scanner is pinned by digest (docker's stable-1).
+      - name: Publish the web image
+        id: web
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: sylou-local/web/Dockerfile
+          build-args: PACKAGES_REFRESH=${{ needs.check.outputs.packages-refresh }}
+          cache-from: type=gha,scope=release-${{ github.run_id }}-web-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.version=${{ env.TAG }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ needs.version.outputs.created }}
+          provenance: mode=max
+          attests: type=sbom,generator=docker/buildkit-syft-scanner:1.12.1@sha256:873a7458c3c8ac8e32c7b796c10e1600b07b963d2aa000a72a2d97aaaa2d6315
+          outputs: type=image,name=ghcr.io/benjahardy/sylou-web,push-by-digest=true,name-canonical=true,push=true
+
+      - name: Publish the functions image
+        id: functions
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: sylou-local/functions/Dockerfile
+          build-args: PACKAGES_REFRESH=${{ needs.check.outputs.packages-refresh }}
+          cache-from: type=gha,scope=release-${{ github.run_id }}-functions-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.version=${{ env.TAG }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ needs.version.outputs.created }}
+          provenance: mode=max
+          attests: type=sbom,generator=docker/buildkit-syft-scanner:1.12.1@sha256:873a7458c3c8ac8e32c7b796c10e1600b07b963d2aa000a72a2d97aaaa2d6315
+          outputs: type=image,name=ghcr.io/benjahardy/sylou-functions,push-by-digest=true,name-canonical=true,push=true
+
+      - name: Publish the tools image
+        id: tools
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: sylou-local/tools/Dockerfile
+          build-args: PACKAGES_REFRESH=${{ needs.check.outputs.packages-refresh }}
+          cache-from: type=gha,scope=release-${{ github.run_id }}-tools-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.version=${{ env.TAG }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ needs.version.outputs.created }}
+          provenance: mode=max
+          attests: type=sbom,generator=docker/buildkit-syft-scanner:1.12.1@sha256:873a7458c3c8ac8e32c7b796c10e1600b07b963d2aa000a72a2d97aaaa2d6315
+          outputs: type=image,name=ghcr.io/benjahardy/sylou-tools,push-by-digest=true,name-canonical=true,push=true
+
+      # The whole point: what is published is what was checked. Every layer,
+      # and the user, entrypoint, command, environment, folder and ports it
+      # runs with, equal those of the image the live checks ran; only the
+      # labels differ. A step built afresh instead of taken from the cache
+      # would give a layer of its own, and stop the release here, untagged.
+      - name: The images pushed are the images checked
+        env:
+          WEB: ${{ steps.web.outputs.digest }}
+          FUNCTIONS: ${{ steps.functions.outputs.digest }}
+          TOOLS: ${{ steps.tools.outputs.digest }}
+        run: |
+          status=0
+          for image in web functions tools; do
+            case "$image" in web) digest=$WEB ;; functions) digest=$FUNCTIONS ;; tools) digest=$TOOLS ;; esac
+            checked=$(jq -S '{layers, user: (.user // ""), entrypoint, cmd, env: (.env // []),
+              workdir: (.workdir // ""), ports: (.ports // {})}' "$RUNNER_TEMP/checked/$image.json")
+            pushed=$(docker buildx imagetools inspect "ghcr.io/benjahardy/sylou-$image@$digest" --format '{{json .Image}}' |
+              jq -S 'if has("rootfs") then . else (to_entries | if length == 1 then .[0].value else error("more than one platform") end) end
+                | {layers: .rootfs.diff_ids, user: (.config.User // ""), entrypoint: .config.Entrypoint, cmd: .config.Cmd,
+                   env: (.config.Env // []), workdir: (.config.WorkingDir // ""), ports: (.config.ExposedPorts // {})}')
+            if [ -n "$checked" ] && [ "$checked" = "$pushed" ]; then
+              echo "$image ($ARCH): the image checked, layer for layer"
+            else
+              echo "::error title=Not the checked image::the $image image pushed for $ARCH differs from the one the checks ran against"
+              diff <(printf '%s\n' "$checked") <(printf '%s\n' "$pushed") || true
+              status=1
+            fi
+          done
+          exit $status
+
+      - name: Keep the digests
+        env:
+          WEB: ${{ steps.web.outputs.digest }}
+          FUNCTIONS: ${{ steps.functions.outputs.digest }}
+          TOOLS: ${{ steps.tools.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          printf '%s\n' "$WEB" > "$RUNNER_TEMP/digests/web"
+          printf '%s\n' "$FUNCTIONS" > "$RUNNER_TEMP/digests/functions"
+          printf '%s\n' "$TOOLS" > "$RUNNER_TEMP/digests/tools"
+
+      - name: Hand the digests on
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digests-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests
+          retention-days: 1
+          overwrite: true
+          if-no-files-found: error
+
+  merge:
+    name: Both chip families, one name
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    cache-mode: none
+    permissions:
+      contents: read
+      packages: write
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
+    outputs:
+      digests: ${{ steps.index.outputs.digests }}
+    steps:
+      - name: The digests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digests-*
+          path: ${{ runner.temp }}/digests
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Sign in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Only the version's own tag: the package names each image by digest,
+      # and a tag that moves, such as latest, would only invite pulling by
+      # name. The index carries the image's description, licence and source
+      # for GHCR's page, copied from the image's own labels.
+      - name: One image for both chip families, under the version's tag
+        id: index
+        run: |
+          digests='{}'
+          for image in web functions tools; do
+            ref="ghcr.io/benjahardy/sylou-$image"
+            amd64=$(cat "$RUNNER_TEMP/digests/digests-amd64/$image")
+            arm64=$(cat "$RUNNER_TEMP/digests/digests-arm64/$image")
+            labels=$(docker buildx imagetools inspect "$ref@$amd64" --format '{{json .Image}}' |
+              jq 'if has("rootfs") then . else (to_entries[0].value) end | .config.Labels')
+            docker buildx imagetools create --tag "$ref:$TAG" \
+              --annotation "index:org.opencontainers.image.title=$(jq -r '.["org.opencontainers.image.title"]' <<< "$labels")" \
+              --annotation "index:org.opencontainers.image.description=$(jq -r '.["org.opencontainers.image.description"]' <<< "$labels")" \
+              --annotation "index:org.opencontainers.image.licenses=$(jq -r '.["org.opencontainers.image.licenses"]' <<< "$labels")" \
+              --annotation "index:org.opencontainers.image.source=https://github.com/BenjaHardy/sylou" \
+              --annotation "index:org.opencontainers.image.version=$TAG" \
+              --annotation "index:org.opencontainers.image.revision=$GITHUB_SHA" \
+              "$ref@$amd64" "$ref@$arm64"
+            index=$(docker buildx imagetools inspect "$ref:$TAG" --format '{{json .Manifest}}' | jq -r .digest)
+            # The tagged index holds exactly what publish pushed, and nothing else.
+            pushed=$( { docker buildx imagetools inspect --raw "$ref@$amd64"; docker buildx imagetools inspect --raw "$ref@$arm64"; } |
+              jq -r '.manifests[].digest' | sort)
+            tagged=$(docker buildx imagetools inspect --raw "$ref@$index" | jq -r '.manifests[].digest' | sort)
+            if [ -z "$pushed" ] || [ "$pushed" != "$tagged" ]; then
+              echo "::error title=Index::$ref:$TAG is not made of the images publish pushed"
+              exit 1
+            fi
+            echo "$ref:$TAG = $ref@$index"
+            digests=$(jq -c --arg image "$image" --arg index "$index" '. + {($image): $index}' <<< "$digests")
+          done
+          echo "digests=$digests" >> "$GITHUB_OUTPUT"
+
+  attest:
+    name: Sign (${{ matrix.image }})
+    needs: [version, merge]
+    strategy:
+      matrix:
+        image: [web, functions, tools]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    cache-mode: none
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
+      IMAGE: ghcr.io/benjahardy/sylou-${{ matrix.image }}
+      DIGEST: ${{ fromJSON(needs.merge.outputs.digests)[matrix.image] }}
+    steps:
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Sign in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # BuildKit's own, stored with the image: both are there for both chip
+      # families, and the SBOMs are what the next steps sign.
+      - name: BuildKit's SBOM and provenance, for both chip families
+        run: |
+          mkdir -p "$RUNNER_TEMP/sbom"
+          provenance=$(docker buildx imagetools inspect "$IMAGE@$DIGEST" --format '{{json .Provenance}}')
+          sboms=$(docker buildx imagetools inspect "$IMAGE@$DIGEST" --format '{{json .SBOM}}')
+          for arch in amd64 arm64; do
+            pick='to_entries | map(select(.key | test("^linux/" + $arch + "(/|$)"))) | if length == 1 then .[0].value else null end'
+            if ! jq -e --arg arch "$arch" "$pick | .SLSA" <<< "$provenance" > /dev/null; then
+              echo "::error title=Provenance::$IMAGE@$DIGEST has no BuildKit provenance for linux/$arch"
+              exit 1
+            fi
+            if ! jq -e --arg arch "$arch" "$pick | .SPDX" <<< "$sboms" > "$RUNNER_TEMP/sbom/$arch.spdx.json"; then
+              echo "::error title=SBOM::$IMAGE@$DIGEST has no BuildKit SBOM for linux/$arch"
+              exit 1
+            fi
+          done
+
+      # The functions' libraries are bundled where a scanner cannot see them,
+      # so the lockfile's SBOM the checks scanned is signed beside the image's.
+      - name: The functions' libraries
+        if: matrix.image == 'functions'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: checked-amd64
+          path: ${{ runner.temp }}/checked
+
+      # Signed through Sigstore's public instance, kept by GitHub and pushed
+      # beside the image. Storage records are for organisations' repositories.
+      - name: Signed provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ env.DIGEST }}
+          push-to-registry: true
+          create-storage-record: false
+
+      - name: Signed SBOM (amd64)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ env.DIGEST }}
+          sbom-path: ${{ runner.temp }}/sbom/amd64.spdx.json
+          push-to-registry: true
+          create-storage-record: false
+
+      - name: Signed SBOM (arm64)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ env.DIGEST }}
+          sbom-path: ${{ runner.temp }}/sbom/arm64.spdx.json
+          push-to-registry: true
+          create-storage-record: false
+
+      - name: Signed SBOM of the functions' libraries
+        if: matrix.image == 'functions'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ env.DIGEST }}
+          sbom-path: ${{ runner.temp }}/checked/functions-libraries.cdx.json
+          push-to-registry: true
+          create-storage-record: false
+
+      # As someone checking the image would: from GitHub's store and from the
+      # registry, signed by this workflow, for this tag, on GitHub's runners.
+      - name: Every signature checks out
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LIBRARIES: ${{ matrix.image == 'functions' }}
+        run: |
+          spdx="https://spdx.dev/Document/v$(jq -r '.spdxVersion | ltrimstr("SPDX-")' "$RUNNER_TEMP/sbom/amd64.spdx.json")"
+          verify() {
+            gh attestation verify "oci://$IMAGE@$DIGEST" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-ref "refs/tags/$TAG" --deny-self-hosted-runners "$@" > /dev/null
+          }
+          status=0
+          for from in "GitHub" "the registry"; do
+            where=()
+            if [ "$from" = "the registry" ]; then where=(--bundle-from-oci); fi
+            verify "${where[@]}" || { echo "::error title=Attestation::no signed provenance from $from"; status=1; }
+            verify "${where[@]}" --predicate-type "$spdx" ||
+              { echo "::error title=Attestation::no signed SBOM from $from"; status=1; }
+            if [ "$LIBRARIES" = true ]; then
+              verify "${where[@]}" --predicate-type https://cyclonedx.org/bom ||
+                { echo "::error title=Attestation::no signed SBOM of the libraries from $from"; status=1; }
+            fi
+          done
+          [ "$status" = 0 ] && echo "$IMAGE@$DIGEST: provenance and SBOM signed, from GitHub and from the registry"
+          exit $status
+
+  bundle:
+    name: Package
+    needs: [version, merge, attest]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    cache-mode: none
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
+      WEB: ${{ fromJSON(needs.merge.outputs.digests).web }}
+      FUNCTIONS: ${{ fromJSON(needs.merge.outputs.digests).functions }}
+      TOOLS: ${{ fromJSON(needs.merge.outputs.digests).tools }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.x
+
+      - name: The package, naming the published images
+        working-directory: sylou-local
+        run: |
+          deno run --allow-read --allow-write release/package.ts --tag "$TAG" --date "$(date -u +%F)" \
+            --web "$WEB" --functions "$FUNCTIONS" --tools "$TOOLS" --out "$RUNNER_TEMP/release/sylou-local"
+
+      # Every rule the recipe keeps (tests/recipe.test.ts), on the package's
+      # own recipe, with Sylou's images published rather than built.
+      - name: Its recipe keeps the recipe's rules
+        working-directory: sylou-local
+        env:
+          SYLOU_RECIPE_DIR: ${{ runner.temp }}/release/sylou-local
+        run: deno test --allow-read --allow-write --allow-run=docker --allow-env tests/recipe.test.ts
+
+      - name: The zip, its checksum and the draft notes
+        working-directory: ${{ runner.temp }}/release
+        run: |
+          zip -q -r -X "sylou-local-$TAG.zip" sylou-local
+          for script in sylou db/backup.sh db/restore.sh db/rotate.sh; do
+            zipinfo "sylou-local-$TAG.zip" "sylou-local/$script" | grep -q '^-rwx' ||
+              { echo "::error title=Zip::$script is not executable in the zip"; exit 1; }
+          done
+          sha256sum "sylou-local-$TAG.zip" > SHA256SUMS
+          cat > notes.md <<EOF
+          Sylou Local $TAG: the package (sylou-local-$TAG.zip) and its checksum (SHA256SUMS).
+
+          Its compose.yaml names Sylou's three images by digest, each for linux/amd64 and linux/arm64:
+
+          - ghcr.io/benjahardy/sylou-web@$WEB
+          - ghcr.io/benjahardy/sylou-functions@$FUNCTIONS
+          - ghcr.io/benjahardy/sylou-tools@$TOOLS
+
+          Each image carries BuildKit's SBOM and provenance, and is signed with GitHub artifact
+          attestations of both, as is the zip. To check them with the GitHub CLI:
+
+              gh attestation verify sylou-local-$TAG.zip --repo $GITHUB_REPOSITORY
+              gh attestation verify oci://ghcr.io/benjahardy/sylou-web@$WEB --repo $GITHUB_REPOSITORY
+          EOF
+
+      - name: Hand the release on
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: |
+            ${{ runner.temp }}/release/sylou-local-${{ env.TAG }}.zip
+            ${{ runner.temp }}/release/SHA256SUMS
+            ${{ runner.temp }}/release/notes.md
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
+
+  release:
+    name: Draft release
+    needs: [version, bundle]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    cache-mode: none
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
+      PRERELEASE: ${{ needs.version.outputs.prerelease }}
+    steps:
+      - name: The release
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+
+      - name: Signed provenance for the zip
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/release/sylou-local-${{ env.TAG }}.zip
+
+      - name: The zip's signature checks out
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh attestation verify "$RUNNER_TEMP/release/sylou-local-$TAG.zip" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --source-ref "refs/tags/$TAG" --deny-self-hosted-runners > /dev/null
+          echo "sylou-local-$TAG.zip: provenance signed"
+
+      # A draft: nobody sees it until you publish it, and with release
+      # immutability on, the tag and these two files are fixed from then on.
+      - name: A draft release, for you to publish
+        working-directory: ${{ runner.temp }}/release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          sha256sum -c SHA256SUMS
+          flags=(--draft --verify-tag --title "Sylou $TAG" --notes-file notes.md)
+          if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" "${flags[@]}" "sylou-local-$TAG.zip" SHA256SUMS

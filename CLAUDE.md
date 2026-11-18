@@ -92,7 +92,9 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   copies every third-party package's own licence files there at build, and
   `licenses/` keeps the texts of the parts that ship none (Deno, its standard
   library and Postgres driver, the edge runtime, PDF.js), pinned by
-  `tests/licenses.test.ts`. `sylou.ps1` /
+  `tests/licenses.test.ts`. `release/package.ts` writes the package a
+  release attaches: the recipe naming Sylou's published images by digest,
+  with no `build:` entries, and the files a person needs beside it. `sylou.ps1` /
   `sylou.cmd` / `sylou` are the commands themselves (`setup`, `start`,
   `stop`, `status`, `doctor`, `backup`, `restore`, `update`, `models`,
   `rotate`, `local-only`, `remove`, `add-user`, `reset-password`), and they
@@ -387,6 +389,12 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   amd64 and arm64, scans them (Grype), sets the package up with the real
   `./sylou setup` beside a stand-in Ollama (`tests/fake-ollama.ts`) and runs
   them; a failure's container logs are kept as an artifact, secrets taken out.
+- Sylou Local release: a `v*` tag runs `release.yml`. It runs `package.yml`
+  first (read-only), rebuilds each image from that run's own build cache,
+  pushes it to GHCR only if its layers equal the checked image's, signs its
+  provenance and SBOMs, and leaves a draft release with the package zip and
+  `SHA256SUMS`; the maintainer publishes it. Only `vX.Y.Z` and
+  `vX.Y.Z-rc.N` tags on a commit of main are released.
 - Database tests: start a throwaway server with Docker
   (`docker run --rm -d --name sylou-rls-db -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:54329:5432 postgres:17.6`),
   then `cd supabase/tests && deno task test:db`. Each run rebuilds the
