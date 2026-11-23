@@ -108,9 +108,10 @@ export function checkRelease(release: Release): void {
   }
 }
 
-/** Writes the package into `out`, which must not exist yet. */
+/** Writes the package into `out`, which must not exist yet; the folders above it may not either. */
 export async function writePackage(release: Release, out: string, repo = REPO): Promise<void> {
   checkRelease(release);
+  await Deno.mkdir(dirname(out), { recursive: true });
   await Deno.mkdir(out);
   const read = (path: string) => Deno.readTextFile(join(repo, "sylou-local", path));
   await Deno.writeTextFile(join(out, "compose.yaml"), releaseCompose(await read("compose.yaml"), release));
