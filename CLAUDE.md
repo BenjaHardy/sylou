@@ -240,7 +240,13 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
   eval. `style-src` keeps `'unsafe-inline'`: TipTap, Radix and Sonner write
   styles at runtime, and editor marks are `style` attributes. Supabase is
   allowed in `connect-src` only; an outside origin the app starts loading
-  (image, font, API) needs an entry in both files.
+  (image, font, API) needs an entry in both files. A Sylou Local install
+  serves the app and its API from one address, so its door also puts
+  `sylou-local/web/api-headers.conf` on every answer it forwards from
+  `/rest/v1/`, `/storage/v1/object/` and the functions, error answers
+  included: the sandbox content policy Supabase's own self-hosting gateways
+  add, plus `nosniff`. `/auth/v1/` is left as Supabase leaves it; an API
+  path forwarded later takes the file too (same test).
 - **Handler seam**: each function's `index.ts` exports
   `handler(req, deps = defaultDeps)` and ends with
   `Deno.serve((req) => handler(req))` — never `Deno.serve(handler)`, which
