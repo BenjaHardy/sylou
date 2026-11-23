@@ -1099,6 +1099,67 @@ live("local models: the functions reach Ollama on this computer and use its mode
 });
 
 // ---------------------------------------------------------------------------
+// The API's answers (T63)
+// ---------------------------------------------------------------------------
+
+live("the door: answers from the data API, storage and the functions are sandboxed, errors included, and the app's requests and streams still work (T63)", async () => {
+  const conf = Deno.readTextFileSync(join(install.dir, "web", "api-headers.conf"));
+  const expected = [...conf.matchAll(/^\s*add_header\s+(\S+)\s+"([^"]+)"\s+always;\s*$/gm)].map((match) => [match[1], match[2]]);
+  assert(
+    expected.some(([name, value]) => name === "Content-Security-Policy" && value.split(";").map((part) => part.trim()).includes("sandbox")),
+    "no sandbox policy in web/api-headers.conf",
+  );
+
+  // What the app asks for, answered as before.
+  const projects = await http("/rest/v1/projects?select=id", { token: alice.access });
+  assertEquals(projects.json(), [{ id: project }], projects.text);
+  const file = await http(`/storage/v1/object/imports/${pdfPath}`, { token: alice.access });
+  assertEquals(file.status, 200, file.text.slice(0, 200));
+  assertStringIncludes(file.headers.get("content-type") ?? "", PDF_TYPE);
+  assertEquals(await sha256(file.bytes), await sha256(pdfBytes), "the stored file came back changed");
+  const config = await http("/functions/v1/config", { token: alice.access });
+  assertEquals(config.status, 200, config.text);
+
+  // A stream, read as the app reads one: token by token, then the result.
+  const streamed = await http("/functions/v1/editor-action", {
+    token: alice.access,
+    json: { project_id: project, action_type: "fix_grammar", selected_text: `Helo wrld, ${MARKER}`, model: `ollama/${FAKE_MODEL}`, stream: true },
+  });
+  assertEquals(streamed.status, 200, streamed.text);
+  assertStringIncludes(streamed.headers.get("content-type") ?? "", "text/event-stream");
+  const events = streamed.text.split("\n").filter((line) => line.startsWith("data: ")).map((line) => JSON.parse(line.slice(6)));
+  assertEquals(events.map((event) => event.token ?? "").join(""), FAKE_REPLY, streamed.text);
+  const done = events.find((event) => event.done === true);
+  assertEquals([done?.result, done?.error], [FAKE_REPLY, undefined], streamed.text);
+
+  // And what the services refuse.
+  const refused = await http("/rest/v1/projects?select=id", { token: "not-a-token" });
+  assertEquals(refused.status, 401, refused.text);
+  const missing = await http(`/storage/v1/object/imports/${alice.id}/${project}/missing.pdf`, { token: alice.access });
+  assert(missing.status >= 400, `a file that is not there: ${missing.status}`);
+  const unsigned = await http("/functions/v1/chat", { json: {} });
+  assertEquals(unsigned.status, 401, unsigned.text);
+
+  const answers: [string, Answer][] = [
+    ["a data read", projects],
+    ["a stored file", file],
+    ["a function's answer", config],
+    ["an editor action's stream", streamed],
+    ["a refused data read", refused],
+    ["a file that is not there", missing],
+    ["an unsigned function call", unsigned],
+  ];
+  for (const [what, answer] of answers) {
+    for (const [name, value] of expected) assertEquals(answer.headers.get(name), value, `${what}: ${name}`);
+  }
+
+  // The sign-in service's answers are left as Supabase leaves them.
+  const settings = await http("/auth/v1/settings");
+  assertEquals(settings.status, 200, settings.text);
+  assert(!(settings.headers.get("content-security-policy") ?? "").includes("sandbox"), "sign-in's answers are sandboxed");
+});
+
+// ---------------------------------------------------------------------------
 // Containment (T19, T36)
 // ---------------------------------------------------------------------------
 

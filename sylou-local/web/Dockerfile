@@ -38,6 +38,7 @@ USER 101
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY sylou-local/web/nginx.conf /etc/nginx/nginx.conf
 COPY sylou-local/web/headers.conf /etc/nginx/sylou/headers.conf
+COPY sylou-local/web/api-headers.conf /etc/nginx/sylou/api-headers.conf
 # The same image serves as the gateway inside Docker, started with this config
 # instead of the door's: `nginx -c /etc/nginx/sylou/gateway.conf`.
 COPY sylou-local/web/gateway.conf /etc/nginx/sylou/gateway.conf

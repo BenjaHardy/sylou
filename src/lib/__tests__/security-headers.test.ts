@@ -1,8 +1,9 @@
 // The browser security headers live in three host files: vercel.json
 // (Vercel), public/_headers (Cloudflare Pages, Netlify) and, for a Sylou
-// Local install, sylou-local/web/headers.conf with its nginx.conf. Nothing in
-// the build reads them, so only this test notices when they drift apart or
-// when the Content-Security-Policy loses one of its strict parts.
+// Local install, sylou-local/web/headers.conf with its nginx.conf, beside
+// api-headers.conf for the API answers that door forwards. Nothing in the
+// build reads them, so only this test notices when they drift apart or when
+// a Content-Security-Policy loses one of its strict parts.
 //
 // What this test cannot see is a header a running nginx drops again: the
 // package tests check /report/x on a real request, because an internal
@@ -69,6 +70,9 @@ function nginxHeaders(...parts: string[]): Record<string, string> {
   return headers;
 }
 
+const PAGE_HEADERS = "include /etc/nginx/sylou/headers.conf;";
+const API_HEADERS = "include /etc/nginx/sylou/api-headers.conf;";
+
 /** The `location` blocks of the package's door, each with its own body. */
 function doorBlocks(): { path: string; body: string }[] {
   const config = read("sylou-local", "web", "nginx.conf");
@@ -87,6 +91,9 @@ function doorBlocks(): { path: string; body: string }[] {
   }
   return blocks;
 }
+
+/** Whether a door block sends its requests on to the gateway. */
+const forwards = (block: { body: string }) => block.body.includes("proxy_pass");
 
 describe("security headers", () => {
   const vercel = vercelRules();
@@ -166,11 +173,42 @@ describe("security headers", () => {
       expect(report.body).not.toContain("try_files");
     });
 
-    it("every block that adds a header of its own includes the shared set, which nginx would otherwise drop", () => {
+    it("every page block that adds a header of its own includes the shared set, which nginx would otherwise drop", () => {
       for (const block of doorBlocks()) {
-        if (!block.body.includes("add_header")) continue;
-        expect(block.body, block.path).toContain("include /etc/nginx/sylou/headers.conf;");
+        if (forwards(block) || !block.body.includes("add_header")) continue;
+        expect(block.body, block.path).toContain(PAGE_HEADERS);
       }
+    });
+
+    // The app and its API share the install's one address, so the answers
+    // the door forwards get headers of their own: an answer is not a page.
+    describe("the API answers it forwards", () => {
+      const api = nginxHeaders("sylou-local", "web", "api-headers.conf");
+
+      it("carry the content policy Supabase's own self-hosting gateways add, and nosniff", () => {
+        // As supabase/supabase#53466 adds it. nginxHeaders reads only lines
+        // that end in `always`, so error answers carry these too.
+        expect(api).toEqual({
+          [CSP_HEADER]: "default-src 'none'; media-src 'self'; style-src 'unsafe-inline'; sandbox",
+          "X-Content-Type-Options": "nosniff",
+        });
+        // A sandbox with no exception: no script, form, pop-up or same-origin access.
+        expect(directives(api[CSP_HEADER]).get("sandbox")).toEqual([]);
+      });
+
+      it("carry them on every forwarded path but sign-in's, which is left as Supabase leaves it", () => {
+        const forwarded = doorBlocks().filter(forwards);
+        expect(forwarded.map((block) => block.path)).toContain("/auth/v1/");
+        for (const block of forwarded) {
+          expect(block.body, block.path).not.toContain(PAGE_HEADERS);
+          if (block.path === "/auth/v1/") {
+            expect(block.body, block.path).not.toContain(API_HEADERS);
+            expect(block.body, block.path).not.toContain("add_header");
+          } else {
+            expect(block.body, block.path).toContain(API_HEADERS);
+          }
+        }
+      });
     });
   });
 });
