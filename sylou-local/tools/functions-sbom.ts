@@ -7,6 +7,7 @@
 // package, named by its purl (D27).
 //
 //   deno task sbom:functions > functions.cdx.json      (from sylou-local/)
+import { createHash } from "node:crypto";
 
 export interface DenoLock {
   version?: string;
@@ -26,6 +27,8 @@ export interface Component {
 export interface Sbom {
   bomFormat: "CycloneDX";
   specVersion: "1.5";
+  /** `urn:uuid:…`: a signed SBOM needs one (actions/attest refuses it without). */
+  serialNumber: string;
   version: 1;
   metadata: { component: { type: "application"; name: string } };
   components: Component[];
@@ -48,6 +51,25 @@ export function purlOf(name: string, version: string): string {
   const scoped = name.startsWith("@");
   const path = scoped ? `%40${name.slice(1)}` : name;
   return `pkg:npm/${path}@${version}`;
+}
+
+/** The URL namespace of RFC 9562, for `nameUuid`. */
+export const URL_NAMESPACE = "6ba7b811-9dad-11d1-80b4-00c04fd430c8";
+
+/**
+ * A UUID made from a name (version 5, SHA-1, RFC 9562): the same name always
+ * gives the same UUID, so a serial number made this way keeps "the same
+ * lockfile gives the same bytes". CycloneDX 1.5 accepts versions 1 to 5 only.
+ */
+export function nameUuid(name: string, namespace = URL_NAMESPACE): string {
+  const space = new Uint8Array(16);
+  const digits = namespace.replaceAll("-", "");
+  for (let i = 0; i < 16; i++) space[i] = parseInt(digits.slice(2 * i, 2 * i + 2), 16);
+  const bytes = createHash("sha1").update(space).update(name).digest().subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 /** A lockfile's base64 integrity as CycloneDX wants a hash: hexadecimal. */
@@ -75,11 +97,13 @@ export function sbomFromLock(lock: DenoLock, subject = "sylou-functions"): Sbom 
       ...(hash ? { hashes: [{ alg: "SHA-512" as const, content: hash }] } : {}),
     });
   }
-  // The same lockfile gives the same bytes: sorted, and no date in it.
+  // The same lockfile gives the same bytes: sorted, no date, and a serial
+  // number made from what the SBOM lists.
   components.sort((a, b) => (a.purl < b.purl ? -1 : a.purl > b.purl ? 1 : 0));
   return {
     bomFormat: "CycloneDX",
     specVersion: "1.5",
+    serialNumber: `urn:uuid:${nameUuid(JSON.stringify({ subject, components }))}`,
     version: 1,
     metadata: { component: { type: "application", name: subject } },
     components,

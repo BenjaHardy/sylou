@@ -290,7 +290,10 @@ jobs:
   attest:
     name: Sign (${{ matrix.image }})
     needs: [version, merge]
+    # One image's refusal stops the release either way; the others carry on,
+    # so a run shows every image's problem at once.
     strategy:
+      fail-fast: false
       matrix:
         image: [web, functions, tools]
     runs-on: ubuntu-latest

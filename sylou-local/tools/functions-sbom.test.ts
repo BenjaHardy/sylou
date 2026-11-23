@@ -5,7 +5,7 @@
 // Run with: deno task test  (from sylou-local/)
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { fromFileUrl } from "https://deno.land/std@0.224.0/path/mod.ts";
-import { type DenoLock, purlOf, sbomFromLock, splitKey } from "./functions-sbom.ts";
+import { type DenoLock, nameUuid, purlOf, sbomFromLock, splitKey } from "./functions-sbom.ts";
 
 const LOCK = fromFileUrl(new URL("../functions/deno.lock", import.meta.url));
 const lock = JSON.parse(Deno.readTextFileSync(LOCK)) as DenoLock;
@@ -54,4 +54,23 @@ Deno.test("the same lockfile gives the same SBOM, a CycloneDX document a scanner
   assertEquals(sbom.bomFormat, "CycloneDX");
   assertEquals(sbom.specVersion, "1.5");
   assertEquals(sbom.metadata.component.name, "sylou-functions");
+});
+
+// The release signs this SBOM, and actions/attest takes a CycloneDX document
+// only with bomFormat, specVersion and serialNumber all there.
+Deno.test("the SBOM carries a serial number: the same for the same lockfile, another for another", () => {
+  const sbom = sbomFromLock(lock);
+  // CycloneDX 1.5's own pattern for it, and a version 5 (name-based) UUID.
+  const uuid = /^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  assert(uuid.test(sbom.serialNumber), sbom.serialNumber);
+  assertEquals(sbomFromLock(structuredClone(lock)).serialNumber, sbom.serialNumber);
+
+  const { ["mammoth@1.12.3"]: _gone, ...fewer } = lock.npm ?? {};
+  assert(sbomFromLock({ ...lock, npm: fewer }).serialNumber !== sbom.serialNumber, "a different list kept the number");
+  assert(sbomFromLock(lock, "another").serialNumber !== sbom.serialNumber, "another subject kept the number");
+});
+
+Deno.test("a name-based UUID is the one RFC 9562 gives for that name", () => {
+  // Python's uuid.uuid5(uuid.NAMESPACE_DNS, "www.example.com").
+  assertEquals(nameUuid("www.example.com", "6ba7b810-9dad-11d1-80b4-00c04fd430c8"), "2ed6657d-e927-568b-95e1-2665a8aea6a2");
 });
