@@ -97,10 +97,14 @@ Lastly, if your contribution touches anything related to AI disclosure (the chat
 
 ### Development setup
 
-Sylou has no mock backend: to run it locally you need your own (free-tier)
-Supabase project; the full walkthrough is [docs/setup.md](docs/setup.md).
-It's written for production self-hosting, and local development is the same
-setup (minus the frontend host). In brief:
+Sylou has no mock backend. The quickest way to run it for development is
+Supabase's local stack in Docker: see the developer setup in
+[docs/local.md](docs/local.md#developer-setup).
+
+You can also develop against your own (free-tier) hosted Supabase project; the
+full walkthrough is [docs/setup.md](docs/setup.md). It's written for
+production self-hosting, and local development is the same setup (minus the
+frontend host). In brief:
 
 1. Create a Supabase project, apply the migrations, set the secrets, and
    deploy the edge functions per [docs/setup.md](docs/setup.md).

@@ -528,6 +528,7 @@ Entry points: `src/main.tsx` → `src/App.tsx` → `src/pages/Index.tsx`
 - `docs/engineering-standards.md` — distilled coding rules + per-PR
   Definition-of-Done (give it to AI coding assistants as context; where it
   disagrees with this file, this file wins)
-- `docs/setup.md`, `docs/model-configuration.md`, `docs/ai-act-position.md`
+- `docs/setup.md`, `docs/local.md` (Sylou Local, then the developer setup),
+  `docs/model-configuration.md`, `docs/ai-act-position.md`
 - `TRANSPARENCY.md`, `SECURITY.md`, `CONTRIBUTING.md`, `TRADEMARK-POLICY.md`,
   `LICENSING.md`

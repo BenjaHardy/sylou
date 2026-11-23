@@ -224,7 +224,7 @@ can have; changes require an explicit transparency-impact note in the PR.
 
 - **All LLM calls go through `_shared/_llm.ts`.** No direct provider fetches
   in functions. Routing is by model-id prefix; exactly two body translators
-  (Anthropic, OpenAI-shape — DeepSeek shares the OpenAI path); every response
+  (Anthropic, OpenAI-shape — DeepSeek and Ollama share the OpenAI path); every response
   is read via `normaliseResponse`, never provider-specific parsing at call
   sites.
 - Per-model knobs live **only** in `_shared/_temperatures.ts` /

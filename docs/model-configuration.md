@@ -8,7 +8,7 @@ This document tracks how Sylou configures each LLM model across the four main ed
 - A temperature, effort, or thinking value is changed in `_temperatures.ts` or `_thinking.ts`
 - Observed model behavior changes (e.g., a model's response quality changes after a provider update)
 
-**Last updated:** October 2026
+**Last updated:** November 2026
 
 ---
 
@@ -39,6 +39,8 @@ accept "high" | "none" and must never be configured with either).
 it with DeepSeek-V4.1-Flash at the Flash price (half price off-peak, outside
 01:00–04:00 and 06:00–10:00 UTC on weekdays). The model runs in thinking
 mode by default; Sylou flags the model as "experimental" and currently does not configure its thinking fields.
+
+Local models (Ollama, Beta) are not in this table: each instance lists its own (see [Local models](#local-models-ollama-beta)).
 
 ---
 
@@ -210,6 +212,38 @@ Turning it off: drop the `cache` option from the chat call sites in `chat/index.
 
 ---
 
+## Local models (Ollama, Beta)
+
+An operator can list models served by their own [Ollama](https://ollama.com) server with two settings (see `supabase/functions/.env.example`): `OLLAMA_URL`, the server's address as the functions reach it (with Docker Desktop, `http://host.docker.internal:11434`), and `OLLAMA_MODELS`, the model names as `ollama list` shows them, comma-separated. In Sylou Local, both go in `config/settings.env` ([local.md](local.md)). Unset, nothing changes. Each listed model is offered as `ollama/<name>` in the chat picker, in a group of its own with its window and whether it can use tools (the `config` function lists them to signed-in users only); the FLOW picker never lists them.
+
+Before every call, Sylou asks Ollama about the model (`/api/show`) and refuses it when:
+
+- it has no context window of its own (`num_ctx`): Ollama would load it with a window sized to the GPU and silently drop whatever does not fit. Create a copy with `PARAMETER num_ctx` set (for example 16384) and list the copy; in Sylou Local, `sylou models <name>` makes one with the largest window the graphics card runs;
+- it is one of Ollama's cloud models, which would send the text off the machine. `OLLAMA_NO_CLOUD=1` on the Ollama server blocks them too.
+
+| Function | On a local model |
+|---|---|
+| Chat | Yes, sized to the window before every call (fit or refuse). A smaller conversation memory (below); a favourite document that does not fit beside a full reply goes in as its summary; tools (documents, web search) only when Ollama lists the model's "tools" capability, a tool result cut to the room left; a prompt still too long after up to three early memory refreshes is refused, with a suggestion to start a new thread. |
+| Editor actions | Yes, fit or refuse: a selection too long for the window is refused with a message. Favourites as above. |
+| Document summaries | Yes. On failure the summary falls back to the document's first 500 characters, never to a cloud model. |
+| Ask/Propose | Yes: both calls are sized before the first runs (600 tokens kept for the summary, 1,000 for the reply). The summary call gets no stored summary and writes a fresh one. Up to three early memory refreshes, then a refusal; favourites and tools as for chat. |
+| FLOW analysis | No (400): FLOW runs on cloud models only. |
+
+Settings applied to every local model:
+
+- `reasoning_effort: "none"`: thinking models otherwise reason by default and can spend the whole reply budget on it. Settings shows no reasoning control.
+- No temperature (the model's own default) and no prompt-caching hint.
+- Output ceilings: the plain `OUTPUT_BUDGETS`, cut to the room the window leaves while that room still holds a useful reply (1,000 tokens for chat and for an Ask/Propose reply, 600 for its summary, about the selection's length for an editor action, the full 500 for a document summary); otherwise the call is refused.
+- A longer wait for the first word: 300 s instead of the cloud's 120 s, since a local model reads the whole prompt before it answers.
+- Token counts come from Ollama (`stream_options.include_usage`); local tokens do not count toward the monthly budget.
+- Prompts are estimated at 3 bytes of text per token, plus 8 tokens per message, with 256 tokens of the window kept free.
+
+Conversation memory (`localMemoryProfile`; chat, Ask and Propose), against the cloud values: a refresh every 20 uncovered messages from a window of 16,384 tokens, every 10 below (cloud: 50); 5 covered messages verbatim (cloud: 20); a stored summary of at most an eighth of the window and 12,000 characters (cloud: 12,000).
+
+Local-only mode (`SYLOU_LOCAL_ONLY`, set by Sylou Local's `sylou local-only on`): every cloud provider counts as not configured, whatever keys are set, and web search is off. A call to a cloud model is refused with one sentence (FLOW's says it needs a cloud model).
+
+---
+
 ## Where to find these settings in code
 
 | Setting                                       | File                                          | Notes                                                                                             |
@@ -225,10 +259,16 @@ Turning it off: drop the `cache` option from the chat call sites in `chat/index.
 | Claude thinking rules per model               | `supabase/functions/_shared/_models.ts`       | `CLAUDE_ALWAYS_THINKING` (thinking cannot be turned off; forced on by `resolveThinking`), `CLAUDE_THINKING_OFF_BETWEEN_TOOLS` ("off" is sent as `between_tools`). |
 | Refusal message                               | `supabase/functions/_shared/_llm.ts`          | `fallbackReplyText` (an explicit message on `stop_reason: "refusal"`, no fallback model). |
 | Prompt caching                                | `supabase/functions/_shared/_llm.ts`          | `CacheHint` on `callLLM` (passed by `chat/index.ts`); Anthropic `cache_control` marks, Mistral `prompt_cache_key`; `[usage]` log lines carry the providers' cache fields (`normaliseUsage`). |
-| Verbatim history window                       | `supabase/functions/_shared/_conversation_memory.ts` | `fetchVerbatimWindow`, `VERBATIM_TAIL` (20), `VERBATIM_CAP` (100): the memory-anchored window chat and context-prompt inject. |
+| Verbatim history window                       | `supabase/functions/_shared/_conversation_memory.ts` | `fetchVerbatimWindow`, `VERBATIM_TAIL` (20), `VERBATIM_CAP` (100): the memory-anchored window chat and context-prompt inject. A local model's profile (`localMemoryProfile`) keeps 5. |
+| Local models (Ollama)                         | `supabase/functions/_shared/_ollama.ts`       | `listedOllamaModels` (`OLLAMA_URL`, `OLLAMA_MODELS`), `fetchLocalModelInfo` (window and tools from `/api/show`; refuses cloud models and models without `num_ctx`), `ollamaBody` (reasoning off, usage on streams). `isAllowedModel` in `_models.ts` admits the listed ones. |
+| Sizing a call to a local window               | `supabase/functions/_shared/_fit.ts`          | `estimatePromptTokens`, `fitReply`, `cutToFit`, `tooLongError`; chat's own sizing in `chat/local.ts` (`LOCAL_EARLY_REFRESHES`, `LOCAL_CHAT_MIN_REPLY`). |
+| Ask/Propose on a local window                 | `supabase/functions/context-prompt/local.ts`  | `fitLocalSummary`, `fitLocalConversation`, `fitLocalReply`; `LOCAL_SUMMARY_MIN_REPLY` (600), `LOCAL_ANSWER_MIN_REPLY` (1,000), `LOCAL_EARLY_REFRESHES` (3). |
+| Favourites beside a local window              | `supabase/functions/_shared/_favourites.ts`   | `splitFavourites`: whole while a full reply still fits, else the stored summary. |
+| Local-only mode                               | `supabase/functions/_shared/_local_only.ts`   | `localOnly` (`SYLOU_LOCAL_ONLY`), the refusal sentences, `webSearchConfigured`. |
+| Budget counting                               | `supabase/functions/_shared/_billing.ts`      | `countsTowardBudget`: local models' tokens are not counted. |
 | Server-side model allowlist + input limits    | `supabase/functions/_shared/_models.ts`       | `ALLOWED_MODELS` (gates the `model` request override), `INPUT_LIMITS` (request text ceilings), `CONTEXT_LIMIT_TOKENS` (per-model context windows, mirrors the registry). |
 | FLOW imported-documents budget                | `supabase/functions/analysis/index.ts`        | `FLOW_IMPORTED_DOCS_BUDGET_TOKENS` cost ceiling; effective allowance = min(policy, model-window remainder after the never-truncated sections). |
-| Provider request timeout                      | `supabase/functions/_shared/_llm.ts`          | `callLLM` `timeoutMs` — default 120s; analysis passes 145s (hosted request-idle limit is 150s); Brave web-search fetches use a 10s `AbortSignal.timeout`. A chat call that hits it is answered with a persisted notice (`PROVIDER_TIMEOUT_MESSAGE`), on every provider, so the explanation survives a thread switch; Ask/Propose report it in the selection window. |
+| Provider request timeout                      | `supabase/functions/_shared/_llm.ts`          | `callLLM` `timeoutMs` — by default (`defaultTimeoutFor`) 120s for the cloud providers, 300s for `ollama/*`; analysis passes 145s (hosted request-idle limit is 150s); Brave web-search fetches use a 10s `AbortSignal.timeout`. A chat call that hits it is answered with a persisted notice (`PROVIDER_TIMEOUT_MESSAGE`), on every provider, so the explanation survives a thread switch; Ask/Propose report it in the selection window. |
 | Body-level wire format (per provider)         | `supabase/functions/_shared/_llm.ts`          | `toAnthropicBody`, `toOpenAIBody`.                                                                |
 
 ---
@@ -244,10 +284,13 @@ Turning it off: drop the `cache` option from the chat call sites in `chat/index.
 - **Z.ai GLM 5.3**: Reasoning-only. `reasoning_effort` accepts "low" | "high" | "max"; omitting the field means the model's own default ("max"), and reasoning cannot be disabled.
 - **Mistral Magistral models**: Reason natively; reject `reasoning_effort` parameter (not currently in Sylou's registry but worth noting if added).
 - **Anthropic Structured Outputs**: Strips most JSON Schema constraints (`maxItems`, `minLength`, `maximum`, etc.). Schema sanitizer in `_llm.ts` handles this transparently.
+- **Ollama (OpenAI-compatible `/v1`)**: Ignores `num_ctx` and `tool_choice` in the request, and drops what overflows the window without an error. Sylou reads the window from `/api/show`, sizes every call, and offers no tools on a final call instead of `tool_choice: none`. A thinking model's reasoning arrives in a `reasoning` field, and a stream reports its token usage only when asked (`stream_options.include_usage`).
 
 ---
 
 ## Checklist: Adding a New Model to Sylou
+
+A local model needs none of this: list it in `OLLAMA_MODELS` (see [Local models](#local-models-ollama-beta)).
 
 1. Register the model in the frontend
    
