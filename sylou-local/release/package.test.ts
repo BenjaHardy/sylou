@@ -3,7 +3,14 @@
 // the folder it writes, so every rule of the recipe holds for it too.
 //
 // Run with: deno task test  (from sylou-local/)
-import { assert, assertEquals, assertMatch, assertStringIncludes, assertThrows } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import {
+  assert,
+  assertEquals,
+  assertMatch,
+  assertRejects,
+  assertStringIncludes,
+  assertThrows,
+} from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { fromFileUrl, join } from "https://deno.land/std@0.224.0/path/mod.ts";
 import {
   checkRelease,
@@ -82,6 +89,20 @@ Deno.test("only a release tag, a day and three digests make a package", () => {
   }
   assertThrows(() => checkRelease({ ...RELEASE, date: "18/11/2026" }), Error, "not a date");
   assertThrows(() => checkRelease({ ...RELEASE, digests: { ...RELEASE.digests, web: "sha256:abc" } }), Error, "web");
+});
+
+// release.yml writes it to $RUNNER_TEMP/release/sylou-local, and nothing has
+// made $RUNNER_TEMP/release before (v0.8.0-rc.3 stopped there).
+Deno.test("the package is written where no folder exists yet, and never over one that does", async () => {
+  const root = await Deno.makeTempDir({ prefix: "sylou-release-" });
+  try {
+    const out = join(root, "release", "sylou-local");
+    await writePackage(RELEASE, out);
+    assert(Deno.statSync(join(out, "compose.yaml")).isFile);
+    await assertRejects(() => writePackage(RELEASE, out), Deno.errors.AlreadyExists);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
 });
 
 Deno.test("the package holds every file the recipe mounts and the commands read", async () => {
