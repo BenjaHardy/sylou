@@ -36,6 +36,7 @@ export const COPIED: [from: string, to: string][] = [
   ["sylou-local/sylou.cmd", "sylou.cmd"],
   ["sylou-local/sylou.ps1", "sylou.ps1"],
   ["sylou-local/NOTICE", "NOTICE"],
+  ["sylou-local/README.txt", "README.txt"],
   ["LICENSE", "LICENSE"],
 ];
 
