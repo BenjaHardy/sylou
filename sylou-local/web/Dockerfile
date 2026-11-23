@@ -23,7 +23,7 @@ RUN npx vite build --mode package
 # The licence files of the packages the app is built from, for /licenses.
 RUN node sylou-local/licenses/collect.mjs npm package-lock.json /app /licenses/third-party
 
-FROM nginx/nginx-unprivileged:stable-alpine@sha256:c3fc8fa482be50ef709c6438eb1bc98d50dbfe5a9b48be90711b8814f4dfd701
+FROM nginx/nginx-unprivileged:stable-alpine@sha256:0c53a1f2890c3526bfd201440f0fd3970e5b78f80630f58284aad0d34b5ec7bd
 # The image's own example server is not included by our nginx.conf; removing
 # it keeps the start-up scripts from finding anything to edit.
 USER root
