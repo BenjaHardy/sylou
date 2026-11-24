@@ -10,7 +10,7 @@ Email **security@sylou.eu** with as much detail as you can reasonably provide:
 
 - A description of the vulnerability and its potential impact
 - Steps to reproduce, or a proof-of-concept if you have one
-- The Sylou version, instance type (official or self-hosted), and any relevant environment details
+- The Sylou version, instance type (official, self-hosted or Sylou Local), and any relevant environment details
 - Your name or handle for attribution (optional; anonymous reports are also welcome)
 
 If the vulnerability is sensitive enough that email feels inappropriate, mention this in a short initial message and we'll agree on a more secure channel for the details.
@@ -31,6 +31,8 @@ Once a fix is ready, it's shipped as a tagged release with release notes that fl
 
 After a grace period (defaulting to about two weeks, adjusted for severity) a full security advisory is published with the technical details and credit to the reporter (with your permission and under whatever name or handle you prefer). 
 
+Sylou Local users get a fix when they update their install ([docs/local.md](docs/local.md)), and the release notes say when an update carries one.
+
 The grace period gives self-hosters time to update before exploit details are public; the more severe the issue, the more carefully this window is managed (sometimes shorter to prompt urgent updates, sometimes coordinated with reporters).
 
 If you'd prefer not to be credited, just say so in your report. Anonymous reports get the same handling as named ones.
@@ -44,6 +46,7 @@ Vulnerabilities in:
 - The shared-report and replay mechanisms
 - The provenance-capture architecture (the integrity of the [t]/[cc]/[ce]/[ai] tagging)
 - The authentication, authorization, and session-handling code paths
+- The Sylou Local package (its recipe and commands) and the images published from this repository; [docs/local.md](docs/local.md) explains how to check them
 
 ## What's typically out of scope
 

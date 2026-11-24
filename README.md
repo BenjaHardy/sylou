@@ -65,7 +65,7 @@ The transparency architecture, covering all the means, whats, whys, hows to achi
 - **Work replay functionality and quantitative data** for further evidence of the involvement of the user to the work.
 - **Shareable FLOW reports** comprising the above elements, with a public URL, a QR-coded badge, and machine-readable AI-origin markers. 
 - **Tutor mode** that restricts the AI to guidance rather than direct generation (for educational contexts).
-- **Selectable LLM** for both the chat (where effort is also selectable) and the FLOW analysis separately, between Mistral (incl. GLM), Claude and DeepSeek.
+- **Selectable LLM** for both the chat (where effort is also selectable) and the FLOW analysis separately, between Mistral (incl. GLM), Claude and DeepSeek; and, in Beta, open models running on your own machine through Ollama, for chat, Ask/Propose, editor actions and document summaries (FLOW stays on cloud models).
 
 Sylou is built on React + TypeScript on the frontend, Supabase (PostgreSQL + Edge Functions) on the backend, and uses LLMs via API.
 
@@ -90,6 +90,8 @@ Setup is documented in [**docs/setup.md**](docs/setup.md). At a high level, you'
 
 The same self-hosted instance can be used by a single person, a small team, an academic department, or a community; whatever fits.
 Self-hosters can set per-user token budgets via SQL; see docs/setup.md for details.
+
+**Just for yourself, on your own computer?** Sylou Local packages the whole of Sylou for Docker: no cloud account needed beyond your AI provider's, or none at all with models running on your computer. See [**docs/local.md**](docs/local.md).
 
 ---
 
@@ -141,7 +143,7 @@ It's provided as-is, without warranty of any kind. That said, it's used daily by
 
 ## Roadmap
 
-Do take a look at our Tally questionnaire, linked at the top of this file, which includes a dedicated question for feedback on possible future functionalities. The maintainer's personal priorities include the addition of new set-ups for more flexibility (including the possibility to run Sylou locally or with self-hosted open LLMs), as well as means to further enrich the FLOW reports.
+Do take a look at our Tally questionnaire, linked at the top of this file, which includes a dedicated question for feedback on possible future functionalities. The maintainer's personal priorities include means to further enrich the FLOW reports.
 Besides what's listed there, we're of course open to suggestions and feedback. See also [**CONTRIBUTING.md**](CONTRIBUTING.md).
 
 ---

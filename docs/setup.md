@@ -3,6 +3,8 @@
 This guide walks through setting up your own Sylou instance from scratch, with the full manual sequence.
 If you get stuck at any step, please [open an issue](https://github.com/BenjaHardy/sylou/issues).
 
+Just want Sylou for yourself, on your own computer? Sylou Local is the quicker way: see [local.md](local.md).
+
 ---
 
 ## Before you start
@@ -119,6 +121,8 @@ Before setting secrets, decide:
 Set the API key for each you wish to use; and you should have at least either Mistral or Anthropic/Claude (recommended models for FLOW analysis). The provider whose key isn't set will appear in Sylou's model picker but fail at runtime if a user selects it; set keys for the providers you want users to actually have access to.
 
 - **Whether you want web search.** Web search uses [Brave Search](https://api.search.brave.com); it's optional. If you don't set the Brave key, the web search toggle in Sylou's UI is greyed out with an explanatory tooltip.
+
+- **Local models (Ollama, Beta)** are meant for a Sylou running on your own computer ([local.md](local.md)). With a Supabase cloud project, leave `OLLAMA_URL` and `OLLAMA_MODELS` unset: the functions run in Supabase's cloud, so they would need an Ollama server reachable from the internet, and an Ollama server has no password.
 
 ### Set the secrets
 

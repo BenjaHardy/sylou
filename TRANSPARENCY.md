@@ -246,7 +246,8 @@ a short narrative of the work so far) regenerated (not appended) roughly every
 Ask/Propose actions then work from this memory plus the newest messages
 verbatim: the last 20 messages the latest memory already covers, and everything
 written since. The summarization runs on the selected chat model and is billed
-like any other call.
+like any other call. A local model (5.6) keeps a smaller memory, sized to its
+window.
 
 It is stored per thread, and FLOW never reads it: instead the analysis reads the full raw chat history itself (5.3).
 
@@ -255,6 +256,36 @@ the processed beginning of a prompt for a few minutes, so that the next request
 in a lively exchange re-reads it at a fraction of the price. This changes
 nothing in what the model sees or answers, and nothing is stored beyond the
 provider's short-lived cache (details in `docs/model-configuration.md`).
+
+### 5.6 Local models (Beta)
+
+An operator can let Sylou use models that run on their own machine, through
+[Ollama](https://ollama.com). They appear in Settings in a group of their own,
+marked Beta, with each model's window (how much text it reads at once) and
+whether it can use tools (open imported documents, search the web). They are
+much smaller than cloud models: expect weaker answers.
+
+- **What runs on a local model**: chat, Ask and Propose, editor actions and
+  the summaries of imported documents. The FLOW analysis always runs on a cloud
+  model, so a FLOW report always names one.
+- **Ask and Propose** (5.1): on a local model, each request gets a fresh
+  writing summary, written without the stored running summary, and logged in
+  the chat flagged not assessed, as on a cloud model. The stored running
+  summary is left untouched, so a later request on a cloud model picks up from
+  the last summary a cloud model wrote.
+- **No silent switch to the cloud.** When a local model cannot answer (the
+  server is stopped, the model is no longer set up, a request is too long for
+  its window), Sylou says so; it never sends the text to a cloud model instead.
+- **A smaller memory** (5.5), shared by chat, Ask and Propose: a summary every
+  20 messages (every 10 for a window under 16k tokens), the last 5 summarised
+  messages kept verbatim, and a summary of at most an eighth of the window. A
+  favourite document that does not fit beside a full reply goes in as its
+  summary.
+- **Tools only where the model supports them**, and a document read through a
+  tool is cut to the room left in the window, with a note saying so.
+- **What still leaves the computer**: web search, when the user turns it on
+  (the search words go to Brave), and anything that runs on a cloud model.
+  Sylou Local's local-only mode turns both off ([`docs/local.md`](docs/local.md)).
 
 ---
 
@@ -268,6 +299,8 @@ encounter it, and marks AI-generated content so it can be detected programmatica
 ## 7. Shared FLOW reports
 
 A FLOW report can be kept private or shared at a public URL. Each shared report carries the generating instance's label, version, and commit hash, so a viewer can identify what produced it. These variables are declared by the operator, and ultimately only the domain serving a shared report can be verified by a viewer: a report is as trustworthy as that domain's operator.
+
+On a Sylou served from the user's own computer, share links (and the QR codes on the badges) open only on that computer; the share box says so. A report made with Sylou Local is self-attested: its user is also its operator, and holds the database the report is made from.
 
 ---
 
